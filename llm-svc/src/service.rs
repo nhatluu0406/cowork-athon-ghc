@@ -3,11 +3,11 @@
 use crate::cloud_proxy::CloudProxyClient;
 use crate::config::Config;
 use crate::llmsvc::{
-    llm_svc_server::LlmSvc, CompressRequest, CompressResponse, DetectIntentRequest,
+    llm_svc_server::LlmSvc, CompressRequest, CompressResponse, Entity,
     EmbedRequest, EmbedResponse, ExtractRequest, ExtractResponse, GenerateRequest,
     GenerateResponse, HealthRequest, HealthResponse, IntentRequest, IntentResponse,
-    ListModelsRequest, ListModelsResponse, ModelInfo, RerankDocument, RerankRequest,
-    RerankResponse, RerankResult,
+    ListModelsRequest, ListModelsResponse, ModelInfo, Relationship, RerankRequest,
+    RerankResponse,
 };
 use crate::routing::{Router, RouteDecision};
 use std::collections::HashMap;
@@ -55,13 +55,13 @@ impl LlmSvc for LlmSvcImpl {
         info!(
             "Embed RPC called with {} texts, model: {}",
             req.texts.len(),
-            req.model_name.as_deref().unwrap_or("default")
+            if req.model_name.is_empty() { "default" } else { req.model_name.as_str() }
         );
 
         // Route decision: embed should prefer local ONNX, fallback to cloud
         match self.router.route("embed") {
             RouteDecision::Cloud => {
-                if let Some(proxy) = &self.cloud_proxy {
+                if let Some(_proxy) = &self.cloud_proxy {
                     // Phase 2: Implement cloud embedding call
                     warn!("Cloud embedding not implemented in Phase 1");
                     return Err(Status::unimplemented(
@@ -90,13 +90,13 @@ impl LlmSvc for LlmSvcImpl {
         info!(
             "Rerank RPC called with {} documents, model: {}",
             req.documents.len(),
-            req.model_name.as_deref().unwrap_or("default")
+            if req.model_name.is_empty() { "default" } else { req.model_name.as_str() }
         );
 
         // Route decision: rerank should prefer local ONNX, fallback to cloud
         match self.router.route("rerank") {
             RouteDecision::Cloud => {
-                if let Some(proxy) = &self.cloud_proxy {
+                if let Some(_proxy) = &self.cloud_proxy {
                     // Phase 2: Implement cloud reranking call
                     warn!("Cloud reranking not implemented in Phase 1");
                     return Err(Status::unimplemented(
@@ -125,7 +125,7 @@ impl LlmSvc for LlmSvcImpl {
         info!(
             "ExtractEntities RPC called with task_mode: {}, model: {}",
             req.task_mode,
-            req.model_name.as_deref().unwrap_or("default")
+            if req.model_name.is_empty() { "default" } else { req.model_name.as_str() }
         );
 
         match self.router.route("extract_entities") {
@@ -135,16 +135,16 @@ impl LlmSvc for LlmSvcImpl {
                         Ok((entities, relationships)) => {
                             let proto_entities = entities
                                 .into_iter()
-                                .map(|e| crate::llmsvc::extract_request::Entity {
+                                .map(|e| Entity {
                                     name: e.clone(),
-                                    type_: "extracted".to_string(),
+                                    r#type: "extracted".to_string(),
                                     confidence: 0.95,
                                     metadata: "{}".to_string(),
                                 })
                                 .collect();
                             let proto_rels = relationships
                                 .into_iter()
-                                .map(|(rel, _)| crate::llmsvc::extract_request::Relationship {
+                                .map(|(rel, _)| Relationship {
                                     from_entity: "entity".to_string(),
                                     relationship_type: rel,
                                     to_entity: "entity".to_string(),
@@ -156,7 +156,7 @@ impl LlmSvc for LlmSvcImpl {
                             Ok(Response::new(ExtractResponse {
                                 entities: proto_entities,
                                 relationships: proto_rels,
-                                model_name: req.model_name.unwrap_or_default(),
+                                model_name: req.model_name,
                                 error: String::new(),
                             }))
                         }
@@ -293,7 +293,7 @@ impl LlmSvc for LlmSvcImpl {
                             Ok(Response::new(GenerateResponse {
                                 answer,
                                 citations: vec![],
-                                model_name: req.model_name.unwrap_or_default(),
+                                model_name: req.model_name,
                                 tokens_used: 0,
                                 latency_ms,
                                 error: String::new(),
@@ -324,7 +324,7 @@ impl LlmSvc for LlmSvcImpl {
     /// Health checks the service's liveness.
     async fn health(
         &self,
-        request: Request<HealthRequest>,
+        _request: Request<HealthRequest>,
     ) -> Result<Response<HealthResponse>, Status> {
         debug!("Health RPC called");
         let mut checks = HashMap::new();
@@ -356,23 +356,14 @@ impl LlmSvc for LlmSvcImpl {
         let req = request.into_inner();
         debug!(
             "ListModels RPC called with filter: {}",
-            req.model_kind.as_deref().unwrap_or("all")
+            if req.model_kind.is_empty() { "all" } else { req.model_kind.as_str() }
         );
 
         let models: Vec<ModelInfo> = self
             .config
             .models
             .iter()
-            .filter(|m| {
-                if let Some(ref kind_filter) = req.model_kind {
-                    if kind_filter.is_empty() || m.kind == *kind_filter {
-                        return true;
-                    }
-                    false
-                } else {
-                    true
-                }
-            })
+            .filter(|m| req.model_kind.is_empty() || m.kind == req.model_kind)
             .map(|m| ModelInfo {
                 name: m.name.clone(),
                 kind: m.kind.clone(),

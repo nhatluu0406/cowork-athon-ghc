@@ -23,7 +23,7 @@ pub mod config;
 // Re-export commonly used types
 pub use llmsvc::{
     llm_svc_server::{LlmSvc, LlmSvcServer},
-    CompressRequest, CompressResponse, DetectIntentRequest, EmbedRequest, EmbedResponse,
+    CompressRequest, CompressResponse, EmbedRequest, EmbedResponse,
     ExtractRequest, ExtractResponse, GenerateRequest, GenerateResponse, HealthRequest,
     HealthResponse, IntentRequest, IntentResponse, ListModelsRequest, ListModelsResponse,
     RerankDocument, RerankRequest, RerankResponse,

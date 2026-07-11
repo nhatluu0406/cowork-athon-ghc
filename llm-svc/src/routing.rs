@@ -116,6 +116,7 @@ pub enum RouteDecision {
 }
 
 /// Router implements NLP_MODE routing logic
+#[derive(Clone)]
 pub struct Router {
     mode: NlpMode,
     retry_policy: RetryPolicy,

@@ -3,7 +3,7 @@
 use anyhow::Result;
 use std::net::SocketAddr;
 use tonic::transport::Server;
-use tracing::{info, warn};
+use tracing::info;
 
 mod llmsvc {
     tonic::include_proto!("llmsvc");
@@ -29,14 +29,14 @@ async fn main() -> Result<()> {
     let config = config::Config::from_env()?;
     info!("LLM Service starting with config: {:?}", config);
 
-    // Create service implementation
-    let service = LlmSvcImpl::new(config).await?;
-
     // Bind gRPC server
     let addr: SocketAddr = config
         .bind_addr
         .parse()
         .expect("Invalid LLMSVC_ADDR");
+
+    // Create service implementation
+    let service = LlmSvcImpl::new(config).await?;
     info!("LLM Service listening on {}", addr);
 
     // Start tonic server
