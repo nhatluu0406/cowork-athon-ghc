@@ -1,4 +1,4 @@
-module github.com/aifunction/m365-knowledge-graph
+module github.com/rad-system/m365-knowledge-graph
 
 go 1.25.0
 
@@ -8,6 +8,7 @@ require github.com/lib/pq v1.12.3
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/xuri/excelize/v2 v2.11.0
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
