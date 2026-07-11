@@ -1,0 +1,33 @@
+# Build artifacts
+/backend/bin/
+/llm-svc/target/
+/frontend/dist/
+/frontend/build/
+node_modules/
+
+# IDE & editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+go.sum
+Cargo.lock
+
+# Test & coverage
+coverage/
+*.out
+*.test
+
+# Misc
+vendor/
+dist/
+*.log
