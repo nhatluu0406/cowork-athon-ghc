@@ -18,7 +18,6 @@ type Config struct {
 	M365ClientID      string
 	M365ClientSecret  string
 	M365AuthMode      string
-	LLMAPIBase        string
 	LLMModel          string
 	LLMEmbedModel     string
 	LLMSvcAddr        string        // T175: gRPC address of llm-svc (e.g., "localhost:9090")
@@ -44,7 +43,6 @@ func LoadConfig() (*Config, error) {
 		M365ClientID:      getEnv("M365_CLIENT_ID", ""),
 		M365ClientSecret:  getEnv("M365_CLIENT_SECRET", ""),
 		M365AuthMode:      getEnv("M365_AUTH_MODE", "entra_id"),
-		LLMAPIBase:        getEnv("LLM_API_BASE_URL", ""),
 		LLMModel:          getEnv("LLM_MODEL", "gpt-4o-mini"),
 		LLMEmbedModel:     getEnv("LLM_EMBED_MODEL", "text-embedding-3-small"),
 		LLMSvcAddr:        getEnv("LLMSVC_ADDR", ""),           // T175: optional gRPC address
@@ -67,12 +65,11 @@ func (c *Config) Validate() error {
 	if c.Neo4jUri == "" {
 		return fmt.Errorf("NEO4J_URI is required")
 	}
-	// T175: Either LLM_API_BASE_URL or LLMSVC_ADDR should be configured
-	// (both are optional, but at least one is needed for embedding/generation).
-	if c.LLMAPIBase == "" && c.LLMSvcAddr == "" {
-		// Both missing is OK for a development environment without embeddings
-		// (semantic search and generation will gracefully degrade to nil/no-op)
-	}
+	// T175/T176a: LLM_API_BASE_URL was removed — all LLM-shaped operations go
+	// through llm-svc (LLMSVC_ADDR) only. LLMSVC_ADDR itself stays optional
+	// here: an unset value is fine for a development environment without
+	// embeddings (semantic search and generation gracefully degrade to
+	// nil/no-op — see cmd/main.go's embedRuntime/llmClient wiring).
 	return nil
 }
 

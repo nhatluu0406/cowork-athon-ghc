@@ -83,12 +83,10 @@ func main() {
 	improver := feedback.NewImprover(db.Conn())
 
 	// Group C/D wiring: embedding client + store + retrieval pipeline.
-	// LLM_API_BASE_URL and LLMSVC_ADDR may be unset in some environments — SemanticSearch and
+	// LLMSVC_ADDR may be unset in some environments — SemanticSearch and
 	// AnswerGenerator both degrade gracefully when their embedder/LLM
 	// interface arguments are a true nil interface (see below) rather than
 	// panicking, per stages.go's nil checks.
-	//
-	// Priority: LLMSVC_ADDR (T171-T176) > LLM_API_BASE_URL (legacy)
 	//
 	// IMPORTANT: we deliberately keep these as interface-typed variables
 	// (not *embedding.SvcAdapter or *embedding.CustomAPIClient) and only assign into them when
@@ -120,9 +118,9 @@ func main() {
 		}
 	}
 
-	// T176a: Removed fallback to custom API. All LLM operations now require llm-svc.
-	// LLM_API_BASE_URL is only used for local testing/development and is not
-	// wired into the Go backend anymore (per spec §3.5).
+	// T176a: Removed fallback to custom API. All LLM operations now require llm-svc
+	// (LLMSVC_ADDR); LLM_API_BASE_URL is no longer read by the Go backend at all
+	// (per spec §3.5).
 
 	embeddingStore := embedding.NewStore(db.Conn())
 
@@ -214,10 +212,12 @@ func main() {
 
 	deltaSyncScheduler := scheduler.NewDeltaSyncScheduler(cfg.DeltaSyncInterval)
 	deltaSyncScheduler.Start(schedulerCtx, func(ctx context.Context) error {
-		// TODO(T125/T119/T120): wire to real delta sync coordinator once
-		// connectors.onedrive/teams are implemented (see tasks.md Group B).
-		logger.InfoContext(ctx, "delta sync tick (no-op until connectors are implemented)")
-		return nil
+		// T125: wire to the real delta sync coordinator (connectors.onedrive/
+		// teams are implemented — see runScheduledDeltaSync in scheduled_sync.go,
+		// which mirrors HandleM365Sync's per-connection logic across every
+		// active m365_connections row instead of relying only on the manual
+		// POST /api/m365/sync endpoint).
+		return runScheduledDeltaSync(ctx, m365Deps, logger)
 	})
 	defer deltaSyncScheduler.Stop()
 	logger.Info("delta sync scheduler started", "interval", cfg.DeltaSyncInterval)
