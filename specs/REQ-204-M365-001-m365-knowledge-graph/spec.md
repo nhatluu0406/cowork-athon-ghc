@@ -168,7 +168,7 @@ The Enterprise Knowledge Graph is an intelligent system that ingests company dat
 
 **Design**
 - New top-level service directory: `llm-svc/` (Rust, separate `Cargo.toml`, separate deployable artifact/container from `m365-knowledge-graph/`).
-- gRPC contract: `proto/llmsvc.proto`, shared (copied, not symlinked, to keep independent versioning) into both `llm-svc/proto/` and `src/m365-knowledge-graph/proto/`. Services/RPCs:
+- gRPC contract: `proto/llmsvc.proto`, shared (copied, not symlinked, to keep independent versioning) into both `llm-svc/proto/` and `backend/proto/`. Services/RPCs:
   ```protobuf
   service LlmSvc {
     rpc Embed(EmbedRequest) returns (EmbedResponse);
@@ -200,7 +200,7 @@ The Enterprise Knowledge Graph is an intelligent system that ingests company dat
 
 **Migration note**: `LLM_API_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`/`LLM_EMBED_MODEL` move from the Go backend's config (§12) to `llm-svc`'s config — the Go backend's `internal/config/` no longer needs to read or validate them; it only needs `LLMSVC_ADDR`. Deployment must supply these to the `llm-svc` process/container, not the Go one.
 
-**Frontend/backend reuse note (per team direction)**: where `src/Backend/`'s existing HTTP handlers or `src/Frontend/`'s existing pages already implement the same shape of endpoint/screen this spec calls for (e.g. `src/Frontend/src/pages/BrainChatPage.tsx`, `DataSourcesPage.tsx`, `EntityBrowserPage.tsx`, `FeedbackReviewPage.tsx`, `GraphPage.tsx`, `LoginPage.tsx`, `DashboardPage.tsx` closely match §4.2/§9's planned pages by name and purpose), the implementation should **copy the existing file as a starting point and edit it to match this spec's API contract and data model** (different endpoints, different entity/graph schema, M365-specific auth), rather than writing each page from a blank file. This applies to `internal/llm/` and `internal/retriever/`'s reranker/ONNX code as described above, and should be applied opportunistically to any other close match found in `src/Backend/`/`src/Frontend/` during implementation — not an exhaustive list.
+**Frontend/backend reuse note (per team direction)**: where the **parent MiniRag repo's** `src/Backend/`'s existing HTTP handlers or `src/Frontend/`'s existing pages already implement the same shape of endpoint/screen this spec calls for (e.g. `src/Frontend/src/pages/BrainChatPage.tsx`, `DataSourcesPage.tsx`, `EntityBrowserPage.tsx`, `FeedbackReviewPage.tsx`, `GraphPage.tsx`, `LoginPage.tsx`, `DashboardPage.tsx` closely match §4.2/§9's planned pages by name and purpose), the implementation should **copy the existing file as a starting point and edit it to match this spec's API contract and data model** (different endpoints, different entity/graph schema, M365-specific auth), rather than writing each page from a blank file. This is a reuse reference into the parent repo only — not this repo's own `backend/`/`Frontend/`. This applies to `internal/llm/` and `internal/retriever/`'s reranker/ONNX code as described above, and should be applied opportunistically to any other close match found in the parent repo's `src/Backend/`/`src/Frontend/` during implementation — not an exhaustive list.
 
 **Explicitly out of scope for this amendment**: the M365 connector/parser/graph/permission logic is unaffected — only LLM-shaped computation (embedding, rerank, NER, compression, generation) moves into `llm-svc`.
 
@@ -337,7 +337,7 @@ llm-svc/                            # Rust gRPC service (§3.5) — separate dep
 ### 4.2 Frontend Project Structure
 
 ```
-Frontend/
+Frontend/   (top-level, sibling to backend/ and llm-svc/ — no src/ prefix in this standalone repo)
 ├── src/
 │   ├── api/
 │   │   ├── client.ts             # Axios client
@@ -996,7 +996,13 @@ See §3 above for the complete reuse-vs-new breakdown per architectural dimensio
 
 7. **`llm-svc` Deployment & Ops** — Container image build, gRPC health-check wiring, mTLS vs. plaintext, restart-on-model-swap runbook. Answer deferred to Phase 2. These are ops-layer concerns; the gRPC contract (T157–T158) and Rust service scaffolding (T159) are the blockers.
 
-8. **Proto Versioning Strategy** — `proto/llmsvc.proto` is copied into both `src/m365-knowledge-graph/proto/` and `llm-svc/proto/`. Should this become a shared git submodule once the contract stabilizes? Answer deferred to Phase 2. **Provisional decision**: keep copies independent until v2.0; include a CI check to verify both copies are identical (detect drift).
+8. **Proto Versioning Strategy** — `proto/llmsvc.proto` is copied into both `backend/proto/` and `llm-svc/proto/`. Should this become a shared git submodule once the contract stabilizes? Answer deferred to Phase 2. **Provisional decision**: keep copies independent until v2.0; include a CI check to verify both copies are identical (detect drift).
+
+### 18.7 Requirement-ID Scheme (C1) ✓ RESOLVED
+**Decision**: this spec deliberately uses **phase-based organization** (§5–§10, each with a named goal and file/endpoint deliverables) rather than a formal `FR-###`/`NFR-###` requirement-ID scheme.
+- **Rationale**: retrofitting a full FR-ID taxonomy across an already-phase-structured POC spec is disproportionate — phases already carry the traceability role (each maps 1:1 to a tasks.md section and a checkpoint), and no other section of this spec references requirement IDs.
+- **Cleanup**: tasks.md's Phase 6 heading previously read `## Phase 6: Feedback Loop (FR-010, FR-011)` — a stray reference to IDs that were never defined anywhere in this spec. The `(FR-010, FR-011)` suffix has been removed; the heading is now just `## Phase 6: Feedback Loop`.
+- **Resolves**: checklists/architecture.md CHK030 ("Is a requirement/acceptance-criteria ID scheme... established?").
 
 ---
 

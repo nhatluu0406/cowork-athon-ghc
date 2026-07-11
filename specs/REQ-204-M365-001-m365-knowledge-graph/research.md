@@ -42,7 +42,7 @@ No `NEEDS CLARIFICATION` markers remain in plan.md's Technical Context — all d
 
 ## 7. MergeAssistant independence
 
-- **Decision**: `src/m365-knowledge-graph/` (this feature) and `src/MergeAssistant/` remain fully separate Go modules with zero shared imports.
+- **Decision**: `backend/` (this feature — `src/m365-knowledge-graph/` in the parent MiniRag monorepo, before this repo's 2026-07-11 standalone extraction) and `src/MergeAssistant/` (parent-repo sibling module, not present in this standalone repo) remain fully separate Go modules with zero shared imports.
 - **Rationale**: User directive (locked, see memory `req204-mergeassistant-critical-constraints`) — MergeAssistant must run independently of any RAD platform change, including this new feature.
 - **Alternatives considered**: Sharing a common `internal/db` or `internal/llm` package across both (rejected — violates the independence constraint even though both use PostgreSQL and an LLM runtime interface; pattern reuse is done by copying/adapting code, never by runtime sharing).
 

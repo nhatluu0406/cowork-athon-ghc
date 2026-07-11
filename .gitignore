@@ -1,13 +1,11 @@
 # Build artifacts
-/backend/bin/
-/llm-svc/target/
-/frontend/dist/
-/frontend/build/
-node_modules/
+backend/bin/
+llm-svc/target/
+Frontend/dist/
+Frontend/build/
+Frontend/node_modules/
 
 # IDE & editor
-.vscode/
-.idea/
 *.swp
 *.swo
 *~
@@ -18,16 +16,17 @@ node_modules/
 .env.local
 .env.*.local
 
-# Dependencies
-go.sum
-Cargo.lock
-
 # Test & coverage
 coverage/
 *.out
 *.test
+Frontend/playwright-report/*
+Frontend/test-results/*
+
+# Logs
+*.log
+logs/
 
 # Misc
-vendor/
 dist/
-*.log
+build/

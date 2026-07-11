@@ -8,11 +8,11 @@
 
 ## Requirement Completeness
 
-- [ ] CHK001 - Is the reuse-vs-new breakdown documented per architectural dimension (data layer, auth, retrieval, etc.)? [Completeness, Spec §3, Gap — table row unpopulated: "*Not populated in any source revision — see Open Questions.*"]
+- [x] CHK001 - Is the reuse-vs-new breakdown documented per architectural dimension (data layer, auth, retrieval, etc.)? [Completeness, Spec §3, Gap — table row unpopulated: "*Not populated in any source revision — see Open Questions.*"] — Resolved 2026-07-11 per spec.md §18.1 (T152): Architecture Decisions Summary table added to §3, covering 13 architectural dimensions.
 - [ ] CHK002 - Are the criteria for deciding what counts as "reused from RAD" vs. "entirely new" explicitly defined anywhere in the spec? [Completeness, Gap]
-- [ ] CHK003 - Is a data/consent/retention policy specified for ingesting tenant-wide private Teams chat content (`Chat.Read.All`, `ChannelMessage.Read.All`)? [Completeness, Spec §18 Q2, Gap]
-- [ ] CHK004 - Are invalidation/refresh triggers specified for `permission_cache` when a user's M365 ACL changes? [Completeness, Spec §18 Q5, Gap]
-- [ ] CHK005 - Is a staleness/expiry field or TTL requirement defined for cached permission entries? [Completeness, Spec §11.1 schema (permission_cache), Gap]
+- [x] CHK003 - Is a data/consent/retention policy specified for ingesting tenant-wide private Teams chat content (`Chat.Read.All`, `ChannelMessage.Read.All`)? [Completeness, Spec §18 Q2, Gap] — Resolved 2026-07-11 per spec.md §18.2 (T153): consent model, retention, redaction, and risk-acceptance policy documented.
+- [x] CHK004 - Are invalidation/refresh triggers specified for `permission_cache` when a user's M365 ACL changes? [Completeness, Spec §18 Q5, Gap] — Resolved 2026-07-11 per spec.md §18.5 (T156, merged with T150): refresh triggered on every delta sync cycle via `RefreshCache()`.
+- [x] CHK005 - Is a staleness/expiry field or TTL requirement defined for cached permission entries? [Completeness, Spec §11.1 schema (permission_cache), Gap] — Resolved 2026-07-11 per spec.md §18.5 (T156, merged with T150): explicit decision that no schema change is needed; staleness bounded by `DELTA_SYNC_INTERVAL` (default 5 min), refresh timestamp implied by `delta_state.last_sync_at`.
 - [ ] CHK006 - Are rollback/recovery requirements defined for a failed graph builder publish cycle (build→validate→publish)? [Completeness, Spec §6, Gap]
 - [ ] CHK007 - Are requirements defined for what happens when Phase 2 NLP extraction produces conflicting entity types for the same underlying entity across multiple documents? [Completeness, Gap]
 - [ ] CHK008 - Is there a requirement specifying maximum/expected latency or timeout budget for the 8-stage retrieval pipeline (§7) as a whole, not just token budget for context packing? [Completeness, Gap]
@@ -23,14 +23,14 @@
 - [ ] CHK010 - Is "near-real-time" (used to describe delta sync strategy in §1) quantified with a specific latency target, or does it only mean "every `DELTA_SYNC_INTERVAL`"? [Clarity, Spec §1, Ambiguity]
 - [ ] CHK011 - Is "robust pipeline design" (§1, §2) defined with measurable criteria (e.g., retry counts, failure tolerance), or is it aspirational language only? [Clarity, Ambiguity]
 - [ ] CHK012 - Is "batched processing" (§1 Data volume) quantified with a specific batch size or throughput target? [Clarity, Ambiguity]
-- [ ] CHK013 - Does the spec clarify whether Phase 6 ("Permission-Aware Retrieval") is a distinct implementation phase with its own deliverables, or purely a documentation/refinement pass over Phase 3? [Clarity, Spec §10, §17, Ambiguity — spec itself flags this as unresolved]
+- [x] CHK013 - Does the spec clarify whether Phase 6 ("Permission-Aware Retrieval") is a distinct implementation phase with its own deliverables, or purely a documentation/refinement pass over Phase 3? [Clarity, Spec §10, §17, Ambiguity — spec itself flags this as unresolved] — Resolved 2026-07-11 per spec.md §18.3 (T154): Phase 6 remains conceptual in the spec but its deliverables are merged into Phase 3 during implementation; there is no separate Phase 6 task list.
 
 ## Requirement Consistency
 
-- [ ] CHK014 - Are Phase 5 (Frontend)'s stated dependencies in the Phases Summary table (§17: "Phase 1–3") consistent with the actual page-level dependency on Phase 4's `/api/feedback/stats` (needed by `DashboardPage.tsx` and `FeedbackReview.tsx`, per §9 footnote)? [Consistency, Spec §17 vs §9, Conflict — spec explicitly flags this mismatch]
-- [ ] CHK015 - Do Phase 6's stated deliverables ("full permission-aware retrieval") duplicate or conflict with Phase 3's Stage 0 permission filter deliverable? [Consistency, Spec §10 vs §7, Conflict — spec explicitly flags this as unresolved]
+- [x] CHK014 - Are Phase 5 (Frontend)'s stated dependencies in the Phases Summary table (§17: "Phase 1–3") consistent with the actual page-level dependency on Phase 4's `/api/feedback/stats` (needed by `DashboardPage.tsx` and `FeedbackReview.tsx`, per §9 footnote)? [Consistency, Spec §17 vs §9, Conflict — spec explicitly flags this mismatch] — Resolved 2026-07-11: spec.md §17's Phases Summary table now carries an explicit footnote on Phase 5 ("also needs Phase 4 for `FeedbackReview.tsx` / dashboard feedback-trends panel"), reconciling it with the §9 footnote; the two sections no longer silently disagree.
+- [x] CHK015 - Do Phase 6's stated deliverables ("full permission-aware retrieval") duplicate or conflict with Phase 3's Stage 0 permission filter deliverable? [Consistency, Spec §10 vs §7, Conflict — spec explicitly flags this as unresolved] — Resolved 2026-07-11 per spec.md §18.3 (T154): duplication resolved by decision to merge Phase 6 deliverables into Phase 3 (Stage 0 permission filter); no separate/conflicting deliverable remains.
 - [ ] CHK016 - Are the "Key Architectural Constraints" (§3.3) consistent with the component list in §3.1 (e.g., is permission filtering described identically in both places)? [Consistency, Spec §3.1 vs §3.3]
-- [ ] CHK017 - Is the embedding storage decision (PostgreSQL `chunk_embeddings.embedding BYTEA`, §6) consistent with the retrieval pipeline's semantic search requirement (§7 Stage 4), given the open question about whether `pgvector` is required for the stated data volume? [Consistency, Spec §6 vs §7 vs §18 Q4]
+- [x] CHK017 - Is the embedding storage decision (PostgreSQL `chunk_embeddings.embedding BYTEA`, §6) consistent with the retrieval pipeline's semantic search requirement (§7 Stage 4), given the open question about whether `pgvector` is required for the stated data volume? [Consistency, Spec §6 vs §7 vs §18 Q4] — Resolved 2026-07-12 per spec.md §18.4 (T155): explicit decision to use brute-force PostgreSQL cosine similarity (no `pgvector`) at POC scale, with documented rationale and a straightforward future swap path if scale grows past ~50K documents.
 
 ## Acceptance Criteria Quality
 
@@ -55,8 +55,8 @@
 
 ## Ambiguities & Conflicts
 
-- [ ] CHK030 - Is a requirement/acceptance-criteria ID scheme (e.g., FR-XXX) established and applied consistently across the spec, or are requirements only described in prose within phase sections? [Traceability, Gap]
-- [ ] CHK031 - Are all five items in Open Questions (§18) tracked with an owner and resolution deadline, or do they remain indefinitely unresolved blocking items? [Gap, Spec §18]
+- [x] CHK030 - Is a requirement/acceptance-criteria ID scheme (e.g., FR-XXX) established and applied consistently across the spec, or are requirements only described in prose within phase sections? [Traceability, Gap] — Resolved 2026-07-12 per spec.md §18.7 (C1): explicit decision to use phase-based organization (§5–§10) instead of a formal FR-### scheme; the one dangling `(FR-010, FR-011)` reference (tasks.md Phase 6 heading) has been removed as a stray leftover.
+- [x] CHK031 - Are all five items in Open Questions (§18) tracked with an owner and resolution deadline, or do they remain indefinitely unresolved blocking items? [Gap, Spec §18] — Resolved 2026-07-11/12 per spec.md §18.1–18.5 (T152–T156): all five original open questions are now marked RESOLVED with documented decisions and rationale (no owner/deadline metadata was added, but none remain indefinitely-unresolved blocking items — §18.6's remaining items 6–8 are explicitly scoped as non-blocking future work, not the original five).
 
 ## Notes
 

@@ -13,7 +13,7 @@
 
 ## 2. Environment setup
 
-**Go backend** (`src/m365-knowledge-graph/.env`) — copy from plan.md / spec.md §12. Note: as of the gRPC amendment, Go holds **no** LLM provider credentials — those moved to `llm-svc` (§12.1):
+**Go backend** (`backend/.env`) — copy from plan.md / spec.md §12. Note: as of the gRPC amendment, Go holds **no** LLM provider credentials — those moved to `llm-svc` (§12.1):
 
 ```bash
 HOST=0.0.0.0
@@ -50,7 +50,7 @@ BRAIN_FALLBACK_TO_CLOUD=true
 ## 3. First run (backend)
 
 ```bash
-cd src/m365-knowledge-graph
+cd backend
 go mod tidy
 go run ./cmd/server            # runs migrations from internal/metadata/schema.go on startup
 ```
@@ -85,7 +85,7 @@ Expected response shape per contracts/api.md `POST /api/knowledge/query`: `answe
 
 ## 6. Frontend integration
 
-The frontend (`src/Frontend/` or a separate repo per plan.md) talks to the backend via:
+The frontend (`Frontend/` or a separate repo per plan.md) talks to the backend via:
 - `VITE_API_BASE_URL` / `VITE_WS_URL` env vars (CLAUDE.md §7 — never hard-code `localhost:8080`)
 - TanStack Query hooks for all server state (`useKnowledgeQuery`, `useEntities`, `useFeedback`) — never Zustand for server data (CLAUDE.md §6)
 - The shared `useWebSocket` hook for real-time sync/query progress — never instantiate `new WebSocket(url)` directly
@@ -101,11 +101,10 @@ Minimal integration test scenario (maps to spec.md §16 E2E acceptance flow, ste
 
 ## 7. Independence check (MergeAssistant)
 
-Before committing any change under `src/m365-knowledge-graph/`, confirm no accidental coupling was introduced:
+This repo is a standalone extraction (2026-07-11) from the parent MiniRag monorepo and does not itself contain `src/MergeAssistant/`, `src/Backend/`, or `src/Frontend/` — those commands only apply inside the parent monorepo, where this feature originated as `src/m365-knowledge-graph/`. Before committing any change under `backend/` in *this* repo, confirm no accidental coupling was introduced:
 
 ```bash
-grep -r "MergeAssistant" src/m365-knowledge-graph/ || echo "clean"
-grep -r "src/Backend\|src/Frontend" src/MergeAssistant/ || echo "clean"
+grep -r "MergeAssistant" backend/ || echo "clean"
 ```
 
-Both must print `clean` — see memory `req204-mergeassistant-critical-constraints`.
+Must print `clean` — see memory `req204-mergeassistant-critical-constraints`. (The reverse check, confirming the parent repo's `src/MergeAssistant/` has no coupling back into `src/Backend`/`src/Frontend`, is only relevant in the parent monorepo, not here.)

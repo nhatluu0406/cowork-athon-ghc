@@ -24,15 +24,15 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [X] T001 Create project directory structure per plan.md at `src/m365-knowledge-graph/`
+- [X] T001 Create project directory structure per plan.md at `backend/`
 - [X] T002 Initialize Go module with `go mod init github.com/rad-system/m365-knowledge-graph`
 - [X] T003 [P] Create `.gitignore` for Go project (vendor/, dist/, *.out, .env)
 - [X] T004 [P] Setup Makefile with targets: build, test, lint, run, docker-build
 - [X] T005 [P] Configure `go.mod` with required dependencies: lib/pq, neo4j-go-driver, MS Graph SDK
-- [X] T006 Create Dockerfile for backend at `src/m365-knowledge-graph/Dockerfile`
+- [X] T006 Create Dockerfile for backend at `backend/Dockerfile`
 - [X] T007 Create docker-compose.yml for local PostgreSQL + Neo4j stack at repo root
 - [X] T008 [P] Setup gofmt, golint in CI/pre-commit hooks
-- [X] T009 Create `src/m365-knowledge-graph/cmd/main.go` entry point with graceful shutdown
+- [X] T009 Create `backend/cmd/main.go` entry point with graceful shutdown
 
 ---
 
@@ -42,26 +42,26 @@
 
 ⚠️ **CRITICAL**: No feature work can begin until this phase is complete
 
-- [X] T010 Create PostgreSQL schema file at `src/m365-knowledge-graph/migrations/001_initial_schema.sql` with all 11 tables from data-model.md §1: delta_state, m365_files, chunks, m365_connections, permission_cache, embedding_models, chunk_embeddings, embedding_jobs, query_logs, feedback_events, extraction_confidence
-- [X] T011 Implement database abstraction layer in `src/m365-knowledge-graph/internal/metadata/db.go` (connection pool, transaction support — `lib/pq`, parameterized `$1/$2/$3` queries per memory `req204-mergeassistant-critical-constraints`-equivalent PostgreSQL rule)
-- [X] T012 [P] Implement PostgreSQL query builders in `src/m365-knowledge-graph/internal/metadata/query.go` (CRUD operations for all tables)
-- [X] T013 Create Neo4j connection pool and query builder in `src/m365-knowledge-graph/internal/graph/neo4j_store.go` (node labels + relationships per data-model.md §2)
-- [X] T014 Implement structured logging via slog in `src/m365-knowledge-graph/internal/common/logger.go`
-- [X] T015 Create error types and wrapping in `src/m365-knowledge-graph/internal/common/errors.go`
-- [X] T016 Implement configuration loader in `src/m365-knowledge-graph/internal/common/config.go` (env vars per plan.md §7 / quickstart.md §2: DATABASE_URL, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, M365_*, LLM_*, JWT_SECRET, ALLOWED_ORIGINS, DELTA_SYNC_INTERVAL)
-- [X] T017 [P] Implement API router and middleware in `src/m365-knowledge-graph/internal/api/router.go` (CORS, auth, logging, error handling)
-- [X] T018 Implement authentication middleware (Entra ID OIDC + JWT fallback) in `src/m365-knowledge-graph/internal/auth/entra_id.go` and `src/m365-knowledge-graph/internal/auth/jwt.go`
-- [X] T019 Implement `POST /api/auth/login` and `POST /api/auth/token/refresh` endpoints in `src/m365-knowledge-graph/internal/api/handlers_auth.go` per contracts/api.md §Auth (was missing from the initial task list — auth middleware alone does not expose the login/refresh HTTP contract)
-- [X] T020 [P] Create shared type definitions in `src/m365-knowledge-graph/pkg/types/entity.go`, `graph.go`, `retrieval.go`, `feedback.go`
-- [X] T021 Implement WebSocket hub in `src/m365-knowledge-graph/internal/websocket/hub.go` (auth via `?token=<JWT>`, 401 + close code 4401 on missing/invalid token per CLAUDE.md §3 BUG-007 pattern; emits `sync_progress`, `extraction_progress`, `query_complete` per contracts/api.md §WebSocket) — was missing; only the frontend-side hook (T098) existed in the original task list
-- [X] T022 Create unit test framework structure under `src/m365-knowledge-graph/tests/unit/`
-- [X] T023 Create integration test mock for MS Graph API at `src/m365-knowledge-graph/tests/integration/m365_mock.go`
+- [X] T010 Create PostgreSQL schema file at `backend/migrations/001_initial_schema.sql` with all 11 tables from data-model.md §1: delta_state, m365_files, chunks, m365_connections, permission_cache, embedding_models, chunk_embeddings, embedding_jobs, query_logs, feedback_events, extraction_confidence
+- [X] T011 Implement database abstraction layer in `backend/internal/metadata/db.go` (connection pool, transaction support — `lib/pq`, parameterized `$1/$2/$3` queries per memory `req204-mergeassistant-critical-constraints`-equivalent PostgreSQL rule)
+- [X] T012 [P] Implement PostgreSQL query builders in `backend/internal/metadata/query.go` (CRUD operations for all tables)
+- [X] T013 Create Neo4j connection pool and query builder in `backend/internal/graph/neo4j_store.go` (node labels + relationships per data-model.md §2)
+- [X] T014 Implement structured logging via slog in `backend/internal/common/logger.go`
+- [X] T015 Create error types and wrapping in `backend/internal/common/errors.go`
+- [X] T016 Implement configuration loader in `backend/internal/common/config.go` (env vars per plan.md §7 / quickstart.md §2: DATABASE_URL, NEO4J_URI, NEO4J_USERNAME, NEO4J_PASSWORD, M365_*, LLM_*, JWT_SECRET, ALLOWED_ORIGINS, DELTA_SYNC_INTERVAL)
+- [X] T017 [P] Implement API router and middleware in `backend/internal/api/router.go` (CORS, auth, logging, error handling)
+- [X] T018 Implement authentication middleware (Entra ID OIDC + JWT fallback) in `backend/internal/auth/entra_id.go` and `backend/internal/auth/jwt.go`
+- [X] T019 Implement `POST /api/auth/login` and `POST /api/auth/token/refresh` endpoints in `backend/internal/api/handlers_auth.go` per contracts/api.md §Auth (was missing from the initial task list — auth middleware alone does not expose the login/refresh HTTP contract)
+- [X] T020 [P] Create shared type definitions in `backend/pkg/types/entity.go`, `graph.go`, `retrieval.go`, `feedback.go`
+- [X] T021 Implement WebSocket hub in `backend/internal/websocket/hub.go` (auth via `?token=<JWT>`, 401 + close code 4401 on missing/invalid token per CLAUDE.md §3 BUG-007 pattern; emits `sync_progress`, `extraction_progress`, `query_complete` per contracts/api.md §WebSocket) — was missing; only the frontend-side hook (T098) existed in the original task list
+- [X] T022 Create unit test framework structure under `backend/tests/unit/`
+- [X] T023 Create integration test mock for MS Graph API at `backend/tests/integration/m365_mock.go`
 
 **Checkpoint**: Foundation ready — feature implementation can now begin in parallel
 
 ---
 
-## Phase 3: M365 Connectors + Parsing (FR-001, FR-002, FR-003, FR-004)
+## Phase 3: M365 Connectors + Parsing
 
 **Goal**: Ingest M365 content with incremental delta sync and parse multiple document formats
 
@@ -69,32 +69,32 @@
 
 ### Tests for M365 Connectors & Parsing
 
-- [X] T024 [P] Unit test MS Graph API client retry logic in `src/m365-knowledge-graph/tests/unit/connectors/client_test.go`
-- [X] T025 [P] Unit test OAuth2 token management in `src/m365-knowledge-graph/tests/unit/auth/oauth_test.go`
-- [X] T026 [P] Unit test document parsers (docx, xlsx, pptx, pdf) in `src/m365-knowledge-graph/tests/unit/parsers/*_test.go`
-- [X] T027 Integration test delta sync coordinator (state machine per data-model.md §1.1: IDLE→SYNC_RUNNING→SYNC_PARTIAL_HAS_MORE⇄SYNC_RUNNING→SYNC_COMPLETED, and →SYNC_FAILED) with mocked Graph API in `src/m365-knowledge-graph/tests/integration/connectors/delta_sync_test.go`
-- [X] T028 Integration test permission cache population in `src/m365-knowledge-graph/tests/integration/connectors/permissions_test.go`
+- [X] T024 [P] Unit test MS Graph API client retry logic in `backend/tests/unit/connectors/client_test.go`
+- [X] T025 [P] Unit test OAuth2 token management in `backend/tests/unit/auth/oauth_test.go`
+- [X] T026 [P] Unit test document parsers (docx, xlsx, pptx, pdf) in `backend/tests/unit/parsers/*_test.go`
+- [X] T027 Integration test delta sync coordinator (state machine per data-model.md §1.1: IDLE→SYNC_RUNNING→SYNC_PARTIAL_HAS_MORE⇄SYNC_RUNNING→SYNC_COMPLETED, and →SYNC_FAILED) with mocked Graph API in `backend/tests/integration/connectors/delta_sync_test.go`
+- [X] T028 Integration test permission cache population in `backend/tests/integration/connectors/permissions_test.go`
 
 ### Implementation for M365 Connectors & Parsing
 
-- [X] T029 [P] Implement MS Graph HTTP client with retry/rate-limiting in `src/m365-knowledge-graph/internal/connectors/client.go`
-- [X] T030 [P] Implement OAuth2 token management in `src/m365-knowledge-graph/internal/connectors/auth.go` (client credentials + delegated tokens; scopes per contracts/api.md §MS Graph scopes: Sites.Read.All, Files.Read.All, Chat.Read.All, ChannelMessage.Read.All, Group.Read.All, People.Read, User.Read)
-- [X] T031 [P] Implement OneDrive/SharePoint ingestor in `src/m365-knowledge-graph/internal/connectors/onedrive.go` (file list, download, delta query)
-- [X] T032 [P] Implement Teams connector in `src/m365-knowledge-graph/internal/connectors/teams.go` (channel list, message fetch)
-- [X] T033 Implement delta sync coordinator in `src/m365-knowledge-graph/internal/connectors/delta.go` (change token persistence into `delta_state`, state machine per data-model.md §1.1)
-- [X] T034 [P] Implement M365 permission extraction in `src/m365-knowledge-graph/internal/connectors/permissions.go` (ACL cache into `permission_cache`, user↔file mapping)
-- [X] T035 [P] Implement document parsers in `src/m365-knowledge-graph/internal/parsers/`: docx.go, xlsx.go, pptx.go, pdf.go, text.go
-- [X] T036 Implement text chunking logic in `src/m365-knowledge-graph/internal/parsers/chunker.go` (fixed-size chunks with overlap, writes to `chunks` table with unique `(file_id, chunk_index)`)
-- [X] T037 Implement `POST /api/m365/connect` endpoint in `src/m365-knowledge-graph/internal/api/handlers_m365.go` (persists to `m365_connections` per contracts/api.md)
-- [X] T038 Implement `POST /api/m365/sync` endpoint in `src/m365-knowledge-graph/internal/api/handlers_m365.go` (manual + scheduled delta sync, returns 202 + emits `sync_progress` WebSocket events, 409 if already `SYNC_RUNNING`)
+- [X] T029 [P] Implement MS Graph HTTP client with retry/rate-limiting in `backend/internal/connectors/client.go`
+- [X] T030 [P] Implement OAuth2 token management in `backend/internal/connectors/auth.go` (client credentials + delegated tokens; scopes per contracts/api.md §MS Graph scopes: Sites.Read.All, Files.Read.All, Chat.Read.All, ChannelMessage.Read.All, Group.Read.All, People.Read, User.Read)
+- [X] T031 [P] Implement OneDrive/SharePoint ingestor in `backend/internal/connectors/onedrive.go` (file list, download, delta query)
+- [X] T032 [P] Implement Teams connector in `backend/internal/connectors/teams.go` (channel list, message fetch)
+- [X] T033 Implement delta sync coordinator in `backend/internal/connectors/delta.go` (change token persistence into `delta_state`, state machine per data-model.md §1.1)
+- [X] T034 [P] Implement M365 permission extraction in `backend/internal/connectors/permissions.go` (ACL cache into `permission_cache`, user↔file mapping)
+- [X] T035 [P] Implement document parsers in `backend/internal/parsers/`: docx.go, xlsx.go, pptx.go, pdf.go, text.go
+- [X] T036 Implement text chunking logic in `backend/internal/parsers/chunker.go` (fixed-size chunks with overlap, writes to `chunks` table with unique `(file_id, chunk_index)`)
+- [X] T037 Implement `POST /api/m365/connect` endpoint in `backend/internal/api/handlers_m365.go` (persists to `m365_connections` per contracts/api.md)
+- [X] T038 Implement `POST /api/m365/sync` endpoint in `backend/internal/api/handlers_m365.go` (manual + scheduled delta sync, returns 202 + emits `sync_progress` WebSocket events, 409 if already `SYNC_RUNNING`)
 - [X] T039 Implement `GET /api/m365/sync/status` endpoint to return sync state and progress per contracts/api.md
-- [X] T040 [P] Implement `GET /api/m365/sources` endpoint in `src/m365-knowledge-graph/internal/api/handlers_m365.go` (list connected sources — present in contracts/api.md, was missing from the original task list)
+- [X] T040 [P] Implement `GET /api/m365/sources` endpoint in `backend/internal/api/handlers_m365.go` (list connected sources — present in contracts/api.md, was missing from the original task list)
 
 **Checkpoint**: M365 ingestion fully functional; ~10K docs + 500K messages can be fetched and parsed
 
 ---
 
-## Phase 4: Knowledge Graph (FR-005, FR-006, FR-007)
+## Phase 4: Knowledge Graph
 
 **Goal**: Extract entities/relationships via LLM and build Neo4j knowledge graph
 
@@ -102,30 +102,30 @@
 
 ### Tests for Knowledge Graph
 
-- [X] T041 [P] Unit test NLP extractor with mocked LLM in `src/m365-knowledge-graph/tests/unit/nlp/extractor_test.go`
-- [X] T042 [P] Unit test confidence scoring in `src/m365-knowledge-graph/tests/unit/nlp/confidence_test.go`
-- [X] T043 [P] Unit test Neo4j graph builder and dedup logic (dedup keys per data-model.md §2.2: `(from_entity_id, to_entity_id, relationship_type)`) in `src/m365-knowledge-graph/tests/unit/graph/builder_test.go`
-- [X] T044 Unit test graph traversal queries in `src/m365-knowledge-graph/tests/unit/graph/traversal_test.go`
-- [X] T045 Integration test full extraction→graph→query flow in `src/m365-knowledge-graph/tests/integration/graph/extraction_test.go`
+- [X] T041 [P] Unit test NLP extractor with mocked LLM in `backend/tests/unit/nlp/extractor_test.go`
+- [X] T042 [P] Unit test confidence scoring in `backend/tests/unit/nlp/confidence_test.go`
+- [X] T043 [P] Unit test Neo4j graph builder and dedup logic (dedup keys per data-model.md §2.2: `(from_entity_id, to_entity_id, relationship_type)`) in `backend/tests/unit/graph/builder_test.go`
+- [X] T044 Unit test graph traversal queries in `backend/tests/unit/graph/traversal_test.go`
+- [X] T045 Integration test full extraction→graph→query flow in `backend/tests/integration/graph/extraction_test.go`
 
 ### Implementation for Knowledge Graph
 
-- [X] T046 [P] Implement NLP entity extractor in `src/m365-knowledge-graph/internal/nlp/extractor.go` (LLM API call, structured output parsing)
-- [X] T047 [P] Create extraction prompts in `src/m365-knowledge-graph/internal/nlp/prompt.go` (entity/relationship extraction, 7 entity types per data-model.md §2.1: Person, Project, Document, Technology, Customer, Department, Chunk)
-- [X] T048 [P] Implement confidence scoring in `src/m365-knowledge-graph/internal/nlp/confidence.go` (0.0–1.0 per extraction, written to `extraction_confidence` — INVARIANT-5 source traceability via `source_chunk_id`)
-- [X] T049 [P] Implement embedding generation runtime in `src/m365-knowledge-graph/internal/embedding/runtime.go` and `custom_api.go` (batch worker; storage schema `embedding_models`/`chunk_embeddings` per data-model.md §1.6-1.7)
-- [X] T050 [P] Implement batch embedding storage in `src/m365-knowledge-graph/internal/embedding/batch.go` and `store.go` (worker pool, 100 texts/batch, tracked via `embedding_jobs`)
-- [X] T051 Implement Neo4j graph builder in `src/m365-knowledge-graph/internal/graph/builder.go` (build→validate→publish cycle, dedup on upsert — INVARIANT-2/3)
-- [X] T052 Implement Neo4j query patterns in `src/m365-knowledge-graph/internal/graph/neo4j_query.go` (entity lookup, path finding, neighbor queries)
-- [X] T053 [P] Implement graph traversal utilities in `src/m365-knowledge-graph/internal/graph/traversal.go` (BFS/DFS, depth limits per data-model.md — default max_depth 2)
-- [X] T054 [P] Implement graph statistics in `src/m365-knowledge-graph/internal/graph/stats.go` (node/edge counts, degree distribution)
+- [X] T046 [P] Implement NLP entity extractor in `backend/internal/nlp/extractor.go` (LLM API call, structured output parsing)
+- [X] T047 [P] Create extraction prompts in `backend/internal/nlp/prompt.go` (entity/relationship extraction, 7 entity types per data-model.md §2.1: Person, Project, Document, Technology, Customer, Department, Chunk)
+- [X] T048 [P] Implement confidence scoring in `backend/internal/nlp/confidence.go` (0.0–1.0 per extraction, written to `extraction_confidence` — INVARIANT-5 source traceability via `source_chunk_id`)
+- [X] T049 [P] Implement embedding generation runtime in `backend/internal/embedding/runtime.go` and `custom_api.go` (batch worker; storage schema `embedding_models`/`chunk_embeddings` per data-model.md §1.6-1.7)
+- [X] T050 [P] Implement batch embedding storage in `backend/internal/embedding/batch.go` and `store.go` (worker pool, 100 texts/batch, tracked via `embedding_jobs`)
+- [X] T051 Implement Neo4j graph builder in `backend/internal/graph/builder.go` (build→validate→publish cycle, dedup on upsert — INVARIANT-2/3)
+- [X] T052 Implement Neo4j query patterns in `backend/internal/graph/neo4j_query.go` (entity lookup, path finding, neighbor queries)
+- [X] T053 [P] Implement graph traversal utilities in `backend/internal/graph/traversal.go` (BFS/DFS, depth limits per data-model.md — default max_depth 2)
+- [X] T054 [P] Implement graph statistics in `backend/internal/graph/stats.go` (node/edge counts, degree distribution)
 - [X] T055 Create Neo4j schema and indexes in migrations (node labels, relationship types, indices per data-model.md §2.1: Person.email, Person.displayName, Project.name, Document.fileName, Technology.name, Customer.name, Department.name)
 
 **Checkpoint**: Full knowledge graph constructed from ingested content; entities and relationships queryable
 
 ---
 
-## Phase 5: Q&A Pipeline (FR-008, FR-009, FR-015, FR-017)
+## Phase 5: Q&A Pipeline
 
 **Goal**: Implement 8-stage hybrid retrieval pipeline with permission filtering and cited answers
 
@@ -133,39 +133,39 @@
 
 ### Tests for Q&A Pipeline
 
-- [X] T056 [P] Unit test permission filter in `src/m365-knowledge-graph/tests/unit/retrieval/permission_filter_test.go`
-- [X] T057 [P] Unit test intent detector in `src/m365-knowledge-graph/tests/unit/retrieval/intent_test.go`
-- [X] T058 [P] Unit test semantic search in `src/m365-knowledge-graph/tests/unit/retrieval/semantic_search_test.go`
-- [X] T059 [P] Unit test graph expander in `src/m365-knowledge-graph/tests/unit/retrieval/graph_expander_test.go`
-- [X] T060 [P] Unit test reranker in `src/m365-knowledge-graph/tests/unit/retrieval/reranker_test.go`
-- [X] T061 [P] Unit test context packer (token budget enforcement) in `src/m365-knowledge-graph/tests/unit/retrieval/context_packer_test.go`
-- [X] T062 Unit test answer generator with mocked LLM in `src/m365-knowledge-graph/tests/unit/retrieval/answer_gen_test.go`
-- [X] T063 Integration test end-to-end retrieval pipeline in `src/m365-knowledge-graph/tests/integration/retrieval/pipeline_test.go`
-- [X] T064 Integration test permission enforcement (verify no out-of-scope content in answer) in `src/m365-knowledge-graph/tests/integration/retrieval/permissions_test.go`
+- [X] T056 [P] Unit test permission filter in `backend/tests/unit/retrieval/permission_filter_test.go`
+- [X] T057 [P] Unit test intent detector in `backend/tests/unit/retrieval/intent_test.go`
+- [X] T058 [P] Unit test semantic search in `backend/tests/unit/retrieval/semantic_search_test.go`
+- [X] T059 [P] Unit test graph expander in `backend/tests/unit/retrieval/graph_expander_test.go`
+- [X] T060 [P] Unit test reranker in `backend/tests/unit/retrieval/reranker_test.go`
+- [X] T061 [P] Unit test context packer (token budget enforcement) in `backend/tests/unit/retrieval/context_packer_test.go`
+- [X] T062 Unit test answer generator with mocked LLM in `backend/tests/unit/retrieval/answer_gen_test.go`
+- [X] T063 Integration test end-to-end retrieval pipeline in `backend/tests/integration/retrieval/pipeline_test.go`
+- [X] T064 Integration test permission enforcement (verify no out-of-scope content in answer) in `backend/tests/integration/retrieval/permissions_test.go`
 
 ### Implementation for Q&A Pipeline
 
-- [X] T065 Implement retrieval orchestrator in `src/m365-knowledge-graph/internal/retrieval/retriever.go` (8-stage pipeline coordinator per data-model.md §15.2 state machine)
-- [X] T066 [P] Implement Stage 0: permission filter in `src/m365-knowledge-graph/internal/retrieval/permission_filter.go` (enforce at retrieval time, not display — INVARIANT-1)
-- [X] T067 [P] Implement Stage 1: intent detector in `src/m365-knowledge-graph/internal/retrieval/intent_detector.go` (5 intent types: find_expert, find_document, find_project_info, find_technology_usage, general_question)
-- [X] T068 [P] Implement Stage 2/4: semantic search in `src/m365-knowledge-graph/internal/retrieval/semantic_search.go` (embed query, brute-force cosine similarity per research.md §6 — no `pgvector` in POC)
-- [X] T069 [P] Implement Stage 3: graph expander in `src/m365-knowledge-graph/internal/retrieval/graph_expander.go` (BFS, depth 1-2)
-- [X] T070 Implement Stage 5: reranker in `src/m365-knowledge-graph/internal/retrieval/reranker.go` (relevance + graph proximity + confidence)
-- [X] T071 Implement Stage 6: context packer in `src/m365-knowledge-graph/internal/retrieval/context_packer.go` (token budgeting, default 12K)
-- [X] T072 Implement Stage 7: answer generator in `src/m365-knowledge-graph/internal/retrieval/answer_gen.go` (LLM generation with citations)
-- [X] T073 Implement permission cache refresh logic (staleness handling) in `src/m365-knowledge-graph/internal/connectors/permissions_refresh.go` — note open gap from data-model.md §1.5: no expiry/staleness column yet; treat "refresh" as full re-pull until resolved
-- [X] T074 Implement `POST /api/knowledge/query` endpoint in `src/m365-knowledge-graph/internal/api/handlers_knowledge.go` (Q&A entry point; response shape `answer`/`sources[]`/`entities[]`/`intent`/`latency_ms` per contracts/api.md)
-- [X] T075 [P] Implement `GET /api/entities` endpoint in `src/m365-knowledge-graph/internal/api/handlers_knowledge.go` (entity browser, filtering by type + `?q=` search)
-- [X] T076 [P] Implement `GET /api/entities/:id` endpoint in `src/m365-knowledge-graph/internal/api/handlers_knowledge.go` (entity detail + relationships per contracts/api.md — was missing from the original task list, only the list endpoint was covered)
-- [X] T077 [P] Implement `GET /api/graph/nodes` and `GET /api/graph/edges` endpoints in `src/m365-knowledge-graph/internal/api/handlers_graph.go`
+- [X] T065 Implement retrieval orchestrator in `backend/internal/retrieval/retriever.go` (8-stage pipeline coordinator per data-model.md §15.2 state machine)
+- [X] T066 [P] Implement Stage 0: permission filter in `backend/internal/retrieval/permission_filter.go` (enforce at retrieval time, not display — INVARIANT-1)
+- [X] T067 [P] Implement Stage 1: intent detector in `backend/internal/retrieval/intent_detector.go` (5 intent types: find_expert, find_document, find_project_info, find_technology_usage, general_question)
+- [X] T068 [P] Implement Stage 2/4: semantic search in `backend/internal/retrieval/semantic_search.go` (embed query, brute-force cosine similarity per research.md §6 — no `pgvector` in POC)
+- [X] T069 [P] Implement Stage 3: graph expander in `backend/internal/retrieval/graph_expander.go` (BFS, depth 1-2)
+- [X] T070 Implement Stage 5: reranker in `backend/internal/retrieval/reranker.go` (relevance + graph proximity + confidence)
+- [X] T071 Implement Stage 6: context packer in `backend/internal/retrieval/context_packer.go` (token budgeting, default 12K)
+- [X] T072 Implement Stage 7: answer generator in `backend/internal/retrieval/answer_gen.go` (LLM generation with citations)
+- [X] T073 Implement permission cache refresh logic (staleness handling) in `backend/internal/connectors/permissions_refresh.go` — note open gap from data-model.md §1.5: no expiry/staleness column yet; treat "refresh" as full re-pull until resolved
+- [X] T074 Implement `POST /api/knowledge/query` endpoint in `backend/internal/api/handlers_knowledge.go` (Q&A entry point; response shape `answer`/`sources[]`/`entities[]`/`intent`/`latency_ms` per contracts/api.md)
+- [X] T075 [P] Implement `GET /api/entities` endpoint in `backend/internal/api/handlers_knowledge.go` (entity browser, filtering by type + `?q=` search)
+- [X] T076 [P] Implement `GET /api/entities/:id` endpoint in `backend/internal/api/handlers_knowledge.go` (entity detail + relationships per contracts/api.md — was missing from the original task list, only the list endpoint was covered)
+- [X] T077 [P] Implement `GET /api/graph/nodes` and `GET /api/graph/edges` endpoints in `backend/internal/api/handlers_graph.go`
 - [X] T078 [P] Implement `GET /api/graph/path` endpoint for finding paths between entities (`?from=&to=&max_depth=`, default depth 2)
-- [X] T079 [P] Implement `GET /api/stats/overview` endpoint in `src/m365-knowledge-graph/internal/api/handlers_stats.go` (dashboard statistics per contracts/api.md — was missing entirely from the original task list despite being listed in plan.md's `stats.go` file and DashboardPage's dependency)
+- [X] T079 [P] Implement `GET /api/stats/overview` endpoint in `backend/internal/api/handlers_stats.go` (dashboard statistics per contracts/api.md — was missing entirely from the original task list despite being listed in plan.md's `stats.go` file and DashboardPage's dependency)
 
 **Checkpoint**: Full Q&A pipeline functional with permission enforcement; answers grounded in knowledge graph
 
 ---
 
-## Phase 6: Feedback Loop (FR-010, FR-011)
+## Phase 6: Feedback Loop
 
 **Goal**: Collect user feedback and drive periodic re-evaluation of low-confidence knowledge
 
@@ -173,20 +173,20 @@
 
 ### Tests for Feedback Loop
 
-- [X] T080 [P] Unit test feedback storage in `src/m365-knowledge-graph/tests/unit/feedback/store_test.go`
-- [X] T081 [P] Unit test feedback analyzer in `src/m365-knowledge-graph/tests/unit/feedback/analyzer_test.go`
-- [X] T082 Unit test re-evaluation logic in `src/m365-knowledge-graph/tests/unit/feedback/improver_test.go`
-- [X] T083 Integration test feedback→re-extraction cycle in `src/m365-knowledge-graph/tests/integration/feedback/feedback_test.go`
+- [X] T080 [P] Unit test feedback storage in `backend/tests/unit/feedback/store_test.go`
+- [X] T081 [P] Unit test feedback analyzer in `backend/tests/unit/feedback/analyzer_test.go`
+- [X] T082 Unit test re-evaluation logic in `backend/tests/unit/feedback/improver_test.go`
+- [X] T083 Integration test feedback→re-extraction cycle in `backend/tests/integration/feedback/feedback_test.go`
 
 ### Implementation for Feedback Loop
 
-- [X] T084 Implement feedback storage in `src/m365-knowledge-graph/internal/feedback/store.go` (like/dislike/flag, comment persistence into `feedback_events`; `query_id` is `INTEGER REFERENCES query_logs(id)` per data-model.md §1.10 FK-type fix)
-- [X] T085 [P] Implement feedback analyzer in `src/m365-knowledge-graph/internal/feedback/analyzer.go` (trend analytics, low-confidence hotspots)
-- [X] T086 [P] Implement re-evaluation engine in `src/m365-knowledge-graph/internal/feedback/improver.go` (periodic re-extraction of low-confidence edges from `extraction_confidence`)
-- [X] T087 [P] Implement fine-tuning export in `src/m365-knowledge-graph/internal/feedback/exporter.go` (feedback pair export)
-- [X] T088 Implement `POST /api/feedback` endpoint in `src/m365-knowledge-graph/internal/api/handlers_feedback.go` (like/dislike/flag submission, 404 if `query_id` unknown)
+- [X] T084 Implement feedback storage in `backend/internal/feedback/store.go` (like/dislike/flag, comment persistence into `feedback_events`; `query_id` is `INTEGER REFERENCES query_logs(id)` per data-model.md §1.10 FK-type fix)
+- [X] T085 [P] Implement feedback analyzer in `backend/internal/feedback/analyzer.go` (trend analytics, low-confidence hotspots)
+- [X] T086 [P] Implement re-evaluation engine in `backend/internal/feedback/improver.go` (periodic re-extraction of low-confidence edges from `extraction_confidence`)
+- [X] T087 [P] Implement fine-tuning export in `backend/internal/feedback/exporter.go` (feedback pair export)
+- [X] T088 Implement `POST /api/feedback` endpoint in `backend/internal/api/handlers_feedback.go` (like/dislike/flag submission, 404 if `query_id` unknown)
 - [X] T089 Implement `GET /api/feedback/stats` endpoint for analytics dashboard
-- [X] T090 [P] Implement scheduler jobs in `src/m365-knowledge-graph/internal/scheduler/delta_sync.go` (periodic delta sync per `DELTA_SYNC_INTERVAL`) and `reevaluator.go` (periodic confidence re-evaluation trigger) — these packages appear in plan.md's project structure but had no dedicated implementation task in the original list
+- [X] T090 [P] Implement scheduler jobs in `backend/internal/scheduler/delta_sync.go` (periodic delta sync per `DELTA_SYNC_INTERVAL`) and `reevaluator.go` (periodic confidence re-evaluation trigger) — these packages appear in plan.md's project structure but had no dedicated implementation task in the original list
 
 **Checkpoint**: User feedback collection and automated re-evaluation cycle fully operational
 
@@ -200,18 +200,20 @@
 
 ### Frontend Tasks
 
-- [X] T091 [P] Create React project structure in `src/Frontend/` with Vite, TanStack Query, Zustand, Shadcn/ui
-- [X] T092 [P] Implement LoginPage.tsx with Entra ID + JWT fallback authentication (calls `POST /api/auth/login`, `POST /api/auth/token/refresh`)
-- [X] T093 [P] Implement DashboardPage.tsx (overview via `GET /api/stats/overview`, recent queries, sync status, graph stats, feedback trends)
-- [X] T094 [P] Implement SearchPage.tsx (Q&A chat interface via `POST /api/knowledge/query`, citation display, feedback buttons)
-- [X] T095 [P] Implement EntityBrowserPage.tsx (filterable entity list via `GET /api/entities`, entity detail view via `GET /api/entities/:id`, relationships)
-- [X] T096 [P] Implement GraphPage.tsx (interactive graph visualization using React Flow via `GET /api/graph/nodes`/`edges`/`path`, filterable by entity type)
-- [X] T097 [P] Implement FeedbackReviewPage.tsx (admin review of flagged answers via `GET /api/feedback/stats`, confidence trends)
-- [X] T098 [P] Implement DataSourcesPage.tsx (M365 connection config via `POST /api/m365/connect`, `GET /api/m365/sources`, sync status, manual trigger via `POST /api/m365/sync`)
-- [X] T099 [P] Implement API integration hooks (TanStack Query hooks for all endpoints — server state only, per CLAUDE.md §6)
-- [X] T100 [P] Implement UI state management (Zustand stores for UI state only, server state via TanStack Query — never mixed, per CLAUDE.md §6)
-- [X] T101 Implement WebSocket hook `useWebSocket` for real-time sync/query progress in `src/Frontend/src/hooks/useWebSocket.ts` (connects to backend hub from T021; never `new WebSocket(url)` directly per CLAUDE.md §6)
-- [X] T102 [P] Create Playwright E2E tests for critical user flows in `src/Frontend/tests/e2e/` (maps to spec.md §16 E2E acceptance flow steps 1-9)
+> **Corrected 2026-07-12**: the `[X]` markers below (T091–T102) are INACCURATE — no `Frontend/` directory, `App.tsx`, or any `.tsx` file exists anywhere in this repository (confirmed by direct filesystem search). This mirrors the same false-complete pattern documented for Phases 1–8 generally (see top-of-file note) and is corrected in the audit-verified status table and remediation tasks at `## Phase 9: Remediation → Group F` (T139–T148), which supersede these entries. Do not trust `[X]` on T091–T102 as evidence of a working frontend; see Group F for the real, currently-unimplemented (0%) status and remaining work.
+
+- [ ] T091 [P] Create React project structure in `Frontend/` with Vite, TanStack Query, Zustand, Shadcn/ui — see Group F (T139)
+- [ ] T092 [P] Implement LoginPage.tsx with Entra ID + JWT fallback authentication (calls `POST /api/auth/login`, `POST /api/auth/token/refresh`) — see Group F (T140)
+- [ ] T093 [P] Implement DashboardPage.tsx (overview via `GET /api/stats/overview`, recent queries, sync status, graph stats, feedback trends) — see Group F (T141)
+- [ ] T094 [P] Implement SearchPage.tsx (Q&A chat interface via `POST /api/knowledge/query`, citation display, feedback buttons) — see Group F (T142)
+- [ ] T095 [P] Implement EntityBrowserPage.tsx (filterable entity list via `GET /api/entities`, entity detail view via `GET /api/entities/:id`, relationships) — see Group F (T143)
+- [ ] T096 [P] Implement GraphPage.tsx (interactive graph visualization using React Flow via `GET /api/graph/nodes`/`edges`/`path`, filterable by entity type) — see Group F (T144)
+- [ ] T097 [P] Implement FeedbackReviewPage.tsx (admin review of flagged answers via `GET /api/feedback/stats`, confidence trends) — see Group F (T145)
+- [ ] T098 [P] Implement DataSourcesPage.tsx (M365 connection config via `POST /api/m365/connect`, `GET /api/m365/sources`, sync status, manual trigger via `POST /api/m365/sync`) — see Group F (T146)
+- [ ] T099 [P] Implement API integration hooks (TanStack Query hooks for all endpoints — server state only, per CLAUDE.md §6)
+- [ ] T100 [P] Implement UI state management (Zustand stores for UI state only, server state via TanStack Query — never mixed, per CLAUDE.md §6)
+- [ ] T101 Implement WebSocket hook `useWebSocket` for real-time sync/query progress in `Frontend/src/hooks/useWebSocket.ts` (connects to backend hub from T021; never `new WebSocket(url)` directly per CLAUDE.md §6) — see Group F (T147)
+- [ ] T102 [P] Create Playwright E2E tests for critical user flows in `Frontend/tests/e2e/` (maps to spec.md §16 E2E acceptance flow steps 1-9) — see Group F (T148)
 
 **Checkpoint**: Frontend dashboard fully functional; all CRUD operations accessible via UI
 
@@ -224,15 +226,15 @@
 **Purpose**: Improvements that affect multiple components; production readiness
 
 - [X] T103 [P] Security audit: verify no out-of-scope content leaks in graph expansion, reranking, citations
-- [X] T104 [P] Complete unit test suite (target: ≥80% coverage) in `src/m365-knowledge-graph/tests/unit/`
-- [X] T105 [P] Complete integration test suite in `src/m365-knowledge-graph/tests/integration/`
+- [X] T104 [P] Complete unit test suite (target: ≥80% coverage) in `backend/tests/unit/`
+- [X] T105 [P] Complete integration test suite in `backend/tests/integration/`
 - [X] T106 [P] Setup CI/CD pipeline (.github/workflows/ or equivalent)
 - [X] T107 [P] Create database migration rollback tests
 - [X] T108 Update CLAUDE.md with REQ-204 status and architecture summary
 - [X] T109 Create runbook documentation in `docs/m365-knowledge-graph/` (deployment, troubleshooting)
 - [X] T110 Create API documentation (OpenAPI/Swagger spec derived from contracts/api.md, endpoint reference)
 - [X] T111 Performance validation: verify Q&A p95 latency ≤ 30s on POC corpus
-- [X] T112 Load testing: verify system handles POC volume (10K docs, 500K messages, 50 concurrent users); independence check per quickstart.md §7 (`grep` confirms zero cross-imports between `src/m365-knowledge-graph/` and `src/MergeAssistant/`)
+- [X] T112 Load testing: verify system handles POC volume (10K docs, 500K messages, 50 concurrent users); independence check per quickstart.md §7 (`grep` confirms zero cross-imports between `backend/` and `src/MergeAssistant/`)
 
 **Checkpoint**: Production-ready system with full test coverage and operational documentation
 
@@ -341,13 +343,13 @@ Task T028: "Integration test permissions"
 - All database writes must be within PostgreSQL transactions
 - All graph updates must follow build→validate→publish cycle
 - Permission filtering is Stage 0 of retrieval, never a post-filter
-- MergeAssistant independence must hold throughout: no task under `src/m365-knowledge-graph/` may import from `src/MergeAssistant/`, `src/Backend/`, or `src/Frontend/` (see quickstart.md §7 verification command)
+- MergeAssistant independence must hold throughout: no task under `backend/` may import from `src/MergeAssistant/`, `src/Backend/`, or `src/Frontend/` (see quickstart.md §7 verification command)
 
 ---
 
 ## Phase 9: Remediation (Post-Audit Corrections)
 
-**Generated**: 2026-07-11, from a direct code-vs-spec audit (agent-run file inspection of `src/m365-knowledge-graph/`, not task-list review).
+**Generated**: 2026-07-11, from a direct code-vs-spec audit (agent-run file inspection of `backend/`, not task-list review).
 
 **Purpose**: Correct the false-complete status of Phases 1–8 above and provide an accurate, actionable remaining-work list. Tasks are grouped by the phase they correct, then a final cross-cutting group for wiring `main.go`.
 
@@ -416,15 +418,15 @@ Task T028: "Integration test permissions"
 #### Group F: Phase 5 Remediation — Frontend (build from scratch)
 
 - [ ] T139 Create `Frontend/` project structure (Vite + React + TypeScript + TanStack Query + Zustand + Shadcn/ui) per spec §4.2 — directory does not exist at all
-- [X] T140 [P] Implement `LoginPage.tsx` (Entra ID + JWT fallback)
-- [X] T141 [P] Implement `DashboardPage.tsx` (overview stats, sync status, feedback trends)
-- [X] T142 [P] Implement `KnowledgeSearch.tsx` (Q&A chat interface with citations + feedback buttons)
-- [X] T143 [P] Implement `EntityBrowser.tsx` (filterable entity list + detail view)
-- [X] T144 [P] Implement `BusinessGraph.tsx` (interactive graph visualization)
-- [X] T145 [P] Implement `FeedbackReview.tsx` (admin review of flagged answers)
-- [X] T146 [P] Implement `DataSourcesPage.tsx` (M365 connection config + sync triggers)
-- [X] T147 Implement `useWebSocket` hook wired to the backend hub (T115)
-- [X] T148 Playwright E2E tests mapped to spec §16 acceptance flow (only meaningful once T113–T147 are done)
+- [ ] T140 [P] Implement `LoginPage.tsx` (Entra ID + JWT fallback) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T141 [P] Implement `DashboardPage.tsx` (overview stats, sync status, feedback trends) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T142 [P] Implement `KnowledgeSearch.tsx` (Q&A chat interface with citations + feedback buttons) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T143 [P] Implement `EntityBrowser.tsx` (filterable entity list + detail view) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T144 [P] Implement `BusinessGraph.tsx` (interactive graph visualization) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T145 [P] Implement `FeedbackReview.tsx` (admin review of flagged answers) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T146 [P] Implement `DataSourcesPage.tsx` (M365 connection config + sync triggers) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T147 Implement `useWebSocket` hook wired to the backend hub (T115) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
+- [ ] T148 Playwright E2E tests mapped to spec §16 acceptance flow (only meaningful once T113–T147 are done) — NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created.
 
 #### Group G: Phase 6 Remediation — Permission-Aware Retrieval
 
@@ -450,12 +452,12 @@ New work introduced by the spec.md §3.4/§3.5 amendment, **revised same-day** f
 
 **gRPC contract — do first, both sides depend on it**
 
-- [X] T157 Author `proto/llmsvc.proto`: `LlmSvc` service with `Embed`, `Rerank`, `ExtractEntities`, `Compress`, `DetectIntent`, `Generate`, `Health`, `ListModels` RPCs (message shapes per spec §3.5); place source copy in `llm-svc/proto/`, mirror into `src/m365-knowledge-graph/proto/` — **DONE 2026-07-11**: Proto file created at `src/m365-knowledge-graph/proto/llmsvc.proto` with complete service definition, all 8 RPCs with request/response message types, task-aware routing hints (TaskType enum for ExtractRequest), and NLP_MODE control (RoutingMode enum for GenerateRequest). Per spec.md §3.5, all messages documented with field purposes. Entity/Relationship types support confidence scoring + metadata for graph builder feedback loop integration.
+- [X] T157 Author `proto/llmsvc.proto`: `LlmSvc` service with `Embed`, `Rerank`, `ExtractEntities`, `Compress`, `DetectIntent`, `Generate`, `Health`, `ListModels` RPCs (message shapes per spec §3.5); place source copy in `llm-svc/proto/`, mirror into `backend/proto/` — **DONE 2026-07-11**: Proto file created at `backend/proto/llmsvc.proto` with complete service definition, all 8 RPCs with request/response message types, task-aware routing hints (TaskType enum for ExtractRequest), and NLP_MODE control (RoutingMode enum for GenerateRequest). Per spec.md §3.5, all messages documented with field purposes. Entity/Relationship types support confidence scoring + metadata for graph builder feedback loop integration.
 - [X] T158 Generate Rust server stubs (`tonic-build`) and Go client stubs (`protoc-gen-go-grpc`) from T157's proto; wire into each side's build (`build.rs` for Rust, `go generate` or Makefile target for Go) — **DONE 2026-07-11**: Created `internal/llmsvc/client.go` with typed Go gRPC client wrapper (all 8 RPCs: Embed, Rerank, ExtractEntities, Compress, DetectIntent, Generate, Health, ListModels). Helper types defined in `internal/llmsvc/types.go`. Proto stubs will be generated at build time via `protoc` (stubs can be pre-generated via `protoc --go_out=. --go-grpc_out=. proto/llmsvc.proto` or integrated into Go's `go generate` / Makefile). Wrapper provides uniform interface across all LLM operations, single point of provider/model/NLP_MODE abstraction per INVARIANT-5 (spec §3.3: "single-service boundary").
 
 **`llm-svc/` — new Rust gRPC service, §3.5 (depends on T157–T158)**
 
-- [X] T159 Scaffold `llm-svc/` (Rust, `tonic` + `Cargo.toml`) as a new top-level service, independent build/deploy from `src/m365-knowledge-graph/` — `src/main.rs` (gRPC server bootstrap), `src/service.rs` (RPC trait impl skeleton), `src/config.rs` — **DONE 2026-07-11**: Complete scaffolding with tonic gRPC server, Tokio runtime, all 8 RPC stubs (returning graceful errors per spec §3.5), configuration loading (env vars + models.yaml), NLP_MODE routing policy (modes 1/2/3), cloud proxy client foundation, and model registry. Proto file copied from Go side. Service starts and binds to gRPC port; Health/ListModels RPCs fully functional. Model inference backends (T160-T162) are Phase 2 stubs with clear error messages (no silent failures). Zero Ollama dependency enforced.
+- [X] T159 Scaffold `llm-svc/` (Rust, `tonic` + `Cargo.toml`) as a new top-level service, independent build/deploy from `backend/` — `src/main.rs` (gRPC server bootstrap), `src/service.rs` (RPC trait impl skeleton), `src/config.rs` — **DONE 2026-07-11**: Complete scaffolding with tonic gRPC server, Tokio runtime, all 8 RPC stubs (returning graceful errors per spec §3.5), configuration loading (env vars + models.yaml), NLP_MODE routing policy (modes 1/2/3), cloud proxy client foundation, and model registry. Proto file copied from Go side. Service starts and binds to gRPC port; Health/ListModels RPCs fully functional. Model inference backends (T160-T162) are Phase 2 stubs with clear error messages (no silent failures). Zero Ollama dependency enforced.
 - [ ] T160 [P] Implement `src/models/onnx.rs` — ONNX inference via the `ort` crate (backs `Embed` and part of `Rerank`), loaded per `models.yaml` entry
 - [ ] T161 [P] Implement `src/models/gguf.rs` — GGUF local-model inference (llama.cpp-compatible Rust binding, e.g. `llama-cpp-2`); backs the local-model path of `DetectIntent`, `ExtractEntities`, `Compress`, `Generate` in `NLP_MODE` 2/3. **Port, don't rewrite from scratch**: use `src/Backend/internal/llm/onnx_planner.go`, `qwen_tokenizer.go`/`spm_tokenizer.go` as the reference for prompt formatting + tokenization behavior (plan.md reuse directive)
 - [ ] T162 [P] Implement `src/models/safetensors.rs` — safetensors inference via `candle`
@@ -557,7 +559,7 @@ New work introduced by the spec.md §3.4/§3.5 amendment, **revised same-day** f
 #### Group L: Cleanup — Dead/Duplicate Code
 
 - [X] T191 (2026-07-11) Confirmed via grep that `internal/connectors/auth.go`'s `OAuth2`/`NewOAuth2`/`ExchangeCode`/`RefreshAccessToken`/`GetToken` were referenced only by their own test file (`tests/unit/auth/oauth_test.go`) — no production caller (`cmd/main.go`, `cmd/routes.go`, or any handler) ever constructed an `OAuth2`; real auth flows entirely through `internal/auth/entra_id.go`. Deleted `internal/connectors/auth.go` and its now-pointless test `tests/unit/auth/oauth_test.go` (removed the now-empty `tests/unit/auth/` directory). `go build ./internal/connectors/... ./internal/auth/...` and `go vet ./internal/connectors/...` pass clean; `go test ./tests/unit/...` still passes (note: `go build ./...` at the repo root still fails, but that is a pre-existing, unrelated break — `internal/llmsvc/llmsvc.pb.go` is an empty generated file even on a clean `git stash` of this session's changes, tracked back to commit `657529c3`).
-- [X] T192 (2026-07-11) Audited `src/Frontend/src/App.tsx`: `Login.tsx` (routed `/login`, primary auth route) and `Search.tsx` (routed `/search`) are each still actively routed at distinct paths alongside their Group F counterparts (`LoginPage.tsx` at `/m365-login`, `KnowledgeSearchPage.tsx` at `/knowledge-search`) — both pairs serve genuinely different routes in the merged app, so neither legacy file is dead code and neither was deleted. `Dashboard.tsx`, however, was imported in `App.tsx` (`import Dashboard from '@/pages/Dashboard'`) but never referenced in any JSX — the `dashboard` route already used `DashboardPage`, so the import was fully dead; removed the import and deleted `src/pages/Dashboard.tsx`. `GraphPage.tsx` had zero imports anywhere in the codebase (route `business-graph` uses `BusinessGraphPage.tsx` instead) — deleted as fully orphaned. Verified via `npx tsc --noEmit`: the 30 pre-existing TS errors (unrelated pre-existing JSX bugs in `DashboardPage.tsx`/`DataSourcesPage.tsx`/`EntityBrowserPage.tsx`, confirmed present on a clean `git stash` too) are unchanged before/after — no new errors introduced, and none reference `App.tsx`, `Dashboard.tsx`, or `GraphPage.tsx`.
+- [ ] T192 NOT VERIFIED IN REPO (2026-07-12 audit): no Frontend/ directory, App.tsx, or any .tsx file exists anywhere in this repository. Prior [X] marking was inaccurate; do not trust until a frontend build is actually found or created. (Original claim, retained for record only — do not treat as evidence of anything: "(2026-07-11) Audited `src/Frontend/src/App.tsx`: `Login.tsx` ... `Dashboard.tsx` ... `GraphPage.tsx` ... deleted as fully orphaned. Verified via `npx tsc --noEmit`..." — none of these files exist on disk.)
 - [X] T193 (2026-07-11) Implemented `GraphClient.GetSites(ctx)` and `GraphClient.GetSiteDrive(ctx, siteID)` in `internal/connectors/client.go`, replacing the old unused `GetDrive`/`GetDelta` stubs (confirmed dead — the real delta path already goes through `OneDriveConnector.GetDelta` in `onedrive.go`). `GetSites` calls `GET /sites?search=*` and follows `@odata.nextLink` pagination exactly like `onedrive.ListFiles`/`teams.ListTeams`; `GetSiteDrive` calls `GET /sites/{siteId}/drive` and returns the parsed drive object, following the same context-propagation and `fmt.Errorf("graphclient.X: ...: %w", err)` wrapping conventions used throughout the package. `go build ./internal/connectors/...` and `go vet ./internal/connectors/...` pass clean.
 
 #### Group M: llm-svc Build Verification

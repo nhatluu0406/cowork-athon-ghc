@@ -12,7 +12,7 @@ Build an Enterprise Knowledge Graph system that ingests company data from Micros
 
 **Locked constraints**:
 1. **Database**: PostgreSQL (metadata/embeddings) + Neo4j (graph) — *not SQLite, not LanceDB*
-2. **Architecture**: Standalone `m365-knowledge-graph/` backend + React frontend — *MergeAssistant (src/MergeAssistant/) is completely independent; zero shared code with src/Backend*
+2. **Architecture**: Standalone `backend/` backend + React frontend — *MergeAssistant (src/MergeAssistant/) is completely independent; zero shared code with src/Backend*
 3. **Auth**: Microsoft Entra ID SSO (OIDC/OAuth2) + Local JWT fallback (demo/test only)
 4. **POC scope**: Single department (~50 users), ~10K docs, ~500K messages
 5. **NLP/Embedding provider mode** (added 2026-07-11, spec.md §3.4/§3.5): runtime-configurable via `NLP_MODE` — `1` cloud_only, `2` cloud_with_local_preprocess (default), `3` local_only. Local inference (modes 2/3) is served by the `llm-svc` Rust service (§3.5) directly (ONNX/GGUF/safetensors) — **no Ollama dependency**, to keep local footprint to a single service process within the ≤8GB RAM budget.
@@ -27,7 +27,7 @@ Build an Enterprise Knowledge Graph system that ingests company data from Micros
 - `llm-svc/` (new, Rust): `tonic` + `prost` (gRPC/protobuf), `ort` (ONNX Runtime bindings), a llama.cpp-compatible crate (GGUF), `candle` (safetensors), plus an internal HTTP client for cloud LLM passthrough (`reqwest` or similar)
 - Brain integration (new): `internal/brain/` — thin Go wrapper tagging gRPC calls by task type (§3.4); the actual local/cloud routing policy (`NLP_MODE`) is implemented inside `llm-svc`, reusing the Brain Platform (REQ-023) Smart Router pattern as reference
 - Frontend: TanStack Query v5, Zustand v4, Shadcn/ui, React Flow (graph viz)
-- **Reuse directive**: where `src/Backend/internal/llm/` (`onnx.go`, `onnx_embedder.go`, `onnx_planner.go`, `smart_router.go`, `smart_router_onnx.go`, `fallback.go`, tokenizers) and `src/Backend/internal/retriever/` (`bert_reranker.go`, `reranker_onnx*.go`) already implement equivalent model-serving/routing/reranking logic, port their algorithms to Rust rather than designing from scratch (see spec.md §3.5). Where `src/Frontend/src/pages/` already has a same-shaped page (`BrainChatPage.tsx`, `DataSourcesPage.tsx`, `EntityBrowserPage.tsx`, `FeedbackReviewPage.tsx`, `GraphPage.tsx`, `LoginPage.tsx`, `DashboardPage.tsx`), copy it as the Phase 5 starting point and edit to match this feature's API/data model instead of writing from a blank file.
+- **Reuse directive**: where, **in the parent MiniRag repo**, `src/Backend/internal/llm/` (`onnx.go`, `onnx_embedder.go`, `onnx_planner.go`, `smart_router.go`, `smart_router_onnx.go`, `fallback.go`, tokenizers) and `src/Backend/internal/retriever/` (`bert_reranker.go`, `reranker_onnx*.go`) already implement equivalent model-serving/routing/reranking logic, port their algorithms to Rust rather than designing from scratch (see spec.md §3.5). Where, in the parent MiniRag repo, `src/Frontend/src/pages/` already has a same-shaped page (`BrainChatPage.tsx`, `DataSourcesPage.tsx`, `EntityBrowserPage.tsx`, `FeedbackReviewPage.tsx`, `GraphPage.tsx`, `LoginPage.tsx`, `DashboardPage.tsx`), copy it as the Phase 5 starting point and edit to match this feature's API/data model instead of writing from a blank file.
 
 **Storage**: PostgreSQL (metadata, embeddings, sync state, feedback, queries) + Neo4j (business knowledge graph)
 
@@ -82,7 +82,7 @@ specs/REQ-204-M365-001-m365-knowledge-graph/
 ### Source Code (new backend)
 
 ```text
-src/m365-knowledge-graph/
+backend/
 ├── cmd/
 │   └── main.go                   # Server entry point
 ├── internal/
@@ -170,7 +170,7 @@ llm-svc/                            # NEW: Rust gRPC service (spec.md §3.5), se
 │   └── config.rs                 # models.yaml loader + hot-reload
 └── models.yaml                    # {name, format, path, dims, kind} per logical model
 
-src/Frontend/  (or separate repo)
+Frontend/  (top-level, sibling to backend/ and llm-svc/ — or separate repo)
 ├── src/
 │   ├── pages/
 │   │   ├── LoginPage.tsx        # Entra ID + JWT fallback
