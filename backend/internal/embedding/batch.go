@@ -3,6 +3,7 @@ package embedding
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -52,10 +53,12 @@ func NewBatchProcessor(db *sql.DB, runtime EmbeddingRuntime, store *Store, batch
 func (bp *BatchProcessor) QueueJob(ctx context.Context, chunkIDs []int64, modelID int64) (int64, error) {
 	var jobID int64
 
-	// Convert slice to JSON for storage (naive but sufficient for POC)
-	chunkIDsJSON := fmt.Sprintf("[%v]", chunkIDs) // Simple representation
+	chunkIDsJSON, err := json.Marshal(chunkIDs)
+	if err != nil {
+		return 0, fmt.Errorf("embedding.BatchProcessor.QueueJob: marshal chunk IDs: %w", err)
+	}
 
-	err := bp.db.QueryRowContext(ctx,
+	err = bp.db.QueryRowContext(ctx,
 		`INSERT INTO embedding_jobs (chunk_ids, model_id, status, error)
 		 VALUES ($1, $2, $3, '')
 		 RETURNING id`,
@@ -263,22 +266,9 @@ func (bp *BatchProcessor) updateJobStatus(ctx context.Context, db *sql.DB, jobID
 }
 
 func parseChunkIDs(jsonStr string) ([]int64, error) {
-	// Naive parser for [1,2,3] format — sufficient for POC
-	// For production, use proper JSON unmarshaling
-	if len(jsonStr) < 2 || jsonStr[0] != '[' || jsonStr[len(jsonStr)-1] != ']' {
-		return nil, fmt.Errorf("invalid chunk IDs format")
-	}
-
-	// Simple parsing: split by comma (doesn't handle edge cases, but OK for POC)
-	inner := jsonStr[1 : len(jsonStr)-1]
-	if inner == "" {
-		return nil, nil
-	}
-
-	// For now, return a placeholder to avoid complex parsing
-	// In production, use json.Unmarshal
 	var result []int64
-	// This is a simplified version; real implementation would parse properly
-	// For the MVP, we just return the IDs in order as they were queued
+	if err := json.Unmarshal([]byte(jsonStr), &result); err != nil {
+		return nil, fmt.Errorf("parseChunkIDs: %w", err)
+	}
 	return result, nil
 }
