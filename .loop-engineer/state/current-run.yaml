@@ -3,7 +3,7 @@ loop: L6
 mode: run
 execution: subagents
 budget: normal
-status: IN_PROGRESS
+status: COMPLETED
 started_at: "2026-07-11T04:00:00Z"
-completed_at: ""
-note: "L6 Implementation opened. Executes per task/slice in dependency waves (max 3 concurrent, reviewer != owner). Foundation scaffold (npm workspaces + tsconfig.base + ADR 0008 build toolchain) laid by the orchestrator. Wave 1 = CGHC-001 (OpenCode runtime pin), CGHC-002 (loopback service boundary), CGHC-003 (core/contracts web-seam) on disjoint subtrees. Loop stays IN_PROGRESS until all 28 tasks DONE and CGHC-028 release-verify gate PASSes; web stays DEFERRED (ADR 0007)."
+completed_at: "2026-07-12T22:00:00Z"
+note: "L6 Implementation completed with gate PASS. Loop Engineer is now MAINTENANCE_ONLY; active day-to-day work moves to Git plus lightweight docs under docs/product, docs/quality, and docs/architecture. Do NOT auto-start L7."

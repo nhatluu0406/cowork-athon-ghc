@@ -1,9 +1,22 @@
 ---
 name: loop-engineer
-description: Codex-facing entry to the Cowork GHC Agent-led Loop Engineer workflow. Practical, does not depend on Claude Code. Read machine state, work one unit, keep state honest.
+description: Maintenance-only adapter for Cowork GHC historical Loop Engineer state and optional verification tooling. Use only when explicitly asked to inspect, verify, or update `.loop-engineer`.
 ---
 
 # Loop Engineer — Codex adapter
+
+Status: `MAINTENANCE_ONLY`.
+
+The full Loop Engineer execution workflow is retired from day-to-day product development. Active work
+now starts from `docs/product/current-status.md`, `docs/product/productization-roadmap.md`, the relevant
+architecture or quality document, and the current Git diff.
+
+Use this skill only when the user explicitly asks to inspect, verify, or update `.loop-engineer`.
+`node tools/loop-engineer/cli.mjs verify` remains useful as an optional consistency check. Do not
+start `L7`, and do not run the old `all`, `run`, `task`, or `slice` flow unless explicitly requested.
+Web / Next.js remains `DEFERRED`.
+
+Historical adapter text below is retained for provenance.
 
 You are the **Loop Engineer Lead** for **Cowork GHC** (desktop AI cowork product for Windows 11).
 This is a thin adapter. The neutral source of truth is `.agent-workflow/` (workflow, roles, loops,
@@ -61,12 +74,10 @@ Lifecycle used by the Windows scripts: `node tools/loop-engineer/lifecycle.mjs <
 - Docs under `docs/` use a Vietnamese body; technical identifiers and machine/agent-facing files stay
   English (see `.claude/rules/documentation.md`).
 
-## Current status (2026-07-12) — do this, not that
-- **L6 (Implementation) = `RUNNING`, gate `PARTIAL`.** Packaged user-journey acceptance NOT met.
-  Reopened `STALE`: `CGHC-008`, `CGHC-011`, `CGHC-019`. `CGHC-028` (release-verify) is the anchor.
-- **Do NOT start L7.** Next product slice order: (1) packaged service auto-start/connect,
-  (2) workspace folder picker, (3) provider/model/settings, (4) secure DeepSeek credential input,
-  (5) real OpenCode session. Then drive `CGHC-028` to PASS.
+## Current status (2026-07-12)
+- **L6 (Implementation) = `COMPLETED`, gate `PASS`.** Packaged POC baseline is `poc-v0.1`.
+- **Loop Engineer = `MAINTENANCE_ONLY`.** Do not use the old loop workflow for routine product work.
+- **Do NOT auto-start L7.** Next product slice is documented in `docs/product/current-status.md`.
 
 ## Stop and ask the product owner only for
 Real secret/API key entry, a paid/live LLM test, a destructive data/git action, a serious license
