@@ -54,6 +54,13 @@ export {
   type SsrfTestModeAudit,
 } from "./test-mode.js";
 
+export {
+  readE2eMockLlmBaseUrl,
+  isE2eMockLlmUrl,
+  assertLoopbackMockBaseUrl,
+  E2E_MOCK_LLM_ENV_KEY,
+} from "./e2e-mock-llm.js";
+
 export { mapProviderError } from "./error-map.js";
 
 export {

@@ -32,6 +32,7 @@ import {
   createProviderPort,
   createProviderRouter,
   createSsrfPolicy,
+  readE2eMockLlmBaseUrl,
 } from "../provider/index.js";
 import {
   createRecentWorkspaces,
@@ -100,7 +101,11 @@ export async function createCoworkService(
   const baseSettingsStore = await openSettingsStore({ fs: settingsFs });
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
-  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  const ssrf = createSsrfPolicy({
+    resolver: dnsResolver,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
 
   // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
   const httpBundle =
