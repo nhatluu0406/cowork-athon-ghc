@@ -8,7 +8,7 @@ updated_at: "2026-07-12"
 
 ## Mốc Git
 
-- `HEAD` hiện tại: pending commit `feat(attachments): add workspace text file context`.
+- `HEAD` hiện tại: `0fc1fa6` — `feat(attachments): add workspace text file context`.
 - Mốc trước: `e40dada` — `fix(session): isolate multi-turn context from assistant output`.
 - Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
 
