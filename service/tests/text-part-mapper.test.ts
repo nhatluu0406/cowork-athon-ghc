@@ -11,6 +11,10 @@ const SID = "sess-text";
 
 test("committed text part.updated supplements missing deltas", () => {
   const mapper = createEvMapper({ sessionId: SID, now: () => "2026-07-12T08:00:00.000Z" });
+  const roleFrame = {
+    type: "message.updated",
+    properties: { sessionID: SID, info: { id: "m1", role: "assistant", sessionID: SID } },
+  };
   const frame = {
     type: "message.part.updated",
     properties: {
@@ -25,7 +29,7 @@ test("committed text part.updated supplements missing deltas", () => {
       },
     },
   };
-  const events = mapper.map(frame);
+  const events = [...mapper.map(roleFrame), ...mapper.map(frame)];
   assert.equal(events.some((e) => e.kind === "token"), true);
   const view = foldEv(SID, events);
   assert.equal(view.text, "CGHC_FINAL_RESPONSE_OK");
@@ -33,6 +37,11 @@ test("committed text part.updated supplements missing deltas", () => {
 
 test("text part.updated does not duplicate after deltas", () => {
   const mapper = createEvMapper({ sessionId: SID, now: () => "2026-07-12T08:00:00.000Z" });
+  const roleFrame = {
+    type: "message.updated",
+    properties: { sessionID: SID, info: { id: "m1", role: "assistant", sessionID: SID } },
+  };
+  mapper.map(roleFrame);
   const deltas = mapper.map({
     type: "message.part.delta",
     properties: { sessionID: SID, messageID: "m1", partID: "p1", field: "text", delta: "Done." },
