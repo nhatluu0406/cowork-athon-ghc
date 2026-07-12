@@ -1,5 +1,10 @@
 # Cowork GHC — Scope & Acceptance (Requirement Baseline, L1)
 
+> **Superseded:** This document is historical Claude planning provenance. It is not
+> the active source of truth. Use
+> [docs/product/cowork-ghc-product-plan.md](./cowork-ghc-product-plan.md) for the
+> current product plan. Keep this file for requirement reconciliation only.
+
 > Status: L1 Requirement Baseline. This is a requirements/acceptance document, not a
 > technical design. Framework, runtime, storage, and IPC mechanisms are decided in L3
 > (Architecture) via ADRs. This document only says *what* must be true and *how it is

@@ -57,7 +57,7 @@ Recommendation: Product Owner decision. Prefer block by default or require a str
 
 ### Documentation Only
 
-1. `docs/product/current-status.md` says “HEAD hiện tại: 0fc1fa6,” but actual HEAD is `4b626fa`. If the intent is “attachment slice HEAD,” reword it.
+1. Resolved by docs consolidation: `docs/product/current-status.md` no longer uses a moving `HEAD hiện tại` field and instead lists latest verified slice commits.
 
 2. Active docs say full L9 release verification has not started, while `.loop-engineer/evidence/CGHC-028-release-verification.md` records a PARTIAL L9/release-candidate verification. Active docs should distinguish “full L9 PASS not complete” from “no L9 evidence exists.”
 
@@ -174,7 +174,7 @@ Defer:
 
 ### Now
 
-- Fix active docs HEAD wording.
+- Keep active docs free of moving `HEAD hiện tại` wording.
 - Clarify L9 status as “partial evidence exists; full L9 PASS incomplete.”
 - Document 32 KiB/file, 64 KiB/turn, and 12k dispatch as separate gates.
 - Decide `.env`/secret-like attachment policy.
@@ -369,8 +369,8 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 | Attachment dispatch-budget omission | Partially confirmed | Code path confirmed; not sent to live model. UI still does not expose included/omitted files. |
 | `.env` allowed without warning | Confirmed by packaged UI | Fake `.env` accepted; no warning. |
 | File-level truncation unreachable | Still code-only inference | Oversized file is rejected with error chip; no truncation observed. |
-| HEAD wording in current-status | Still documentation-only | Active docs still cite older HEAD; current HEAD after audit commit is `efccb60`. |
-| L9 status wording | Still documentation-only | Current docs still say full L9 not started, while provenance has partial evidence. |
+| HEAD wording in current-status | Superseded | Docs consolidation removed the moving HEAD field and lists verified slice commits instead. |
+| L9 status wording | Superseded | Docs consolidation now states that partial packaged evidence exists while full L9 / release-candidate PASS is incomplete. |
 | Workspace explorer not recommended | Confirmed by packaged UI | Workspace/attachment flows can start without explorer; no evidence that explorer is needed before RC. |
 | Preview tab not recommended | Not verified for live file changes | No live tool/file preview flow was run; defer decision until live file-change flow is verified. |
 | Rename/delete discoverability | Not verified | No persisted multi-conversation/live terminal flow was completed in this pass. |
