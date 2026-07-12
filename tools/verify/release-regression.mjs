@@ -39,6 +39,11 @@ try {
     "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts app/ui/tests/conversation-controller.test.ts",
   );
 
+  run(
+    "activity-presentation",
+    "node --import tsx --test app/ui/tests/activity-model.test.ts service/tests/workspace-file-preview.test.ts service/tests/conversation-store.test.ts",
+  );
+
   run("app-lifecycle-cli", "node --import tsx --test tools/app/tests/app-cli.test.ts");
 
   check("opencode-binary", existsSync(OPENCODE), `missing ${OPENCODE} — run npm install`);

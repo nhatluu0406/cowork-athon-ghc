@@ -34,10 +34,14 @@ Mục tiêu: người dùng quản lý, mở lại và tiếp tục phiên một
 
 Mục tiêu: làm rõ agent đã làm gì trong workspace.
 
-- Timeline tool activity dễ đọc.
-- File-change summary trước và sau safe action.
-- Permission history ngắn cho approve/deny.
-- Phân biệt model output, tool output và app diagnostics.
+- ~~Timeline tool activity dễ đọc (tiếng Việt, trạng thái rõ).~~ **DONE** (2026-07-12)
+- ~~File-change summary từ `file_mutation` EV đã xác minh.~~ **DONE**
+- ~~Permission history read-only trong panel phải.~~ **DONE**
+- ~~Xem trước tệp văn bản an toàn (bounded, workspace guard).~~ **DONE**
+- ~~Persistence activity khi mở lại conversation (không replay live).~~ **DONE**
+- Phân biệt model output, tool output và app diagnostics — **DONE** (token không vào timeline).
+- Diff before/after đầy đủ cho file sửa — **chưa** (slice này chỉ preview nội dung hiện tại / tạo mới).
+- Packaged live journey A–D — deterministic trong `activity-presentation-packaged.mjs`; live tùy chọn.
 
 ## 4. Attachments and context input
 

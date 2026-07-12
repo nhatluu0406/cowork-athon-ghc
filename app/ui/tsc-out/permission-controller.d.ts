@@ -13,7 +13,8 @@
  *  - An `unknown` / `already_resolved` outcome closes the modal with a TRUTHFUL note, never a
  *    fabricated success.
  */
-import type { ServiceClient } from "./service-client.js";
+import type { PermissionDecision } from "@cowork-ghc/contracts";
+import type { PendingPermissionView, PermissionDecisionResponse, ServiceClient } from "./service-client.js";
 /**
  * Injectable timer seam so tests can drive the polling lifecycle deterministically (no real
  * waits). Defaults to the host `setInterval`/`clearInterval`. The handle is opaque (`unknown`)
@@ -44,6 +45,14 @@ export interface PermissionControllerDeps {
     readonly timer?: PermissionControllerTimer;
     /** Visibility seam; defaults to the `document` visibility API. Tests inject a fake. */
     readonly visibility?: PermissionControllerVisibility;
+    /** Fired when a pending permission is shown (read-only history seed). */
+    readonly onPending?: (request: PendingPermissionView) => void;
+    /** Fired after a decision POST returns (resolved / already_resolved). */
+    readonly onDecision?: (input: {
+        readonly request: PendingPermissionView;
+        readonly outcome: PermissionDecisionResponse;
+        readonly requestedDecision: PermissionDecision;
+    }) => void;
 }
 export interface PermissionControllerHandle {
     /** Fetch pending requests once and reconcile the modal against them. */
