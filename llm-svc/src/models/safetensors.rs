@@ -59,7 +59,7 @@ pub struct SafetensorsModel;
 /// Load a model from safetensors format
 ///
 /// Expected structure:
-/// ```
+/// ```text
 /// model_dir/
 ///   ├── model.safetensors      # The model weights
 ///   ├── model.safetensors.index.json (optional, for large models)

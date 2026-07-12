@@ -53,7 +53,7 @@ pub struct GgufSession;
 /// Load a GGUF model from a directory
 ///
 /// Expected structure:
-/// ```
+/// ```text
 /// model_dir/
 ///   ├── model.gguf          # The quantized model
 ///   ├── tokenizer.json      # HuggingFace tokenizer
