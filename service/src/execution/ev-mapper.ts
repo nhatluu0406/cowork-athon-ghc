@@ -33,6 +33,7 @@ import {
 } from "./opencode-events.js";
 import { mapPart, type BaseAllocator } from "./part-mapper.js";
 import { mapTodos } from "./todo-mapper.js";
+import { mapTextPartSnapshot, type TextPartCursorMap } from "./text-part-mapper.js";
 import { sanitizeErrorMessage } from "./error-sanitize.js";
 
 export interface EvMapperOptions {
@@ -96,6 +97,7 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
   // sanitizer so a leak is impossible even before real secret VALUES are seeded (HIGH-S1).
   const redactError = options.redactError ?? sanitizeErrorMessage;
   let seq = options.startSeq ?? 0;
+  const textPartCursors: TextPartCursorMap = new Map();
 
   const alloc: BaseAllocator = (): EvBase => ({
     sessionId: options.sessionId,
@@ -134,11 +136,21 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
       }
       case "message.part.updated": {
         const part = readPart(frame);
-        return part ? mapPart(part, alloc) : [];
+        if (!part) return [];
+        const partRaw = asRecord(asRecord(frame.properties).part);
+        const toolEvents = mapPart(part, alloc);
+        const textEvents = mapTextPartSnapshot(part, partRaw, alloc, textPartCursors);
+        return textEvents.length > 0 ? [...toolEvents, ...textEvents] : toolEvents;
       }
       case "message.part.delta": {
-        const delta = readString(asRecord(frame.properties), "delta");
-        return delta ? [{ ...alloc(), kind: "token", delta }] : [];
+        const props = asRecord(frame.properties);
+        const delta = readString(props, "delta");
+        if (!delta) return [];
+        const partId =
+          readString(props, "partID") ?? readString(props, "messageID") ?? "text";
+        const prev = textPartCursors.get(partId) ?? "";
+        textPartCursors.set(partId, prev + delta);
+        return [{ ...alloc(), kind: "token", delta }];
       }
       case "session.idle": {
         // The ONLY honest source of a `completed` terminal (a run finished).

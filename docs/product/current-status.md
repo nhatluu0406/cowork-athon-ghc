@@ -8,18 +8,26 @@ updated_at: "2026-07-12"
 
 ## Mốc Git
 
-- `HEAD` hiện tại: pending commit `feat(activity): add tool timeline and file-change review`.
-- Mốc trước: `72502f1` — `feat(session): add persistent conversation management and resume`.
+- `HEAD` hiện tại: pending commit `fix(session): finalize tool-using conversations correctly`.
+- Mốc trước: `899a555` — `feat(activity): add tool timeline and file-change review`.
 - Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
 
 ## Trạng thái POC
 
-Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Tool Activity and File-Change Presentation** vừa hoàn tất:
-timeline hoạt động tiếng Việt từ EV stream thật, thẻ công cụ, lịch sử quyền (read-only), tóm tắt thay đổi tệp đã xác minh, xem trước tệp văn bản an toàn, và persistence activity khi mở lại cuộc trò chuyện.
+Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Conversation finalization** vừa sửa lỗi release-critical: cuộc trò chuyện có tool/permission không còn kẹt `Đang xử lý` với bubble trống; phản hồi cuối đến từ stream OpenCode, fetch session sau terminal, hoặc fallback tiếng Việt trung thực.
 
-Slice **Session Management and Resume** (trước đó) vẫn giữ nguyên: cuộc trò chuyện lưu trong user-data, sidebar, mở lại, đổi tên, tìm kiếm, xóa metadata, trạng thái gián đoạn, tạo phiên tiếp nối.
+Slice **Tool Activity and File-Change Presentation** (trước đó) vẫn giữ nguyên.
 
 Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, `docs/architecture/`. `.loop-engineer/` chỉ `MAINTENANCE_ONLY`.
+
+## Nguồn phản hồi cuối (trung thực)
+
+| Nguồn | Khi nào |
+|---|---|
+| Stream EV `token` / `message.part.delta` | Phản hồi stream trong lúc chạy |
+| `message.part.updated` (text committed) | OpenCode chỉ gửi snapshot text sau tool |
+| `GET /v1/session/{id}` sau terminal | Text chưa có trên stream khi `session.idle` |
+| Fallback UI | `Tác vụ đã hoàn tất nhưng runtime không trả về phản hồi cuối.` — không gán là output model |
 
 ## Nguồn tín hiệu activity (trung thực)
 
@@ -49,6 +57,7 @@ Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, 
 - Permission, cancellation, provider recovery, lifecycle scripts.
 - Conversation persistence + multi-conversation UI.
 - **Activity timeline + file-change panel + permission history + file preview API.**
+- **Conversation finalization** — tool turn kết thúc với text hoặc fallback; spinner dừng.
 
 ## Slice khuyến nghị tiếp theo
 
@@ -58,6 +67,7 @@ Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, 
 
 ```powershell
 npm run verify:release
+node tools/verify/conversation-finalization-packaged.mjs
 node tools/verify/activity-presentation-packaged.mjs
 node tools/verify/session-management-packaged.mjs
 ```

@@ -267,6 +267,7 @@ export interface ServiceClient {
   ): Promise<ConversationRecord>;
   /** Reconnect to an OpenCode session after service restart (when still available). */
   continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
+  getRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
   previewWorkspaceFile(relativePath: string): Promise<{
     readonly relativePath: string;
     readonly kind: "text" | "binary" | "missing";
@@ -500,6 +501,17 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         `/v1/session/${encodeURIComponent(sessionId)}/continue`,
         { method: "POST", body: "{}" },
       ),
+
+    getRuntimeSession: async (sessionId) => {
+      const data = await call<{ session: SessionMeta; view: SessionView }>(
+        `/v1/session/${encodeURIComponent(sessionId)}`,
+      );
+      return {
+        session: data.session,
+        view: data.view,
+        canPrompt: data.view.terminal === null,
+      };
+    },
 
     previewWorkspaceFile: async (relativePath) =>
       (

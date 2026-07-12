@@ -15,6 +15,7 @@ import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -50,6 +51,10 @@ function phaseLabel(phase) {
             return "Đang hủy";
         case "completed":
             return "Đã hoàn tất";
+        case "completed_without_final_message":
+            return "Đã hoàn tất (không có phản hồi cuối)";
+        case "denied":
+            return "Đã bị từ chối";
         case "cancelled":
             return "Đã hủy";
         case "failed":
@@ -301,7 +306,111 @@ async function awaitLiveClient(state, readiness) {
     }
     throw new Error("Không kết nối lại được local service.");
 }
+function updateAssistantBubble(state, text) {
+    const assistant = state.activeAssistant?.querySelector(".msg__text p") ?? null;
+    if (assistant !== null)
+        assistant.textContent = text;
+}
+function stopStreamWatchdog(state) {
+    if (state.streamWatchdog !== null) {
+        clearInterval(state.streamWatchdog);
+        state.streamWatchdog = null;
+    }
+}
+function touchStreamActivity(state) {
+    state.lastStreamActivityAt = Date.now();
+}
+function startStreamWatchdog(state, dom, sessionId, handlers) {
+    stopStreamWatchdog(state);
+    touchStreamActivity(state);
+    state.streamWatchdog = setInterval(() => {
+        if (state.conv.state.runtimePhase !== "running" && state.conv.state.runtimePhase !== "cancelling") {
+            stopStreamWatchdog(state);
+            return;
+        }
+        const idleFor = Date.now() - state.lastStreamActivityAt;
+        if (idleFor < STREAM_STALL_AFTER_ACTIVITY_MS)
+            return;
+        if (idleFor > STREAM_WATCHDOG_MS) {
+            stopStreamWatchdog(state);
+            void (async () => {
+                await state.conv.setRuntimePhase("failed");
+                const msg = "Phiên không phản hồi sau thời gian chờ.";
+                updateAssistantBubble(state, msg);
+                await state.conv.recordAssistantMessage(msg);
+                renderState(dom, state, handlers);
+            })();
+            return;
+        }
+        if (state.client === null || state.finalizingTurn)
+            return;
+        void (async () => {
+            try {
+                const refreshed = await state.client.getRuntimeSession(sessionId);
+                if (refreshed.view.terminal !== null) {
+                    stopStreamWatchdog(state);
+                    await finalizeConversationTurn(state, dom, refreshed.view, handlers, sessionId);
+                }
+            }
+            catch {
+                // best effort poll
+            }
+        })();
+    }, STREAM_POLL_INTERVAL_MS);
+}
+async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
+    if (view.terminal === null || state.finalizingTurn)
+        return;
+    const terminal = view.terminal;
+    state.finalizingTurn = true;
+    stopStreamWatchdog(state);
+    let fetchedText = null;
+    if (shouldPollSessionView(view) && state.client !== null) {
+        try {
+            const refreshed = await state.client.getRuntimeSession(sessionId);
+            if (refreshed.view.text.trim().length > 0)
+                fetchedText = refreshed.view.text.trim();
+            if (refreshed.view.text.trim().length > view.text.trim().length) {
+                view = { ...view, text: refreshed.view.text };
+            }
+        }
+        catch {
+            // best effort
+        }
+    }
+    let resolved;
+    if (view.terminal === "completed") {
+        resolved = resolveFinalAssistantText(view.text, fetchedText);
+    }
+    else if (terminal === "denied") {
+        const text = view.text.trim().length > 0 ? view.text.trim() : "Yêu cầu đã bị từ chối.";
+        resolved = { text, outcome: "denied" };
+    }
+    else if (terminal === "cancelled") {
+        const text = view.text.trim().length > 0 ? view.text.trim() : "Phiên đã bị hủy.";
+        resolved = { text, outcome: "cancelled" };
+    }
+    else {
+        const text = view.error?.message?.trim() ??
+            view.text.trim() ??
+            "Có lỗi xảy ra trong phiên.";
+        resolved = { text, outcome: "failed" };
+    }
+    state.lastView = view;
+    state.assistantText = resolved.text;
+    updateAssistantBubble(state, resolved.text);
+    state.activityLive = false;
+    const phase = terminal === "completed"
+        ? runtimePhaseForCompleted(resolved, terminal)
+        : mapTerminalToRuntimePhase(terminal);
+    await state.conv.setRuntimePhase(phase);
+    await state.conv.recordAssistantMessage(resolved.text);
+    await persistActivity(state);
+    state.finalizingTurn = false;
+    renderState(dom, state, handlers);
+}
 function stopStream(state) {
+    stopStreamWatchdog(state);
     state.stream?.stop();
     state.stream = null;
     state.streamSessionId = null;
@@ -319,45 +428,34 @@ function bindEvStream(state, dom, handlers, sessionId) {
         onEvent: (event) => {
             if (!state.conv.shouldApplyStreamView(sessionId))
                 return;
+            touchStreamActivity(state);
             state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
             refreshActivityUi(state, dom);
         },
         onView: (view) => {
             if (!state.conv.shouldApplyStreamView(sessionId))
                 return;
+            touchStreamActivity(state);
             state.lastView = view;
             state.assistantText = view.text;
-            const assistant = state.activeAssistant?.querySelector(".msg__text p") ?? null;
-            if (assistant !== null)
-                assistant.textContent = view.text;
-            if (view.terminal === "completed")
-                void state.conv.setRuntimePhase("completed");
-            if (view.terminal === "cancelled")
-                void state.conv.setRuntimePhase("cancelled");
-            if (view.terminal === "errored" || view.terminal === "denied") {
-                void state.conv.setRuntimePhase("failed");
-                if (view.error?.message && view.text.trim().length === 0) {
-                    appendMessage(dom, "assistant", view.error.message);
-                }
-            }
+            updateAssistantBubble(state, view.text);
             refreshActivityUi(state, dom);
             if (view.terminal !== null) {
-                state.activityLive = false;
-                void state.conv.recordAssistantMessage(view.text).then(async () => {
-                    await persistActivity(state);
-                    renderState(dom, state, handlers);
-                });
+                void finalizeConversationTurn(state, dom, view, handlers, sessionId);
+                return;
             }
             renderState(dom, state, handlers);
         },
         onError: (message) => {
             if (!state.conv.shouldApplyStreamView(sessionId))
                 return;
+            stopStreamWatchdog(state);
             void state.conv.setRuntimePhase("failed");
             appendMessage(dom, "assistant", message);
             renderState(dom, state, handlers);
         },
     });
+    startStreamWatchdog(state, dom, sessionId, handlers);
 }
 async function ensureLive(state, readiness) {
     await getShellBridge().connectLive();
@@ -687,6 +785,9 @@ export function mountCoworkApp(root) {
         permissionHistory: [],
         activitySnapshot: null,
         activityLive: false,
+        streamWatchdog: null,
+        lastStreamActivityAt: 0,
+        finalizingTurn: false,
     };
     const handlers = {
         onSelect: (id) => {

@@ -20,6 +20,8 @@ export type RuntimePhase =
   | "running"
   | "cancelling"
   | "completed"
+  | "completed_without_final_message"
+  | "denied"
   | "failed"
   | "cancelled";
 
@@ -319,8 +321,10 @@ function runtimePhaseToStatus(phase: RuntimePhase): ConversationStatus | null {
     case "cancelling":
       return "running";
     case "completed":
+    case "completed_without_final_message":
       return "completed";
     case "cancelled":
+    case "denied":
       return "cancelled";
     case "failed":
       return "errored";
