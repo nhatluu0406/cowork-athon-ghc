@@ -12,14 +12,16 @@
  * are CGHC-019. This keeps the surface minimal and the SSRF seam the only wire concern.
  */
 
-import type { ProviderDescriptor } from "@cowork-ghc/contracts";
+import type { ProviderDescriptor, ProviderId, TestResult } from "@cowork-ghc/contracts";
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import { BadRequestError } from "../server/http-util.js";
 import { SsrfBlockedError } from "./ssrf-policy.js";
+import type { ModelConfigService } from "./model-config-service.js";
 import type { ProviderPort } from "./provider-port.js";
 
 export const PROVIDERS_PATH = "/v1/providers";
 export const PROVIDER_ENDPOINT_PATH = "/v1/providers/endpoint";
+export const PROVIDER_TEST_CONNECTION_PATH = "/v1/providers/test-connection";
 
 /**
  * Malformed / policy-refused provider request (bad client input: a malformed body or an
@@ -55,8 +57,35 @@ function parseEndpointBody(body: unknown): EndpointBody {
   return { id, baseUrl };
 }
 
+function parseProviderIdBody(body: unknown): ProviderId {
+  if (typeof body !== "object" || body === null) {
+    throw new ProviderRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  const id = record["id"] ?? record["providerId"];
+  if (typeof id !== "string" || id.trim().length === 0) {
+    throw new ProviderRequestError("id is required.");
+  }
+  return id;
+}
+
+async function probeWithOptionalRetry(
+  port: ProviderPort,
+  id: ProviderId,
+): Promise<TestResult> {
+  const first = await port.testConnection(id);
+  if (first.ok) return first;
+  if (first.error?.retryable === true) {
+    return port.testConnection(id);
+  }
+  return first;
+}
+
 /** Build the provider router. The orchestrator mounts it via `service.mount`. */
-export function createProviderRouter(port: ProviderPort): BoundaryRouter {
+export function createProviderRouter(
+  port: ProviderPort,
+  modelConfig?: ModelConfigService,
+): BoundaryRouter {
   return {
     name: "provider",
     routes: [
@@ -83,6 +112,21 @@ export function createProviderRouter(port: ProviderPort): BoundaryRouter {
             throw cause;
           }
           return { status: 200, data: { configured: true } };
+        },
+      },
+      {
+        method: "POST",
+        path: PROVIDER_TEST_CONNECTION_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ result: TestResult }>> => {
+          const id = parseProviderIdBody(ctx.body);
+          if (port.credentialRefFor(id) === undefined) {
+            throw new ProviderRequestError("No credential is configured for this provider.");
+          }
+          if (modelConfig !== undefined && modelConfig.activeModelFor() === undefined) {
+            throw new ProviderRequestError("A default model must be configured before testing.");
+          }
+          const result = await probeWithOptionalRetry(port, id);
+          return { status: 200, data: { result } };
         },
       },
     ],

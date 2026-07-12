@@ -1,31 +1,32 @@
 # Cowork GHC - Tasks
 
-> Human view synchronized from `.loop-engineer/state/tasks.yaml` on 2026-07-12 (reconciliation pass).
+> Human view synchronized from `.loop-engineer/state/tasks.yaml` on 2026-07-12 (Slice 3 pass).
 > `tasks.yaml` remains canonical.
-
-## Git anchor
-
-- **HEAD:** `ff32d8087e54433a925d020075f5105c2f0f413e`
 
 ## Summary
 
-- `DONE`: 25
-- `STALE`: 2
+- `DONE`: 27
+- `STALE`: 0
 - `IN_PROGRESS`: 1
-- Reconciliation confirms: `CGHC-008` **DONE** (packaged evidence in commit `ff32d808`)
+- Slice 3 packaged PASS: `CGHC-011`, `CGHC-019` **DONE**
 
-## Active / Reopened Tasks
+## Active Tasks
 
 | ID | Capability | Status | Current note |
 |---|---|---|---|
-| `CGHC-011` | add-credential-test-connection | `STALE` | Backend evidence valid. Packaged secure credential entry and DeepSeek test connection unverified. |
-| `CGHC-019` | model-config-switch | `STALE` | Backend evidence valid. Packaged provider/model settings UI unverified. |
-| `CGHC-028` | release-verification | `IN_PROGRESS` | Slices 1–2 packaged PASS (`3856a84`, `ff32d808`). Full packaged POC journey still unverified. |
+| `CGHC-028` | release-verification | `IN_PROGRESS` | Slices 1–3 packaged PASS. Full packaged POC journey still unverified. |
+
+## Recently Completed (Slice 3)
+
+| ID | Capability | Status |
+|---|---|---|
+| `CGHC-011` | add-credential-test-connection | `DONE` |
+| `CGHC-019` | model-config-switch | `DONE` |
 
 ## Done Tasks
 
-`CGHC-001`, `CGHC-002`, `CGHC-003`, `CGHC-004`, `CGHC-005`, `CGHC-006`, `CGHC-007`, `CGHC-008`, `CGHC-009`, `CGHC-010`, `CGHC-012`, `CGHC-013`, `CGHC-014`, `CGHC-015`, `CGHC-016`, `CGHC-017`, `CGHC-018`, `CGHC-020`, `CGHC-021`, `CGHC-022`, `CGHC-023`, `CGHC-024`, `CGHC-025`, `CGHC-026`, `CGHC-027`.
+`CGHC-001` … `CGHC-008`, `CGHC-009` … `CGHC-020`, `CGHC-021` … `CGHC-027` (see `tasks.yaml`).
 
 ## Next Product Slice
 
-Slice 3 — packaged provider/model settings and secure credential entry (`CGHC-011` / `CGHC-019`). Do not proceed to DeepSeek live testing or OpenCode live session until packaged GUI verification passes.
+Slice 4 — OpenCode live session integration. Do not start L7.

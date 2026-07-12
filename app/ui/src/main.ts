@@ -15,6 +15,7 @@ import { createServiceClient, type ServiceClient } from "./service-client.js";
 import { createReadinessController } from "./readiness-controller.js";
 import { createReadinessView } from "./readiness-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { mountSettingsView } from "./settings-view.js";
 import { createTimelineView } from "./timeline-view.js";
 import { createPermissionController } from "./permission-controller.js";
@@ -84,7 +85,11 @@ function mountFeatures(root: HTMLElement, client: ServiceClient): void {
     },
   });
   root.append(sessionHint);
-  // CGHC-022: settings view — a client of the service.
+  mountLlmSettingsPanel(root, {
+    client,
+    getBootstrap: () => bridge.getBootstrap(),
+  });
+  // General settings (theme, logging).
   mountSettingsView(root, { client });
   // CGHC-015: honest EV timeline. It mounts idle now; the live stream is wired once a session
   // exists (a later task). No fabricated activity.

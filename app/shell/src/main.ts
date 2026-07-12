@@ -46,6 +46,7 @@ import {
   createFirstConfiguredSource,
   createPersistedSettingsSource,
 } from "./service/persisted-settings-source.js";
+import { loadProjectEnvFile } from "./load-project-env.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -66,6 +67,10 @@ const RENDERER_DIR = join(here, "..", "..", "ui", "dist");
 
 let lifecycleLogPath = join(DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
 let shellController: ServiceController | null = null;
+
+function envCredentialImportEnabled(): boolean {
+  return !app.isPackaged || process.env["COWORK_GHC_ALLOW_ENV_IMPORT"] === "1";
+}
 
 function resolveRuntimePaths() {
   const packaged = resolvePackagedPaths({
@@ -99,6 +104,7 @@ function createShellController(settingsFilePath: string, packaged: ReturnType<ty
 
   return new ServiceController({
     log: writeLifecycleLog,
+    allowEnvCredentialImport: envCredentialImportEnabled(),
     startService: createTieredStartService(
       tracedStartService("live", createLiveStartService(createLiveOptionsResolver(liveSource))),
       tracedStartService(
@@ -106,6 +112,7 @@ function createShellController(settingsFilePath: string, packaged: ReturnType<ty
         createSettingsOnlyStartService({
           settingsFilePath,
           allowedOrigins: [APP_ORIGIN],
+          allowEnvCredentialImport: envCredentialImportEnabled(),
         }),
       ),
     ),
@@ -194,6 +201,9 @@ void runShellLifecycle({
   },
   trace: writeStartupTrace,
   prepare: () => {
+    if (envCredentialImportEnabled()) {
+      loadProjectEnvFile(DEV_APP_ROOT);
+    }
     const { packaged, settingsFilePath } = resolveRuntimePaths();
     shellController = createShellController(settingsFilePath, packaged);
   },

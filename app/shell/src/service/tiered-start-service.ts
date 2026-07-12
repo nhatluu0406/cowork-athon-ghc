@@ -30,17 +30,10 @@ import { ServiceLaunchNotConfiguredError } from "./launch-config.js";
 
 /** Options for the Tier-1 settings-only fallback start. */
 export interface SettingsOnlyStartOptions {
-  /**
-   * Absolute path to the persistent settings file. MUST match the path the live launch uses so
-   * onboarding writes and the live launch reads the same `settings.json`.
-   */
   readonly settingsFilePath: string;
-  /**
-   * Browser origins allowed to call the loopback service cross-origin — the packaged renderer's
-   * `app://cowork`. Without this the renderer's cross-origin `fetch` is blocked by CORS and never
-   * reaches the service, so onboarding never loads.
-   */
   readonly allowedOrigins: readonly string[];
+  /** Development / verification: enable POST /v1/credentials/import-env on the service. */
+  readonly allowEnvCredentialImport?: boolean;
 }
 
 /**
@@ -53,6 +46,7 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
     const { running } = await startCoworkService({
       settingsFilePath: options.settingsFilePath,
       allowedOrigins: options.allowedOrigins,
+      allowEnvCredentialImport: options.allowEnvCredentialImport === true,
     });
     return {
       baseUrl: running.baseUrl,

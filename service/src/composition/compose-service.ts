@@ -58,12 +58,12 @@ import {
 } from "./wiring.js";
 import {
   downRuntimeHealth,
-  notAttachedConnector,
   notAttachedRuntimeReplyPort,
   notAttachedSendPrompt,
   notAttachedSessionStore,
 } from "./tier2-seams.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
+import { createHttpConnectorBundle } from "./http-connector-factory.js";
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
@@ -92,17 +92,20 @@ export async function createCoworkService(
   const settingsFs = options.settingsFs ?? createNodeSettingsFs(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
   const baseSettingsStore = await openSettingsStore({ fs: settingsFs });
 
-  // --- Provider port (SSRF policy) + model config (seeded from settings.defaultModel). ---
-  const ssrf = createSsrfPolicy({ resolver: options.dnsResolver ?? defaultDnsResolver() });
-  const providerPort = createProviderPort({
-    ssrf,
-    connector: options.connector ?? notAttachedConnector(),
-  });
+  const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
+
+  // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
+  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  const providerPort =
+    options.connector !== undefined
+      ? createProviderPort({ ssrf, connector: options.connector })
+      : createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver).providerPort;
+
   const modelConfig = createModelConfigService({
     port: providerPort,
     audit: createInMemoryModelAuditSink(),
   });
-  seedFromSettings(baseSettingsStore, providerPort, modelConfig);
+  await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
 
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,
   // and (2) mirrors default-model / credential-ref writes into the in-memory runtime resolver so
@@ -161,9 +164,11 @@ export async function createCoworkService(
       fsProbe: options.workspaceFsProbe ?? nodeFsProbe(),
       existsProbe: options.workspaceExistsProbe ?? nodeExistenceProbe,
     }),
-    createCredentialRouter(credentialService),
+    createCredentialRouter(credentialService, {
+      allowEnvImport: options.allowEnvCredentialImport === true,
+    }),
     createSettingsRouter(settingsStore, modelPort),
-    createProviderRouter(providerPort),
+    createProviderRouter(providerPort, modelConfig),
     createPermissionRouter(permissionGate),
     createEvStreamRouter(streamHub),
     createSessionStreamRouter(streamHub),
@@ -207,16 +212,19 @@ export async function startCoworkService(
 }
 
 /** Seed the runtime resolver from the persistent settings (one source of truth at boot). */
-function seedFromSettings(
+async function seedFromSettings(
   store: Awaited<ReturnType<typeof openSettingsStore>>,
   providerPort: ReturnType<typeof createProviderPort>,
   modelConfig: ReturnType<typeof createModelConfigService>,
-): void {
+): Promise<void> {
   const defaultModel = store.defaultModel();
   if (defaultModel !== undefined) {
     modelConfig.configureModel({ scope: "default", model: defaultModel });
   }
   for (const provider of store.listProviderSettings()) {
+    if (provider.baseUrl !== undefined) {
+      await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+    }
     if (provider.credentialRef !== undefined) {
       providerPort.configureCredential(provider.providerId, provider.credentialRef);
     }

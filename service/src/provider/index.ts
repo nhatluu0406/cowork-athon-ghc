@@ -110,4 +110,5 @@ export {
   ProviderRequestError,
   PROVIDERS_PATH,
   PROVIDER_ENDPOINT_PATH,
+  PROVIDER_TEST_CONNECTION_PATH,
 } from "./router.js";

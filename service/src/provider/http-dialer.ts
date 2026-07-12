@@ -78,8 +78,14 @@ export function createHttpsDialer(): HttpDialer {
       const isHttps = req.url.protocol === "https:";
       const lib = isHttps ? https : http;
       // F2: ALWAYS return the pinned, validated IP — never let Node re-resolve via DNS.
-      const lookup: LookupFunction = (_hostname, _options, callback) => {
-        callback(null, req.ip, req.family);
+      const lookup: LookupFunction = (_hostname, options, callback) => {
+        const cb = typeof options === "function" ? options : callback;
+        const opts = typeof options === "object" && options !== null ? options : {};
+        if (opts.all === true) {
+          cb(null, [{ address: req.ip, family: req.family }]);
+          return;
+        }
+        cb(null, req.ip, req.family);
       };
       const request = lib.request(
         {
