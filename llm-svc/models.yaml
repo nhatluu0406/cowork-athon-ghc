@@ -63,6 +63,25 @@ models:
     version: "1.0"
     is_default: false
 
+  # Local GGUF generative model (T161) — real implementation
+  # Pure-Rust inference via llama-gguf v0.14 crate (compatible with llama.cpp)
+  # No cmake required — pure Rust compilation with full GGUF support
+  # Expected directory structure:
+  #   model_dir/
+  #     ├── model.gguf              # Quantized weights (required)
+  #     ├── tokenizer.json          # HuggingFace tokenizer (optional)
+  #     └── tokenizer.model         # SentencePiece tokenizer (optional)
+  # Supported formats: Q4, Q5, Q8 quantizations, 7B–70B models
+  # CPU inference: 5–20 tokens/sec (model and quantization dependent)
+  # To enable: uncomment below and point path at a GGUF model directory
+  # - name: mistral-7b-instruct-gguf
+  #   kind: generative
+  #   format: gguf
+  #   path: /models/mistral-7b-instruct/
+  #   dims: 0
+  #   version: "1.0"
+  #   is_default: false
+
   # Cloud-based generation model (proxy in llm-svc)
   - name: gpt-4o-mini
     kind: generative

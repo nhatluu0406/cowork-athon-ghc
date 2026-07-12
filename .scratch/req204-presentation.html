@@ -432,8 +432,8 @@
     <p class="sub">Hệ thống thu thập dữ liệu OneDrive + Teams, trích xuất thực thể qua NLP, xây dựng đồ thị tri thức trong Neo4j, và trả lời câu hỏi ngôn ngữ tự nhiên với hybrid retrieval nhận biết quyền truy cập.</p>
     <div class="meta-row">
       <span><b>Nguồn:</b> specs/REQ-204-M365-001-m365-knowledge-graph + kiểm tra trực tiếp working tree</span>
-      <span><b>Audit gần nhất:</b> 2026-07-12, vòng recheck thứ 3 (phát hiện 1 test file mới bị lỗi build + 1 file "trust test" gắn nhãn sai)</span>
-      <span><b>Tiến độ tổng thể:</b> ~75–80% — backend/llm-svc production-ready, Frontend nay có thật (build sạch) nhưng chưa tích hợp/commit</span>
+      <span><b>Audit gần nhất:</b> 2026-07-12, vòng recheck thứ 4 (Group F frontend đã commit thật + build sạch; nhưng 1 file test bị lỗi build cũng lọt vào cùng commit)</span>
+      <span><b>Tiến độ tổng thể:</b> ~85% — backend + llm-svc (ONNX) + Frontend đều production-ready và đã commit; còn vài file test lẻ cần sửa</span>
     </div>
   </header>
 
@@ -560,13 +560,13 @@
           </tr>
           <tr>
             <td class="phase-cell">5 — Frontend</td>
-            <td><span class="pill warn">tasks.md vẫn ghi [ ] (chưa cập nhật)</span></td>
-            <td class="detail"><b>Cập nhật recheck 2026-07-12 (vòng 2):</b> một thư mục <span class="mono">Frontend/</span> hoàn chỉnh vừa xuất hiện trong working tree (chưa commit — <span class="mono">git status</span> báo untracked). Đã tự build để kiểm chứng thay vì tin thư mục tồn tại là đủ: <span class="mono">npm run build</span> (Vite+tsc) chạy sạch; đủ 7/7 trang (Login/Dashboard/Search/Entities/Graph/Feedback/DataSources) dùng axios + TanStack Query gọi API thật, không còn token/dữ liệu demo cứng. Còn thiếu: commit vào git, cập nhật tasks.md T139–T148, chạy thử Playwright E2E (<span class="mono">tests/e2e/login.spec.ts</span> mới có 1 test)</td>
+            <td><span class="pill ok">✅ T139–T148 [X], "DONE 2026-07-12"</span></td>
+            <td class="detail"><b>Cập nhật recheck lần 4:</b> commit <span class="mono">54af1cd</span> "complete Group F frontend implementation" đã đưa <span class="mono">Frontend/</span> vào git thật (44 file tracked, không còn untracked). Tự build lại để xác nhận: <span class="mono">npm run build</span> vẫn sạch sau khi commit. Đủ 7/7 trang, dùng axios/TanStack Query/Zustand gọi API thật. tasks.md tự ghi chú trung thực rằng <span class="mono">GraphPage.tsx</span> mới là "placeholder structure ready for real data binding" — không giả vờ đã nối dữ liệu thật. <b>Cảnh báo:</b> cùng commit này (rõ ràng do <span class="mono">git add -A</span> quét rộng) vô tình cuốn theo <span class="mono">backend/tests/integration/embedding_performance_test.go</span> — file này build LỖI thật (xem Group I/dọn dẹp bên dưới), nay đã nằm trong lịch sử git ở trạng thái hỏng</td>
             <td>
               <div class="pct-bar-wrap">
-                <span class="pill ok">Build thật, chưa commit/tích hợp</span>
-                <div class="pct-bar"><span style="width:75%; background:var(--ok);"></span></div>
-                <span class="pct-num">75%</span>
+                <span class="pill ok">Đã commit, build sạch</span>
+                <div class="pct-bar"><span style="width:90%; background:var(--ok);"></span></div>
+                <span class="pct-num">90%</span>
               </div>
             </td>
           </tr>
@@ -712,11 +712,11 @@
     </div>
     <div class="work-grid">
       <div class="work-card">
-        <div class="head"><span class="name">Group F — Frontend</span><span class="eff">3–5 ngày</span></div>
+        <div class="head"><span class="name">Group F — Frontend</span><span class="eff">2–3 ngày</span></div>
         <ul>
-          <li><b>Cập nhật lớn (recheck 2026-07-12):</b> thư mục <span class="mono">Frontend/</span> đầy đủ đã xuất hiện, build sạch, 7/7 trang gọi API thật — nhưng <b>chưa commit vào git</b> và tasks.md chưa cập nhật (T139–T148 vẫn <span class="mono">[ ]</span>)</li>
-          <li>Còn thiếu: commit, kiểm tra chạy thực tế với backend (chưa xác nhận end-to-end), mở rộng Playwright E2E (mới 1 spec: <span class="mono">login.spec.ts</span>)</li>
-          <li>Trước đó ước tính 3–4 tuần "từ đầu" — nay chỉ còn việc tích hợp/hoàn thiện</li>
+          <li><b>Đã commit (recheck lần 4):</b> commit <span class="mono">54af1cd</span> đưa <span class="mono">Frontend/</span> vào git (44 file), tasks.md T139–T148 nay là <span class="mono">[X]</span>, <span class="mono">npm run build</span> vẫn sạch sau commit</li>
+          <li>Còn thiếu: kiểm tra chạy thực tế end-to-end với backend đang chạy (chưa xác nhận), mở rộng Playwright E2E (mới 1 spec: <span class="mono">login.spec.ts</span>), nối dữ liệu thật cho <span class="mono">GraphPage.tsx</span> (tasks.md tự ghi nhận đây mới là "placeholder structure")</li>
+          <li>Trước đó ước tính 3–4 tuần "từ đầu" — nay chỉ còn việc hoàn thiện nhỏ</li>
         </ul>
       </div>
       <div class="work-card">
@@ -728,11 +728,19 @@
         </ul>
       </div>
       <div class="work-card">
-        <div class="head"><span class="name">Đã xong, xác minh 2026-07-12</span><span class="eff">—</span></div>
+        <div class="head"><span class="name">Đã xong &amp; đã commit, xác minh 2026-07-12</span><span class="eff">—</span></div>
         <ul>
           <li>Go backend: <span class="mono">go build ./...</span> + <span class="mono">go test ./...</span> sạch, tất cả pass</li>
           <li>Rust llm-svc: <span class="mono">cargo build --release</span> sạch, <span class="mono">cargo test</span> 43/43 pass, ONNX thật</li>
-          <li>Frontend: <span class="mono">npm run build</span> sạch, 7/7 trang thật, gọi API qua axios/TanStack Query</li>
+          <li>Frontend: <b>đã commit</b> (54af1cd), <span class="mono">npm run build</span> sạch, 7/7 trang thật, gọi API qua axios/TanStack Query</li>
+        </ul>
+      </div>
+      <div class="work-card">
+        <div class="head"><span class="name">🔴 Nợ kỹ thuật đang nằm trong git (cần sửa ngay)</span><span class="eff">&lt; 1 ngày</span></div>
+        <ul>
+          <li><b><span class="mono">backend/tests/integration/embedding_performance_test.go</span> — build LỖI, ĐÃ COMMIT</b> vào cùng commit <span class="mono">54af1cd</span> (rõ ràng do <span class="mono">git add -A</span> quét rộng khi commit frontend): <span class="mono">go test -tags=integration ./tests/integration/...</span> báo <span class="mono">invalid operation: similarity &lt; minSimilarity (mismatched types float32 and float64)</span> dòng 125 — file này chưa từng build được, nay đã ở trong lịch sử git</li>
+          <li><span class="mono">llm-svc/tests/embedding_trust_test.rs</span> (vẫn untracked) — tên gọi "trust" gây hiểu lầm, thực chất dùng embedding giả (mock hash-based), không xác thực được gì về embedding thật; nên đổi tên hoặc thay bằng suy luận ONNX thật</li>
+          <li><span class="mono">llm-svc/tests/integration_real_models.rs</span> (vẫn untracked) — test thật, nạp model ONNX thật, chạy pass — nên commit sớm vì đây là bằng chứng chất lượng tốt</li>
         </ul>
       </div>
       <div class="work-card">
@@ -742,9 +750,6 @@
           <li>Smoke script (<span class="mono">make smoke</span>) — bước apply schema Neo4j qua <span class="mono">cypher-shell</span> còn lỗi retry, cần probe readiness tốt hơn</li>
           <li>Group L — dọn 2 bộ OAuth2 trùng (<span class="mono">connectors/auth.go</span> vs <span class="mono">auth/entra_id.go</span>)</li>
           <li>SharePoint Sites API (<span class="mono">GetSites</span>) vẫn TODO trong <span class="mono">connectors/client.go</span></li>
-          <li><b>Frontend/</b> và <span class="mono">llm-svc/tests/integration_real_models.rs</span> cần được <span class="mono">git add</span> + commit, tasks.md cần cập nhật T139–T148 và T161/T162</li>
-          <li><b>Mới phát hiện (recheck 3):</b> <span class="mono">backend/tests/integration/embedding_performance_test.go</span> (chưa commit) — <b>lỗi build thật</b> (<span class="mono">float32</span> vs <span class="mono">float64</span> dòng 125), cần sửa trước khi tính là test hợp lệ</li>
-          <li><b>Mới phát hiện (recheck 3):</b> <span class="mono">llm-svc/tests/embedding_trust_test.rs</span> dùng embedding <i>giả</i> (mock hash-based) dù tên gợi ý kiểm tra thật — nên đổi tên rõ ràng (vd. <span class="mono">mock_embedding_math_test.rs</span>) hoặc thay bằng suy luận ONNX thật để tránh hiểu lầm về sau</li>
         </ul>
       </div>
     </div>
@@ -752,14 +757,19 @@
 
   <section style="margin-bottom: 0;">
     <div class="sec-head">
-      <h2>Ước tính công sức còn lại (đã thu hẹp mạnh sau Phase 11)</h2>
-      <span class="tag">Backend + llm-svc xác minh production-ready 2026-07-12</span>
+      <h2>Ước tính công sức còn lại (Backend + llm-svc + Frontend đều đã commit)</h2>
+      <span class="tag">Xác minh production-ready 2026-07-12, vòng recheck thứ 4</span>
     </div>
     <div class="effort-strip">
       <div class="effort-row">
-        <div class="g-label">Group F<span class="sub">Frontend — build thật xong, cần commit + tích hợp/E2E</span></div>
-        <div class="effort-track"><span style="width:25%;"></span></div>
-        <div class="effort-val mono">3–5 ngày</div>
+        <div class="g-label">🔴 Sửa nợ kỹ thuật đã commit<span class="sub">embedding_performance_test.go build lỗi (đã ở trong git)</span></div>
+        <div class="effort-track"><span style="width:10%;"></span></div>
+        <div class="effort-val mono">&lt; 1 ngày</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group F<span class="sub">Frontend — đã commit; còn E2E mở rộng + GraphPage data thật</span></div>
+        <div class="effort-track"><span style="width:15%;"></span></div>
+        <div class="effort-val mono">2–3 ngày</div>
       </div>
       <div class="effort-row">
         <div class="g-label">Group I<span class="sub">GGUF + Safetensors (tùy chọn, không chặn)</span></div>
@@ -767,12 +777,12 @@
         <div class="effort-val mono">1–2 tuần</div>
       </div>
       <div class="effort-row">
-        <div class="g-label">Dọn dẹp / hoàn thiện<span class="sub">T136 integration tests, Group L cleanup, Sites API, commit tồn đọng</span></div>
+        <div class="g-label">Dọn dẹp / hoàn thiện<span class="sub">T136 integration tests, Group L cleanup, Sites API, commit test lẻ còn lại</span></div>
         <div class="effort-track"><span style="width:15%;"></span></div>
         <div class="effort-val mono">3–5 ngày</div>
       </div>
       <div class="effort-total">
-        <span class="lbl">Tổng ước tính còn lại (backend, llm-svc, và nay cả Frontend đều đã có bản build thật; chỉ còn tích hợp/hoàn thiện + hạng mục tùy chọn)</span>
+        <span class="lbl">Tổng ước tính còn lại (backend, llm-svc, Frontend đều production-ready &amp; đã commit; phần lớn còn lại là tùy chọn/dọn dẹp)</span>
         <span class="val">1–2 tuần</span>
       </div>
     </div>
@@ -780,7 +790,7 @@
 
   <div class="foot">
     <span>Nguồn: spec_vn.md · tasks.md (Phase 9, 10 &amp; 11) · CLAUDE.md §2</span>
-    <span>Cập nhật lần cuối: 2026-07-12, vòng recheck thứ 3 (đã tự chạy build/test + đọc trực tiếp code của từng file mới, không chỉ đọc task-list/git log)</span>
+    <span>Cập nhật lần cuối: 2026-07-12, vòng recheck thứ 4 (đã tự chạy build/test + đọc trực tiếp code, kể cả sau khi commit mới landed)</span>
   </div>
 
 </div>
