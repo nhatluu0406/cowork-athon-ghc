@@ -215,27 +215,5 @@ impl TryFrom<&crate::config::ModelConfig> for Model {
 // as a separate decision (no reference implementation to port from).
 
 pub mod onnx;
-
-/// GGUF inference module (Phase 2, blocked — see comment above)
-pub mod gguf {
-    /// Generate text using GGUF model
-    /// Phase 2: Implement via `llama-cpp-2` crate
-    pub fn generate(_prompt: &str, _max_tokens: usize) -> Result<String, String> {
-        Err("GGUF generation not implemented in Phase 1 (stub)".to_string())
-    }
-
-    /// Extract entities using GGUF model
-    /// Phase 2: Implement via `llama-cpp-2` crate
-    pub fn extract(_text: &str) -> Result<(Vec<String>, Vec<(String, String)>), String> {
-        Err("GGUF extraction not implemented in Phase 1 (stub)".to_string())
-    }
-}
-
-/// Safetensors inference module (Phase 2)
-pub mod safetensors {
-    /// Inference on safetensors model
-    /// Phase 2: Implement via `candle` crate
-    pub fn inference(_input: &[f32]) -> Result<Vec<f32>, String> {
-        Err("Safetensors inference not implemented in Phase 1 (stub)".to_string())
-    }
-}
+pub mod gguf;
+pub mod safetensors;
