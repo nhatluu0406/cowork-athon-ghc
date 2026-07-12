@@ -77,6 +77,22 @@ Giới hạn POC: **một runtime execution active** tại một thời điểm.
 - **Dispatch preflight** (`dispatch-plan.ts`): tính budget cuối 12k ký tự từ prior context + attachment envelopes + user request; fail-fast nếu attachment selected không fit; không tạo runtime turn khi preflight fail.
 - Pending chips trong composer; metadata gắn `ConversationMessage.attachments`; content chỉ trên wire trong envelope untrusted.
 
+## Boundary Skills (Phase 1)
+
+- Skill là directory chứa `SKILL.md` với frontmatter `id`, `name`, `description`, optional
+  `version`, theo sau bởi instruction text. Không có code execution hoặc dependency loading.
+- Allowed roots explicit: built-in Skills đóng gói cùng app và app-managed user-local Skills
+  dưới user data. Service chỉ scan direct children, tối đa 64/root; không scan workspace.
+- Service validate regular-file/realpath confinement, 32 KiB, UTF-8 text, metadata/ID,
+  duplicate IDs, nội dung rỗng/binary và internal transport marker. Invalid Skill vẫn list
+  với lý do nhưng không enable được.
+- Enabled registry là global-local, persist qua relaunch. Mỗi user turn lưu snapshot metadata
+  `id/name/version/source/contentHash/modifiedAt`; raw Skill content không vào transcript.
+- Dispatch transport tách `<<<CGHC_SELECTED_LOCAL_SKILLS>>>` khỏi prior turns, attachment data
+  và current request. Skills dùng chung bounded 12k budget và fail-fast nếu không fit.
+- Skill chỉ là instruction context. Workspace guards, provider readiness, keyring,
+  tool/file permission và OpenCode runtime boundary vẫn authoritative.
+
 ## Không lặp lại tài liệu cũ
 
 Các ADR và báo cáo trong `.loop-engineer/` vẫn là provenance. Khi cần làm việc hằng ngày, đọc tài liệu ngắn trong
