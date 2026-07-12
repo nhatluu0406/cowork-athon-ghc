@@ -54,6 +54,12 @@ export interface EnvLaunchSourceOptions {
   readonly allowedOrigins?: readonly string[];
   /** Absolute settings file the live service reads/writes (shared with the onboarding service). */
   readonly settingsFilePath?: string;
+  readonly skillsStateFilePath?: string;
+  readonly skillRoots?: readonly {
+    readonly path: string;
+    readonly source: "built_in" | "user_local";
+    readonly createIfMissing?: boolean;
+  }[];
   /** Open the ONE credential store (default: the OS keyring adapter). Injectable for tests. */
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
 }
@@ -136,6 +142,10 @@ export function createEnvLaunchSource(options: EnvLaunchSourceOptions = {}): Liv
         credentialStore: store,
         ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
         ...(settingsFilePath !== undefined ? { settingsFilePath } : {}),
+        ...(options.skillsStateFilePath !== undefined
+          ? { skillsStateFilePath: options.skillsStateFilePath }
+          : {}),
+        ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
       },
       ...(binPath !== undefined ? { binPath } : {}),
       ...(appRoot !== undefined ? { appRoot } : {}),

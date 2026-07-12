@@ -163,14 +163,26 @@ export function createServiceClient(baseUrl, clientToken) {
                 method: "DELETE",
             });
         },
-        appendConversationMessage: async (id, role, text, attachments) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, {
+        appendConversationMessage: async (id, role, text, attachments, skills) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, {
             method: "POST",
             body: JSON.stringify({
                 role,
                 text,
                 ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+                ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
             }),
         })).conversation,
+        listSkills: async () => (await call("/v1/skills")).skills,
+        refreshSkills: async () => (await call("/v1/skills/refresh", {
+            method: "POST",
+            body: "{}",
+        })).skills,
+        setSkillEnabled: async (id, enabled) => (await call(`/v1/skills/${encodeURIComponent(id)}/enabled`, {
+            method: "PUT",
+            body: JSON.stringify({ enabled }),
+        })).skill,
+        enabledSkillSnapshots: async () => (await call("/v1/skills/enabled")).skills,
+        previewSkill: async (id) => (await call(`/v1/skills/${encodeURIComponent(id)}/preview`)).preview,
         readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) => call("/v1/workspace/attachment-read", {
             method: "POST",
             body: JSON.stringify({ absolutePath, priorBytesUsed }),

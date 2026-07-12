@@ -6,6 +6,7 @@
  */
 
 import type { ModelRef } from "@cowork-ghc/contracts";
+import type { SkillUseMetadata } from "../skills/types.js";
 
 export type ConversationStatus =
   | "draft"
@@ -43,6 +44,8 @@ export interface ConversationMessage {
   readonly at: string;
   /** Workspace attachment metadata only — file content is never stored in transcript. */
   readonly attachments?: readonly AttachmentMetadata[];
+  /** Immutable Skill provenance used for this turn; raw Skill content is never persisted. */
+  readonly skills?: readonly SkillUseMetadata[];
 }
 
 /** One OpenCode runtime session linked to a Cowork conversation (a single turn). */
@@ -139,4 +142,5 @@ export interface AppendMessageInput {
   readonly role: "user" | "assistant";
   readonly text: string;
   readonly attachments?: readonly AttachmentMetadata[];
+  readonly skills?: readonly SkillUseMetadata[];
 }

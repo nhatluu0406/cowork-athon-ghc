@@ -107,6 +107,7 @@ export * as workspace from "./workspace/index.js";
 export * as credential from "./credential/index.js";
 export * as diagnostics from "./diagnostics/index.js";
 export * as execution from "./execution/index.js";
+export * as skills from "./skills/index.js";
 
 // Composition root (Tier 1): the integration assembly that wires the domain modules above into
 // ONE running loopback service and mounts every router. The shell/scripts call `startCoworkService`;

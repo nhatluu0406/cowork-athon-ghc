@@ -7,6 +7,7 @@ import { BadRequestError } from "../server/http-util.js";
 import type { ConversationStore } from "./store.js";
 import type { ConversationStatus, ConversationPatch, PersistedActivitySnapshot, RuntimeTurnRecord } from "./types.js";
 import { normalizeTitle } from "./title.js";
+import type { SkillUseMetadata } from "../skills/types.js";
 
 export const CONVERSATIONS_PATH = "/v1/conversations";
 export const CONVERSATION_ITEM_PATH = "/v1/conversations/{id}";
@@ -96,6 +97,36 @@ function parseCompleteRuntimeTurn(value: unknown): {
     throw new ConversationRequestError("Invalid completeRuntimeTurn.status.");
   }
   return { runtimeSessionId, completedAt, status: status as RuntimeTurnRecord["status"] };
+}
+
+function parseSkillUses(value: unknown): readonly SkillUseMetadata[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > 64) {
+    throw new ConversationRequestError("skills must be a bounded array.");
+  }
+  return value.map((item) => {
+    if (typeof item !== "object" || item === null) {
+      throw new ConversationRequestError("Invalid skill provenance.");
+    }
+    const rec = item as Record<string, unknown>;
+    const required = ["id", "name", "version", "source", "contentHash", "modifiedAt"] as const;
+    for (const key of required) {
+      if (typeof rec[key] !== "string" || (rec[key] as string).length === 0) {
+        throw new ConversationRequestError(`Invalid skill provenance field: ${key}.`);
+      }
+    }
+    if (rec["source"] !== "built_in" && rec["source"] !== "user_local") {
+      throw new ConversationRequestError("Invalid skill provenance source.");
+    }
+    return {
+      id: rec["id"] as string,
+      name: rec["name"] as string,
+      version: rec["version"] as string,
+      source: rec["source"],
+      contentHash: rec["contentHash"] as string,
+      modifiedAt: rec["modifiedAt"] as string,
+    };
+  });
 }
 
 export function createConversationRouter(store: ConversationStore): BoundaryRouter {
@@ -198,6 +229,7 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
           const role = rec["role"];
           const text = rec["text"];
           const attachments = rec["attachments"];
+          const skills = parseSkillUses(rec["skills"]);
           if (role !== "user" && role !== "assistant") {
             throw new ConversationRequestError("role must be user or assistant.");
           }
@@ -206,6 +238,7 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
             role,
             text,
             ...(Array.isArray(attachments) ? { attachments } : {}),
+            ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
           });
           return { status: 200, data: { conversation } };
         },

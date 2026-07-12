@@ -5,6 +5,7 @@
  */
 import type { AttachmentMetadata, ConversationMessage } from "./service-client.js";
 import { type AttachmentSnapshot } from "./attachment-context.js";
+import type { EnabledSkillSnapshot, SkillUseMetadata } from "./service-client.js";
 export type AttachmentInclusionStatus = "selected" | "included" | "rejected" | "omitted_by_budget";
 export interface AttachmentDispatchEntry {
     readonly relativePath: string;
@@ -18,6 +19,7 @@ export interface DispatchPlanSuccess {
     readonly entries: readonly AttachmentDispatchEntry[];
     readonly includedMetadata: readonly AttachmentMetadata[];
     readonly priorTruncated: boolean;
+    readonly skillMetadata: readonly SkillUseMetadata[];
 }
 export interface DispatchPlanFailure {
     readonly ok: false;
@@ -29,5 +31,5 @@ export type DispatchPlan = DispatchPlanSuccess | DispatchPlanFailure;
  * Plan the full outbound dispatch. Any selected attachment that cannot be included
  * causes fail-fast (no silent omission).
  */
-export declare function planDispatchPrompt(priorMessages: readonly ConversationMessage[], attachments: readonly AttachmentSnapshot[], userPrompt: string, maxChars?: number): DispatchPlan;
+export declare function planDispatchPrompt(priorMessages: readonly ConversationMessage[], attachments: readonly AttachmentSnapshot[], userPrompt: string, maxChars?: number, skills?: readonly EnabledSkillSnapshot[]): DispatchPlan;
 //# sourceMappingURL=dispatch-plan.d.ts.map
