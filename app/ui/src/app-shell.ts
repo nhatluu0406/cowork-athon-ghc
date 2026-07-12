@@ -482,6 +482,38 @@ async function capturePermissionBeforeSnapshot(
   }
 }
 
+const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit", "patch", "multiedit", "delete"]);
+
+async function captureBeforeOnToolStart(
+  state: AppState,
+  event: Extract<import("@cowork-ghc/contracts").EvEvent, { kind: "tool_call" }>,
+): Promise<void> {
+  if (state.client === null || state.activeWorkspace === null) return;
+  if (event.status !== "running" && event.status !== "pending") return;
+  if (!FILE_MUTATION_TOOL_NAMES.has(event.toolName)) return;
+  if (event.summary === undefined || event.summary.length === 0) return;
+  const relativePath = toRelativePath(event.summary, state.activeWorkspace);
+  if (relativePath.length === 0 || relativePath.startsWith("...")) return;
+  for (const entry of state.pendingBeforeSnapshots.values()) {
+    if (entry.relativePath === relativePath) return;
+  }
+  try {
+    const before = await state.client.captureFileReviewSnapshot(relativePath);
+    state.pendingBeforeSnapshots.set(`tool:${event.callId}`, {
+      relativePath,
+      before,
+      operation:
+        event.toolName === "write"
+          ? "create"
+          : event.toolName === "delete"
+            ? "delete"
+            : "edit",
+    });
+  } catch {
+    // best effort
+  }
+}
+
 async function finalizeFileMutationReview(
   state: AppState,
   event: Extract<EvEvent, { kind: "file_mutation" }>,
@@ -762,6 +794,10 @@ function startStreamWatchdog(
       stopStreamWatchdog(state);
       return;
     }
+    if (state.permissionHistory.some((entry) => entry.decision === "pending")) {
+      touchStreamActivity(state);
+      return;
+    }
     const idleFor = Date.now() - state.lastStreamActivityAt;
     if (idleFor < STREAM_STALL_AFTER_ACTIVITY_MS) return;
     if (idleFor > STREAM_WATCHDOG_MS) {
@@ -883,6 +919,9 @@ function bindEvStream(
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
       refreshActivityUi(state, dom);
+      if (event.kind === "tool_call") {
+        void captureBeforeOnToolStart(state, event);
+      }
       if (event.kind === "file_mutation") {
         void finalizeFileMutationReview(state, event, sessionId, dom);
       }
@@ -1700,6 +1739,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             container: dom.root,
             onPending: (request) => {
+              touchStreamActivity(state);
               void capturePermissionBeforeSnapshot(state, request);
               const target =
                 request.action.targetPath !== undefined
@@ -1718,6 +1758,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               }
             },
             onDecision: ({ request, outcome, requestedDecision }) => {
+              touchStreamActivity(state);
               const target =
                 request.action.targetPath !== undefined
                   ? toRelativePath(request.action.targetPath, state.activeWorkspace)
