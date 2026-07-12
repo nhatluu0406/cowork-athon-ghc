@@ -6,7 +6,7 @@ handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
   frozen_at: "2026-07-12T12:00:00Z"
-  note: "L6 RUNNING, gate PARTIAL. Slices 1–3 packaged PASS on dist-app/win-unpacked/Cowork GHC.exe. CGHC-008, CGHC-011, CGHC-019 DONE. Service reachability RESOLVED. Bounded DeepSeek test connection verified via keyring (no .env after relaunch). OpenCode live session NOT started. Do NOT start L7. LEAN mode."
+  note: "L6 RUNNING, gate PARTIAL. Slices 1–3 packaged PASS. Bootstrap regression fixed: default userData boots settings-only (not live OpenCode). CGHC-008/011/019 DONE. Do NOT start L7."
 git:
   is_repo: true
   head: e99c3b14a25162a66cfb20171c8d0be8a6f033bf

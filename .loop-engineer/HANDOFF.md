@@ -45,4 +45,8 @@ Evidence:
 
 ## Precise Next Action
 
-**Slice 4:** OpenCode live session integration (bounded). Do **not** start L7 until full packaged POC journey is met.
+**Slice 4:** OpenCode live session integration (bounded). Boot must remain settings-only until explicit `connectLive`. Do **not** start L7.
+
+## Bootstrap note (2026-07-12)
+
+Packaged app must be rebuilt after `8f7abff` for default-profile boot. Use `dist-app/win-unpacked/Cowork GHC.exe` from the post-fix package build. Verify: `node tools/verify/bootstrap-packaged.mjs`.
