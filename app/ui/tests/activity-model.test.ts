@@ -89,6 +89,13 @@ test("token events are excluded from activity timeline", () => {
 
 test("toRelativePath stays inside workspace and redactCommand hides secrets", () => {
   assert.equal(toRelativePath(`${WS}/src/a.ts`, WS), "src/a.ts");
+  assert.equal(
+    toRelativePath(
+      "C:/Users/NHATLU~1/AppData/Local/Temp/cghc-freview-ws-abc/create-blue.txt",
+      "C:/Users/Nhat Luu/AppData/Local/Temp/cghc-freview-ws-abc",
+    ),
+    "create-blue.txt",
+  );
   assert.match(redactCommandText("curl -H Authorization: Bearer sk-secret"), /\[redacted\]/i);
 });
 
