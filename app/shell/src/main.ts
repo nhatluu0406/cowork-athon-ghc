@@ -77,11 +77,16 @@ function resolveRuntimePaths() {
     devAppRoot: DEV_APP_ROOT,
   });
   const settingsFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
+  const conversationsDir = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "conversations");
   lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
-  return { packaged, settingsFilePath };
+  return { packaged, settingsFilePath, conversationsDir };
 }
 
-function createShellController(settingsFilePath: string, packaged: ReturnType<typeof resolvePackagedPaths>) {
+function createShellController(
+  settingsFilePath: string,
+  conversationsDir: string,
+  packaged: ReturnType<typeof resolvePackagedPaths>,
+) {
   const liveSource = createFirstConfiguredSource([
     createPersistedSettingsSource({
       settingsFilePath,
@@ -101,6 +106,7 @@ function createShellController(settingsFilePath: string, packaged: ReturnType<ty
 
   const settingsOnlyOptions = {
     settingsFilePath,
+    conversationsDir,
     allowedOrigins: [APP_ORIGIN] as const,
     allowEnvCredentialImport: envCredentialImportEnabled(),
   };
@@ -201,8 +207,8 @@ void runShellLifecycle({
     if (envCredentialImportEnabled()) {
       loadProjectEnvFile(DEV_APP_ROOT);
     }
-    const { packaged, settingsFilePath } = resolveRuntimePaths();
-    shellController = createShellController(settingsFilePath, packaged);
+    const { packaged, settingsFilePath, conversationsDir } = resolveRuntimePaths();
+    shellController = createShellController(settingsFilePath, conversationsDir, packaged);
   },
   onReady: () => {
     if (shellController === null) {

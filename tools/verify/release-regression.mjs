@@ -34,6 +34,11 @@ try {
     'node --import tsx --test service/tests/provider-error-map.test.ts service/tests/provider-http-connector.test.ts service/tests/runtime-reply-adapter.test.ts service/tests/permission-bridge.test.ts',
   );
 
+  run(
+    "conversation-management",
+    "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts app/ui/tests/conversation-controller.test.ts",
+  );
+
   run("app-lifecycle-cli", "node --import tsx --test tools/app/tests/app-cli.test.ts");
 
   check("opencode-binary", existsSync(OPENCODE), `missing ${OPENCODE} — run npm install`);

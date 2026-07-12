@@ -137,12 +137,32 @@ export function createServiceClient(baseUrl, clientToken) {
             return {
                 accepted: false,
                 sessionId: data.sessionId,
-                reason: data.reason ?? "runtime_unavailable",
+                reason: data.reason ?? data.code ?? "runtime_unavailable",
             };
         },
         cancelSession: async (sessionId) => {
             await call(`/v1/session/${encodeURIComponent(sessionId)}/cancel`, { method: "POST", body: "{}" });
         },
+        listConversations: async (query) => {
+            const q = query?.trim();
+            const path = q !== undefined && q.length > 0
+                ? `/v1/conversations?q=${encodeURIComponent(q)}`
+                : "/v1/conversations";
+            return (await call(path)).conversations;
+        },
+        createConversation: async (input) => (await call("/v1/conversations", {
+            method: "POST",
+            body: JSON.stringify(input),
+        })).conversation,
+        getConversation: async (id) => (await call(`/v1/conversations/${encodeURIComponent(id)}`)).conversation,
+        patchConversation: async (id, patch) => (await call(`/v1/conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) })).conversation,
+        deleteConversation: async (id) => {
+            await call(`/v1/conversations/${encodeURIComponent(id)}`, {
+                method: "DELETE",
+            });
+        },
+        appendConversationMessage: async (id, role, text) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ role, text }) })).conversation,
+        continueRuntimeSession: async (sessionId) => call(`/v1/session/${encodeURIComponent(sessionId)}/continue`, { method: "POST", body: "{}" }),
         listPendingPermissions: permission.listPendingPermissions,
         decidePermission: permission.decidePermission,
     };
