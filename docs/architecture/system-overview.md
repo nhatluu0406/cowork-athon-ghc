@@ -77,6 +77,15 @@ Giới hạn POC: **một runtime execution active** tại một thời điểm.
 - **Dispatch preflight** (`dispatch-plan.ts`): tính budget cuối 12k ký tự từ prior context + attachment envelopes + user request; fail-fast nếu attachment selected không fit; không tạo runtime turn khi preflight fail.
 - Pending chips trong composer; metadata gắn `ConversationMessage.attachments`; content chỉ trên wire trong envelope untrusted.
 
+## Boundary file review (File Work Review slice)
+
+- Service module `service/src/file-review/`: bounded snapshot capture (`POST /v1/file-review/snapshot`),
+  artifact build (`POST /v1/file-review/build`), deterministic unified diff, secret-like redaction.
+- UI captures **before** snapshot khi permission pending cho file mutation; **after** snapshot khi `file_mutation` EV
+  (retry ngắn nếu disk chưa flush); persist `fileReviews[]` trên activity conversation.
+- Activity panel tách `attachmentContextPaths` vs `runtimeReadPaths`; review surface ở right panel (không Preview tab toàn cục).
+- Historical diff dùng snapshot đã persist — không đọc lại file disk để tái tạo; hash mismatch banner khi file hiện tại khác.
+
 ## Boundary Skills (Phase 1)
 
 - Skill là directory chứa `SKILL.md` với frontmatter `id`, `name`, `description`, optional
