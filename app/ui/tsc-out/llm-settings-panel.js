@@ -176,6 +176,7 @@ export function mountLlmSettingsPanel(container, deps) {
     const render = (view) => {
         summary.textContent = activeSummary(view);
         renderCredentialStatus(view);
+        deps.onSettingsUpdated?.(view);
         if (view.defaultModel !== null) {
             const preset = PROVIDER_PRESETS.find((p) => p.providerId === view.defaultModel.providerID);
             if (preset !== undefined) {
@@ -282,13 +283,16 @@ export function mountLlmSettingsPanel(container, deps) {
                 const result = await deps.client.testProviderConnection(selectedPreset.providerId);
                 if (result.ok) {
                     setStatus("Kết nối thành công.", "ok");
+                    deps.onConnectionTestResult?.(true);
                 }
                 else {
                     setStatus(userFacingProviderError(result.error), "err");
+                    deps.onConnectionTestResult?.(false);
                 }
             }
             catch (error) {
                 setStatus(userFacingProviderError(error instanceof Error ? error.message : "Kiểm tra kết nối thất bại."), "err");
+                deps.onConnectionTestResult?.(false);
             }
             finally {
                 setControlsBusy(false, {

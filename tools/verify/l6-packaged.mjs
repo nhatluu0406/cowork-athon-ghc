@@ -5,6 +5,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,10 +137,10 @@ async function setComposer(text) {
 
 function launch(extraEnv = {}, userDataDir) {
   const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
+  
   delete env["DEEPSEEK_API_KEY"];
   const args = userDataDir ? [`--user-data-dir=${userDataDir}`] : [];
-  return spawn(EXE, args, { env, stdio: "ignore", windowsHide: true });
+  return spawn(EXE, args, { env: packagedChildEnv(extraEnv), stdio: "ignore", windowsHide: true });
 }
 
 async function stop(proc) {

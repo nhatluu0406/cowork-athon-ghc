@@ -3,6 +3,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -118,9 +119,9 @@ async function waitForText(selector, pattern, timeoutMs = 120_000) {
 
 function launch(extraEnv = {}, userDataDir) {
   const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
+  
   const args = userDataDir ? [`--user-data-dir=${userDataDir}`] : [];
-  return spawn(EXE, args, { env, stdio: "ignore", windowsHide: true });
+  return spawn(EXE, args, { env: packagedChildEnv(extraEnv), stdio: "ignore", windowsHide: true });
 }
 
 async function stop(proc) {

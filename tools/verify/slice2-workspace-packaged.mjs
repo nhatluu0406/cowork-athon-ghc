@@ -7,6 +7,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { packagedChildEnv } from "./packaged-launch-env.mjs";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -128,8 +129,6 @@ async function waitForDomStatus(match, timeoutMs = 30_000) {
 }
 
 function launch(extraEnv = {}) {
-  const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
   return spawn(EXE, [], {
     env,
     stdio: "ignore",

@@ -6,6 +6,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";

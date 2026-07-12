@@ -6,6 +6,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -90,7 +91,7 @@ async function waitForConnected(timeoutMs = 90_000) {
 
 function launch() {
   const env = { ...process.env };
-  delete env["ELECTRON_RUN_AS_NODE"];
+  
   return spawn(EXE, [], {
     env: {
       ...env,

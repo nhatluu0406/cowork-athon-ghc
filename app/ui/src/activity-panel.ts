@@ -73,6 +73,7 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
   const header = rightPanel.querySelector(".rp-header");
   const toggle = el("button", "rp-header__toggle", "Thu gọn") as HTMLButtonElement;
   toggle.type = "button";
+  toggle.setAttribute("aria-label", "Thu gọn bảng hoạt động");
   header?.append(toggle);
 
   const planCard = rightPanel.querySelector(".plan-card");
