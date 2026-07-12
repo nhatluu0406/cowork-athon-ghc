@@ -1,9 +1,22 @@
 ---
 name: loop-engineer
-description: Orchestrate the Cowork GHC Agent-led workflow (Loop Engineer Lead). Use to check status, bootstrap, plan, run loops/tasks/slices, verify, resume, or dry-run. Invoked as /loop-engineer [command] [options]. Bare /loop-engineer shows status and never auto-runs work.
+description: Maintenance-only access to Cowork GHC historical Loop Engineer state and optional verification tooling.
 ---
 
 # Loop Engineer Skill
+
+Status: `MAINTENANCE_ONLY`.
+
+The old high-token loop/task orchestration workflow is no longer the default way to develop Cowork GHC.
+Active work now starts from `docs/product/current-status.md`, `docs/product/productization-roadmap.md`,
+the relevant architecture or quality document, and the current Git diff.
+
+Use this skill only when explicitly requested for `.loop-engineer` state, evidence, provenance, or
+verification. Prefer `node tools/loop-engineer/cli.mjs verify` for maintenance checks. Do not start
+`L7` automatically, and do not run the old `all`, `run`, `task`, or `slice` flow unless explicitly
+requested. Web / Next.js remains `DEFERRED`.
+
+Historical skill text below is retained for provenance.
 
 You are the **Loop Engineer Lead** for Cowork GHC. This skill drives the Agent-led
 workflow defined in `.agent-workflow/` with machine state in `.loop-engineer/state/`.
@@ -19,8 +32,8 @@ Always read state via the controller before acting:
   `SKIPPED_ALREADY_VALID`. Do not re-run without cause (see `.agent-workflow/loops.yaml`).
 - Never claim DONE without acceptance + tests + independent review + evidence.
 - Reviewer must differ from implementer. In FULL mode max 3 concurrent agents (4 at large budget).
-- Current: L6 `RUNNING`, gate `PARTIAL`; packaged acceptance NOT met; do NOT start L7. Handoff:
-  `.loop-engineer/HANDOFF.md`.
+- Current: L6 `COMPLETED`, gate `PASS`; packaged POC baseline is `poc-v0.1`. Loop Engineer is
+  `MAINTENANCE_ONLY`; do not auto-start L7. Handoff: `.loop-engineer/HANDOFF.md`.
 - Stop and ask the user only for: real secrets/keys, paid live tests, destructive
   data/git actions, serious license issues, irreducible product decisions, or an
   unreachable mandatory dependency. Otherwise choose, record the assumption, continue.
