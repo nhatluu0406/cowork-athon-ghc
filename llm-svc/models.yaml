@@ -53,15 +53,15 @@ models:
     version: "1.0"
     is_default: true
 
-  # Optional: local generative model for modes 2/3 (GGUF format)
-  # Uncomment when deploying with local Qwen model
-  # - name: qwen3-8b-q4
-  #   kind: generative
-  #   format: gguf
-  #   path: /models/qwen3-8b-q4.gguf
-  #   dims: 0
-  #   version: "1.0"
-  #   is_default: true
+  # Local safetensors generative model (T162)
+  # Real model: Qwen2.5-3B with sharded safetensors weights
+  - name: qwen2.5-3b-safetensors
+    kind: generative
+    format: safetensors
+    path: /mnt/data-disk/Data/ONNXModel/translate-tool/models/qwen2.5-3B/
+    dims: 0
+    version: "1.0"
+    is_default: false
 
   # Cloud-based generation model (proxy in llm-svc)
   - name: gpt-4o-mini

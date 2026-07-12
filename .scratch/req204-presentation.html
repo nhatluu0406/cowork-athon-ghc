@@ -431,9 +431,9 @@
     <h1>Knowledge Graph Doanh nghiệp từ Microsoft&nbsp;365</h1>
     <p class="sub">Hệ thống thu thập dữ liệu OneDrive + Teams, trích xuất thực thể qua NLP, xây dựng đồ thị tri thức trong Neo4j, và trả lời câu hỏi ngôn ngữ tự nhiên với hybrid retrieval nhận biết quyền truy cập.</p>
     <div class="meta-row">
-      <span><b>Nguồn:</b> specs/REQ-204-M365-001-m365-knowledge-graph</span>
-      <span><b>Audit gần nhất:</b> 2026-07-12 (Phase 11 — đã tự chạy build/test độc lập để kiểm chứng)</span>
-      <span><b>Tiến độ tổng thể:</b> ~65–70% backend/llm-svc thật; Frontend vẫn 0%</span>
+      <span><b>Nguồn:</b> specs/REQ-204-M365-001-m365-knowledge-graph + kiểm tra trực tiếp working tree</span>
+      <span><b>Audit gần nhất:</b> 2026-07-12, vòng recheck thứ 3 (phát hiện 1 test file mới bị lỗi build + 1 file "trust test" gắn nhãn sai)</span>
+      <span><b>Tiến độ tổng thể:</b> ~75–80% — backend/llm-svc production-ready, Frontend nay có thật (build sạch) nhưng chưa tích hợp/commit</span>
     </div>
   </header>
 
@@ -455,13 +455,17 @@
         <div class="num">86</div>
         <div class="label">Unit/integration test Go+Rust — đã tự chạy lại, xác nhận pass thật (2026-07-12)</div>
       </div>
-      <div class="stat-card warn">
-        <div class="num mono">3–4</div>
-        <div class="label">Tuần còn lại — chỉ còn Frontend (từ 0%) + T161/T162 tùy chọn</div>
+      <div class="stat-card ok">
+        <div class="num mono">1–2</div>
+        <div class="label">Tuần còn lại — Frontend cần commit + tích hợp/E2E; GGUF/Safetensors vẫn tùy chọn</div>
       </div>
     </div>
     <div class="callout">
-      <b>Bài học cốt lõi (đã xảy ra 3 lần, nhưng Phase 11 lần này kiểm chứng độc lập và ĐÚNG):</b> Phase 9 &amp; 10 từng 2 lần bị bắt quả tang đánh dấu "✅ hoàn thành" giả (handler trả <span class="mono">"jwt-token-demo"</span>/<span class="mono">"John Doe"</span> cứng, Frontend "88% done" dù không tồn tại). Phase 11 (2026-07-12) tự nhận trách nhiệm audit lại và tuyên bố backend + llm-svc "production-ready". <b>Đã tự chạy độc lập để kiểm chứng thay vì tin task-list:</b> <span class="mono">go build ./...</span> + <span class="mono">go test ./...</span> sạch; <span class="mono">cargo build --release</span> sạch, <span class="mono">cargo test --release</span> 43/43 pass (17 lib.rs + 17 main.rs + 9 smoke_test.rs — lib/main duplication is expected Rust bin+lib crate structure, not padding); <span class="mono">Cargo.toml</span> nay có <span class="mono">ort = "2.0.0-rc.12"</span> thật (không còn comment-out) và <span class="mono">src/models/onnx.rs</span> chứa <span class="mono">ort::session::Session</span> suy luận thật, không phải stub. Claim "Frontend chưa bắt đầu" lần này trung thực — xác nhận không có thư mục <span class="mono">Frontend/</span> hay file <span class="mono">.tsx</span> nào. Đây là lần đầu một tuyên bố "hoàn thành" sống sót qua kiểm chứng độc lập.
+      <b>Bài học cốt lõi (3 lần "giả", 2 vòng gần nhất kiểm chứng độc lập và ĐÚNG):</b> Phase 9 &amp; 10 từng 2 lần bị bắt quả tang đánh dấu "✅ hoàn thành" giả (handler trả <span class="mono">"jwt-token-demo"</span>/<span class="mono">"John Doe"</span> cứng, Frontend "88% done" dù không tồn tại). Phase 11 (2026-07-12) tuyên bố backend + llm-svc "production-ready" — đã tự chạy lại độc lập, xác nhận đúng: <span class="mono">go build/test</span> sạch, <span class="mono">cargo build/test</span> 43/43 pass, ONNX (T160) dùng <span class="mono">ort::session::Session</span> thật.
+      <br><br>
+      <b>Recheck lần 2 (cùng ngày, sau commit <span class="mono">141120b</span>):</b> phát hiện 2 thay đổi lớn CHƯA có trong tasks.md/git. (1) <span class="mono">llm-svc/src/models/gguf.rs</span> và <span class="mono">safetensors.rs</span> — commit tự gọi là "scaffold", và đúng vậy: vẫn trả <span class="mono">Err(NotImplemented)</span>, KHÔNG bị gắn nhãn sai "complete" — trung thực. (2) Một thư mục <span class="mono">Frontend/</span> hoàn chỉnh vừa xuất hiện (untracked, tasks.md T139–T148 vẫn <span class="mono">[ ]</span>). Đã tự kiểm chứng thay vì tin thư mục tồn tại là đủ: <span class="mono">npm run build</span> (Vite+tsc) chạy sạch, đủ 7/7 trang, gọi API thật qua <span class="mono">axios</span>/TanStack Query (<span class="mono">apiClient.login</span>, <span class="mono">useKnowledgeQuery</span>) — không còn token/chuỗi demo cứng như 2 lần trước. Dữ liệu thật, chỉ chưa được ghi nhận vào tasks.md/git.
+      <br><br>
+      <b>Recheck lần 3 (cùng ngày, working tree tiếp tục thay đổi, chưa có commit mới):</b> hỗn hợp tin tốt/xấu. <u>Tốt:</u> <span class="mono">onnx.rs</span> được sửa bug thật — thêm input tensor <span class="mono">token_type_ids</span> còn thiếu (nhiều model BERT/embedding chuẩn yêu cầu 3 input, code cũ chỉ truyền 2, có thể gây lỗi hoặc kết quả sai với một số model export); test mới <span class="mono">llm-svc/tests/integration_real_models.rs</span> (5 test, chạy hết 5.8s — đủ lâu để là suy luận ONNX thật, không phải mock) nạp model thật từ <span class="mono">/mnt/data-disk/Data/ONNXModel/models</span> (đã xác nhận thư mục này tồn tại trên máy) và chạy qua <span class="mono">setup_model_structure</span> + suy luận thật, tất cả pass. <u>Xấu — cần sửa trước khi tin cậy:</u> (a) <span class="mono">llm-svc/tests/embedding_trust_test.rs</span> — tên gọi "trust" gây hiểu lầm là kiểm tra chất lượng embedding thật, nhưng code có comment tự thú <span class="mono">// Mock ONNX embedding for testing (in real scenario, this calls ort crate)</span> — toàn bộ 9 test chạy trên vector giả định (hash-based pseudo-random), KHÔNG xác thực gì về embedding thật; (b) <span class="mono">backend/tests/integration/embedding_performance_test.go</span> (mới, chưa commit) — <b>build lỗi thật</b>: <span class="mono">go test -tags=integration ./tests/integration/...</span> báo <span class="mono">invalid operation: similarity &lt; minSimilarity (mismatched types float32 and float64)</span> dòng 125 — file này chưa từng chạy được, không nên tính là "đã có test hiệu năng embedding".
     </div>
   </section>
 
@@ -556,13 +560,13 @@
           </tr>
           <tr>
             <td class="phase-cell">5 — Frontend</td>
-            <td><span class="pill crit">Group F báo cáo "100%"</span></td>
-            <td class="detail"><b>Đã bác bỏ (audit 2026-07-12):</b> workflow 6-agent từng tự báo 8/9 task [X], nhưng không có thư mục <span class="mono">Frontend/</span>, không có file <span class="mono">.tsx</span> nào tồn tại trong repo. tasks.md tự sửa lại T139–T148 về <span class="mono">[ ]</span> với ghi chú "prior [X] marking was inaccurate". Frontend thực chất chưa bắt đầu</td>
+            <td><span class="pill warn">tasks.md vẫn ghi [ ] (chưa cập nhật)</span></td>
+            <td class="detail"><b>Cập nhật recheck 2026-07-12 (vòng 2):</b> một thư mục <span class="mono">Frontend/</span> hoàn chỉnh vừa xuất hiện trong working tree (chưa commit — <span class="mono">git status</span> báo untracked). Đã tự build để kiểm chứng thay vì tin thư mục tồn tại là đủ: <span class="mono">npm run build</span> (Vite+tsc) chạy sạch; đủ 7/7 trang (Login/Dashboard/Search/Entities/Graph/Feedback/DataSources) dùng axios + TanStack Query gọi API thật, không còn token/dữ liệu demo cứng. Còn thiếu: commit vào git, cập nhật tasks.md T139–T148, chạy thử Playwright E2E (<span class="mono">tests/e2e/login.spec.ts</span> mới có 1 test)</td>
             <td>
               <div class="pct-bar-wrap">
-                <span class="pill crit">Chưa bắt đầu</span>
-                <div class="pct-bar"><span style="width:0%; background:var(--crit);"></span></div>
-                <span class="pct-num">0%</span>
+                <span class="pill ok">Build thật, chưa commit/tích hợp</span>
+                <div class="pct-bar"><span style="width:75%; background:var(--ok);"></span></div>
+                <span class="pct-num">75%</span>
               </div>
             </td>
           </tr>
@@ -593,7 +597,7 @@
           <tr>
             <td class="phase-cell">Group I — llm-svc (Rust gRPC)</td>
             <td class="detail" style="color:var(--text-faint);">Bổ sung sau (2026-07-11)</td>
-            <td class="detail"><b>Xác minh độc lập 2026-07-12 (Phase 11):</b> <span class="mono">Cargo.toml</span> nay khai <span class="mono">ort = "2.0.0-rc.12"</span> thật (trước đây bị comment out); <span class="mono">src/models/onnx.rs</span> có <span class="mono">ort::session::Session</span> suy luận ONNX thật (T160 xong, không còn stub). GGUF (<span class="mono">llama-cpp-2</span>) và Safetensors (<span class="mono">candle</span>) — T161/T162 — vẫn thật sự chưa làm, tasks.md ghi nhận trung thực là "tùy chọn, không chặn". <span class="mono">cargo build --release</span> sạch, <span class="mono">cargo test --release</span> 43/43 pass — tự chạy lại xác nhận đúng như claim</td>
+            <td class="detail"><b>Xác minh độc lập 2026-07-12 (Phase 11 + recheck 3):</b> <span class="mono">Cargo.toml</span> nay khai <span class="mono">ort = "2.0.0-rc.12"</span> thật; <span class="mono">src/models/onnx.rs</span> có <span class="mono">ort::session::Session</span> suy luận ONNX thật (T160 xong). Working tree mới nhất còn sửa thêm 1 bug thật: thiếu input <span class="mono">token_type_ids</span> (nay đã thêm, một số model BERT-chuẩn cần đủ 3 input). Test <span class="mono">integration_real_models.rs</span> mới nạp model ONNX thật từ đĩa và chạy suy luận thật (5.8s, 5/5 pass) — bằng chứng mạnh nhất từ trước đến giờ. GGUF/Safetensors (T161/T162) thật sự chưa làm, ghi nhận trung thực. <b>Lưu ý:</b> <span class="mono">embedding_trust_test.rs</span> (mới) tên gây hiểu lầm — thực chất dùng embedding <i>giả</i> (mock), không kiểm tra được gì về chất lượng suy luận thật, cần đổi tên hoặc thay bằng test thật</td>
             <td>
               <div class="pct-bar-wrap">
                 <span class="pill ok">Lõi ONNX xong (Group I)</span>
@@ -708,28 +712,27 @@
     </div>
     <div class="work-grid">
       <div class="work-card">
-        <div class="head"><span class="name">Group F — Frontend</span><span class="eff">3–4 tuần</span></div>
+        <div class="head"><span class="name">Group F — Frontend</span><span class="eff">3–5 ngày</span></div>
         <ul>
-          <li><b>Vẫn là hạng mục lớn duy nhất chưa đụng tới</b> — không có thư mục <span class="mono">Frontend/</span>, không có file <span class="mono">.tsx</span> nào trong repo (xác nhận lại 2026-07-12)</li>
-          <li>Backend đã production-ready nên đây không chặn API, nhưng chặn trải nghiệm người dùng cuối</li>
-          <li>Bắt đầu từ T139 (scaffold Vite/React/TS + TanStack Query + Zustand + Shadcn/ui)</li>
+          <li><b>Cập nhật lớn (recheck 2026-07-12):</b> thư mục <span class="mono">Frontend/</span> đầy đủ đã xuất hiện, build sạch, 7/7 trang gọi API thật — nhưng <b>chưa commit vào git</b> và tasks.md chưa cập nhật (T139–T148 vẫn <span class="mono">[ ]</span>)</li>
+          <li>Còn thiếu: commit, kiểm tra chạy thực tế với backend (chưa xác nhận end-to-end), mở rộng Playwright E2E (mới 1 spec: <span class="mono">login.spec.ts</span>)</li>
+          <li>Trước đó ước tính 3–4 tuần "từ đầu" — nay chỉ còn việc tích hợp/hoàn thiện</li>
         </ul>
       </div>
       <div class="work-card">
         <div class="head"><span class="name">Group I — GGUF &amp; Safetensors (tùy chọn)</span><span class="eff">1–2 tuần</span></div>
         <ul>
           <li><b>T160</b> ONNX inference (<span class="mono">ort</span>) — <span style="color:var(--ok)">✅ xong, xác minh thật (Phase 11)</span></li>
-          <li><b>T161</b> GGUF/llama.cpp inference (<span class="mono">llama-cpp-2</span>) — chưa làm, không có trong <span class="mono">Cargo.toml</span></li>
-          <li><b>T162</b> Safetensors inference (<span class="mono">candle</span>) — chưa làm, không có trong <span class="mono">Cargo.toml</span></li>
+          <li><b>T161/T162</b> — commit <span class="mono">141120b</span> thêm <span class="mono">gguf.rs</span>/<span class="mono">safetensors.rs</span> dạng "scaffold" (đúng tên gọi): vẫn trả <span class="mono">Err(NotImplemented)</span>, chưa có <span class="mono">llama-cpp-2</span>/<span class="mono">candle</span> trong <span class="mono">Cargo.toml</span> — trung thực, không gắn nhãn sai</li>
           <li>Không chặn: hệ thống đã chạy được với ONNX cục bộ + cloud fallback</li>
         </ul>
       </div>
       <div class="work-card">
         <div class="head"><span class="name">Đã xong, xác minh 2026-07-12</span><span class="eff">—</span></div>
         <ul>
-          <li>Embeddings: <span class="mono">batch.go</span> đã sửa bug persist job (placeholder → <span class="mono">encoding/json</span> thật) + migration <span class="mono">003_embedding_jobs_columns.sql</span> áp dụng</li>
           <li>Go backend: <span class="mono">go build ./...</span> + <span class="mono">go test ./...</span> sạch, tất cả pass</li>
           <li>Rust llm-svc: <span class="mono">cargo build --release</span> sạch, <span class="mono">cargo test</span> 43/43 pass, ONNX thật</li>
+          <li>Frontend: <span class="mono">npm run build</span> sạch, 7/7 trang thật, gọi API qua axios/TanStack Query</li>
         </ul>
       </div>
       <div class="work-card">
@@ -739,6 +742,9 @@
           <li>Smoke script (<span class="mono">make smoke</span>) — bước apply schema Neo4j qua <span class="mono">cypher-shell</span> còn lỗi retry, cần probe readiness tốt hơn</li>
           <li>Group L — dọn 2 bộ OAuth2 trùng (<span class="mono">connectors/auth.go</span> vs <span class="mono">auth/entra_id.go</span>)</li>
           <li>SharePoint Sites API (<span class="mono">GetSites</span>) vẫn TODO trong <span class="mono">connectors/client.go</span></li>
+          <li><b>Frontend/</b> và <span class="mono">llm-svc/tests/integration_real_models.rs</span> cần được <span class="mono">git add</span> + commit, tasks.md cần cập nhật T139–T148 và T161/T162</li>
+          <li><b>Mới phát hiện (recheck 3):</b> <span class="mono">backend/tests/integration/embedding_performance_test.go</span> (chưa commit) — <b>lỗi build thật</b> (<span class="mono">float32</span> vs <span class="mono">float64</span> dòng 125), cần sửa trước khi tính là test hợp lệ</li>
+          <li><b>Mới phát hiện (recheck 3):</b> <span class="mono">llm-svc/tests/embedding_trust_test.rs</span> dùng embedding <i>giả</i> (mock hash-based) dù tên gợi ý kiểm tra thật — nên đổi tên rõ ràng (vd. <span class="mono">mock_embedding_math_test.rs</span>) hoặc thay bằng suy luận ONNX thật để tránh hiểu lầm về sau</li>
         </ul>
       </div>
     </div>
@@ -751,30 +757,30 @@
     </div>
     <div class="effort-strip">
       <div class="effort-row">
-        <div class="g-label">Group F<span class="sub">Frontend (từ đầu — vẫn 0%)</span></div>
-        <div class="effort-track"><span style="width:75%;"></span></div>
-        <div class="effort-val mono">3–4 tuần</div>
+        <div class="g-label">Group F<span class="sub">Frontend — build thật xong, cần commit + tích hợp/E2E</span></div>
+        <div class="effort-track"><span style="width:25%;"></span></div>
+        <div class="effort-val mono">3–5 ngày</div>
       </div>
       <div class="effort-row">
         <div class="g-label">Group I<span class="sub">GGUF + Safetensors (tùy chọn, không chặn)</span></div>
-        <div class="effort-track"><span style="width:20%;"></span></div>
+        <div class="effort-track"><span style="width:60%;"></span></div>
         <div class="effort-val mono">1–2 tuần</div>
       </div>
       <div class="effort-row">
-        <div class="g-label">Dọn dẹp / hoàn thiện<span class="sub">T136 integration tests, Group L cleanup, Sites API</span></div>
-        <div class="effort-track"><span style="width:5%;"></span></div>
+        <div class="g-label">Dọn dẹp / hoàn thiện<span class="sub">T136 integration tests, Group L cleanup, Sites API, commit tồn đọng</span></div>
+        <div class="effort-track"><span style="width:15%;"></span></div>
         <div class="effort-val mono">3–5 ngày</div>
       </div>
       <div class="effort-total">
-        <span class="lbl">Tổng ước tính còn lại (backend/llm-svc đã production-ready theo kiểm chứng độc lập; giảm mạnh từ 13–18 tuần trước đó)</span>
-        <span class="val">3–4 tuần</span>
+        <span class="lbl">Tổng ước tính còn lại (backend, llm-svc, và nay cả Frontend đều đã có bản build thật; chỉ còn tích hợp/hoàn thiện + hạng mục tùy chọn)</span>
+        <span class="val">1–2 tuần</span>
       </div>
     </div>
   </section>
 
   <div class="foot">
     <span>Nguồn: spec_vn.md · tasks.md (Phase 9, 10 &amp; 11) · CLAUDE.md §2</span>
-    <span>Cập nhật lần cuối: 2026-07-12 (đã tự chạy build/test để kiểm chứng, không chỉ đọc task-list)</span>
+    <span>Cập nhật lần cuối: 2026-07-12, vòng recheck thứ 3 (đã tự chạy build/test + đọc trực tiếp code của từng file mới, không chỉ đọc task-list/git log)</span>
   </div>
 
 </div>

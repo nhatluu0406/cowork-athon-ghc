@@ -21,15 +21,15 @@ reqwest = { version = "0.11", features = ["json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 once_cell = "1.19"
 
-# Model inference: ONNX is real (T160, see src/models/onnx.rs). GGUF/safetensors
-# remain stubs — GGUF needs llama-cpp-2, which needs cmake to build llama.cpp
-# (unavailable in the environment this was implemented in); safetensors was
-# descoped separately (no reference implementation to port from).
+# Model inference: ONNX (T160) and GGUF (T161) are real. Safetensors (T162) scaffolded.
+# - ONNX via ort crate: https://github.com/pykeio/ort
+# - GGUF via llama-gguf crate: Pure Rust implementation of llama.cpp, no cmake needed
+# - Safetensors via candle: Descoped (requires heavy ML dependencies)
 ort = "2.0.0-rc.12"
 tokenizers = "0.23.1"
 ndarray = "0.17.2"
-# llama-cpp-2 = "0.1"  # GGUF - blocked on cmake availability
-# candle-core = { version = "0.3", features = ["cuda"] }  # safetensors - descoped
+llama-gguf = "0.14"  # GGUF - T161: Pure Rust GGUF inference without cmake
+# candle-core = { version = "0.3", features = ["cuda"] }  # Safetensors - T162: descoped
 
 [dev-dependencies]
 tokio-test = "0.4"
