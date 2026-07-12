@@ -18,7 +18,7 @@ and the current working tree instead.
 | Slice | File Work Review and Before/After Diff |
 | Feature commit | `c81fbc4` — feat(files): add persistent before-after review |
 | Implementation Agent | Cursor |
-| Packaged journeys | `file-review-packaged.mjs` A–L — **PARTIAL** in this session (live agent file writes did not land on disk; `verify:release` PASS) |
+| Packaged journeys | `file-review-packaged.mjs` A–L — **NOT PASS YET / PARTIAL** in this session (live agent file writes did not land on disk; `verify:release` PASS) |
 | Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
 | Prior slices still PASS | Skills Foundation A–J; Provider Readiness A–J; Attachment Honesty A–J |
 
@@ -40,6 +40,26 @@ a permanent product dependency.
 
 Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/`,
 `docs/architecture/`, and `AGENTS.md`. `.loop-engineer/` is maintenance-only provenance.
+
+## Reference analysis pass
+
+Git/docs reference analysis is complete. Two reference reports were added:
+
+- [CoworkLocalallOS_3 Capability Audit](../references/coworklocalallos3-capability-audit.md)
+- [Cowork Frontend Design Assessment](../references/cowork-frontend-design-assessment.md)
+
+D1-D4 have been mapped into the canonical product plan as external parallel tracks:
+
+- D1: Dispatch / fan-out agent.
+- D2: Microsoft automation: Teams, SharePoint, OneDrive, Graph.
+- D3: Knowledge system: RAG, vector, graph.
+- D4: Advanced LLM gateway: key pool, rotation, load balance, failover, cost routing.
+
+Cowork GHC does not currently implement D1-D4. The frontend PDF has been assessed as
+design reference only; no UI implementation was started. Recommended future shell direction
+is `1a Airy`, staged after the packaged File Work Review blocker is closed. Code, Structure/RAG,
+Microsoft 365, and concurrency surfaces remain future/dependency-gated surfaces, not current
+product capability.
 
 ## Verified Baseline
 
@@ -88,7 +108,9 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
 - `npm run verify:release` PASS (includes `service/tests/file-review.test.ts`, router test, activity-model updates).
 - `npm run package:win` PASS.
 - `node tools/verify/file-review-packaged.mjs` — harness added for journeys A–L; live-agent file-write
-  steps did not complete in this verification environment (re-run in clean profile recommended).
+  steps did not complete in this verification environment. The live packaged verification did
+  not complete successfully. The failure may be related to runtime/environment instability,
+  but the root cause is not yet proven.
 
 Full L9 / release-candidate verification is **not** complete.
 
@@ -96,13 +118,20 @@ Full L9 / release-candidate verification is **not** complete.
 
 Next Agent: Cursor.
 
-Recommended next slice after File Work Review packaged PASS:
+Current blocker:
 
 ```text
-Minimal Workspace Navigator
+Packaged File Work Review A–L verification is incomplete.
 ```
 
-Do not start the next slice until Product Owner issues its brief.
+Next implementation action:
+
+```text
+Diagnose and re-run packaged File Work Review A–L
+```
+
+Minimal Workspace Navigator has not started. Do not start it until packaged File Work
+Review A–L passes and the Product Owner issues that brief.
 
 ## Useful Verification Commands
 
