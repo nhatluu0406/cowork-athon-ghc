@@ -29,7 +29,7 @@ updated_at: "2026-07-12"
 ## Release
 
 - L9 release verification đầy đủ chưa bắt đầu.
-- Packaged live deny/cancel recovery trong **cùng** conversation: unit test + `conversation-finalization-packaged.mjs` (conversation riêng cho deny); chưa có journey live riêng cho deny→next-turn trong `multi-turn-packaged.mjs`.
+- Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
 
 ## Tính năng chưa có
 
