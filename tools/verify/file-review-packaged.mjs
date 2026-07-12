@@ -4,13 +4,16 @@
  * Requires: dist-app build, DEEPSEEK_API_KEY in .env or environment.
  */
 
+import { createHash } from "node:crypto";
 import { execSync, spawn } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -21,7 +24,366 @@ const REPO = process.cwd();
 const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
 const CDP_PORT = 19235;
 const SECRET_FIXTURE = "VIOLET-FILE-REVIEW-428";
+const SECRET_PATH_PATTERN = /(^|[\\/])(\.env|.*\.(pem|key)|id_rsa|id_ed25519|credentials\.json|service-account.*\.json|\.npmrc|\.pypirc)$/iu;
+const TIMEOUTS = {
+  appShellMs: 90_000,
+  startupTraceMs: 120_000,
+  serviceReadyMs: 120_000,
+  workspaceMs: 60_000,
+  credentialMs: 30_000,
+  providerReadyMs: 60_000,
+  sendStartMs: 60_000,
+  permissionRequestMs: 180_000,
+  permissionDrainMs: 30_000,
+  terminalMs: 240_000,
+  mutationEventMs: 90_000,
+  diskFileMs: 120_000,
+  reviewMs: 90_000,
+};
 const results = {};
+
+class StageTimeoutError extends Error {
+  constructor(stage, timeoutMs, details = "") {
+    super(`timeout at ${stage} after ${timeoutMs}ms${details ? `: ${details}` : ""}`);
+    this.name = "StageTimeoutError";
+    this.stage = stage;
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+class StageTracker {
+  constructor(artifactRoot) {
+    this.artifactRoot = artifactRoot;
+    this.startedAt = new Date().toISOString();
+    this.currentStage = "preflight";
+    this.lastPassedStage = null;
+    this.stages = [];
+  }
+
+  start(stage, note = "") {
+    this.currentStage = stage;
+    const entry = { stage, status: "started", at: new Date().toISOString(), note };
+    this.stages.push(entry);
+    console.log(`[${entry.at}] ${stage}${note ? ` — ${note}` : ""}`);
+  }
+
+  pass(stage = this.currentStage, extra = {}) {
+    this.lastPassedStage = stage;
+    const entry = { stage, status: "passed", at: new Date().toISOString(), ...extra };
+    this.stages.push(entry);
+    console.log(`[${entry.at}] ${stage} PASS`);
+  }
+
+  fail(stage = this.currentStage, error) {
+    const entry = {
+      stage,
+      status: "failed",
+      at: new Date().toISOString(),
+      error: redact(error instanceof Error ? error.message : String(error)),
+    };
+    this.stages.push(entry);
+    console.error(`[${entry.at}] ${stage} FAIL — ${entry.error}`);
+  }
+}
+
+function redact(value) {
+  const key = process.env["DEEPSEEK_API_KEY"];
+  let text = String(value ?? "");
+  if (key?.trim()) text = text.split(key).join("[REDACTED_API_KEY]");
+  text = text.replace(/sk-[A-Za-z0-9_-]{8,}/gu, "sk-[REDACTED]");
+  return text;
+}
+
+function writeJson(path, data) {
+  writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+
+function fileHash(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function isSecretLikePath(path) {
+  return SECRET_PATH_PATTERN.test(path.replace(/\\/g, "/"));
+}
+
+function fileInfo(path) {
+  if (!existsSync(path)) return { exists: false };
+  const stat = statSync(path);
+  return {
+    exists: true,
+    sizeBytes: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    sha256: stat.isFile() && !isSecretLikePath(path) ? fileHash(path) : undefined,
+  };
+}
+
+function listWorkspaceFiles(root, maxEntries = 80) {
+  const entries = [];
+  const queue = [{ abs: root, rel: "" }];
+  while (queue.length > 0 && entries.length < maxEntries) {
+    const current = queue.shift();
+    if (!current) break;
+    let children = [];
+    try {
+      children = readdirSync(current.abs, { withFileTypes: true });
+    } catch (error) {
+      entries.push({ path: current.rel || ".", error: redact(error instanceof Error ? error.message : error) });
+      continue;
+    }
+    for (const child of children) {
+      if (entries.length >= maxEntries) break;
+      const rel = current.rel ? `${current.rel}/${child.name}` : child.name;
+      const abs = join(current.abs, child.name);
+      const info = fileInfo(abs);
+      entries.push({
+        path: rel,
+        kind: child.isDirectory() ? "directory" : child.isFile() ? "file" : "other",
+        ...info,
+      });
+      if (child.isDirectory()) queue.push({ abs, rel });
+    }
+  }
+  return { root, truncated: queue.length > 0 || entries.length >= maxEntries, entries };
+}
+
+function safeReadText(path, maxChars = 120_000) {
+  if (!existsSync(path)) return "";
+  return readFileSync(path, "utf8").slice(0, maxChars);
+}
+
+function envSnapshot(extraKeys = {}) {
+  const keys = new Set([
+    "COWORK_GHC_REMOTE_DEBUG_PORT",
+    "COWORK_GHC_E2E_WORKSPACE_ROOT",
+    "COWORK_GHC_STARTUP_TRACE",
+    "ELECTRON_RUN_AS_NODE",
+    "DEEPSEEK_API_KEY",
+    ...Object.keys(extraKeys),
+  ]);
+  const out = {};
+  for (const key of [...keys].sort()) {
+    if (key === "DEEPSEEK_API_KEY") {
+      out[key] = process.env[key]?.trim() ? "[present]" : "[missing]";
+    } else if (key === "ELECTRON_RUN_AS_NODE") {
+      out[key] = process.env[key] === undefined ? "[absent in parent]" : "[present in parent; stripped from child]";
+    } else {
+      out[key] = extraKeys[key] ?? process.env[key] ?? "[unset]";
+    }
+  }
+  return out;
+}
+
+function exeMetadata() {
+  if (!existsSync(EXE)) return { path: EXE, exists: false };
+  const stat = statSync(EXE);
+  return {
+    path: EXE,
+    exists: true,
+    sizeBytes: stat.size,
+    modifiedAt: stat.mtime.toISOString(),
+    sha256: fileHash(EXE),
+  };
+}
+
+function readConversationDiagnostics(profileDir) {
+  const convRoot = join(profileDir, ".runtime", "conversations");
+  if (!existsSync(convRoot)) return { conversations: [] };
+  const indexPath = join(convRoot, "index.json");
+  let index = { conversations: [] };
+  try {
+    index = existsSync(indexPath) ? JSON.parse(readFileSync(indexPath, "utf8")) : index;
+  } catch (error) {
+    return { error: redact(error instanceof Error ? error.message : error), conversations: [] };
+  }
+  const conversations = [];
+  for (const summary of index.conversations ?? []) {
+    const path = join(convRoot, `${summary.id}.json`);
+    if (!existsSync(path)) continue;
+    try {
+      const record = JSON.parse(readFileSync(path, "utf8"));
+      const activity = record.activity && typeof record.activity === "object" ? record.activity : {};
+      conversations.push({
+        id: record.id,
+        status: record.status,
+        runtimeSessionId: record.runtimeSessionId,
+        runtimePhase: record.runtimePhase,
+        runtimeTurns: (record.runtimeTurns ?? []).map((t) => ({
+          runtimeTurnId: t.id,
+          runtimeSessionId: t.runtimeSessionId,
+          status: t.status,
+        })),
+        messageCount: record.messages?.length ?? 0,
+        fileReviewsCount: Array.isArray(activity.fileReviews) ? activity.fileReviews.length : 0,
+        latestActivityKinds: Array.isArray(activity.items)
+          ? activity.items.slice(-12).map((item) => item.kind ?? item.label ?? "unknown")
+          : [],
+        fileChanges: Array.isArray(activity.fileChanges) ? activity.fileChanges.slice(-12) : [],
+        permissionStates: Array.isArray(activity.permissionHistory)
+          ? activity.permissionHistory.slice(-12).map((item) => ({
+              requestId: item.requestId,
+              decision: item.decision,
+              targetSummary: item.targetSummary,
+            }))
+          : [],
+      });
+    } catch (error) {
+      conversations.push({ id: summary.id, error: redact(error instanceof Error ? error.message : error) });
+    }
+  }
+  return { lastActive: index.lastActiveConversationId ?? null, conversations };
+}
+
+async function captureRendererDiagnostics() {
+  try {
+    return await cdpEvaluate(`(() => {
+      const text = (selector) => document.querySelector(selector)?.textContent ?? '';
+      const rows = [...document.querySelectorAll('.output-files .file-row--clickable')].map((row) => ({
+        relativePath: row.dataset.relativePath ?? '',
+        operation: row.dataset.operation ?? '',
+        reviewId: row.dataset.reviewId ?? '',
+        text: row.textContent ?? '',
+      }));
+      const permission = document.querySelector('.permission-dialog');
+      const titleId = permission?.getAttribute('aria-labelledby');
+      const descId = permission?.getAttribute('aria-describedby');
+      return {
+        executionStatus: text('.execution-status'),
+        transcriptTextLength: text('.transcript').length,
+        assistantFinalText: [...document.querySelectorAll('.msg--assistant .msg__text')].at(-1)?.textContent?.slice(0, 1200) ?? '',
+        activityText: text('.activity-panel').slice(0, 4000),
+        outputRows: rows,
+        fileReviewsCountFromRows: rows.filter((row) => row.reviewId).length,
+        permissionDialog: permission ? {
+          requestId: titleId?.replace(/^permission-title-/, '') ?? '',
+          action: permission.querySelector('.permission-action-kind')?.textContent ?? '',
+          targetPath: permission.querySelector('.permission-action-target')?.textContent ?? '',
+          description: descId ? document.getElementById(descId)?.textContent ?? '' : '',
+        } : null,
+      };
+    })()`);
+  } catch (error) {
+    return { error: redact(error instanceof Error ? error.message : error) };
+  }
+}
+
+async function buildDiagnostics(context, error) {
+  const disk = {
+    expectedCreatePath: context.createPath,
+    expectedCreateRelativePath: "create-blue.txt",
+    expectedCreateInfo: context.createPath ? fileInfo(context.createPath) : undefined,
+    workspaceListing: context.workspace ? listWorkspaceFiles(context.workspace) : undefined,
+  };
+  const renderer = await captureRendererDiagnostics();
+  const traceText = context.tracePath ? safeReadText(context.tracePath) : "";
+  return {
+    result: error ? "FAIL" : "PASS",
+    failedStage: error ? context.tracker.currentStage : null,
+    lastPassedStage: context.tracker.lastPassedStage,
+    timestamps: {
+      startedAt: context.tracker.startedAt,
+      finishedAt: new Date().toISOString(),
+    },
+    stages: context.tracker.stages,
+    paths: {
+      executable: EXE,
+      artifactRoot: context.artifactRoot,
+      profile: context.profile,
+      workspace: context.workspace,
+      startupTrace: context.tracePath,
+    },
+    executable: exeMetadata(),
+    authenticatedHealth: context.authenticatedHealth ?? null,
+    sanitizedEnvironment: envSnapshot({
+      COWORK_GHC_REMOTE_DEBUG_PORT: String(CDP_PORT),
+      COWORK_GHC_E2E_WORKSPACE_ROOT: context.workspace,
+      COWORK_GHC_STARTUP_TRACE: context.tracePath,
+    }),
+    ids: {
+      permission: context.permissionObserved ?? null,
+      conversation: context.conversationDiagnostics?.lastActive ?? null,
+    },
+    permissionObserved: context.permissionObserved !== null,
+    mutationEventObserved: context.mutationEventObserved === true,
+    fileExists: disk.expectedCreateInfo?.exists === true,
+    fileReviewsCount: renderer?.fileReviewsCountFromRows ?? null,
+    cleanupResult: context.cleanupResult ?? null,
+    diagnosticFiles: context.diagnosticFiles ?? [],
+    error: error
+      ? {
+          name: error instanceof Error ? error.name : "Error",
+          message: redact(error instanceof Error ? error.message : String(error)),
+          stage: error instanceof StageTimeoutError ? error.stage : context.tracker.currentStage,
+        }
+      : null,
+    disk,
+    renderer,
+    conversationDiagnostics: readConversationDiagnostics(context.profile),
+    startupTraceTail: traceText.slice(-8000),
+  };
+}
+
+async function writeDiagnostics(context, error = null) {
+  mkdirSync(context.artifactRoot, { recursive: true });
+  const diagnostics = await buildDiagnostics(context, error);
+  context.conversationDiagnostics = diagnostics.conversationDiagnostics;
+  const resultPath = join(context.artifactRoot, "file-review-verification-result.json");
+  writeJson(resultPath, diagnostics);
+  context.diagnosticFiles = [...(context.diagnosticFiles ?? []), resultPath];
+  const summaryPath = join(context.artifactRoot, "file-review-verification-summary.md");
+  writeFileSync(
+    summaryPath,
+    [
+      `# File Review packaged verification ${diagnostics.result}`,
+      "",
+      `- Failed stage: ${diagnostics.failedStage ?? "none"}`,
+      `- Last passed stage: ${diagnostics.lastPassedStage ?? "none"}`,
+      `- Profile: ${diagnostics.paths.profile}`,
+      `- Workspace: ${diagnostics.paths.workspace}`,
+      `- Startup trace: ${diagnostics.paths.startupTrace}`,
+      `- Result JSON: ${resultPath}`,
+      `- Error: ${diagnostics.error?.message ?? "none"}`,
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+  context.diagnosticFiles.push(summaryPath);
+  return diagnostics;
+}
+
+async function simulateFailure() {
+  const artifactRoot = mkdtempSync(join(tmpdir(), "cghc-freview-artifacts-sim-"));
+  const workspace = mkdtempSync(join(tmpdir(), "cghc-freview-ws-sim-"));
+  const profile = mkdtempSync(join(tmpdir(), "cghc-freview-profile-sim-"));
+  const tracePath = join(artifactRoot, "startup.trace");
+  writeFileSync(tracePath, "log:settings_only_started: simulated\nlog:service_started: simulated\n", "utf8");
+  writeFileSync(join(workspace, "note.txt"), "SIMULATED", "utf8");
+  const tracker = new StageTracker(artifactRoot);
+  const context = {
+    artifactRoot,
+    workspace,
+    profile,
+    tracePath,
+    tracker,
+    createPath: join(workspace, "create-blue.txt"),
+    permissionObserved: null,
+    mutationEventObserved: false,
+    cleanupResult: { mode: "failure-preserved", simulated: true },
+    diagnosticFiles: [tracePath],
+  };
+  tracker.start("A01 launch", "simulation");
+  tracker.pass("A01 launch");
+  tracker.start("A07 permission requested", "simulation timeout");
+  const error = new StageTimeoutError("A07 permission requested", TIMEOUTS.permissionRequestMs, "simulated");
+  tracker.fail("A07 permission requested", error);
+  const diagnostics = await writeDiagnostics(context, error);
+  console.log(`file-review-packaged simulation: FAIL artifact=${artifactRoot}`);
+  console.log(JSON.stringify({
+    result: diagnostics.result,
+    failedStage: diagnostics.failedStage,
+    artifactRoot,
+    resultFile: join(artifactRoot, "file-review-verification-result.json"),
+  }, null, 2));
+}
 
 function loadProjectEnvForVerify() {
   const path = join(REPO, ".env");
@@ -105,11 +467,12 @@ async function waitSelector(selector, timeoutMs = 90_000) {
   throw new Error(`timeout selector ${selector}`);
 }
 
-function launch(profile, workspace, extra = {}) {
+function launch(profile, workspace, tracePath, extra = {}) {
   return spawn(EXE, [`--user-data-dir=${profile}`], {
     env: packagedChildEnv({
       COWORK_GHC_REMOTE_DEBUG_PORT: String(CDP_PORT),
       COWORK_GHC_E2E_WORKSPACE_ROOT: workspace,
+      COWORK_GHC_STARTUP_TRACE: tracePath,
       ...extra,
     }),
     stdio: "ignore",
@@ -154,6 +517,184 @@ async function configure() {
   await waitFor(".llm-settings-status", /thành công/iu, 60_000);
   await cdpEvaluate(`document.querySelector('.modal .icon-btn')?.click()`);
   await sleep(500);
+}
+
+async function waitForTrace(tracePath, pattern, timeoutMs, stage) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(tracePath) && pattern.test(readFileSync(tracePath, "utf8"))) return;
+    await sleep(200);
+  }
+  throw new StageTimeoutError(stage, timeoutMs, `trace ${pattern}`);
+}
+
+async function waitForStage(selector, pattern, timeoutMs, stage) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const text = String(
+        await cdpEvaluate(
+          `document.querySelector(${JSON.stringify(selector)})?.textContent ?? ''`,
+        ),
+      );
+      if (pattern.test(text)) return text;
+    } catch {
+      // renderer not ready
+    }
+    await sleep(350);
+  }
+  throw new StageTimeoutError(stage, timeoutMs, `${selector} ${pattern}`);
+}
+
+async function waitSelectorStage(selector, timeoutMs, stage) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (await cdpEvaluate(`!!document.querySelector(${JSON.stringify(selector)})`)) return;
+    } catch {
+      // renderer not ready
+    }
+    await sleep(300);
+  }
+  throw new StageTimeoutError(stage, timeoutMs, `selector ${selector}`);
+}
+
+async function waitPermissionRequest(timeoutMs = TIMEOUTS.permissionRequestMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const pending = await cdpEvaluate(`(() => {
+        const dialog = document.querySelector('.permission-dialog');
+        if (!dialog) return null;
+        const titleId = dialog.getAttribute('aria-labelledby') ?? '';
+        const descId = dialog.getAttribute('aria-describedby') ?? '';
+        return {
+          requestId: titleId.replace(/^permission-title-/, ''),
+          operation: dialog.querySelector('.permission-action-kind')?.textContent ?? '',
+          relativePath: dialog.querySelector('.permission-action-target')?.textContent ?? '',
+          description: descId ? document.getElementById(descId)?.textContent ?? '' : '',
+          scope: document.querySelector('.permission-scope-input:checked')?.value ?? 'once',
+        };
+      })()`);
+      if (pending?.requestId) return pending;
+    } catch {
+      // renderer not ready
+    }
+    await sleep(350);
+  }
+  throw new StageTimeoutError("A07 permission requested", timeoutMs, "permission dialog missing");
+}
+
+async function approveObservedPermission(timeoutMs = TIMEOUTS.permissionDrainMs) {
+  await cdpEvaluate(`(() => {
+    if (window.__cghcVerifyFetchInstalled === true) return true;
+    window.__cghcVerifyFetchInstalled = true;
+    window.__cghcVerifyPermissionDecisions = [];
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = async (...args) => {
+      const request = args[0];
+      const url = String(typeof request === 'string' ? request : request?.url ?? '');
+      const response = await originalFetch(...args);
+      if (url.includes('/v1/permission/decision')) {
+        let body = '';
+        try {
+          body = await response.clone().text();
+        } catch {
+          body = '[unavailable]';
+        }
+        window.__cghcVerifyPermissionDecisions.push({
+          url: url.replace(/token=[^&]+/gu, 'token=[REDACTED]'),
+          status: response.status,
+          ok: response.ok,
+          body: body.slice(0, 1200),
+          at: new Date().toISOString(),
+        });
+      }
+      return response;
+    };
+    return true;
+  })()`);
+  const clicked = await cdpEvaluate(`(() => {
+    const button = document.querySelector('.permission-allow');
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`);
+  if (clicked !== true) {
+    throw new Error("permission allow button missing after request was observed");
+  }
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const stillPending = await cdpEvaluate(`!!document.querySelector('.permission-dialog')`);
+    const decisions = await cdpEvaluate(`window.__cghcVerifyPermissionDecisions ?? []`);
+    if (!stillPending && decisions.length > 0) {
+      return { status: "dialog_closed", decisionResponse: decisions.at(-1) };
+    }
+    if (!stillPending) return { status: "dialog_closed", decisionResponse: null };
+    await sleep(300);
+  }
+  throw new StageTimeoutError("A08 permission approved", timeoutMs, "permission dialog still pending");
+}
+
+async function captureAuthenticatedHealth() {
+  return cdpEvaluate(`(async () => {
+    const bridge = window.coworkShell;
+    if (!bridge?.getBootstrap) return { available: false, reason: 'bridge_unavailable' };
+    const bootstrap = await bridge.getBootstrap();
+    const response = await fetch(bootstrap.serviceBaseUrl.replace(/\\/$/u, '') + '/v1/health', {
+      headers: { authorization: 'Bearer ' + bootstrap.clientToken },
+    });
+    let body = '';
+    try {
+      body = await response.clone().text();
+    } catch {
+      body = '[unavailable]';
+    }
+    return {
+      available: true,
+      status: response.status,
+      ok: response.ok,
+      baseUrlPresent: !!bootstrap.serviceBaseUrl,
+      clientTokenPresent: !!bootstrap.clientToken,
+      body: body.slice(0, 1200),
+    };
+  })()`);
+}
+
+async function waitForMutationEvent(relativePath, timeoutMs = TIMEOUTS.mutationEventMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const observed = await cdpEvaluate(`(() => {
+      const rows = [...document.querySelectorAll('.output-files .file-row--clickable')];
+      return rows.some((row) => (row.dataset.relativePath ?? '').includes(${JSON.stringify(relativePath)}));
+    })()`);
+    if (observed) return true;
+    await sleep(500);
+  }
+  throw new StageTimeoutError("A09 mutation event observed", timeoutMs, relativePath);
+}
+
+async function waitForDiskFileStage(path, pattern, timeoutMs = TIMEOUTS.diskFileMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (existsSync(path)) {
+      const text = readFileSync(path, "utf8");
+      if (pattern.test(text)) return text;
+    }
+    await sleep(500);
+  }
+  throw new StageTimeoutError("A10 file exists on disk", timeoutMs, path);
+}
+
+async function waitReviewMarkerStage(pattern, timeoutMs = TIMEOUTS.reviewMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await clickFirstFileChange();
+    const body = await reviewBody();
+    if (pattern.test(body)) return body;
+    await sleep(500);
+  }
+  throw new StageTimeoutError("A11 file review persisted", timeoutMs, String(pattern));
 }
 
 async function ensureComposerUnlocked() {
@@ -236,13 +777,33 @@ async function attachViaE2E() {
 }
 
 async function main() {
+  if (process.env["CGHC_FILE_REVIEW_SIMULATE_FAILURE"] === "1") {
+    await simulateFailure();
+    return;
+  }
   if (!existsSync(EXE)) throw new Error(`missing ${EXE} — run npm run package:win`);
   loadProjectEnvForVerify();
   if (!process.env["DEEPSEEK_API_KEY"]?.trim()) throw new Error("DEEPSEEK_API_KEY required");
 
   const workspace = mkdtempSync(join(tmpdir(), "cghc-freview-ws-"));
   const profile = mkdtempSync(join(tmpdir(), "cghc-freview-profile-"));
+  const artifactRoot = mkdtempSync(join(tmpdir(), "cghc-freview-artifacts-"));
+  const tracePath = join(artifactRoot, "startup.trace");
+  writeFileSync(tracePath, "", "utf8");
+  const tracker = new StageTracker(artifactRoot);
+  const context = {
+    artifactRoot,
+    workspace,
+    profile,
+    tracePath,
+    tracker,
+    permissionObserved: null,
+    mutationEventObserved: false,
+    cleanupResult: null,
+    diagnosticFiles: [tracePath],
+  };
   const createPath = join(workspace, "create-blue.txt");
+  context.createPath = createPath;
   const modifyPath = join(workspace, "modify-me.txt");
   const deletePath = join(workspace, "delete-me.txt");
   const attachA = join(workspace, "attach-a.txt");
@@ -259,23 +820,100 @@ async function main() {
   writeFileSync(binaryPath, Buffer.from([0, 1, 2, 3, 255]), "binary");
   writeFileSync(secretPath, `KEY=${SECRET_FIXTURE}`, "utf8");
 
-  let proc = launch(profile, workspace);
-  await waitSelector(".app-shell");
-  await waitFor(".topbar__status", LOCAL_SERVICE_READY);
-  await configure();
+  let proc = null;
 
-  console.log("file-review: journey A — create file");
-  await sendPrompt(
-    "Create a text file named create-blue.txt in the workspace root with exactly the content: CREATE-BLUE-314. Reply OK when done.",
-  );
-  await waitTerminalAfterPermission("allow");
-  await waitForDiskFile(createPath, /CREATE-BLUE-314/u);
-  const actA = await activityText();
-  if (!/Đã tạo tệp/u.test(actA)) throw new Error("A: missing create activity label");
-  await waitFor(".output-files", /create-blue\.txt/u);
-  const reviewA = await waitReviewMarker(/CREATE-BLUE-314/u);
-  if (!/không tồn tại|Trước:/iu.test(reviewA)) throw new Error("A: before state not shown");
-  results.A = "PASS";
+  try {
+    tracker.start("A01 launch", EXE);
+    writeJson(join(artifactRoot, "launch-metadata.json"), {
+      executable: exeMetadata(),
+      profile,
+      workspace,
+      artifactRoot,
+      tracePath,
+      sanitizedEnvironment: envSnapshot({
+        COWORK_GHC_REMOTE_DEBUG_PORT: String(CDP_PORT),
+        COWORK_GHC_E2E_WORKSPACE_ROOT: workspace,
+        COWORK_GHC_STARTUP_TRACE: tracePath,
+      }),
+    });
+    proc = launch(profile, workspace, tracePath);
+    await waitForTrace(tracePath, /settings_only_started:|service_started:/, TIMEOUTS.startupTraceMs, "A01 launch");
+    await waitSelectorStage(".app-shell", TIMEOUTS.appShellMs, "A01 launch");
+    tracker.pass("A01 launch");
+
+    tracker.start("A02 local service ready");
+    const status = await waitForStage(".topbar__status", LOCAL_SERVICE_READY, TIMEOUTS.serviceReadyMs, "A02 local service ready");
+    context.authenticatedHealth = await captureAuthenticatedHealth();
+    tracker.pass("A02 local service ready", { status, authenticatedHealth: context.authenticatedHealth });
+
+    tracker.start("A03 workspace active");
+    await cdpEvaluate(`document.querySelector('.workspace-choose')?.click()`);
+    const workspaceText = await waitForStage(".workspace-context", /cghc-freview-ws-/u, TIMEOUTS.workspaceMs, "A03 workspace active");
+    tracker.pass("A03 workspace active", { workspaceText });
+
+    tracker.start("A04 provider ready");
+    await cdpEvaluate(`document.querySelector('.topbar__gateway')?.click()`);
+    await waitSelectorStage(".modal:not([hidden]) .llm-save-credential", TIMEOUTS.credentialMs, "A04 provider ready");
+    const key = process.env["DEEPSEEK_API_KEY"] ?? "";
+    await cdpEvaluate(`(() => {
+      const input = document.querySelector('.llm-credential-input');
+      input.value = ${JSON.stringify(key)};
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.llm-save-credential')?.click();
+    })()`);
+    await waitForStage(".llm-credential-status", /Đã cấu hình|đã có khoá/iu, TIMEOUTS.credentialMs, "A04 provider ready");
+    await cdpEvaluate(`document.querySelector('.llm-test-connection')?.click()`);
+    const providerStatus = await waitForStage(".llm-settings-status", /thành công/iu, TIMEOUTS.providerReadyMs, "A04 provider ready");
+    await cdpEvaluate(`document.querySelector('.modal .icon-btn')?.click()`);
+    await sleep(500);
+    tracker.pass("A04 provider ready", { providerStatus: redact(providerStatus) });
+
+    console.log("file-review: journey A — create file");
+    tracker.start("A05 conversation created");
+    await ensureComposerUnlocked();
+    tracker.pass("A05 conversation created");
+
+    tracker.start("A06 runtime turn started");
+    await sendPrompt(
+      "Create a text file named create-blue.txt in the workspace root with exactly the content: CREATE-BLUE-314. Reply OK when done.",
+    );
+    tracker.pass("A06 runtime turn started");
+
+    tracker.start("A07 permission requested");
+    const permission = await waitPermissionRequest();
+    context.permissionObserved = permission;
+    if (!/create-blue\.txt/iu.test(permission.relativePath) && !/create-blue\.txt/iu.test(permission.description)) {
+      throw new Error(`A: permission target mismatch ${JSON.stringify(permission)}`);
+    }
+    tracker.pass("A07 permission requested", { permission });
+
+    tracker.start("A08 permission approved");
+    const permissionReply = await approveObservedPermission();
+    tracker.pass("A08 permission approved", { permissionReply });
+
+    tracker.start("A09 mutation event observed");
+    await waitForMutationEvent("create-blue.txt");
+    context.mutationEventObserved = true;
+    tracker.pass("A09 mutation event observed");
+
+    tracker.start("A10 file exists on disk", createPath);
+    await waitForDiskFileStage(createPath, /CREATE-BLUE-314/u);
+    tracker.pass("A10 file exists on disk", { file: fileInfo(createPath) });
+
+    const actA = await activityText();
+    if (!/Đã tạo tệp/u.test(actA)) throw new Error("A: missing create activity label");
+    await waitFor(".output-files", /create-blue\.txt/u);
+
+    tracker.start("A11 file review persisted");
+    const reviewA = await waitReviewMarkerStage(/CREATE-BLUE-314/u);
+    if (!/không tồn tại|Trước:/iu.test(reviewA)) throw new Error("A: before state not shown");
+    tracker.pass("A11 file review persisted");
+
+    tracker.start("A12 terminal assistant response");
+    await assertNotProcessing();
+    const assistantText = String(await cdpEvaluate(`[...document.querySelectorAll('.msg--assistant .msg__text')].at(-1)?.textContent ?? ''`));
+    tracker.pass("A12 terminal assistant response", { assistantTextLength: assistantText.length });
+    results.A = "PASS";
 
   console.log("file-review: journey B — modify file");
   await ensureComposerUnlocked();
@@ -314,7 +952,7 @@ async function main() {
 
   console.log("file-review: journey E — attachment vs runtime read");
   await stopAll(proc);
-  proc = launch(profile, workspace, { COWORK_GHC_E2E_ATTACHMENT_PATH: attachA });
+  proc = launch(profile, workspace, tracePath, { COWORK_GHC_E2E_ATTACHMENT_PATH: attachA });
   await waitSelector(".app-shell");
   await waitFor(".topbar__status", LOCAL_SERVICE_READY);
   await configure();
@@ -337,7 +975,7 @@ async function main() {
 
   console.log("file-review: journey F — relaunch historical diff");
   await stopAll(proc);
-  proc = launch(profile, workspace);
+  proc = launch(profile, workspace, tracePath);
   await waitSelector(".app-shell");
   await waitFor(".topbar__status", LOCAL_SERVICE_READY);
   await cdpEvaluate(`document.querySelector('.history-item')?.click()`);
@@ -400,10 +1038,31 @@ async function main() {
   assertNoProcesses();
   results.L = "PASS";
 
+  context.cleanupResult = { mode: "success-cleaned" };
+  await writeDiagnostics(context, null);
   rmSync(workspace, { recursive: true, force: true });
   rmSync(profile, { recursive: true, force: true });
 
-  console.log("file-review-packaged: PASS", results);
+  console.log("file-review-packaged: PASS", {
+    results,
+    artifactRoot,
+    resultFile: join(artifactRoot, "file-review-verification-result.json"),
+  });
+  } catch (error) {
+    tracker.fail(tracker.currentStage, error);
+    await stopAll(proc);
+    context.cleanupResult = { mode: "failure-preserved", profile, workspace, artifactRoot };
+    const diagnostics = await writeDiagnostics(context, error);
+    console.error("file-review-packaged: FAIL", {
+      failedStage: diagnostics.failedStage,
+      lastPassedStage: diagnostics.lastPassedStage,
+      artifactRoot,
+      resultFile: join(artifactRoot, "file-review-verification-result.json"),
+      profile,
+      workspace,
+    });
+    process.exitCode = 1;
+  }
 }
 
 main().catch((err) => {
