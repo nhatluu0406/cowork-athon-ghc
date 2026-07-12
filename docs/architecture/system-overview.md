@@ -45,6 +45,24 @@ Electron shell là owner của local service và runtime child. Shutdown chỉ d
 kill generic `node.exe` hoặc process ngoài quyền sở hữu. State runtime tạm thời nằm dưới `.runtime/` hoặc profile
 ứng dụng, không phải source of truth cho sản phẩm.
 
+## Boundary conversation / runtime turn
+
+Cowork GHC tách **conversation identity** (persisted, user-facing) khỏi **OpenCode runtime session** (ephemeral, một lượt):
+
+```text
+Cowork conversation A
+├── runtime turn A1 (OpenCode session s1) → terminal
+├── runtime turn A2 (OpenCode session s2) → terminal
+└── ...
+```
+
+- UI và `conversation` store giữ transcript, activity, workspace binding.
+- Trước mỗi user message, `planRuntimeTurn` quyết định reuse (`canPrompt`) hoặc tạo session mới.
+- Khi cần session mới, context prior được prepend deterministic (bounded) vào prompt gửi OpenCode — không lưu trong user message persisted.
+- Event stream lọc theo `runtimeSessionId` hiện hành để tránh late events từ turn cũ.
+
+Giới hạn POC: **một runtime execution active** tại một thời điểm.
+
 ## Không lặp lại tài liệu cũ
 
 Các ADR và báo cáo trong `.loop-engineer/` vẫn là provenance. Khi cần làm việc hằng ngày, đọc tài liệu ngắn trong

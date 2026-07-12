@@ -36,8 +36,11 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Permission history (read-only) | PASS | Từ quyết định modal thật |
 | File preview API | PASS | `service/tests/workspace-file-preview.test.ts` |
 | Activity persistence on reopen | PASS | `conversation-store` `setActivity` |
-| Tool-using conversation finalization | PASS | `app/ui/tests/session-finalization.test.ts`; packaged `conversation-finalization-packaged.mjs` (file-action first message) |
+| Tool-using conversation finalization | PASS | `app/ui/tests/session-finalization.test.ts`; packaged `conversation-finalization-packaged.mjs` |
 | Final response source (stream / fetch / fallback) | PASS | `text-part-mapper`, `session-finalization`, `ev-reducer` late-token grace |
+| Multi-turn trong cùng Cowork conversation | PASS | `runtime-turn-planner`, `transcript-context`, atomic PATCH; packaged `multi-turn-packaged.mjs` (ORANGE-731, relaunch, file) |
+| Runtime turn history persisted | PASS | `service/tests/conversation-multi-turn.test.ts` |
+| Last-active conversation on relaunch | PASS | `GET /v1/conversations/last-active` + UI auto-select |
 
 ## Regression không-live
 
@@ -54,6 +57,7 @@ Không gọi DeepSeek, không cần API key, không tạo process lâu dài.
 ```powershell
 npm run package:win
 node tools/verify/minimal-packaged-smoke.mjs
+node tools/verify/multi-turn-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 ```
 

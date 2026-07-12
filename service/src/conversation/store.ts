@@ -7,11 +7,13 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AppendMessageInput,
+  ConversationPatch,
   ConversationRecord,
   ConversationSummary,
   CreateConversationInput,
   ConversationStatus,
   PersistedActivitySnapshot,
+  RuntimeTurnRecord,
 } from "./types.js";
 import { normalizeTitle, titleFromFirstMessage } from "./title.js";
 
@@ -22,10 +24,13 @@ export interface ConversationStore {
   rename(id: string, title: string): Promise<ConversationRecord>;
   updateStatus(id: string, status: ConversationStatus): Promise<ConversationRecord>;
   setRuntimeSession(id: string, runtimeSessionId: string | null): Promise<ConversationRecord>;
+  patch(id: string, patch: ConversationPatch): Promise<ConversationRecord>;
   setActivity(id: string, activity: PersistedActivitySnapshot): Promise<ConversationRecord>;
   appendMessage(id: string, message: AppendMessageInput): Promise<ConversationRecord>;
   delete(id: string): Promise<boolean>;
   recoverStaleRunning(): Promise<number>;
+  getLastActiveId(): Promise<string | null>;
+  setLastActiveId(id: string): Promise<void>;
 }
 
 export interface ConversationStoreOptions {
@@ -36,6 +41,7 @@ export interface ConversationStoreOptions {
 interface IndexFile {
   readonly version: 1;
   readonly conversations: readonly ConversationSummary[];
+  readonly lastActiveConversationId?: string | null;
 }
 
 function summaryOf(record: ConversationRecord): ConversationSummary {
@@ -72,11 +78,24 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     }
   }
 
-  async function writeIndex(conversations: readonly ConversationSummary[]): Promise<void> {
+  async function writeIndex(
+    conversations: readonly ConversationSummary[],
+    lastActiveConversationId?: string | null,
+  ): Promise<void> {
     const sorted = [...conversations].sort(
       (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
     );
-    await atomicWriteJson(indexPath, { version: 1, conversations: sorted });
+    const index = await readIndex();
+    const payload: IndexFile = {
+      version: 1,
+      conversations: sorted,
+      ...(lastActiveConversationId !== undefined
+        ? { lastActiveConversationId }
+        : index.lastActiveConversationId !== undefined
+          ? { lastActiveConversationId: index.lastActiveConversationId }
+          : {}),
+    };
+    await atomicWriteJson(indexPath, payload);
   }
 
   async function readRecord(id: string): Promise<ConversationRecord | undefined> {
@@ -175,6 +194,50 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       }));
     },
 
+    patch(id, patch) {
+      return mutate(id, (record) => {
+        let next: ConversationRecord = { ...record, updatedAt: clock() };
+        if (patch.title !== undefined) {
+          next = { ...next, title: normalizeTitle(patch.title) };
+        }
+        if (patch.status !== undefined) {
+          next = { ...next, status: patch.status };
+        }
+        if (patch.runtimeSessionId !== undefined) {
+          next = {
+            ...next,
+            runtimeSessionId: patch.runtimeSessionId,
+            ...(patch.runtimeSessionId !== null && patch.status === undefined
+              ? { status: "ready" as const }
+              : {}),
+          };
+        }
+        if (patch.activity !== undefined) {
+          next = { ...next, activity: patch.activity };
+        }
+        if (patch.registerRuntimeTurn !== undefined) {
+          const turns = [...(next.runtimeTurns ?? []), patch.registerRuntimeTurn];
+          next = { ...next, runtimeTurns: turns };
+        }
+        if (patch.completeRuntimeTurn !== undefined) {
+          const turns = [...(next.runtimeTurns ?? [])];
+          const idx = turns.findIndex(
+            (t) => t.runtimeSessionId === patch.completeRuntimeTurn!.runtimeSessionId,
+          );
+          if (idx >= 0) {
+            const updated: RuntimeTurnRecord = {
+              ...turns[idx]!,
+              status: patch.completeRuntimeTurn.status,
+              completedAt: patch.completeRuntimeTurn.completedAt,
+            };
+            turns[idx] = updated;
+            next = { ...next, runtimeTurns: turns };
+          }
+        }
+        return next;
+      });
+    },
+
     setActivity(id, activity) {
       return mutate(id, (record) => ({ ...record, activity, updatedAt: clock() }));
     },
@@ -205,13 +268,29 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
     async delete(id) {
       const index = await readIndex();
       if (!index.conversations.some((c) => c.id === id)) return false;
-      await writeIndex(index.conversations.filter((c) => c.id !== id));
+      const lastActive =
+        index.lastActiveConversationId === id ? null : index.lastActiveConversationId;
+      await writeIndex(index.conversations.filter((c) => c.id !== id), lastActive);
       try {
         await unlink(join(root, `${id}.json`));
       } catch {
         // best effort
       }
       return true;
+    },
+
+    async getLastActiveId() {
+      const index = await readIndex();
+      const id = index.lastActiveConversationId;
+      if (id === undefined || id === null) return null;
+      if (!index.conversations.some((c) => c.id === id)) return null;
+      return id;
+    },
+
+    async setLastActiveId(id) {
+      const index = await readIndex();
+      if (!index.conversations.some((c) => c.id === id)) return;
+      await writeIndex(index.conversations, id);
     },
 
     async recoverStaleRunning() {

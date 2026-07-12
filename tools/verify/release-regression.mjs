@@ -36,7 +36,7 @@ try {
 
   run(
     "conversation-management",
-    "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts app/ui/tests/conversation-controller.test.ts",
+    "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts service/tests/conversation-multi-turn.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/transcript-context.test.ts app/ui/tests/runtime-turn-planner.test.ts",
   );
 
   run(

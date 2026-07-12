@@ -10,6 +10,7 @@ import type {
   ConversationRecord,
   ConversationStatus,
   ConversationSummary,
+  RuntimeTurnRecord,
   ServiceClient,
 } from "./service-client.js";
 
@@ -47,7 +48,9 @@ export interface ConversationManager {
   deleteConversation(id: string): Promise<void>;
   /** Clear runtime binding so a new OpenCode session can be created for the same conversation. */
   startContinuation(): Promise<string>;
-  linkRuntimeSession(runtimeSessionId: string): Promise<void>;
+  linkRuntimeSession(runtimeSessionId: string, startedAt?: string): Promise<void>;
+  completeRuntimeTurn(runtimeSessionId: string, status: RuntimeTurnRecord["status"]): Promise<void>;
+  markLastActive(): Promise<void>;
   recordUserMessage(text: string): Promise<void>;
   recordAssistantMessage(text: string): Promise<void>;
   setRuntimePhase(phase: RuntimePhase): Promise<void>;
@@ -208,6 +211,7 @@ export function createConversationManager(
                 : record.status === "errored" || record.status === "interrupted"
                   ? "failed"
                   : "idle";
+        await (await client()).patchConversation(id, { lastActive: true });
       } catch {
         state.listError = "Không mở được phiên này.";
         await this.refreshList();
@@ -245,13 +249,36 @@ export function createConversationManager(
       return state.activeConversationId;
     },
 
-    async linkRuntimeSession(runtimeSessionId) {
+    async linkRuntimeSession(runtimeSessionId, startedAt) {
       if (state.activeConversationId === null) return;
+      const at = startedAt ?? new Date().toISOString();
       const record = await (await client()).patchConversation(state.activeConversationId, {
         runtimeSessionId,
         status: "ready",
+        registerRuntimeTurn: {
+          runtimeSessionId,
+          startedAt: at,
+          status: "running",
+        },
       });
       await syncRecord(record);
+    },
+
+    async completeRuntimeTurn(runtimeSessionId, status) {
+      if (state.activeConversationId === null) return;
+      const record = await (await client()).patchConversation(state.activeConversationId, {
+        completeRuntimeTurn: {
+          runtimeSessionId,
+          status,
+          completedAt: new Date().toISOString(),
+        },
+      });
+      await syncRecord(record);
+    },
+
+    async markLastActive() {
+      if (state.activeConversationId === null) return;
+      await (await client()).patchConversation(state.activeConversationId, { lastActive: true });
     },
 
     async recordUserMessage(text) {

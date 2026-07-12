@@ -155,6 +155,8 @@ export function createServiceClient(baseUrl, clientToken) {
             body: JSON.stringify(input),
         })).conversation,
         getConversation: async (id) => (await call(`/v1/conversations/${encodeURIComponent(id)}`)).conversation,
+        getLastActiveConversationId: async () => (await call("/v1/conversations/last-active"))
+            .conversationId,
         patchConversation: async (id, patch) => (await call(`/v1/conversations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(patch) })).conversation,
         deleteConversation: async (id) => {
             await call(`/v1/conversations/${encodeURIComponent(id)}`, {

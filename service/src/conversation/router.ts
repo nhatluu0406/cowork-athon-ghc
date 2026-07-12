@@ -1,16 +1,17 @@
 /**
- * Conversation HTTP router — persisted multi-session management.
+ * Conversation HTTP router — CRUD + message append.
  */
 
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import { BadRequestError } from "../server/http-util.js";
 import type { ConversationStore } from "./store.js";
-import type { ConversationStatus, PersistedActivitySnapshot } from "./types.js";
+import type { ConversationStatus, ConversationPatch, PersistedActivitySnapshot, RuntimeTurnRecord } from "./types.js";
 import { normalizeTitle } from "./title.js";
 
 export const CONVERSATIONS_PATH = "/v1/conversations";
 export const CONVERSATION_ITEM_PATH = "/v1/conversations/{id}";
 export const CONVERSATION_MESSAGES_PATH = "/v1/conversations/{id}/messages";
+export const CONVERSATION_LAST_ACTIVE_PATH = "/v1/conversations/last-active";
 
 export class ConversationRequestError extends BadRequestError {
   constructor(message: string) {
@@ -59,10 +60,56 @@ function parseStatus(value: unknown): ConversationStatus {
   return value as ConversationStatus;
 }
 
+function parseRuntimeTurn(value: unknown): RuntimeTurnRecord {
+  if (typeof value !== "object" || value === null) {
+    throw new ConversationRequestError("registerRuntimeTurn must be an object.");
+  }
+  const rec = value as Record<string, unknown>;
+  const runtimeSessionId = rec["runtimeSessionId"];
+  const startedAt = rec["startedAt"];
+  const status = rec["status"];
+  if (typeof runtimeSessionId !== "string" || typeof startedAt !== "string") {
+    throw new ConversationRequestError("registerRuntimeTurn requires runtimeSessionId and startedAt.");
+  }
+  if (status !== "running" && status !== "completed" && status !== "cancelled" && status !== "errored") {
+    throw new ConversationRequestError("Invalid registerRuntimeTurn.status.");
+  }
+  return { runtimeSessionId, startedAt, status };
+}
+
+function parseCompleteRuntimeTurn(value: unknown): {
+  runtimeSessionId: string;
+  completedAt: string;
+  status: RuntimeTurnRecord["status"];
+} {
+  if (typeof value !== "object" || value === null) {
+    throw new ConversationRequestError("completeRuntimeTurn must be an object.");
+  }
+  const rec = value as Record<string, unknown>;
+  const runtimeSessionId = rec["runtimeSessionId"];
+  const completedAt = rec["completedAt"];
+  const status = rec["status"];
+  if (typeof runtimeSessionId !== "string" || typeof completedAt !== "string") {
+    throw new ConversationRequestError("completeRuntimeTurn requires runtimeSessionId and completedAt.");
+  }
+  if (status !== "running" && status !== "completed" && status !== "cancelled" && status !== "errored") {
+    throw new ConversationRequestError("Invalid completeRuntimeTurn.status.");
+  }
+  return { runtimeSessionId, completedAt, status: status as RuntimeTurnRecord["status"] };
+}
+
 export function createConversationRouter(store: ConversationStore): BoundaryRouter {
   return {
     name: "conversation",
     routes: [
+      {
+        method: "GET",
+        path: CONVERSATION_LAST_ACTIVE_PATH,
+        handler: async (): Promise<RouteResult> => ({
+          status: 200,
+          data: { conversationId: await store.getLastActiveId() },
+        }),
+      },
       {
         method: "GET",
         path: CONVERSATIONS_PATH,
@@ -97,30 +144,38 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
             throw new ConversationRequestError("Body must be an object.");
           }
           const rec = ctx.body as Record<string, unknown>;
-          if (typeof rec["title"] === "string") {
-            const conversation = await store.rename(id, normalizeTitle(rec["title"]));
-            return { status: 200, data: { conversation } };
+
+          const patch: ConversationPatch = {
+            ...(typeof rec["title"] === "string" ? { title: normalizeTitle(rec["title"]) } : {}),
+            ...(rec["status"] !== undefined ? { status: parseStatus(rec["status"]) } : {}),
+            ...(rec["runtimeSessionId"] === null ? { runtimeSessionId: null } : {}),
+            ...(typeof rec["runtimeSessionId"] === "string"
+              ? { runtimeSessionId: rec["runtimeSessionId"] }
+              : {}),
+            ...(rec["activity"] !== undefined && typeof rec["activity"] === "object"
+              ? { activity: rec["activity"] as PersistedActivitySnapshot }
+              : {}),
+            ...(rec["registerRuntimeTurn"] !== undefined
+              ? { registerRuntimeTurn: parseRuntimeTurn(rec["registerRuntimeTurn"]) }
+              : {}),
+            ...(rec["completeRuntimeTurn"] !== undefined
+              ? { completeRuntimeTurn: parseCompleteRuntimeTurn(rec["completeRuntimeTurn"]) }
+              : {}),
+          };
+
+          if (Object.keys(patch).length === 0 && rec["lastActive"] !== true) {
+            throw new ConversationRequestError("No supported patch fields.");
           }
-          if (rec["status"] !== undefined) {
-            const conversation = await store.updateStatus(id, parseStatus(rec["status"]));
-            return { status: 200, data: { conversation } };
+
+          let conversation =
+            Object.keys(patch).length > 0 ? await store.patch(id, patch) : await store.get(id);
+          if (conversation === undefined) return { status: 404, data: { error: "not_found" } };
+
+          if (rec["lastActive"] === true) {
+            await store.setLastActiveId(id);
           }
-          if (rec["runtimeSessionId"] === null) {
-            const conversation = await store.setRuntimeSession(id, null);
-            return { status: 200, data: { conversation } };
-          }
-          if (typeof rec["runtimeSessionId"] === "string") {
-            const conversation = await store.setRuntimeSession(id, rec["runtimeSessionId"]);
-            return { status: 200, data: { conversation } };
-          }
-          if (rec["activity"] !== undefined && typeof rec["activity"] === "object") {
-            const conversation = await store.setActivity(
-              id,
-              rec["activity"] as PersistedActivitySnapshot,
-            );
-            return { status: 200, data: { conversation } };
-          }
-          throw new ConversationRequestError("No supported patch fields.");
+
+          return { status: 200, data: { conversation } };
         },
       },
       {

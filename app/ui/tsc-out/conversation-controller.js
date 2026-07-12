@@ -149,6 +149,7 @@ export function createConversationManager(getClient) {
                                 : record.status === "errored" || record.status === "interrupted"
                                     ? "failed"
                                     : "idle";
+                await (await client()).patchConversation(id, { lastActive: true });
             }
             catch {
                 state.listError = "Không mở được phiên này.";
@@ -184,14 +185,37 @@ export function createConversationManager(getClient) {
             state.continuationAvailable = false;
             return state.activeConversationId;
         },
-        async linkRuntimeSession(runtimeSessionId) {
+        async linkRuntimeSession(runtimeSessionId, startedAt) {
             if (state.activeConversationId === null)
                 return;
+            const at = startedAt ?? new Date().toISOString();
             const record = await (await client()).patchConversation(state.activeConversationId, {
                 runtimeSessionId,
                 status: "ready",
+                registerRuntimeTurn: {
+                    runtimeSessionId,
+                    startedAt: at,
+                    status: "running",
+                },
             });
             await syncRecord(record);
+        },
+        async completeRuntimeTurn(runtimeSessionId, status) {
+            if (state.activeConversationId === null)
+                return;
+            const record = await (await client()).patchConversation(state.activeConversationId, {
+                completeRuntimeTurn: {
+                    runtimeSessionId,
+                    status,
+                    completedAt: new Date().toISOString(),
+                },
+            });
+            await syncRecord(record);
+        },
+        async markLastActive() {
+            if (state.activeConversationId === null)
+                return;
+            await (await client()).patchConversation(state.activeConversationId, { lastActive: true });
         },
         async recordUserMessage(text) {
             if (state.activeConversationId === null)
