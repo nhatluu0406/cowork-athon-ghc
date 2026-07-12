@@ -266,7 +266,11 @@ mod tests {
     #[test]
     fn test_retry_policy() {
         let policy = RetryPolicy::new();
-        assert_eq!(policy.delay_for_attempt(0).as_millis(), 1000);
+        // First attempt is base_delay_ms (1000) +/- 25% jitter, per delay_for_attempt's
+        // `delay_ms - jitter_range/2 + jitter` formula — never exactly 1000 when jitter
+        // is enabled (the default), so assert the intended range instead of equality.
+        let delay_0 = policy.delay_for_attempt(0);
+        assert!(delay_0.as_millis() >= 875 && delay_0.as_millis() <= 1125);
         // Second attempt should be ~2000ms (with jitter)
         let delay_1 = policy.delay_for_attempt(1);
         assert!(delay_1.as_millis() >= 1000 && delay_1.as_millis() <= 3000);

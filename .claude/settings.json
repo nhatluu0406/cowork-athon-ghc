@@ -1,0 +1,22 @@
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "rad-knowledge"
+  ],
+  "enabledPlugins": {
+    "context-mode@context-mode": true
+  },
+  "mcpServers": {
+    "rad-knowledge": {
+      "command": "/usr/bin/node",
+      "args": [
+        "/home/dungpham/MiniRag/mcp-adapter/claude-adapter.js"
+      ],
+      "env": {
+        "RAD_SERVER_URL": "http://localhost:8080",
+        "RAD_API_URL": "http://localhost:8080",
+        "RAD_API_KEY": "gyXBZ75fTouCSgv5VGDYtWqAfVnjQtCjccaHN5eZ8RQ="
+      }
+    }
+  }
+}

@@ -1,0 +1,552 @@
+<style>
+  :root {
+    --bg: #eef1ef;
+    --bg-alt: #e3e8e4;
+    --surface: #ffffff;
+    --border: #d8dfdb;
+    --border-soft: #e3e8e4;
+    --text: #1b2624;
+    --text-dim: #59685f;
+    --text-faint: #8a9791;
+    --accent: #1f7a5c;
+    --accent-soft: rgba(31, 122, 92, 0.09);
+    --accent-strong: #155940;
+    --good: #2f9e44;
+    --good-soft: rgba(47, 158, 68, 0.10);
+    --warn: #c98a1f;
+    --warn-soft: rgba(201, 138, 31, 0.10);
+    --risk: #c94a3c;
+    --risk-soft: rgba(201, 74, 60, 0.09);
+    --shadow: 0 1px 2px rgba(20, 30, 25, 0.04), 0 10px 24px rgba(20, 30, 25, 0.06);
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #11161a;
+    --bg-alt: #0c1013;
+    --surface: #171e22;
+    --border: #2a343a;
+    --border-soft: #232c31;
+    --text: #e7ece9;
+    --text-dim: #9aa8a1;
+    --text-faint: #647069;
+    --accent: #3fcf9e;
+    --accent-soft: rgba(63, 207, 158, 0.12);
+    --accent-strong: #6fe0ba;
+    --good: #55d074;
+    --good-soft: rgba(85, 208, 116, 0.12);
+    --warn: #e0ac3f;
+    --warn-soft: rgba(224, 172, 63, 0.12);
+    --risk: #ec6b5c;
+    --risk-soft: rgba(236, 107, 92, 0.13);
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 26px rgba(0,0,0,0.32);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11161a;
+      --bg-alt: #0c1013;
+      --surface: #171e22;
+      --border: #2a343a;
+      --border-soft: #232c31;
+      --text: #e7ece9;
+      --text-dim: #9aa8a1;
+      --text-faint: #647069;
+      --accent: #3fcf9e;
+      --accent-soft: rgba(63, 207, 158, 0.12);
+      --accent-strong: #6fe0ba;
+      --good: #55d074;
+      --good-soft: rgba(85, 208, 116, 0.12);
+      --warn: #e0ac3f;
+      --warn-soft: rgba(224, 172, 63, 0.12);
+      --risk: #ec6b5c;
+      --risk-soft: rgba(236, 107, 92, 0.13);
+      --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 10px 26px rgba(0,0,0,0.32);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page { max-width: 880px; margin: 0 auto; padding: 52px 28px 100px; }
+
+  h1, h2, h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    color: var(--text);
+    margin: 0;
+    text-wrap: balance;
+  }
+
+  /* ---------- Masthead ---------- */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding-bottom: 28px;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: 36px;
+  }
+  .eyebrow {
+    font-size: 12.5px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .masthead h1 { font-size: 30px; line-height: 1.25; }
+  .masthead .sub { color: var(--text-dim); font-size: 15.5px; max-width: 62ch; }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 6px 22px;
+    font-size: 12.5px; color: var(--text-faint); margin-top: 6px;
+  }
+  .meta-row b { color: var(--text-dim); font-weight: 600; }
+
+  /* ---------- Verdict banner ---------- */
+  .verdict {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 40px;
+  }
+  .verdict .icon {
+    flex-shrink: 0;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-family: Georgia, serif;
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .verdict .txt { font-size: 14.5px; color: var(--text); }
+  .verdict .txt b { color: var(--accent-strong); }
+
+  section { margin-bottom: 46px; }
+  .sec-head { margin-bottom: 16px; }
+  .sec-head h2 { font-size: 21px; }
+  .sec-head .desc { color: var(--text-dim); font-size: 13.5px; margin-top: 4px; }
+
+  /* ---------- Scorecard ---------- */
+  .scorecard {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .score-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    box-shadow: var(--shadow);
+  }
+  .score-card .label { font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+  .score-card .dots { display: flex; gap: 4px; margin-bottom: 6px; }
+  .score-card .dots span {
+    flex: 1; height: 7px; border-radius: 4px; background: var(--border-soft);
+  }
+  .score-card .dots span.on.good { background: var(--good); }
+  .score-card .dots span.on.warn { background: var(--warn); }
+  .score-card .dots span.on.risk { background: var(--risk); }
+  .score-card .verdict-txt { font-size: 13px; font-weight: 700; }
+  .score-card .verdict-txt.good { color: var(--good); }
+  .score-card .verdict-txt.warn { color: var(--warn); }
+  .score-card .verdict-txt.risk { color: var(--risk); }
+
+  /* ---------- Two-column pro/con ---------- */
+  .pc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .pc-col {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .pc-col.strength { border-top: 3px solid var(--good); }
+  .pc-col.weakness { border-top: 3px solid var(--risk); }
+  .pc-col .pc-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 700; margin-bottom: 12px;
+  }
+  .pc-col.strength .pc-title { color: var(--good); }
+  .pc-col.weakness .pc-title { color: var(--risk); }
+  .pc-item { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-soft); }
+  .pc-item:first-of-type { border-top: none; padding-top: 0; }
+  .pc-item .mark {
+    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; margin-top: 1px;
+  }
+  .pc-col.strength .mark { background: var(--good-soft); color: var(--good); }
+  .pc-col.weakness .mark { background: var(--risk-soft); color: var(--risk); }
+  .pc-item .body b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .pc-item .body p { margin: 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.5; }
+
+  /* ---------- Effectiveness gauge ---------- */
+  .gauge-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px 18px;
+    box-shadow: var(--shadow);
+  }
+  .gauge-track {
+    position: relative;
+    display: flex;
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .gauge-track .zone {
+    flex: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 600; color: var(--surface);
+  }
+  .gauge-track .zone.z1 { background: var(--risk); }
+  .gauge-track .zone.z2 { background: var(--warn); }
+  .gauge-track .zone.z3 { background: color-mix(in srgb, var(--good) 70%, var(--warn) 30%); }
+  .gauge-track .zone.z4 { background: var(--good); }
+  .gauge-marker {
+    position: absolute;
+    top: -8px;
+    width: 0; height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 10px solid var(--text);
+    transform: translateX(-50%);
+  }
+  .gauge-marker-label {
+    position: absolute;
+    top: -30px;
+    transform: translateX(-50%);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+  .gauge-legend { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-faint); }
+  .gauge-note { margin-top: 14px; font-size: 13.5px; color: var(--text-dim); line-height: 1.6; }
+  .gauge-note b { color: var(--text); }
+
+  /* ---------- Priority list ---------- */
+  .priority-list { display: flex; flex-direction: column; gap: 10px; }
+  .priority-item {
+    display: flex;
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow);
+    align-items: flex-start;
+  }
+  .priority-item .rank {
+    flex-shrink: 0;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--surface);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 13px;
+  }
+  .priority-item .content { flex: 1; }
+  .priority-item .content .row1 {
+    display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  }
+  .priority-item .content h3 { font-family: inherit; font-size: 14.5px; font-weight: 700; }
+  .priority-item .content .eff {
+    font-size: 11.5px; color: var(--accent); font-weight: 600;
+    background: var(--accent-soft); padding: 2px 8px; border-radius: 100px; white-space: nowrap;
+  }
+  .priority-item .content p { margin: 6px 0 0; font-size: 13px; color: var(--text-dim); line-height: 1.55; }
+
+  /* ---------- Timeline compare ---------- */
+  .timeline-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .tl-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .tl-card .tl-label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+  .tl-card .tl-value { font-size: 24px; font-weight: 700; font-family: Georgia, serif; }
+  .tl-card.recommended { border-color: var(--accent); }
+  .tl-card.recommended .tl-value { color: var(--accent-strong); }
+  .tl-card .tl-hint { font-size: 12px; color: var(--text-faint); margin-top: 4px; }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    background: var(--risk-soft);
+    border-left: 3px solid var(--risk);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    margin-top: 16px;
+  }
+  .callout b { color: var(--risk); }
+
+  .foot {
+    margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-faint);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+
+  @media (max-width: 720px) {
+    .scorecard { grid-template-columns: 1fr 1fr; }
+    .pc-grid { grid-template-columns: 1fr; }
+    .timeline-compare { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="eyebrow">Tóm tắt cho Project Manager &middot; REQ-204</div>
+    <h1>Knowledge Graph Doanh nghiệp từ Microsoft 365 — Hệ thống đang ở đâu?</h1>
+    <p class="sub">Bản tóm tắt phi kỹ thuật: hệ thống làm được gì, chưa làm được gì, và mức độ sẵn sàng thực tế để ra quyết định (tiếp tục đầu tư / điều chỉnh phạm vi / lùi mốc thời gian).</p>
+    <div class="meta-row">
+      <span><b>Cập nhật:</b> dựa trên audit code trực tiếp gần nhất</span>
+      <span><b>Phạm vi:</b> POC 1 phòng ban, ~50 người dùng</span>
+    </div>
+  </header>
+
+  <div class="verdict">
+    <div class="icon">!</div>
+    <div class="txt">
+      <b>Kết luận ngắn gọn:</b> Phần khó nhất về mặt kỹ thuật (đồ thị tri thức, AI trích xuất, thuật toán tìm kiếm) đã chạy thật và đúng. Nhưng hệ thống <b>chưa thể trả lời câu hỏi có ích cho người dùng cuối</b> vì 2 mắt xích dữ liệu đầu vào còn thiếu — đây là khoảng cách ngắn nhất để lấp, không phải một khiếm khuyết kiến trúc.
+    </div>
+  </div>
+
+  <section>
+    <div class="sec-head">
+      <h2>Điểm sức khỏe dự án theo 4 khía cạnh</h2>
+      <div class="desc">Đánh giá nhanh — không phải % hoàn thành task, mà mức độ dùng được trên thực tế</div>
+    </div>
+    <div class="scorecard">
+      <div class="score-card">
+        <div class="label">Nền tảng &amp; kiến trúc</div>
+        <div class="dots"><span class="on good"></span><span class="on good"></span><span class="on good"></span><span class="on good"></span><span></span></div>
+        <div class="verdict-txt good">Vững</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Dữ liệu đầu vào (tài liệu)</div>
+        <div class="dots"><span class="on risk"></span><span></span><span></span><span></span><span></span></div>
+        <div class="verdict-txt risk">Yếu</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Chất lượng câu trả lời AI</div>
+        <div class="dots"><span class="on warn"></span><span class="on warn"></span><span></span><span></span><span></span></div>
+        <div class="verdict-txt warn">Chưa kiểm chứng được</div>
+      </div>
+      <div class="score-card">
+        <div class="label">Giao diện người dùng</div>
+        <div class="dots"><span class="on warn"></span><span class="on warn"></span><span class="on warn"></span><span></span><span></span></div>
+        <div class="verdict-txt warn">Có, chưa demo được</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Ưu điểm &amp; Nhược điểm</h2>
+      <div class="desc">Nhìn thẳng vào cả hai phía — để quyết định đầu tư tiếp dựa trên bằng chứng, không dựa trên báo cáo lạc quan</div>
+    </div>
+    <div class="pc-grid">
+      <div class="pc-col strength">
+        <div class="pc-title">✓ Ưu điểm</div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>Kiến trúc đã được kiểm chứng</b>
+            <p>Toàn bộ pattern (thu thập dữ liệu, đồ thị, tìm kiếm, phản hồi) vay mượn từ hệ thống RAD đang chạy production — không phải thiết kế mới chưa qua thử thách.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>Phần khó nhất đã chạy thật</b>
+            <p>AI trích xuất thực thể từ tài liệu, xây dựng đồ thị Neo4j, và thuật toán xếp hạng kết quả — đây là phần tốn nhiều công sức trí tuệ nhất, không phải phần "làm cho có".</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>Hệ thống đã "sống" — không còn là bản rời rạc</b>
+            <p>Toàn bộ 16 chức năng API, cập nhật realtime, và 2 tiến trình nền (đồng bộ dữ liệu, tự cải thiện) đã kết nối và chạy được cùng nhau.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>Bảo mật quyền truy cập được thiết kế từ đầu</b>
+            <p>Người dùng chỉ thấy tài liệu họ có quyền — đây là bước đầu tiên trong quy trình xử lý, không phải lớp chặn thêm sau này (giảm rủi ro rò rỉ dữ liệu nội bộ).</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>Giao diện người dùng đã viết đủ 7 màn hình</b>
+            <p>Tìm kiếm hỏi-đáp, duyệt thực thể, trực quan hóa đồ thị, đánh giá phản hồi, cấu hình kết nối, đăng nhập, tổng quan — đúng theo phạm vi đã thống nhất.</p>
+          </div>
+        </div>
+      </div>
+      <div class="pc-col weakness">
+        <div class="pc-title">✕ Nhược điểm &amp; Rủi ro</div>
+        <div class="pc-item">
+          <div class="mark">✕</div>
+          <div class="body">
+            <b>Chưa trả lời được câu hỏi thật</b>
+            <p>Kho dữ liệu để "tìm kiếm theo nghĩa" hiện đang rỗng — hệ thống chưa được chạy để nạp dữ liệu vào đó, nên phần quan trọng nhất của Q&amp;A hiện chưa cho kết quả.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✕</div>
+          <div class="body">
+            <b>Đa số định dạng tài liệu chưa đọc được nội dung</b>
+            <p>Word, Excel, PowerPoint, PDF — 4 trong 5 định dạng phổ biến nhất trong doanh nghiệp — hiện chưa trích xuất được nội dung thật, chỉ file text thuần hoạt động.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✕</div>
+          <div class="body">
+            <b>Không có phương án AI chạy nội bộ (offline)</b>
+            <p>Thiết kế ban đầu cho phép chạy mô hình AI ngay trên máy chủ nội bộ để giảm phụ thuộc dịch vụ ngoài — phần này chưa được xây, hệ thống hiện phụ thuộc hoàn toàn vào dịch vụ AI đám mây.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✕</div>
+          <div class="body">
+            <b>Giao diện chưa dựng được để xem trực tiếp</b>
+            <p>Code 7 màn hình đã có, nhưng thiếu bước khởi tạo dự án ban đầu — nên hiện chưa thể bấm chạy và xem demo thực tế cho stakeholder.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✕</div>
+          <div class="body">
+            <b>Rủi ro quy trình báo cáo</b>
+            <p>Đã xảy ra 2 lần trong cùng một ngày: đội thực hiện báo "hoàn thành" nhưng kiểm tra trực tiếp cho thấy chưa đúng. Cần một bước xác minh độc lập bắt buộc trước khi chấp nhận bất kỳ báo cáo "xong" nào tiếp theo.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Mức độ hiệu quả hiện tại</h2>
+      <div class="desc">Vị trí thực tế của hệ thống trên thang từ "chưa dùng được" đến "sẵn sàng vận hành"</div>
+    </div>
+    <div class="gauge-wrap">
+      <div class="gauge-track">
+        <span class="gauge-marker" style="left: 34%;"></span>
+        <span class="gauge-marker-label" style="left: 34%;">Hiện tại</span>
+        <div class="zone z1">Chưa dùng được</div>
+        <div class="zone z2">Hạ tầng đã kết nối</div>
+        <div class="zone z3">Dùng thử nội bộ</div>
+        <div class="zone z4">Sẵn sàng vận hành</div>
+      </div>
+      <div class="gauge-legend">
+        <span>Không chạy được</span>
+        <span>Chạy nhưng chưa có giá trị dùng</span>
+        <span>Trả lời được, còn thiếu sót</span>
+        <span>Ổn định, đủ tin cậy</span>
+      </div>
+      <div class="gauge-note">
+        Hệ thống đã vượt qua mốc "không chạy được" và đang ở vùng <b>"hạ tầng đã kết nối"</b> — server khởi động, định tuyến đúng, không sập. Nhưng vì hai khoảng trống dữ liệu (embedding rỗng + parser tài liệu chưa đọc được nội dung), một người dùng thật đặt câu hỏi hôm nay sẽ <b>không nhận được câu trả lời hữu ích</b>. Đây không phải lỗi thiết kế — là công việc dữ liệu còn dang dở, có thể đo được và ước lượng thời gian rõ ràng (xem bên dưới).
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Khuyến nghị ưu tiên tiếp theo</h2>
+      <div class="desc">Sắp xếp theo tỷ lệ giá trị/chi phí — không theo thứ tự nhóm kỹ thuật</div>
+    </div>
+    <div class="priority-list">
+      <div class="priority-item">
+        <div class="rank">1</div>
+        <div class="content">
+          <div class="row1"><h3>Nạp dữ liệu vào kho tìm kiếm theo nghĩa</h3><span class="eff">3–5 ngày</span></div>
+          <p>Chi phí thấp nhất, nhưng mở khóa gần như toàn bộ giá trị của tính năng hỏi-đáp. Nên làm ngay và làm trước tiên — đây là "nút thắt cổ chai" duy nhất giữ toàn bộ hệ thống ở mức "chưa dùng được".</p>
+        </div>
+      </div>
+      <div class="priority-item">
+        <div class="rank">2</div>
+        <div class="content">
+          <div class="row1"><h3>Hoàn thiện đọc nội dung Word/Excel/PowerPoint/PDF</h3><span class="eff">2–3 tuần</span></div>
+          <p>Bắt buộc phải có nếu muốn dùng dữ liệu thật của công ty — hiện tại các định dạng tài liệu phổ biến nhất chưa được đọc, nên dữ liệu thử nghiệm sẽ không đại diện cho thực tế.</p>
+        </div>
+      </div>
+      <div class="priority-item">
+        <div class="rank">3</div>
+        <div class="content">
+          <div class="row1"><h3>Dựng bộ khung Frontend để xem demo trực tiếp</h3><span class="eff">vài ngày (phần UI đã viết sẵn)</span></div>
+          <p>Chi phí còn lại nhỏ vì 7 màn hình đã được viết — chỉ thiếu bước khởi tạo dự án. Nên làm sớm để có thể trình diễn cho stakeholder song song với các mục 1–2.</p>
+        </div>
+      </div>
+      <div class="priority-item">
+        <div class="rank">4</div>
+        <div class="content">
+          <div class="row1"><h3>Thiết lập bước xác minh độc lập bắt buộc</h3><span class="eff">quy trình, không tốn thời gian dev</span></div>
+          <p>Sau 2 lần báo cáo sai "hoàn thành", mọi báo cáo trạng thái tiếp theo nên được một người/luồng kiểm tra độc lập xác nhận bằng cách chạy thử thật, trước khi được xem là căn cứ ra quyết định.</p>
+        </div>
+      </div>
+      <div class="priority-item">
+        <div class="rank">5</div>
+        <div class="content">
+          <div class="row1"><h3>AI chạy nội bộ (offline model)</h3><span class="eff">3–4 tuần — có thể lùi lại</span></div>
+          <p>Chỉ cần thiết nếu yêu cầu bảo mật/chi phí bắt buộc không phụ thuộc dịch vụ AI đám mây. Có thể tạm hoãn để tập trung nguồn lực cho mục 1–3 nếu chấp nhận dùng AI đám mây trong giai đoạn thử nghiệm.</p>
+        </div>
+      </div>
+    </div>
+    <div class="callout">
+      <b>Lưu ý khi ra quyết định:</b> ước tính thời gian ở trên do đội kỹ thuật tự đưa ra và có tiền sử báo cáo lạc quan hai lần liên tiếp trong dự án này. Nên đối chiếu với một mốc kiểm tra thực tế giữa chừng (ví dụ sau mục 1) trước khi cam kết toàn bộ lịch trình phía dưới với các bên liên quan.
+    </div>
+  </section>
+
+  <section style="margin-bottom: 0;">
+    <div class="sec-head">
+      <h2>So sánh lộ trình</h2>
+      <div class="desc">Nếu ưu tiên đúng thứ tự giá trị, có thể có bản demo dùng thật sớm hơn nhiều so với "làm xong toàn bộ"</div>
+    </div>
+    <div class="timeline-compare">
+      <div class="tl-card recommended">
+        <div class="tl-label">Demo dùng thật (mục 1–3 ở trên)</div>
+        <div class="tl-value">~5–7 tuần</div>
+        <div class="tl-hint">Đủ để người dùng nội bộ hỏi-đáp trên dữ liệu thật và xem giao diện</div>
+      </div>
+      <div class="tl-card">
+        <div class="tl-label">Hoàn tất toàn bộ phạm vi ban đầu</div>
+        <div class="tl-value">~13–18 tuần</div>
+        <div class="tl-hint">Bao gồm cả AI chạy nội bộ, hoàn thiện quyền hạn nâng cao, và kiểm thử đầy đủ</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>Nguồn: đối chiếu trực tiếp với mã nguồn — không dựa trên đánh dấu ✅ của task-list</span>
+    <span>Tài liệu dành cho quyết định quản lý dự án, không thay thế báo cáo kỹ thuật chi tiết</span>
+  </div>
+
+</div>

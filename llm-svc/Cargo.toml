@@ -21,10 +21,15 @@ reqwest = { version = "0.11", features = ["json"] }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 once_cell = "1.19"
 
-# Model inference (ONNX, GGUF, safetensors) - stubs for Phase 1, real impl in Phase 2
-# ort = "2.0"  # ONNX Runtime - Phase 2 implementation
-# llama-cpp-2 = "0.1"  # GGUF - Phase 2 implementation
-# candle-core = { version = "0.3", features = ["cuda"] }  # safetensors - Phase 2 implementation
+# Model inference: ONNX is real (T160, see src/models/onnx.rs). GGUF/safetensors
+# remain stubs — GGUF needs llama-cpp-2, which needs cmake to build llama.cpp
+# (unavailable in the environment this was implemented in); safetensors was
+# descoped separately (no reference implementation to port from).
+ort = "2.0.0-rc.12"
+tokenizers = "0.23.1"
+ndarray = "0.17.2"
+# llama-cpp-2 = "0.1"  # GGUF - blocked on cmake availability
+# candle-core = { version = "0.3", features = ["cuda"] }  # safetensors - descoped
 
 [dev-dependencies]
 tokio-test = "0.4"

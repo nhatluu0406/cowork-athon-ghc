@@ -1,0 +1,768 @@
+<style>
+  :root {
+    --bg: #12151b;
+    --bg-alt: #0e1116;
+    --surface: #1a1f28;
+    --surface-raised: #202632;
+    --border: #2a313d;
+    --border-soft: #232a35;
+    --text: #e7eaee;
+    --text-dim: #8b95a3;
+    --text-faint: #5c6573;
+    --accent: #5fd4c0;
+    --accent-dim: #3a8f81;
+    --accent-soft: rgba(95, 212, 192, 0.12);
+    --ok: #4ade80;
+    --ok-soft: rgba(74, 222, 128, 0.14);
+    --warn: #f5b942;
+    --warn-soft: rgba(245, 185, 66, 0.14);
+    --crit: #ef5b5b;
+    --crit-soft: rgba(239, 91, 91, 0.14);
+    --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.28);
+  }
+
+  :root[data-theme="light"] {
+    --bg: #f4f5f3;
+    --bg-alt: #ebece9;
+    --surface: #ffffff;
+    --surface-raised: #ffffff;
+    --border: #dcded9;
+    --border-soft: #e5e6e2;
+    --text: #1b1f24;
+    --text-dim: #565f6b;
+    --text-faint: #87909b;
+    --accent: #1a8f7c;
+    --accent-dim: #0f6558;
+    --accent-soft: rgba(26, 143, 124, 0.09);
+    --ok: #1f9d55;
+    --ok-soft: rgba(31, 157, 85, 0.10);
+    --warn: #b3760a;
+    --warn-soft: rgba(179, 118, 10, 0.10);
+    --crit: #c0392b;
+    --crit-soft: rgba(192, 57, 43, 0.10);
+    --shadow: 0 1px 2px rgba(20,20,15,0.05), 0 8px 20px rgba(20,20,15,0.06);
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f4f5f3;
+      --bg-alt: #ebece9;
+      --surface: #ffffff;
+      --surface-raised: #ffffff;
+      --border: #dcded9;
+      --border-soft: #e5e6e2;
+      --text: #1b1f24;
+      --text-dim: #565f6b;
+      --text-faint: #87909b;
+      --accent: #1a8f7c;
+      --accent-dim: #0f6558;
+      --accent-soft: rgba(26, 143, 124, 0.09);
+      --ok: #1f9d55;
+      --ok-soft: rgba(31, 157, 85, 0.10);
+      --warn: #b3760a;
+      --warn-soft: rgba(179, 118, 10, 0.10);
+      --crit: #c0392b;
+      --crit-soft: rgba(192, 57, 43, 0.10);
+      --shadow: 0 1px 2px rgba(20,20,15,0.05), 0 8px 20px rgba(20,20,15,0.06);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+  }
+
+  h1, h2, h3 {
+    font-family: "Segoe UI Semibold", "Helvetica Neue", Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    color: var(--text);
+    margin: 0;
+  }
+
+  .mono {
+    font-family: "SF Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  a { color: var(--accent); }
+
+  /* ---------- Header ---------- */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 40px;
+  }
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .eyebrow .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .masthead h1 { font-size: 32px; }
+  .masthead .sub {
+    color: var(--text-dim);
+    font-size: 15.5px;
+    max-width: 62ch;
+  }
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    font-size: 13px;
+    color: var(--text-faint);
+    margin-top: 4px;
+  }
+  .meta-row b { color: var(--text-dim); font-weight: 600; }
+
+  /* ---------- Section shell ---------- */
+  section { margin-bottom: 52px; }
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .sec-head h2 { font-size: 21px; }
+  .sec-head .tag {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  /* ---------- Overview stat cards ---------- */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 16px 14px;
+    box-shadow: var(--shadow);
+  }
+  .stat-card .num {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 26px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-card .label {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .stat-card.ok .num { color: var(--ok); }
+  .stat-card.warn .num { color: var(--warn); }
+  .stat-card.crit .num { color: var(--crit); }
+  .stat-card.neutral .num { color: var(--accent); }
+
+  /* ---------- Architecture flow ---------- */
+  .flow {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    min-height: 84px;
+  }
+  .flow-step .n {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+    display: block;
+  }
+  .flow-step .t { font-size: 13.5px; font-weight: 600; display: block; color: var(--text); }
+  .flow-step .d { font-size: 12px; color: var(--text-dim); display: block; }
+
+  /* ---------- Component list ---------- */
+  .comp-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .comp {
+    background: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .comp .k { font-size: 13px; font-weight: 600; }
+  .comp .v { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+
+  /* ---------- Status table (the centerpiece) ---------- */
+  .status-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .status-table-wrap { overflow-x: auto; }
+  .status-table th, .status-table td {
+    padding: 12px 14px;
+    text-align: left;
+    vertical-align: top;
+    font-size: 13.5px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .status-table th {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    background: var(--bg-alt);
+    font-weight: 600;
+  }
+  .status-table tr:last-child td { border-bottom: none; }
+  .status-table .phase-cell { font-weight: 600; white-space: nowrap; }
+  .status-table td.detail { color: var(--text-dim); font-size: 13px; line-height: 1.5; }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 9px 3px 7px;
+    border-radius: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .pill::before {
+    content: "";
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.ok::before { background: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .pill.warn::before { background: var(--warn); }
+  .pill.crit { background: var(--crit-soft); color: var(--crit); }
+  .pill.crit::before { background: var(--crit); }
+
+  .pct-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 110px;
+  }
+  .pct-bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border-soft);
+    overflow: hidden;
+  }
+  .pct-bar > span { display: block; height: 100%; border-radius: 3px; }
+  .pct-num { font-family: "SF Mono", Consolas, monospace; font-size: 12px; color: var(--text-dim); width: 34px; text-align: right; }
+
+  /* ---------- Callout ---------- */
+  .callout {
+    background: var(--warn-soft);
+    border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+    border-left: 3px solid var(--warn);
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-size: 13.5px;
+    color: var(--text);
+    margin-top: 18px;
+  }
+  .callout b { color: var(--warn); }
+
+  /* ---------- Remaining work ---------- */
+  .work-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .work-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: var(--shadow);
+  }
+  .work-card .head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .work-card .head .name { font-size: 14.5px; font-weight: 700; }
+  .work-card .head .eff {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 11.5px;
+    color: var(--text-faint);
+  }
+  .work-card ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .work-card li::marker { color: var(--text-faint); }
+
+  /* ---------- Effort strip ---------- */
+  .effort-strip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+  }
+  .effort-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 0;
+  }
+  .effort-row .g-label {
+    width: 230px;
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .effort-row .g-label .sub { display: block; font-weight: 400; color: var(--text-faint); font-size: 11.5px; }
+  .effort-track {
+    flex: 1;
+    height: 8px;
+    background: var(--border-soft);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .effort-track > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 4px;
+  }
+  .effort-val {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    width: 90px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .effort-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .effort-total .lbl { font-size: 13px; color: var(--text-dim); }
+  .effort-total .val { font-family: "SF Mono", Consolas, monospace; font-size: 20px; font-weight: 700; color: var(--accent); }
+
+  /* ---------- Footer ---------- */
+  .foot {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 760px) {
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .comp-grid { grid-template-columns: 1fr 1fr; }
+    .work-grid { grid-template-columns: 1fr; }
+    .flow { grid-template-columns: 1fr 1fr; }
+    .effort-row { flex-wrap: wrap; }
+    .effort-row .g-label { width: 100%; }
+    .effort-val { text-align: left; }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <div class="eyebrow"><span class="dot"></span>REQ-204 &middot; M365-001 &middot; Báo cáo trạng thái</div>
+    <h1>Knowledge Graph Doanh nghiệp từ Microsoft&nbsp;365</h1>
+    <p class="sub">Hệ thống thu thập dữ liệu OneDrive + Teams, trích xuất thực thể qua NLP, xây dựng đồ thị tri thức trong Neo4j, và trả lời câu hỏi ngôn ngữ tự nhiên với hybrid retrieval nhận biết quyền truy cập.</p>
+    <div class="meta-row">
+      <span><b>Nguồn:</b> specs/REQ-204-M365-001-m365-knowledge-graph</span>
+      <span><b>Audit gần nhất:</b> 2026-07-12 (3 lần hiệu chỉnh trạng thái)</span>
+      <span><b>Tiến độ tổng thể:</b> ~35–40% (đã hiệu chỉnh lần 3)</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="sec-head">
+      <h2>Tổng quan nhanh</h2>
+      <span class="tag">theo tasks.md — Phase 9 &amp; 10</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-card neutral">
+        <div class="num">6</div>
+        <div class="label">Phase kiến trúc gốc</div>
+      </div>
+      <div class="stat-card crit">
+        <div class="num">3×</div>
+        <div class="label">Lần hiệu chỉnh trạng thái "✅ hoàn thành" giả</div>
+      </div>
+      <div class="stat-card warn">
+        <div class="num">195</div>
+        <div class="label">Task đã đánh số (gốc + 2 vòng remediation)</div>
+      </div>
+      <div class="stat-card neutral">
+        <div class="num mono">13–18</div>
+        <div class="label">Tuần công việc còn lại (ước tính)</div>
+      </div>
+    </div>
+    <div class="callout">
+      <b>Bài học cốt lõi (lặp lại 3 lần):</b> task-list từng đánh dấu toàn bộ 112 task ban đầu là hoàn thành dựa trên "file đã tồn tại", không phải "chạy được thật". Vòng audit thứ 2 (commit <span class="mono">b60116ff</span>, phát hiện 2026-07-11) cho thấy y hệt mẫu lỗi cũ: multi-agent workflow tự báo cáo Group F/G/I "100% complete" trong khi <span class="mono">handlers_auth.go</span>/<span class="mono">handlers_graph.go</span>/<span class="mono">handlers_knowledge.go</span>/<span class="mono">handlers_m365.go</span> vẫn trả dữ liệu giả cứng (<span class="mono">"jwt-token-demo"</span>, <span class="mono">"John Doe"</span>). Group J (2026-07-11) đã sửa thật các handler này — xác minh trực tiếp trong code hiện tại không còn chuỗi placeholder. Dấu ✅ trên task-list không phải bằng chứng cho code chạy được — luôn xác minh trực tiếp thân hàm xử lý, kể cả sau khi đã "sửa xong" một lần.
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Kiến trúc — Pipeline Retrieval 8 giai đoạn</h2>
+      <span class="tag">Stage 0 → Stage 7</span>
+    </div>
+    <div class="flow">
+      <div class="flow-step"><span class="n">STAGE 0</span><span class="t">Lọc quyền</span><span class="d">Phạm vi truy cập M365 của user</span></div>
+      <div class="flow-step"><span class="n">STAGE 1</span><span class="t">Phát hiện Intent</span><span class="d">find_expert, find_document, …</span></div>
+      <div class="flow-step"><span class="n">STAGE 2</span><span class="t">Query NER</span><span class="d">Nhận diện entity trong câu hỏi</span></div>
+      <div class="flow-step"><span class="n">STAGE 3+4</span><span class="t">Graph + Semantic (song song)</span><span class="d">Neo4j traversal &amp; vector search</span></div>
+      <div class="flow-step"><span class="n">STAGE 5</span><span class="t">Rerank</span><span class="d">0.5 relevance + 0.3 proximity + 0.2 confidence</span></div>
+      <div class="flow-step"><span class="n">STAGE 6</span><span class="t">Đóng gói ngữ cảnh</span><span class="d">Ngân sách 12K token</span></div>
+      <div class="flow-step"><span class="n">STAGE 7</span><span class="t">Sinh câu trả lời</span><span class="d">LLM + trích dẫn nguồn</span></div>
+    </div>
+
+    <div class="comp-grid" style="margin-top:16px;">
+      <div class="comp"><div class="k">Metadata</div><div class="v">PostgreSQL — sync state, chunk, embeddings, feedback</div></div>
+      <div class="comp"><div class="k">Đồ thị tri thức</div><div class="v">Neo4j — Person/Project/Document/Technology/Customer</div></div>
+      <div class="comp"><div class="k">Auth</div><div class="v">Entra ID SSO (OIDC) + Local JWT fallback (demo)</div></div>
+      <div class="comp"><div class="k">Connector M365</div><div class="v">MS Graph API — OneDrive/SharePoint + Teams, delta sync</div></div>
+      <div class="comp"><div class="k">NLP/Embedding</div><div class="v">LLM-svc (Rust, gRPC) — extraction, embedding, rerank</div></div>
+      <div class="comp"><div class="k">Frontend</div><div class="v">React/TS — TanStack Query + Zustand + Shadcn/ui</div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Trạng thái thực tế theo Phase (đã hiệu chỉnh qua audit)</h2>
+      <span class="tag">"task-list nói" ≠ "audit thấy"</span>
+    </div>
+    <div class="status-table-wrap">
+      <table class="status-table">
+        <thead>
+          <tr>
+            <th>Phase</th>
+            <th>Task-list ghi</th>
+            <th>Audit phát hiện</th>
+            <th>Trạng thái đã sửa</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="phase-cell">1 — Auth / Connectors / Parsers</td>
+            <td><span class="pill ok">✅ Hoàn thành</span></td>
+            <td class="detail">Đã xác minh lại (2026-07-12): cả 4 parser (docx/xlsx/pptx/pdf) đều trích xuất thật (zip/XML, <span class="mono">excelize/v2</span>), không còn stub <span class="mono">nil, nil</span>. Entra ID/JWT/Graph API OneDrive/Teams thật. SharePoint Sites API (<span class="mono">GetSites</span>) vẫn TODO</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill ok">Gần xong</span>
+                <div class="pct-bar"><span style="width:80%; background:var(--ok);"></span></div>
+                <span class="pct-num">80%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">2 — NLP / Graph / Embeddings</td>
+            <td><span class="pill ok">✅ Hoàn thành</span></td>
+            <td class="detail">Extractor NLP + Neo4j migration chạy thật, vững; <span class="mono">embedding/custom_api.go</span> và <span class="mono">store.go</span> ban đầu không tồn tại</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill warn">Một phần</span>
+                <div class="pct-bar"><span style="width:60%; background:var(--warn);"></span></div>
+                <span class="pct-num">60%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">3 — Hybrid Retrieval</td>
+            <td><span class="pill ok">✅ Hoàn thành</span></td>
+            <td class="detail">Đã sửa (Group D): NER thật, graph+semantic song song, rerank/context-pack/answer-gen thật, smoke test 16/16 qua. Nhưng semantic search rỗng cho tới khi embedding được ghi</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill ok">Đúng đắn, chờ dữ liệu</span>
+                <div class="pct-bar"><span style="width:85%; background:var(--ok);"></span></div>
+                <span class="pct-num">85%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">4 — Vòng lặp Feedback</td>
+            <td><span class="pill ok">✅ Hoàn thành</span></td>
+            <td class="detail">Logic thật &amp; đúng (store/analyzer/improver/exporter) — nhưng không được đăng ký trong <span class="mono">main.go</span>, không thể gọi tới</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill ok">Đã wire xong</span>
+                <div class="pct-bar"><span style="width:100%; background:var(--ok);"></span></div>
+                <span class="pct-num">100%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">5 — Frontend</td>
+            <td><span class="pill crit">Group F báo cáo "100%"</span></td>
+            <td class="detail"><b>Đã bác bỏ (audit 2026-07-12):</b> workflow 6-agent từng tự báo 8/9 task [X], nhưng không có thư mục <span class="mono">Frontend/</span>, không có file <span class="mono">.tsx</span> nào tồn tại trong repo. tasks.md tự sửa lại T139–T148 về <span class="mono">[ ]</span> với ghi chú "prior [X] marking was inaccurate". Frontend thực chất chưa bắt đầu</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill crit">Chưa bắt đầu</span>
+                <div class="pct-bar"><span style="width:0%; background:var(--crit);"></span></div>
+                <span class="pct-num">0%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">6 — Retrieval nhận biết quyền</td>
+            <td><span class="pill warn">Group G báo cáo "100%"</span></td>
+            <td class="detail">Audit 2026-07-11 từng phát hiện <span class="mono">RefreshCache</span> dùng driveID/itemID placeholder thay vì resolve thật. Group K (T189–T190, 2026-07-11) đã kiểm tra lại code hiện tại: <span class="mono">RefreshCache</span> resolve đúng <span class="mono">drive_id</span>/<span class="mono">source_id</span> thật từ <span class="mono">m365_files</span> — không còn placeholder, có test tích hợp xác nhận khớp <span class="mono">ExtractAndCache</span> trực tiếp</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill ok">Xác minh đúng (Group K)</span>
+                <div class="pct-bar"><span style="width:95%; background:var(--ok);"></span></div>
+                <span class="pct-num">95%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">Cross-cutting — main.go</td>
+            <td>Ngầm định xong (T009)</td>
+            <td class="detail">Ban đầu chỉ 67 dòng skeleton, mỗi <span class="mono">/health</span> được đăng ký. Đã sửa: DB/Neo4j/config init, router 16 endpoint + WebSocket, 2 scheduler, graceful shutdown</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill ok">Đã kết nối</span>
+                <div class="pct-bar"><span style="width:100%; background:var(--ok);"></span></div>
+                <span class="pct-num">100%</span>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="phase-cell">Group I — llm-svc (Rust gRPC)</td>
+            <td class="detail" style="color:var(--text-faint);">Bổ sung sau (2026-07-11)</td>
+            <td class="detail">Scaffold + proto + routing/wiring Go-side hoàn tất; inference model thật (ONNX/GGUF/safetensors) vẫn trả <span class="mono">Err("not implemented")</span>. <b>Cập nhật 2026-07-12:</b> Rust toolchain nay đã có sẵn trong môi trường — <span class="mono">cargo build --release</span> chạy sạch; <span class="mono">cargo test --release</span>: 5/6 pass, 1 fail (<span class="mono">test_retry_policy</span>, lệch thời gian backoff 969≠1000, có vẻ là test sai dung sai chứ không phải lỗi logic routing)</td>
+            <td>
+              <div class="pct-bar-wrap">
+                <span class="pill crit">Lõi còn stub</span>
+                <div class="pct-bar"><span style="width:40%; background:var(--crit);"></span></div>
+                <span class="pct-num">40%</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Phase 10 — Vòng hiệu chỉnh thứ hai (audit sau Group F/G/I)</h2>
+      <span class="tag">tasks.md dòng 522–539 · sau commit b60116ff</span>
+    </div>
+    <div class="callout" style="background:var(--crit-soft); border-color:color-mix(in srgb, var(--crit) 40%, transparent); border-left-color:var(--crit);">
+      <b>Lặp lại đúng mẫu lỗi cũ:</b> multi-agent workflow tạo ra commit <span class="mono">b60116ff</span> tự báo cáo Group F (Frontend), Group G (Permissions), Group I (llm-svc) đều "100% complete". Audit code trực tiếp phát hiện <span class="mono">handlers_auth.go</span> vẫn trả <span class="mono">"jwt-token-demo"</span> cứng, <span class="mono">handlers_graph.go</span>/<span class="mono">handlers_knowledge.go</span> trả JSON giả (<span class="mono">"John Doe"</span>), <span class="mono">handlers_m365.go</span> toàn bộ TODO — trong khi các package logic thật (<span class="mono">internal/auth</span>, 8-stage pipeline) đã tồn tại nhưng không được gọi tới.
+    </div>
+    <div class="status-table-wrap" style="margin-top:16px;">
+      <table class="status-table">
+        <thead>
+          <tr>
+            <th>Hạng mục</th>
+            <th>Task-list từng ghi</th>
+            <th>Audit phát hiện</th>
+            <th>Trạng thái đã sửa (Group J/K/L/M)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="phase-cell">Auth endpoints</td>
+            <td class="detail">T117/T118 "DONE"</td>
+            <td class="detail">Trả cứng <span class="mono">"jwt-token-demo"</span>, không gọi <span class="mono">internal/auth</span></td>
+            <td><span class="pill ok">✅ Đã wire (T184, Group J)</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">Graph / Entity endpoints</td>
+            <td class="detail">Ngầm định xong qua Group D</td>
+            <td class="detail">4 endpoint graph + 2 endpoint entity trả JSON giả cứng, không gọi Neo4j</td>
+            <td><span class="pill ok">✅ Đã wire (Group J)</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">M365 connection endpoints</td>
+            <td class="detail">T038–T040 [X]</td>
+            <td class="detail">4 endpoint toàn TODO, chưa từng đụng <span class="mono">m365_connections</span>/<span class="mono">delta_state</span></td>
+            <td><span class="pill ok">✅ Đã wire (Group J)</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">Permission cache refresh</td>
+            <td class="detail">"production-ready", 6 test pass</td>
+            <td class="detail"><span class="mono">RefreshCache</span> dùng driveID/itemID placeholder</td>
+            <td><span class="pill ok">✅ Xác minh đúng (T189–190, Group K)</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">llm-svc inference (T160–168)</td>
+            <td class="detail">"All 10 tasks COMPLETE"</td>
+            <td class="detail">ONNX/GGUF/safetensors vẫn <span class="mono">Err("not implemented")</span></td>
+            <td><span class="pill crit">🔴 Chưa làm — nhãn đã sửa (T195)</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">llm-svc build health</td>
+            <td class="detail">"compiles cleanly"</td>
+            <td class="detail">Không thể xác nhận — môi trường lúc đó không có Rust toolchain</td>
+            <td><span class="pill ok">✅ Đã xác nhận 2026-07-12: build sạch, 5/6 test pass</span></td>
+          </tr>
+          <tr>
+            <td class="phase-cell">Code trùng lặp (auth/connector, frontend pages)</td>
+            <td class="detail">Không theo dõi</td>
+            <td class="detail">2 bộ OAuth2 song song; frontend page cũ và mới cùng tồn tại (dù frontend thực ra chưa từng tồn tại)</td>
+            <td><span class="pill warn">🟡 Cần dọn dẹp (Group L)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head">
+      <h2>Việc còn lại — theo nhóm remediation</h2>
+      <span class="tag">Group A–I, tasks.md dòng 368–517</span>
+    </div>
+    <div class="work-grid">
+      <div class="work-card">
+        <div class="head"><span class="name">Group C — Embeddings</span><span class="eff">3–5 ngày</span></div>
+        <ul>
+          <li>Đã xong T126–T128 (client, store, batch worker); T176a đã xóa <span class="mono">custom_api.go</span> cũ, thay bằng <span class="mono">svc_client.go</span>/<span class="mono">svc_adapter.go</span> qua gRPC</li>
+          <li><b>Chưa commit:</b> <span class="mono">batch.go</span> từng dùng parser placeholder giả (<span class="mono">fmt.Sprintf("[%v]",...)</span>) làm hỏng persist job — đã sửa bằng <span class="mono">encoding/json</span> thật + migration <span class="mono">003_embedding_jobs_columns.sql</span> (thêm cột <span class="mono">chunk_ids</span>/<span class="mono">updated_at</span>), đang chờ commit</li>
+          <li>Cần: chạy backfill thật để <span class="mono">chunk_embeddings</span> có dữ liệu cho semantic search</li>
+        </ul>
+      </div>
+      <div class="work-card">
+        <div class="head"><span class="name">Group F — Frontend</span><span class="eff">3–4 tuần</span></div>
+        <ul>
+          <li><b>Xác nhận lại 2026-07-12: chưa hề bắt đầu</b> — không có thư mục <span class="mono">Frontend/</span>, không có file <span class="mono">.tsx</span> nào trong repo</li>
+          <li>Báo cáo "8/9 trang đã xong" từ workflow trước là giả — tasks.md đã tự sửa T139–T148 về <span class="mono">[ ]</span></li>
+          <li>Cần bắt đầu lại từ T139 (scaffold Vite/React/TS)</li>
+        </ul>
+      </div>
+      <div class="work-card">
+        <div class="head"><span class="name">Group I — llm-svc (Rust)</span><span class="eff">3–4 tuần</span></div>
+        <ul>
+          <li><b>T160</b> ONNX inference (<span class="mono">ort</span>) — chưa làm</li>
+          <li><b>T161</b> GGUF/llama.cpp inference — chưa làm</li>
+          <li><b>T162</b> Safetensors inference (<span class="mono">candle</span>) — chưa làm</li>
+          <li>Cập nhật T194 (2026-07-12): Rust toolchain nay có sẵn — <span class="mono">cargo build --release</span> sạch, <span class="mono">cargo test --release</span> 5/6 pass (1 fail: <span class="mono">test_retry_policy</span> lệch timing)</li>
+          <li>Không phụ thuộc Ollama theo yêu cầu spec — đã xác nhận qua build/test thật, còn T168 smoke test riêng chưa làm</li>
+        </ul>
+      </div>
+      <div class="work-card">
+        <div class="head"><span class="name">Tồn đọng tests tích hợp &amp; dọn dẹp</span><span class="eff">theo dõi</span></div>
+        <ul>
+          <li>T136 — <span class="mono">pipeline_test.go</span>/<span class="mono">permissions_test.go</span> vẫn assert trên dữ liệu mock cũ, cần cập nhật để khớp hành vi thật</li>
+          <li>Smoke script (<span class="mono">make smoke</span>) — bước apply schema Neo4j qua <span class="mono">cypher-shell</span> còn lỗi retry, cần probe readiness tốt hơn</li>
+          <li>Group L — dọn 2 bộ OAuth2 trùng (<span class="mono">connectors/auth.go</span> vs <span class="mono">auth/entra_id.go</span>), xóa frontend page cũ nếu còn</li>
+          <li>SharePoint Sites API (<span class="mono">GetSites</span>) vẫn TODO trong <span class="mono">connectors/client.go</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section style="margin-bottom: 0;">
+    <div class="sec-head">
+      <h2>Ước tính công sức còn lại</h2>
+      <span class="tag">theo effort table, tasks.md dòng 502–516</span>
+    </div>
+    <div class="effort-strip">
+      <div class="effort-row">
+        <div class="g-label">Group B<span class="sub">Auth / Connectors / Parsers</span></div>
+        <div class="effort-track"><span style="width:14%;"></span></div>
+        <div class="effort-val mono">2–3 tuần</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group D<span class="sub">Retrieval — triển khai thật</span></div>
+        <div class="effort-track"><span style="width:14%;"></span></div>
+        <div class="effort-val mono">2–3 tuần</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group F<span class="sub">Frontend (từ đầu)</span></div>
+        <div class="effort-track"><span style="width:20%;"></span></div>
+        <div class="effort-val mono">3–4 tuần</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group I<span class="sub">llm-svc + Brain routing</span></div>
+        <div class="effort-track"><span style="width:20%;"></span></div>
+        <div class="effort-val mono">3–4 tuần</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group G<span class="sub">Permissions</span></div>
+        <div class="effort-track"><span style="width:5%;"></span></div>
+        <div class="effort-val mono">1 tuần</div>
+      </div>
+      <div class="effort-row">
+        <div class="g-label">Group A / C / E / H<span class="sub">Wiring, embeddings, feedback, quyết định</span></div>
+        <div class="effort-track"><span style="width:9%;"></span></div>
+        <div class="effort-val mono">~2 tuần</div>
+      </div>
+      <div class="effort-total">
+        <span class="lbl">Tổng ước tính còn lại (thay cho tuyên bố "production ready" trước đây)</span>
+        <span class="val">13–18 tuần</span>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    <span>Nguồn: spec_vn.md · tasks.md (Phase 9 &amp; 10) · CLAUDE.md §2</span>
+    <span>Cập nhật lần cuối: 2026-07-12</span>
+  </div>
+
+</div>

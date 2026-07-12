@@ -203,8 +203,129 @@ impl CloudProxyClient {
         Ok(response.trim().to_string())
     }
 
+    /// Call cloud LLM provider for text embeddings (OpenAI-compatible /embeddings API)
+    pub async fn embed(&self, texts: &[String], model: Option<&str>) -> Result<Vec<Vec<f32>>> {
+        let model_name = model.filter(|m| !m.is_empty()).unwrap_or(&self.model);
+        debug!(
+            "cloud_proxy.embed: model={}, texts={}",
+            model_name,
+            texts.len()
+        );
+
+        let request_body = json!({
+            "model": model_name,
+            "input": texts,
+        });
+
+        let url = format!("{}/embeddings", self.base_url);
+        let response = self
+            .http_client
+            .post(&url)
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .await
+            .map_err(|e| anyhow!("cloud_proxy embed HTTP request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(anyhow!("cloud_proxy embed HTTP error {}: {}", status, body));
+        }
+
+        let body: Value = response
+            .json()
+            .await
+            .map_err(|e| anyhow!("Failed to parse cloud embed response: {}", e))?;
+
+        let data = body
+            .get("data")
+            .and_then(|d| d.as_array())
+            .ok_or_else(|| anyhow!("Invalid embed response format from cloud LLM (no data[])"))?;
+
+        data.iter()
+            .map(|item| {
+                item.get("embedding")
+                    .and_then(|e| e.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect::<Vec<f32>>()
+                    })
+                    .ok_or_else(|| anyhow!("Invalid embed response item (no embedding[])"))
+            })
+            .collect()
+    }
+
+    /// Compress context via abstractive summarization (LLM-based).
+    pub async fn compress(&self, context: &str, target_tokens: i32, query: &str) -> Result<String> {
+        let query_hint = if query.is_empty() {
+            String::new()
+        } else {
+            format!(" Focus the summary on answering: \"{}\".", query)
+        };
+        let prompt = format!(
+            "Summarize the following context to approximately {} tokens, preserving all facts, \
+             names, and citations needed to answer questions about it.{}\n\nContext:\n{}",
+            target_tokens, query_hint, context
+        );
+        // Rough token->word budget for max_tokens on the summarization call itself.
+        let max_tokens = (target_tokens as f32 * 1.5).ceil() as i32;
+        self.generate(&prompt, max_tokens, 0.3).await
+    }
+
     /// Detect if cloud proxy is configured
     pub fn is_configured() -> bool {
         std::env::var("LLM_API_BASE_URL").is_ok() && std::env::var("LLM_API_KEY").is_ok()
+    }
+}
+
+/// cosine_similarity computes the cosine similarity between two equal-length vectors.
+/// Shared by cloud-side (embedding-based bi-encoder) and local ONNX-based reranking —
+/// both approaches score relevance as similarity between query and document embeddings
+/// rather than a dedicated cross-encoder forward pass (out of scope for this pass).
+pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 {
+        return 0.0;
+    }
+    dot / (norm_a * norm_b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cosine_similarity_identical() {
+        let a = vec![1.0, 2.0, 3.0];
+        assert!((cosine_similarity(&a, &a) - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_cosine_similarity_orthogonal() {
+        let a = vec![1.0, 0.0];
+        let b = vec![0.0, 1.0];
+        assert!(cosine_similarity(&a, &b).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_cosine_similarity_opposite() {
+        let a = vec![1.0, 0.0];
+        let b = vec![-1.0, 0.0];
+        assert!((cosine_similarity(&a, &b) - (-1.0)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_cosine_similarity_mismatched_length() {
+        let a = vec![1.0, 0.0];
+        let b = vec![1.0, 0.0, 0.0];
+        assert_eq!(cosine_similarity(&a, &b), 0.0);
     }
 }

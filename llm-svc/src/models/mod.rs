@@ -109,6 +109,7 @@ impl Model {
 }
 
 /// ModelRegistry holds all loaded models and provides lookup
+#[derive(Debug)]
 pub struct ModelRegistry {
     models: Arc<Mutex<Vec<Model>>>,
 }
@@ -184,24 +185,38 @@ impl Default for ModelRegistry {
     }
 }
 
-// Stubs for Phase 2 implementation (actual inference backends)
+/// Converts a models.yaml-sourced ModelConfig into a runtime Model, validating
+/// its format/kind strings against the known enums (T166: this is the boundary
+/// where a bad models.yaml entry is caught and skipped-with-a-log rather than
+/// silently accepted or crashing the whole reload).
+impl TryFrom<&crate::config::ModelConfig> for Model {
+    type Error = String;
 
-/// ONNX inference module (Phase 2)
-pub mod onnx {
-    /// Embed texts using ONNX model
-    /// Phase 2: Implement via `ort` crate
-    pub fn embed(_texts: &[&str]) -> Result<Vec<Vec<f32>>, String> {
-        Err("ONNX embedding not implemented in Phase 1 (stub)".to_string())
-    }
-
-    /// Rerank documents using ONNX model
-    /// Phase 2: Implement via `ort` crate
-    pub fn rerank(_query: &str, _documents: &[&str]) -> Result<Vec<f32>, String> {
-        Err("ONNX reranking not implemented in Phase 1 (stub)".to_string())
+    fn try_from(c: &crate::config::ModelConfig) -> Result<Self, Self::Error> {
+        let format = ModelFormat::from_str(&c.format)
+            .ok_or_else(|| format!("unknown model format '{}'", c.format))?;
+        let kind = ModelKind::from_str(&c.kind)
+            .ok_or_else(|| format!("unknown model kind '{}'", c.kind))?;
+        Ok(Model::new(
+            c.name.clone(),
+            kind,
+            format,
+            c.path.clone().unwrap_or_default(),
+            c.dims,
+            c.version.clone(),
+            c.is_default,
+        ))
     }
 }
 
-/// GGUF inference module (Phase 2)
+// ONNX is real (T160, via the `ort` + `tokenizers` crates — see models/onnx.rs).
+// GGUF/safetensors remain stubs: GGUF needs `llama-cpp-2`, which needs `cmake` to
+// build llama.cpp (not available in this environment); safetensors was descoped
+// as a separate decision (no reference implementation to port from).
+
+pub mod onnx;
+
+/// GGUF inference module (Phase 2, blocked — see comment above)
 pub mod gguf {
     /// Generate text using GGUF model
     /// Phase 2: Implement via `llama-cpp-2` crate

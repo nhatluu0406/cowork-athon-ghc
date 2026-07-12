@@ -4,10 +4,22 @@
 #   - name: model identifier
 #     kind: embedding | reranker | generative
 #     format: onnx | gguf | safetensors | cloud
-#     path: local file path (empty for cloud models)
+#     path: local path (empty for cloud models) — for format: onnx, this MUST be
+#       a DIRECTORY containing both `model.onnx` and `tokenizer.json` (standard
+#       HuggingFace export layout), not a path to the .onnx file directly. See
+#       src/models/onnx.rs's module doc comment (T160) for the exact convention.
 #     dims: embedding dimensionality (0 for non-embedding models)
 #     version: model version
 #     is_default: true if this is the default for its kind
+#
+# Reranking note (T160): the Rerank RPC's local path currently reuses the
+# default `kind: embedding` model (bi-encoder cosine similarity between query
+# and document embeddings — see cloud_proxy::cosine_similarity's doc comment
+# for why), not a dedicated `kind: reranker` cross-encoder model. The
+# `bge-reranker-base` entry below is a real cross-encoder reranker format but
+# is not yet wired to anything — implementing a cross-encoder ONNX forward
+# pass (different input/output shape than the embedding path) is future work,
+# not part of this pass.
 
 models:
   # Default embedding model (used by Go backend via Embed RPC)
@@ -19,21 +31,24 @@ models:
     version: "1.0"
     is_default: true
 
-  # Optional: local embedding model (ONNX format)
-  # Uncomment and set path when deployed with local ONNX embedder
+  # Optional: local embedding model (ONNX format, real inference — T160).
+  # Uncomment and point `path` at a directory containing model.onnx +
+  # tokenizer.json (e.g. downloaded from a HuggingFace ONNX export like
+  # sentence-transformers/all-MiniLM-L6-v2) to enable local embedding/rerank.
   # - name: e5-small-v2
   #   kind: embedding
   #   format: onnx
-  #   path: /models/e5-small-v2.onnx
+  #   path: /models/e5-small-v2/
   #   dims: 384
   #   version: "1.0"
   #   is_default: false
 
-  # Default reranker model (used by Go backend via Rerank RPC)
+  # Reranker model entry (format/kind are real; NOT yet wired to a
+  # cross-encoder ONNX forward pass — see the Reranking note above).
   - name: bge-reranker-base
     kind: reranker
     format: onnx
-    path: /models/bge-reranker-base.onnx
+    path: /models/bge-reranker-base/
     dims: 0
     version: "1.0"
     is_default: true

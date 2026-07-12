@@ -1,18 +1,28 @@
 // service.rs: LlmSvc trait implementation for all RPCs
 
-use crate::cloud_proxy::CloudProxyClient;
+use crate::cloud_proxy::{cosine_similarity, CloudProxyClient};
 use crate::config::Config;
 use crate::llmsvc::{
     llm_svc_server::LlmSvc, CompressRequest, CompressResponse, Entity,
     EmbedRequest, EmbedResponse, ExtractRequest, ExtractResponse, GenerateRequest,
     GenerateResponse, HealthRequest, HealthResponse, IntentRequest, IntentResponse,
     ListModelsRequest, ListModelsResponse, ModelInfo, Relationship, RerankRequest,
-    RerankResponse,
+    RerankResponse, RerankResult,
 };
 use crate::routing::{Router, RouteDecision};
 use std::collections::HashMap;
 use tonic::{Request, Response, Status};
 use tracing::{debug, info, warn};
+
+/// Serialize an embedding vector to little-endian float32 bytes, matching the
+/// wire format `internal/embedding/store.go` already expects on the Go side.
+fn encode_embedding(v: &[f32]) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(v.len() * 4);
+    for f in v {
+        buf.extend_from_slice(&f.to_le_bytes());
+    }
+    buf
+}
 
 /// LlmSvcImpl is the gRPC service implementation for all LLM-shaped operations.
 #[derive(Clone)]
@@ -61,21 +71,74 @@ impl LlmSvc for LlmSvcImpl {
         // Route decision: embed should prefer local ONNX, fallback to cloud
         match self.router.route("embed") {
             RouteDecision::Cloud => {
-                if let Some(_proxy) = &self.cloud_proxy {
-                    // Phase 2: Implement cloud embedding call
-                    warn!("Cloud embedding not implemented in Phase 1");
-                    return Err(Status::unimplemented(
-                        "Cloud embedding not yet implemented",
-                    ));
+                if let Some(proxy) = &self.cloud_proxy {
+                    match proxy.embed(&req.texts, Some(&req.model_name)).await {
+                        Ok(vectors) => {
+                            let dimensions = vectors.first().map(|v| v.len()).unwrap_or(0) as i32;
+                            let embeddings =
+                                vectors.iter().map(|v| encode_embedding(v)).collect();
+                            Ok(Response::new(EmbedResponse {
+                                embeddings,
+                                model_name: req.model_name,
+                                dimensions,
+                                error: String::new(),
+                            }))
+                        }
+                        Err(e) => {
+                            warn!("Cloud embedding failed: {}", e);
+                            Err(Status::internal(format!("Embedding failed: {}", e)))
+                        }
+                    }
+                } else {
+                    Err(Status::unavailable("No cloud proxy configured"))
                 }
-                Err(Status::unavailable("No cloud proxy configured"))
             }
             RouteDecision::Local => {
-                // Phase 2: Implement local ONNX embedding
-                warn!("Local ONNX embedding not implemented in Phase 1 (stub)");
-                Err(Status::unimplemented(
-                    "Local ONNX embedding not yet implemented",
-                ))
+                let model = if req.model_name.is_empty() {
+                    self.config
+                        .models_registry
+                        .get_default(crate::models::ModelKind::Embedding)
+                } else {
+                    self.config.models_registry.get(&req.model_name)
+                };
+                let Some(model) = model else {
+                    return Err(Status::failed_precondition(
+                        "No local embedding model configured (models.yaml)",
+                    ));
+                };
+                if model.format != crate::models::ModelFormat::Onnx {
+                    return Err(Status::failed_precondition(format!(
+                        "Model '{}' is not an ONNX model (format: {})",
+                        model.name,
+                        model.format.as_str()
+                    )));
+                }
+
+                let model_dir = model.path.clone();
+                let texts: Vec<String> = req.texts.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                    crate::models::onnx::embed(&model_dir, &text_refs)
+                })
+                .await
+                .map_err(|e| Status::internal(format!("embedding task panicked: {}", e)))?;
+
+                match result {
+                    Ok(vectors) => {
+                        let dimensions = vectors.first().map(|v| v.len()).unwrap_or(0) as i32;
+                        let embeddings = vectors.iter().map(|v| encode_embedding(v)).collect();
+                        Ok(Response::new(EmbedResponse {
+                            embeddings,
+                            model_name: model.name,
+                            dimensions,
+                            error: String::new(),
+                        }))
+                    }
+                    Err(e) => {
+                        warn!("Local ONNX embedding failed: {}", e);
+                        Err(Status::internal(format!("Local embedding failed: {}", e)))
+                    }
+                }
             }
             RouteDecision::Error => Err(Status::failed_precondition("Cannot route Embed request")),
         }
@@ -93,24 +156,117 @@ impl LlmSvc for LlmSvcImpl {
             if req.model_name.is_empty() { "default" } else { req.model_name.as_str() }
         );
 
-        // Route decision: rerank should prefer local ONNX, fallback to cloud
+        // Route decision: rerank should prefer local ONNX, fallback to cloud.
+        // Both paths score relevance as query/document embedding cosine similarity
+        // (a bi-encoder approach) rather than a dedicated cross-encoder forward
+        // pass — see cosine_similarity's doc comment for why.
         match self.router.route("rerank") {
             RouteDecision::Cloud => {
-                if let Some(_proxy) = &self.cloud_proxy {
-                    // Phase 2: Implement cloud reranking call
-                    warn!("Cloud reranking not implemented in Phase 1");
-                    return Err(Status::unimplemented(
-                        "Cloud reranking not yet implemented",
-                    ));
+                if let Some(proxy) = &self.cloud_proxy {
+                    let mut texts: Vec<String> = vec![req.query.clone()];
+                    texts.extend(req.documents.iter().map(|d| d.text.clone()));
+                    match proxy.embed(&texts, None).await {
+                        Ok(vectors) if vectors.len() == texts.len() => {
+                            let query_vec = &vectors[0];
+                            let mut results: Vec<RerankResult> = req
+                                .documents
+                                .iter()
+                                .zip(vectors[1..].iter())
+                                .map(|(doc, doc_vec)| RerankResult {
+                                    doc_id: doc.doc_id.clone(),
+                                    score: cosine_similarity(query_vec, doc_vec),
+                                    rank: 0,
+                                })
+                                .collect();
+                            results.sort_by(|a, b| {
+                                b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+                            });
+                            for (i, r) in results.iter_mut().enumerate() {
+                                r.rank = (i + 1) as i32;
+                            }
+                            if req.top_k > 0 {
+                                results.truncate(req.top_k as usize);
+                            }
+                            Ok(Response::new(RerankResponse {
+                                results,
+                                model_name: req.model_name,
+                                error: String::new(),
+                            }))
+                        }
+                        Ok(_) => Err(Status::internal(
+                            "Rerank embedding count mismatch from cloud provider",
+                        )),
+                        Err(e) => {
+                            warn!("Cloud reranking failed: {}", e);
+                            Err(Status::internal(format!("Reranking failed: {}", e)))
+                        }
+                    }
+                } else {
+                    Err(Status::unavailable("No cloud proxy configured"))
                 }
-                Err(Status::unavailable("No cloud proxy configured"))
             }
             RouteDecision::Local => {
-                // Phase 2: Implement local BGE reranker via ONNX
-                warn!("Local ONNX reranking not implemented in Phase 1 (stub)");
-                Err(Status::unimplemented(
-                    "Local ONNX reranking not yet implemented",
-                ))
+                let model = if req.model_name.is_empty() {
+                    self.config
+                        .models_registry
+                        .get_default(crate::models::ModelKind::Embedding)
+                } else {
+                    self.config.models_registry.get(&req.model_name)
+                };
+                let Some(model) = model else {
+                    return Err(Status::failed_precondition(
+                        "No local embedding model configured for reranking (models.yaml)",
+                    ));
+                };
+
+                let model_dir = model.path.clone();
+                let mut texts: Vec<String> = vec![req.query.clone()];
+                texts.extend(req.documents.iter().map(|d| d.text.clone()));
+                let doc_count = req.documents.len();
+
+                let result = tokio::task::spawn_blocking(move || {
+                    let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                    crate::models::onnx::embed(&model_dir, &text_refs)
+                })
+                .await
+                .map_err(|e| Status::internal(format!("reranking task panicked: {}", e)))?;
+
+                match result {
+                    Ok(vectors) if vectors.len() == doc_count + 1 => {
+                        let query_vec = &vectors[0];
+                        let mut results: Vec<RerankResult> = req
+                            .documents
+                            .iter()
+                            .zip(vectors[1..].iter())
+                            .map(|(doc, doc_vec)| RerankResult {
+                                doc_id: doc.doc_id.clone(),
+                                score: cosine_similarity(query_vec, doc_vec),
+                                rank: 0,
+                            })
+                            .collect();
+                        results.sort_by(|a, b| {
+                            b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                        for (i, r) in results.iter_mut().enumerate() {
+                            r.rank = (i + 1) as i32;
+                        }
+                        if req.top_k > 0 {
+                            results.truncate(req.top_k as usize);
+                        }
+                        Ok(Response::new(RerankResponse {
+                            results,
+                            model_name: model.name,
+                            error: String::new(),
+                        }))
+                    }
+                    Ok(_) => Err(Status::internal(
+                        "Rerank embedding count mismatch from local ONNX model",
+                    )),
+                    Err(e) => {
+                        warn!("Local ONNX reranking failed: {}", e);
+                        Err(Status::internal(format!("Local reranking failed: {}", e)))
+                    }
+                }
             }
             RouteDecision::Error => Err(Status::failed_precondition("Cannot route Rerank request")),
         }
@@ -195,18 +351,38 @@ impl LlmSvc for LlmSvcImpl {
 
         match self.router.route("compress") {
             RouteDecision::Cloud => {
-                if let Some(_proxy) = &self.cloud_proxy {
-                    // Phase 2: Implement cloud compression
-                    warn!("Cloud compression not implemented in Phase 1");
-                    return Err(Status::unimplemented(
-                        "Cloud compression not yet implemented",
-                    ));
+                if let Some(proxy) = &self.cloud_proxy {
+                    match proxy
+                        .compress(&req.context, req.target_tokens, &req.query)
+                        .await
+                    {
+                        Ok(compressed) => {
+                            // Approximate token counts the same way context_packer.go does
+                            // (len/4) — llm-svc doesn't have access to the target LLM's
+                            // real tokenizer either.
+                            let original_tokens = (req.context.len() / 4).max(1) as i32;
+                            let compressed_tokens = (compressed.len() / 4) as i32;
+                            let compression_ratio = compressed_tokens as f32 / original_tokens as f32;
+                            Ok(Response::new(CompressResponse {
+                                compressed_context: compressed,
+                                original_tokens,
+                                compressed_tokens,
+                                compression_ratio,
+                                error: String::new(),
+                            }))
+                        }
+                        Err(e) => {
+                            warn!("Cloud compression failed: {}", e);
+                            Err(Status::internal(format!("Compression failed: {}", e)))
+                        }
+                    }
+                } else {
+                    Err(Status::unavailable("No cloud proxy configured"))
                 }
-                Err(Status::unavailable("No cloud proxy configured"))
             }
             RouteDecision::Local => {
-                // Phase 2: Implement local compression via GGUF
-                warn!("Local GGUF compression not implemented in Phase 1 (stub)");
+                // T161: Implement local compression via GGUF
+                warn!("Local GGUF compression not implemented (stub)");
                 Err(Status::unimplemented(
                     "Local GGUF compression not yet implemented",
                 ))
@@ -359,18 +535,27 @@ impl LlmSvc for LlmSvcImpl {
             if req.model_kind.is_empty() { "all" } else { req.model_kind.as_str() }
         );
 
-        let models: Vec<ModelInfo> = self
-            .config
-            .models
-            .iter()
-            .filter(|m| req.model_kind.is_empty() || m.kind == req.model_kind)
+        // T166: read from the hot-reloadable registry, not the startup-time
+        // snapshot in self.config.models — a models.yaml edit takes effect here
+        // without a rebuild/restart.
+        let registry_models = if req.model_kind.is_empty() {
+            self.config.models_registry.list(None)
+        } else if let Some(kind) = crate::models::ModelKind::from_str(&req.model_kind) {
+            self.config.models_registry.list(Some(kind))
+        } else {
+            // Unrecognized filter value: no models match, matching the prior
+            // string-equality filter's behavior for garbage input.
+            vec![]
+        };
+        let models: Vec<ModelInfo> = registry_models
+            .into_iter()
             .map(|m| ModelInfo {
                 name: m.name.clone(),
-                kind: m.kind.clone(),
-                format: m.format.clone(),
-                dimensions: m.dims as i32,
+                kind: m.kind.as_str().to_string(),
+                format: m.format.as_str().to_string(),
+                dimensions: m.dimensions as i32,
                 version: m.version.clone(),
-                is_local: m.path.is_some(),
+                is_local: !m.path.is_empty(),
                 is_default: m.is_default,
                 metadata: "{}".to_string(),
             })
