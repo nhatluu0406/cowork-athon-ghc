@@ -54,4 +54,5 @@ updated_at: "2026-07-12"
 
 - GUI hiện là usable POC quality.
 - Chưa claim parity với Claude Cowork hoặc OpenWork.
+- Local service và provider status hiển thị tách biệt; missing credential chặn send trước runtime.
 - Một số empty/error/loading states cần polish trước release candidate.

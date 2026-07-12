@@ -46,7 +46,7 @@ parity hoàn chỉnh và không clone trực tiếp bất kỳ sản phẩm nào
 |---|---|---|
 | Service lifecycle | Đã verify bằng packaged app | `poc-v0.1`; đã có release regression và packaged smoke evidence. |
 | Workspace selection | Đã verify bằng packaged app | Workspace picker/recent workspace đã có; audit mới nhất dùng E2E picker seam, native picker vẫn cần pass manual thật. |
-| Provider/model/keyring | Đã verify bằng packaged app, còn UX gap | Đã có evidence Windows keyring/provider recovery; interactive pass mới nhất phát hiện gap missing-credential preflight. |
+| Provider/model/keyring | Đã verify bằng packaged app | Đã có evidence Windows keyring/provider recovery; missing-credential preflight và phân tách local service vs provider status đã verify trong slice Provider Readiness. |
 | OpenCode runtime | Đã verify bằng packaged app | Runtime hiện tại là OpenCode; replaceable runtime endpoint vẫn là boundary kiến trúc. |
 | Streaming | Đã verify bằng packaged app | Có evidence packaged trước đó; UX pass mới nhất không chạy live streaming. |
 | Permissions | Đã verify bằng packaged app, chưa re-verify live ở pass mới nhất | Có evidence packaged Allow/Deny và deny-next-turn; UX pass mới nhất không chạy lại permission modal live. |
@@ -85,8 +85,8 @@ bounded untrusted context; sản phẩm không claim native OpenCode continuatio
 
 ## 5. UX baseline hiện tại
 
-- Application shell: packaged Electron desktop shell có local service readiness và
-  provider/model status.
+- Application shell: packaged Electron desktop shell có **local service readiness** và
+  **provider/model status** tách biệt (không gom `Đã kết nối` chung).
 - Conversation sidebar: persisted conversations, search, switch, rename/delete qua
   context menu.
 - Workspace selection: chọn active workspace, hiển thị current/recent workspace.
@@ -104,13 +104,6 @@ UI hiện ở mức **functional POC quality**, chưa phải release-candidate p
 
 ## 6. Product gaps đã biết
 
-- Missing-credential preflight: packaged UI mới nhất cho phép send rồi rơi vào trạng thái
-  running/not-connected không rõ recovery.
-- Settings modal focus: modal mở ra nhưng focus quan sát được vẫn nằm ở `BODY`.
-- Continuation controls trong empty-state DOM: continuation wording tồn tại trong DOM trước
-  khi người dùng chọn historical terminal conversation.
-- Activity visibility ở narrow/high-DPI: chat vẫn usable, nhưng activity panel có thể gần
-  như biến mất mà chưa có affordance rõ.
 - Live tool/file/permission GUI verification: chưa hoàn tất trong interactive pass mới nhất.
 - Native picker: chưa verify trực tiếp trong pass mới nhất; đã dùng deterministic E2E picker seam.
 - Full before/after diff: chưa implement.
@@ -123,9 +116,11 @@ UI hiện ở mức **functional POC quality**, chưa phải release-candidate p
 
 ### Phase A - An toàn và trạng thái trung thực
 
+**Trạng thái: CLOSED** (packaged POC scope, 2026-07-12).
+
 Entry condition: packaged POC baseline hiện tại sạch và docs đồng thuận về next slice.
 
-Work:
+Work (đã hoàn tất):
 - presentation cho attachment included/omitted budget;
 - secret-like file policy;
 - missing credential preflight;
@@ -134,7 +129,7 @@ Work:
 
 Exit acceptance: packaged app hiển thị trung thực attachment inclusion state, block hoặc
 xử lý rõ secret-like files, fail fast khi thiếu credential, và không còn các lỗi focus /
-empty-state đã biết.
+empty-state đã biết — **đạt** qua `attachment-honesty-packaged.mjs` và `provider-readiness-packaged.mjs`.
 
 ### Phase B - Nền tảng Skills
 
