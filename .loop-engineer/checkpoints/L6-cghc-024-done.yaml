@@ -1,0 +1,32 @@
+checkpoint: L6-cghc-024-done
+created_at: "2026-07-11T12:30:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+stop_reason: null
+tasks_done_total: 16
+numbered_tasks_done:
+  - "CGHC-001/002/003/004/005/006/007/009/010/011/012/013/021/023/024/027 (16/28)"
+cghc_024:
+  outcome: "DONE — 4 REAL fixtures captured from pinned OpenCode 1.17.11 (DeepSeek behind provider-neutral custom OpenAI-compat)"
+  fixtures: "simple-chat(98f,completed) tool-call(116f,completed+file_mutation) error(90f,errored/APIError400) cancel(90f,cancelled/MessageAbortedError)"
+  live_budget: "2 successful (simple-chat, tool-call) + 1 provider-400 + 1 aborted = 2 successful <= 3; 0 retries"
+  secret_hygiene: "token from Windows Credential Manager -> child env only; opencode.json holds only {env:DEEPSEEK_API_KEY}; write-time + independent scan of all 4 fixtures CLEAN"
+  fixes_forced_by_live_run:
+    - "launch.ts never created XDG_DATA_HOME/config dirs -> OpenCode 500 on session-create -> mkdirSync added"
+    - "EV mapper lacked pinned housekeeping vocabulary -> exact KNOWN_IGNORED_TYPES set added (drift detection preserved); CGHC-012 test corrected (session.status was mislabeled unknown); ADDITIVE, CGHC-012 NOT invalidated"
+    - "MEDIUM-2 route confirmation resolved (probed real /session, /session/{id}/message, /event, /session/{id}/abort)"
+  reviews: "security-reviewer PASS (0 Crit/High) + code-reviewer PASS (0 Crit/High); applied Low-4 empty-key guard + Low-2 base-URL host-check fix; Low-1 carried to CGHC-018; Low-3 accepted cosmetic"
+health:
+  full_suite: "236 pass / 0 skip / 0 fail"
+  tsc: "clean (project + tools/capture-frames)"
+  unresolved_critical: 0
+  unresolved_high: 0
+next_wave:
+  plan: "CGHC-016 (permission-enforcement, CRITICAL, service/permission/) + CGHC-014 (two-hop SSE streaming, service/execution/) as a parallel pair (<=2 concurrent per stall-mitigation). Reviewers differ: 016->security-reviewer, 014->ux-performance-reviewer."
+  then: "CGHC-018 (needs 016), CGHC-015 (needs 014), CGHC-017 (needs 016+015), CGHC-019/020/022/008; then CGHC-025/026; CGHC-028 packaged E2E last."
+resume_hint: >
+  CGHC-024 DONE (16/28). Live DeepSeek-behind-OpenCode path fully exercised and reviewed, 0 Crit/High.
+  Continue L6 autonomously: launch CGHC-016 + CGHC-014 pair, independent review each, checkpoint, then
+  proceed through remaining L6 and CGHC-028. Web DEFERRED (ADR 0007). No credential gate remains.

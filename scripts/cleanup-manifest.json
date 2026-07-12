@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "description": "Canonical cleanup allowlist for clean.bat (via tools/app/cli.mjs and tools/loop-engineer/lifecycle.mjs, both delegating to clean.mjs). clean deletes ONLY paths in cleanable_categories, and never a path overlapping a 'preserve' entry.",
+  "categories": {
+    "generated": [
+      "node_modules",
+      "dist",
+      "build",
+      "out",
+      "coverage",
+      "test-results",
+      ".turbo",
+      ".vite",
+      ".next",
+      "src-tauri/target"
+    ],
+    "downloaded-library": [
+      ".tools",
+      ".cache"
+    ],
+    "runtime-temporary": [
+      ".runtime/pids",
+      ".runtime/logs",
+      ".runtime/temp",
+      ".runtime/state"
+    ],
+    "preserve": [
+      ".git",
+      "docs",
+      ".agent-workflow",
+      ".claude",
+      ".agents",
+      "CLAUDE.md",
+      "AGENTS.md",
+      "tools",
+      "scripts",
+      ".loop-engineer/state",
+      ".loop-engineer/checkpoints",
+      ".loop-engineer/evidence",
+      ".loop-engineer/reports",
+      ".loop-engineer/source",
+      "skills-lock.json"
+    ],
+    "user-data": [],
+    "credential": [],
+    "external": []
+  },
+  "cleanable_categories": ["generated", "downloaded-library", "runtime-temporary"],
+  "notes": [
+    "user-data (sessions/history) and credentials are NEVER cleaned by clean.bat; a separate opt-in reset flow handles user application data.",
+    "Package-manager caches outside the project (npm/pnpm global store) are external and out of scope.",
+    "The reference source under .loop-engineer/source keeps its own .git and is preserved."
+  ]
+}

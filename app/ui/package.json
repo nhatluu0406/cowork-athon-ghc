@@ -1,0 +1,21 @@
+{
+  "name": "@cowork-ghc/ui",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cowork GHC renderer (React/UI in later tasks). A CLIENT of the loopback service (ADR 0003): no filesystem/credential access, no business logic, no secrets in client state. Imports @cowork-ghc/contracts; NEVER app/shell (CGHC-003 import-direction rule).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -b",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@cowork-ghc/contracts": "*",
+    "@cowork-ghc/service": "*"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.10.6",
+    "happy-dom": "20.10.6"
+  }
+}

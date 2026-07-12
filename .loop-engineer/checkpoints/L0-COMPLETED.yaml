@@ -1,0 +1,20 @@
+checkpoint: L0
+created_at: "2026-07-10T09:05:00Z"
+run_id: RUN-0001
+loop_status: COMPLETED
+gate: PASS
+resumable: true
+state_snapshot:
+  project_state: .loop-engineer/state/project-state.yaml
+  loops: .loop-engineer/state/loops.yaml
+  tasks: .loop-engineer/state/tasks.yaml
+evidence:
+  - .loop-engineer/evidence/L0/bootstrap-verification.md
+tests:
+  command: "node --test tools/loop-engineer/tests/*.test.mjs"
+  result: "34 pass / 0 fail"
+reference_source:
+  repository: different-ai/openwork
+  branch: dev
+  commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+resume_hint: "L0 is COMPLETED and valid. Re-running L0 returns SKIPPED_ALREADY_VALID. Next: /loop-engineer run L1."

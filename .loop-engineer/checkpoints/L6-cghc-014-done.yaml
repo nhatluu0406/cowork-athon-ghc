@@ -1,0 +1,27 @@
+checkpoint: L6-cghc-014-done
+created_at: "2026-07-11T14:00:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+tasks_done_total: 18
+numbered_tasks_done:
+  - "CGHC-001..007, 009..014, 016, 021, 023, 024, 027 (18/28)"
+cghc_014:
+  outcome: "DONE — hop-2 coalescing/backpressure + snapshot/resync + EV5; review PASS 0 Crit/High"
+  guarantees: "token deltas coalesce to one accumulator (5000->1 emission); state events flush tokens first (ordering); terminal is final + never fabricated; resync adopts authoritative snapshot (no stale waiting/completed, no dup/lost terminal)"
+  low_fixes: "ev-sse per-kind field validation (terminal->state, token->delta, error->message); close()-mid-window no-leak test"
+  accepted_boundary: "live long-lived SSE response NOT mounted (dispatcher writes 1 JSON envelope/handler); snapshot/resume half live; core+framing delivered -> wire in CGHC-015 with an E2E slow-consumer test + progress-cadence bound"
+unblocked:
+  - "CGHC-015 (EV timeline UI) promoted BACKLOG -> READY (deps CGHC-014 + CGHC-003 satisfied); carries the live-SSE-wiring + slow-consumer E2E + progress-cadence obligations"
+in_flight:
+  - "CGHC-018 (file-mutation + audit, CRITICAL) implementer running (aa864cb864e0a63a4); security review to follow"
+health:
+  streaming_suite: "21 tests pass (targeted); full-repo re-verify deferred until CGHC-018 lands"
+  tsc: "clean at CGHC-014 land"
+  unresolved_critical: 0
+  unresolved_high: 0
+resume_hint: >
+  CGHC-014 DONE (18/28), reviewed 0 Crit/High. CGHC-018 in flight. After it: full-suite + tsc re-verify,
+  then CGHC-015 (UI timeline + live SSE wiring), CGHC-017 (permission UI), CGHC-019/020/022/008, then
+  CGHC-025/026 and CGHC-028 packaged E2E. No credential gate remains. Web DEFERRED (ADR 0007).

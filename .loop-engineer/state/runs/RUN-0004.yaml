@@ -1,0 +1,71 @@
+run_id: RUN-0004
+loop: L3
+mode: run
+execution: subagents
+budget: normal
+parallel_peak: 1
+status: COMPLETED
+started_at: "2026-07-11T01:00:00Z"
+completed_at: "2026-07-11T01:30:00Z"
+gate:
+  result: PASS
+  evidence:
+    - docs/architecture/cowork-ghc-implementation-design.md
+    - docs/architecture/decisions/README.md
+    - .loop-engineer/evidence/L3/architecture-authoring-notes.md
+    - .loop-engineer/evidence/L3/review-security.md
+    - .loop-engineer/evidence/L3/review-dispositions.md
+agents:
+  - role: product-architect
+    task: L3-A1
+    outcome: DONE
+    note: "Authored 6 ADRs + index + implementation design, grounded in L2; all six decisions decided (Status: Proposed for L4 freeze)."
+  - role: security-reviewer
+    task: L3-REV-SEC
+    outcome: PASS_WITH_FINDINGS
+    note: "Focused grounding + invariant review (!= author). 0 Critical/High, 2 Medium, 2 Low. SEC-1/SEC-2 confirmed closed; all L2 citations verified; no feature code."
+decisions:
+  - id: ADR-0001
+    decision: "Reuse OpenCode as pinned single-owner supervised child; OpenCode owns session content, Cowork GHC owns settings/light metadata; /ee boundary + pin/upgrade policy (RE6)."
+  - id: ADR-0002
+    decision: "Desktop shell = Electron (closest call; reversible, with an explicit footprint/security revisit condition for Tauri)."
+  - id: ADR-0003
+    decision: "Standalone loopback local service; HTTP + SSE baseline (WebSocket only-if-needed); P7 loopback-only bind + non-loopback-refused test."
+  - id: ADR-0004
+    decision: "One-owner supervision chain; .runtime/pids/*.json identity-token schema; graceful loopback shutdown then taskkill /T or Win32 Job Object; stale-PID by identity, not name; no admin (LC3)."
+  - id: ADR-0005
+    decision: "Thin provider-neutral ProviderPort over the runtime (no duplicated provider logic); PR7 taxonomy at the boundary; 5th provider = user-defined OpenAI-compatible endpoint; D4 gateway = seam only."
+  - id: ADR-0006
+    decision: "@napi-rs/keyring (Windows Credential Manager) single OS-backed store; inject-at-launch, NEVER c.auth.set/auth.json/env.json (SEC-1); scrubber covers provider keys (SEC-2); handle-only in state."
+findings:
+  critical: 0
+  high: 0
+  medium: 2
+  low: 2
+  resolved_in_l3: 2
+  note: >
+    Both reviews PASS_WITH_FINDINGS. LOW-1 (PR2 traceability) and LOW-2 (bind :0 wording)
+    RESOLVED in L3. MED-1 (identity vs boundary token distinction) and MED-2 (custom base_url
+    SSRF policy) carried to L4 threat model and captured in-artifact as ADR open items.
+    See .loop-engineer/evidence/L3/review-dispositions.md.
+summary: >
+  L3 Architecture Candidates. product-architect turned the L2 discovery into six DECIDED ADRs
+  (runtime reuse=OpenCode; shell=Electron; standalone loopback HTTP+SSE service; Windows
+  identity-verified supervision + tree-kill; thin ProviderPort; @napi-rs/keyring single store)
+  plus a coherent implementation design (layered architecture, bounded contexts, permission/secret
+  placement, port seams, .runtime/ layout, requirements->component traceability). All decisions
+  Status: Proposed; L4 freezes. Independent focused review (reviewer != implementer) confirmed
+  grounding, invariant compliance, SEC-1/SEC-2 closure, decision-completeness, and no feature code;
+  0 Critical/High.
+overrides_flagged_for_L4:
+  - "Service placement = standalone (not embedded-in-Electron-main) — ADR 0003."
+  - "5th provider = user-defined custom OpenAI-compatible endpoint (not fixed DeepSeek) — ADR 0005."
+  - "Shell = Electron (the closest call) — ADR 0002; reversible with a stated revisit trigger."
+open_items_for_L4:
+  - "Multi-role critique (runtime, frontend, test, security, UX) + threat model + architecture FREEZE."
+  - "Threat model MED-1: distinguish supervision identityToken from the boundary client-token; record single-user trust boundary."
+  - "Threat model MED-2: validation policy for user-defined provider base_url (https, host allow/deny) before D4."
+  - "Ratify OpenCode pin value + upgrade-test gate; SSE-schema re-normalization extent."
+next_valid_commands:
+  - "/loop-engineer status"
+  - "/loop-engineer run L4   (Architecture Review + freeze — not auto-run)"
