@@ -17,7 +17,9 @@ updated_at: "2026-07-12"
 ## Session
 
 - **Tiếp tục** (cùng OpenCode session ID) chỉ khả dụng khi runtime session chưa terminal và service có thể `continueSession`. Sau relaunch app, thường cần **tạo phiên tiếp nối** để gửi prompt mới.
-- POC vẫn **single-turn per OpenCode runtime session** — re-prompt cùng session sau terminal trả HTTP 409; UI tạo runtime session mới liên kết cùng Cowork conversation.
+- POC vẫn **single-turn per OpenCode runtime session** — re-prompt cùng session sau terminal trả HTTP 409; UI tạo runtime session mới liên kết cùng Cowork conversation. Gửi tin nhắn thứ hai trong cùng conversation cần `startContinuation` + session mới; đôi khi gặp lỗi service tạm thời (`Internal boundary error`) — dùng cuộc trò chuyện mới nếu cần.
+- Trạng thái `completed_without_final_message` hiển thị khi tool hoàn tất nhưng runtime không trả text cuối; UI dùng fallback tiếng Việt, không fabricate model output.
+- Grace window ngắn (~120ms service, ~200ms UI) cho token đến sau `session.idle`; không phải sleep tùy ý dài.
 - Không hỗ trợ nhiều runtime session chạy song song.
 - Template re-run / workflow replay chưa có.
 - Rename/delete qua context menu (chuột phải) — chưa có menu riêng trong sidebar.

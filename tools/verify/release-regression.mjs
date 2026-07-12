@@ -41,7 +41,7 @@ try {
 
   run(
     "activity-presentation",
-    "node --import tsx --test app/ui/tests/activity-model.test.ts service/tests/workspace-file-preview.test.ts service/tests/conversation-store.test.ts",
+    "node --import tsx --test app/ui/tests/activity-model.test.ts app/ui/tests/session-finalization.test.ts service/tests/workspace-file-preview.test.ts service/tests/text-part-mapper.test.ts service/tests/conversation-store.test.ts",
   );
 
   run("app-lifecycle-cli", "node --import tsx --test tools/app/tests/app-cli.test.ts");
