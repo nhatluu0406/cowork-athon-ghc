@@ -33,7 +33,17 @@ export interface OpencodeProviderConfig {
   readonly permission?: Readonly<Record<string, string>>;
 }
 
-/** Reject an obviously-unsafe base URL before OpenCode ever dials it (synchronous shape check). */
+/** Live-session tool permission policy written into `opencode.json` (non-secret). */
+export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = {
+  "*": "ask",
+  read: "allow",
+  list: "allow",
+  glob: "allow",
+  grep: "allow",
+  bash: "deny",
+  webfetch: "deny",
+  websearch: "deny",
+};
 function assertSafeBaseUrl(baseUrl: string): void {
   let url: URL;
   try {

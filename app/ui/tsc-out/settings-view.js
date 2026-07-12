@@ -30,9 +30,7 @@ export function mountSettingsView(container, deps) {
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     const generalBox = el("div", "settings-general");
-    const providersBox = el("div", "settings-providers");
-    const modelBox = el("div", "settings-model");
-    section.append(el("h2", "settings-title", "Cài đặt"), status, generalBox, providersBox, modelBox);
+    section.append(el("h2", "settings-title", "Cài đặt chung"), status, generalBox);
     container.append(section);
     const setStatus = (text) => {
         status.textContent = text;
@@ -79,79 +77,8 @@ export function mountSettingsView(container, deps) {
         wrap.prepend(input);
         return wrap;
     }
-    function renderProvider(p) {
-        const item = el("li", "settings-provider");
-        // Credential STATUS only — the account label is a non-secret handle, never a key.
-        const state = p.hasCredential
-            ? `đã cấu hình khoá (${p.credentialAccount ?? ""})`
-            : "chưa có khoá";
-        item.append(el("span", "settings-provider-id", p.providerId));
-        item.append(el("span", "settings-provider-cred", state));
-        const urlLabel = el("label", "settings-field", "base_url");
-        const urlInput = document.createElement("input");
-        urlInput.type = "text";
-        urlInput.className = "settings-base-url";
-        urlInput.value = p.baseUrl ?? "";
-        urlInput.placeholder = "https://…";
-        const save = el("button", "settings-base-url-save", "Lưu");
-        save.type = "button";
-        save.addEventListener("click", () => {
-            void run("Đang lưu base_url", () => deps.client.setProviderBaseUrl(p.providerId, urlInput.value.trim()));
-        });
-        urlLabel.append(urlInput, save);
-        item.append(urlLabel);
-        return item;
-    }
-    function renderProviders(view) {
-        providersBox.replaceChildren(el("h3", "settings-subtitle", "Nhà cung cấp"));
-        const list = el("ul", "settings-provider-list");
-        if (view.providers.length === 0) {
-            list.append(el("li", "settings-provider-empty", "Chưa cấu hình nhà cung cấp nào."));
-        }
-        for (const p of view.providers)
-            list.append(renderProvider(p));
-        providersBox.append(list);
-    }
-    function renderModel(view) {
-        modelBox.replaceChildren(el("h3", "settings-subtitle", "Mô hình mặc định"));
-        const current = view.defaultModel
-            ? `${view.defaultModel.providerID} / ${view.defaultModel.modelID}`
-            : "chưa đặt";
-        modelBox.append(el("p", "settings-model-current", current));
-        if (view.defaultModel) {
-            const clearDefault = el("button", "settings-model-clear", "Xoá mô hình mặc định");
-            clearDefault.type = "button";
-            clearDefault.addEventListener("click", () => {
-                void run("Đang xoá mô hình mặc định", () => deps.client.setDefaultModel(null));
-            });
-            modelBox.append(clearDefault);
-        }
-        if (deps.sessionId !== undefined) {
-            const clearSession = el("button", "settings-session-clear", "Trở về mặc định cho phiên này");
-            clearSession.type = "button";
-            clearSession.addEventListener("click", () => void clearSessionOverride());
-            modelBox.append(clearSession);
-        }
-    }
-    async function clearSessionOverride() {
-        const sessionId = deps.sessionId;
-        if (sessionId === undefined)
-            return;
-        setStatus("Đang trở về mô hình mặc định…");
-        try {
-            const result = await deps.client.clearSessionModel(sessionId);
-            setStatus(result.cleared
-                ? "Phiên đã trở về mô hình mặc định."
-                : "Phiên chưa có ghi đè — vẫn dùng mặc định.");
-        }
-        catch (error) {
-            setStatus(error instanceof Error ? error.message : "Không thể xoá ghi đè phiên.");
-        }
-    }
     function render(view) {
         renderGeneral(view);
-        renderProviders(view);
-        renderModel(view);
     }
     async function load() {
         setStatus("Đang tải cài đặt…");

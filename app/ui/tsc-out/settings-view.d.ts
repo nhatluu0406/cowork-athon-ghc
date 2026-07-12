@@ -16,9 +16,7 @@
  */
 import type { ServiceClient } from "./service-client.js";
 export interface SettingsViewDeps {
-    readonly client: Pick<ServiceClient, "getSettings" | "updateGeneral" | "setProviderBaseUrl" | "setDefaultModel" | "clearSessionModel">;
-    /** The active session, if any — enables the "clear session override" control (LOW-1). */
-    readonly sessionId?: string;
+    readonly client: Pick<ServiceClient, "getSettings" | "updateGeneral">;
 }
 /** Mount the settings view into `container`. Returns nothing; it manages its own state. */
 export declare function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps): void;

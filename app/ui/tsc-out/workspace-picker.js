@@ -9,6 +9,8 @@
  *    and does NOT become the active workspace — no session is started here.
  *  - W2: the recent list is fetched from the service (single source of truth) with a per-entry
  *    `available` flag; an unavailable (removed/renamed) entry renders disabled, not hidden.
+ *  - Persistence: on mount the last saved `settings.activeWorkspace` is revalidated through the
+ *    service before the UI shows an active state. Activation persists via `setActiveWorkspace`.
  *
  * DOM is built with `textContent` only (no HTML parsing), controls are keyboard-reachable and
  * labelled, and no secret is ever written into the DOM.
@@ -34,37 +36,75 @@ export function mountWorkspacePicker(container, deps) {
     recentList.setAttribute("aria-label", "Recent workspaces");
     section.append(chooseBtn, status, recentHeading, recentList);
     container.append(section);
+    let activePath = null;
+    const syncActivation = (rootPath) => {
+        activePath = rootPath;
+        if (rootPath === null)
+            deps.onDeactivated?.();
+        else
+            deps.onActivated?.(rootPath);
+    };
     const renderStatus = (s) => {
         chooseBtn.disabled = s.kind === "busy";
-        section.classList.toggle("is-rejected", s.kind === "rejected");
+        const hasActive = s.kind === "active" || (s.kind === "rejected" && s.preservePath !== undefined);
+        section.classList.toggle("is-active", hasActive);
+        section.classList.toggle("is-rejected", s.kind === "rejected" || s.kind === "restore_lost");
+        chooseBtn.textContent = hasActive
+            ? "Đổi thư mục workspace…"
+            : "Chọn thư mục workspace…";
         if (s.kind === "idle")
             status.textContent = "Chưa chọn workspace.";
         else if (s.kind === "busy")
             status.textContent = "Đang xác thực thư mục…";
         else if (s.kind === "active")
-            status.textContent = `Workspace: ${s.rootPath}`;
+            status.textContent = `Đang hoạt động: ${s.rootPath}`;
+        else if (s.kind === "restore_lost") {
+            status.textContent = `Workspace đã lưu không còn khả dụng (${s.savedPath}). ${s.message}`;
+        }
+        else if (s.preservePath !== undefined) {
+            status.textContent = `Đang hoạt động: ${s.preservePath} — ${s.message}`;
+        }
         else
             status.textContent = s.message;
     };
-    const applyResult = (result) => {
+    const applyGranted = async (rootPath, persist) => {
+        if (persist)
+            await deps.client.setActiveWorkspace(rootPath);
+        syncActivation(rootPath);
+        renderStatus({ kind: "active", rootPath });
+        void refreshRecent();
+    };
+    const applyResult = async (result, options) => {
+        const persist = options?.persist ?? true;
         if (result.granted) {
-            renderStatus({ kind: "active", rootPath: result.grant.rootPath });
-            deps.onActivated?.(result.grant.rootPath);
-            void refreshRecent();
+            await applyGranted(result.grant.rootPath, persist);
+            return;
+        }
+        // Honest failure: preserve the previous valid workspace when possible.
+        if (activePath !== null) {
+            renderStatus({
+                kind: "rejected",
+                message: result.message,
+                preservePath: activePath,
+            });
         }
         else {
-            // Honest failure: no active workspace, no session.
             renderStatus({ kind: "rejected", message: result.message });
         }
     };
-    const grant = async (rootPath) => {
+    const grant = async (rootPath, options) => {
         renderStatus({ kind: "busy" });
         try {
-            applyResult(await deps.client.grantWorkspace(rootPath));
+            await applyResult(await deps.client.grantWorkspace(rootPath), options);
         }
         catch (error) {
             const message = error instanceof Error ? error.message : "Không thể xác thực workspace.";
-            renderStatus({ kind: "rejected", message });
+            if (activePath !== null) {
+                renderStatus({ kind: "rejected", message, preservePath: activePath });
+            }
+            else {
+                renderStatus({ kind: "rejected", message });
+            }
         }
     };
     const choose = async () => {
@@ -74,7 +114,12 @@ export function mountWorkspacePicker(container, deps) {
         }
         catch (error) {
             const message = error instanceof Error ? error.message : "Không mở được hộp thoại.";
-            renderStatus({ kind: "rejected", message });
+            if (activePath !== null) {
+                renderStatus({ kind: "rejected", message, preservePath: activePath });
+            }
+            else {
+                renderStatus({ kind: "rejected", message });
+            }
             return;
         }
         if (picked.canceled || picked.rootPath === undefined)
@@ -92,7 +137,6 @@ export function mountWorkspacePicker(container, deps) {
                 btn.addEventListener("click", () => void grant(entry.rootPath));
             }
             else {
-                // A removed/renamed folder is shown, disabled, and labelled — never silently dropped.
                 btn.disabled = true;
                 btn.append(el("span", "workspace-recent-unavailable", " (không khả dụng)"));
                 btn.setAttribute("aria-disabled", "true");
@@ -106,12 +150,40 @@ export function mountWorkspacePicker(container, deps) {
             renderRecent(await deps.client.recentWorkspaces());
         }
         catch {
-            // Recent is a convenience surface; a failure must not break the picker.
             renderRecent([]);
         }
     }
+    async function restorePersisted() {
+        renderStatus({ kind: "busy" });
+        try {
+            const saved = (await deps.client.getSettings()).activeWorkspace;
+            if (saved === null) {
+                syncActivation(null);
+                renderStatus({ kind: "idle" });
+                return;
+            }
+            const result = await deps.client.grantWorkspace(saved.rootPath);
+            if (result.granted) {
+                await applyGranted(result.grant.rootPath, false);
+                return;
+            }
+            syncActivation(null);
+            renderStatus({
+                kind: "restore_lost",
+                savedPath: saved.rootPath,
+                message: result.message,
+            });
+        }
+        catch (error) {
+            syncActivation(null);
+            const message = error instanceof Error ? error.message : "Không khôi phục được workspace.";
+            renderStatus({ kind: "rejected", message });
+        }
+    }
     chooseBtn.addEventListener("click", () => void choose());
-    renderStatus({ kind: "idle" });
-    void refreshRecent();
+    void (async () => {
+        await restorePersisted();
+        await refreshRecent();
+    })();
 }
 //# sourceMappingURL=workspace-picker.js.map

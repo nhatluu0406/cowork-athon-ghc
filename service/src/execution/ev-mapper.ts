@@ -229,6 +229,8 @@ const KNOWN_IGNORED_TYPES: ReadonlySet<string> = new Set([
   "reference.updated",
   "file.edited",
   "file.watcher.updated",
+  "permission.asked",
+  "permission.replied",
 ]);
 
 /** True for a recognised housekeeping frame the mapper deliberately drops (not drift). */

@@ -29,11 +29,11 @@ test("an Allow and a Deny POST /permission/{requestId}/reply with the decision b
     const allowReq = fake.requests.find((r) => r.path === "/permission/req-allow/reply");
     assert.ok(allowReq, "the allow reply hit the request-id route");
     assert.equal(allowReq?.method, "POST");
-    assert.deepEqual(allowReq?.body, { decision: "allow", scope: "once" });
+    assert.deepEqual(allowReq?.body, { reply: "once" });
 
     const denyReq = fake.requests.find((r) => r.path === "/permission/req-deny/reply");
     assert.ok(denyReq, "the deny reply hit the request-id route");
-    assert.deepEqual(denyReq?.body, { decision: "deny" }); // no scope on a deny
+    assert.deepEqual(denyReq?.body, { reply: "reject" }); // deny maps to reject
   } finally {
     await fake.close();
   }

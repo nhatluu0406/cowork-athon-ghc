@@ -5,38 +5,42 @@
 
 ## Current State
 
-- Phase: `L6_IN_PROGRESS`
-- Loop: `L6` Implementation = `RUNNING`
-- Gate: `PARTIAL`
+- Phase: `L6_COMPLETE`
+- Loop: `L6` Implementation = `COMPLETED`
+- Gate: `PASS` (desktop POC packaged acceptance)
 - Operating mode: `LEAN`
-- Do not start: `L7`
+- Do not auto-start: `L7`
 - Web / Next.js: `DEFERRED`
 
 ## Packaged POC Status
 
-Verified on `dist-app/win-unpacked/Cowork GHC.exe`:
+Verified on `dist-app/win-unpacked/Cowork GHC.exe` (`tools/verify/l6-packaged.mjs`):
 
 | Area | Status |
 |---|---|
 | Service lifecycle | PASS |
 | Workspace selection | PASS |
 | Provider/model/keyring | PASS |
-| OpenCode live session | PASS |
-| HuyTT12 GUI integration | PASS |
-| Cancellation visible state | PASS |
+| OpenCode live session + streaming | PASS |
+| Real permission approve/deny | PASS |
+| Provider error recovery | PASS |
+| Active-session interruption | PASS |
+| Cancellation | PASS (prior regression) |
 | Clean process shutdown | PASS |
+| HuyTT12 GUI integration | PASS |
+| Windows init/stop scripts | PASS |
 
-## Still Open
+## Carry-forward
 
-- Real pending permission request was not observed during packaged GUI safe file action.
-- Full stop/resume/clean L9 journey.
-- Provider-error packaged E2E.
-- Template/session resume packaged smoke.
+- Template/session resume packaged smoke
+- Invalid model / bad URL provider-error legs
+- Full `start.bat` / `clean.bat` L9 evidence
+- L9 release verification loop
 
 ## Controller validation
 
-- `node tools/loop-engineer/cli.mjs verify` - run after updates before commit.
+- `node tools/loop-engineer/cli.mjs verify` — PASS
 
 ## Next Action
 
-Continue `CGHC-028`. Do not start L7.
+Await product-owner decision to start L7. Do not auto-start L7.
