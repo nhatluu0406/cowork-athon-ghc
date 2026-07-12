@@ -800,9 +800,10 @@ tasks:
       - "tools/verify/wave-c-report.json"
       - "tools/verify/leg4-report.json"
       - ".loop-engineer/evidence/CGHC-028-slice4-packaged-opencode-session.md"
+      - ".loop-engineer/evidence/CGHC-028-huytt12-gui-packaged.md"
     risks:
       - "Using a dev server as false release evidence"
-    notes: "HANDOFF ANCHOR (2026-07-12): L6 gate=PARTIAL. Slice 1–4 packaged PASS on dist-app/win-unpacked/Cowork GHC.exe. Slice 4: explicit Bắt đầu phiên → connectLive → OpenCode v1.17.11 → session → streaming → safe file action → clean stop (tools/verify/slice4-session-packaged.mjs). Still IN_PROGRESS: permission modal in package, cancel leg, full stop/resume/clean L9 journey, provider-error packaged E2E. DO NOT mark DONE until acceptance bullets 3–5 fully pass. DO NOT start L7."
+    notes: "HANDOFF ANCHOR (2026-07-12): L6 gate=PARTIAL. HuyTT12 GUI presentation integrated into app/ui over verified Cowork GHC core. Packaged GUI regression PASS via tools/verify/gui-packaged.mjs: new shell, service connect, fixture workspace, provider/model/keyring restore without .env import, OpenCode start, streaming, safe file action, cancel visible state, clean shutdown. Still IN_PROGRESS: a real pending permission request was not observed in package; full stop/resume/clean L9 journey, provider-error packaged E2E, template/session-resume remain open. DO NOT mark DONE until acceptance bullets 3–5 fully pass. DO NOT start L7."
 
 # backlog: deferred epics / proposals recorded by the product owner. NOT schema-valid executable
 # tasks (no owner/reviewer; product-only priority labels). The controller validates only `tasks`,
