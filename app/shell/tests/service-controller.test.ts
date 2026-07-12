@@ -142,3 +142,27 @@ test("the running handshake carries the token (bridge path), proving hygiene is 
   await controller.start();
   assert.equal(controller.getBootstrap().clientToken, TOKEN);
 });
+
+test("startLive() uses startLiveService when provided", async () => {
+  let bootCalls = 0;
+  let liveCalls = 0;
+  const controller = new ServiceController({
+    startService: async () => {
+      bootCalls += 1;
+      return { baseUrl: "http://127.0.0.1:2", token: "onboard", stop: async () => {} };
+    },
+    startLiveService: async () => {
+      liveCalls += 1;
+      return { baseUrl: BASE_URL, token: TOKEN, stop: async () => {} };
+    },
+  });
+
+  await controller.start();
+  assert.equal(bootCalls, 1);
+  assert.equal(liveCalls, 0);
+
+  await controller.stop();
+  await controller.startLive();
+  assert.equal(liveCalls, 1);
+  assert.deepEqual(controller.getBootstrap(), { serviceBaseUrl: BASE_URL, clientToken: TOKEN });
+});

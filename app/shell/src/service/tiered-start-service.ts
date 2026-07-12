@@ -23,10 +23,18 @@
  * state the subsequent live launch reads.
  */
 
-import { startCoworkService } from "@cowork-ghc/service";
+import { startCoworkService, RuntimeSpawnError } from "@cowork-ghc/service";
 
 import type { StartService, StartedService } from "./service-controller.js";
 import { ServiceLaunchNotConfiguredError } from "./launch-config.js";
+
+export interface TieredStartServiceOptions {
+  /**
+   * When true, a live OpenCode spawn failure falls back to the settings-only service so the
+   * renderer keeps a working onboarding surface (user-gated `connectLive` only).
+   */
+  readonly fallbackOnLiveSpawnFailure?: boolean;
+}
 
 /** Options for the Tier-1 settings-only fallback start. */
 export interface SettingsOnlyStartOptions {
@@ -64,12 +72,16 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
 export function createTieredStartService(
   live: StartService,
   settingsOnly: StartService,
+  options: TieredStartServiceOptions = {},
 ): StartService {
   return async (): Promise<StartedService> => {
     try {
       return await live();
     } catch (err) {
       if (err instanceof ServiceLaunchNotConfiguredError) {
+        return settingsOnly();
+      }
+      if (options.fallbackOnLiveSpawnFailure === true && err instanceof RuntimeSpawnError) {
         return settingsOnly();
       }
       throw err;

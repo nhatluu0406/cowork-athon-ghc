@@ -37,7 +37,13 @@ export type StartService = () => Promise<StartedService>;
 export type ServiceStatus = "idle" | "starting" | "running" | "failed" | "stopped";
 
 export interface ServiceControllerOptions {
+  /** Default boot path: the Tier-1 settings-only onboarding service. */
   readonly startService: StartService;
+  /**
+   * User-gated live connect (`connectLive`): tiered live attempt with onboarding fallback.
+   * Defaults to {@link startService} when omitted.
+   */
+  readonly startLiveService?: StartService;
   /** Secret-free lifecycle log. The controller NEVER passes the token here. */
   readonly log?: (line: string) => void;
   /** Forwarded to the renderer bootstrap (dev / verification import seam). */
@@ -50,6 +56,7 @@ function messageOf(err: unknown): string {
 
 export class ServiceController {
   private readonly startFn: StartService;
+  private readonly startLiveFn: StartService;
   private readonly log: (line: string) => void;
   private readonly allowEnvCredentialImport: boolean;
   private status: ServiceStatus = "idle";
@@ -60,6 +67,7 @@ export class ServiceController {
 
   constructor(options: ServiceControllerOptions) {
     this.startFn = options.startService;
+    this.startLiveFn = options.startLiveService ?? options.startService;
     this.log = options.log ?? ((): void => {});
     this.allowEnvCredentialImport = options.allowEnvCredentialImport === true;
   }
@@ -74,11 +82,20 @@ export class ServiceController {
     return this.failureMessage;
   }
 
-  /** Start the live service ONCE. Concurrent / repeat calls never double-start. */
+  /** Start the onboarding (settings-only) service ONCE. Concurrent calls never double-start. */
   async start(): Promise<void> {
+    return this.invokeStart(this.startFn);
+  }
+
+  /** User-gated live connect: try the live path, fall back per the injected tiered seam. */
+  async startLive(): Promise<void> {
+    return this.invokeStart(this.startLiveFn);
+  }
+
+  private async invokeStart(fn: StartService): Promise<void> {
     if (this.startPromise !== null) return this.startPromise;
     if (this.status === "running") return;
-    const run = this.runStart();
+    const run = this.runStart(fn);
     this.startPromise = run;
     try {
       await run;
@@ -87,12 +104,12 @@ export class ServiceController {
     }
   }
 
-  private async runStart(): Promise<void> {
+  private async runStart(fn: StartService): Promise<void> {
     this.status = "starting";
     this.failureMessage = null;
     this.log("service_starting");
     try {
-      const started = await this.startFn();
+      const started = await fn();
       this.started = started;
       this.status = "running";
       this.log(`service_started: ${started.baseUrl}`);
