@@ -184,13 +184,14 @@ loops:
     status: RUNNING
     depends_on:
       - L5
-    note: "Codex checkpoint 2026-07-12 (service reachability): component-level work remains DONE with unit evidence, but the packaged desktop POC is still NOT usable end-to-end. Commit bcffc9d fixed packaged bootstrap; this checkpoint resolves the packaged loopback reachability blocker by verifying authenticated GET /v1/health before logging service_started (settings_only_ready marker + bounded poll). Packaged verification: dist-app/win-unpacked/Cowork GHC.exe starts settings-only service on 127.0.0.1 ephemeral port, unauthenticated /v1/health returns 401, authenticated health passes before started markers, and owned processes/listener clean up after root PID stop. Still unverified in package: native folder picker, provider/model/credential settings UI, DeepSeek test connection, live OpenCode session, streaming, permission/file journey. Uncommitted renderer workspace-selection wiring remains partial. No live DeepSeek request. Loop stays RUNNING; gate is PARTIAL until all tasks are DONE and CGHC-028 release-verify PASSes. Do NOT start L7."
+    note: "Codex checkpoint 2026-07-12 (Slice 2 workspace): component-level work remains DONE with unit evidence; packaged desktop POC still NOT complete end-to-end. Slice 1 service reachability + Slice 2 workspace picker/persistence/restore verified on dist-app/win-unpacked/Cowork GHC.exe (tools/verify/slice2-workspace-packaged.mjs PASS). CGHC-008 DONE. Still unverified in package: provider/model/credential settings UI, DeepSeek test connection, live OpenCode session, streaming, permission/file journey. No live DeepSeek request. Loop stays RUNNING; gate is PARTIAL until CGHC-028 release-verify PASSes. Do NOT start L7."
     gate:
       result: PARTIAL
       evidence:
         - .loop-engineer/evidence/CGHC-028-release-verification.md
         - .loop-engineer/evidence/CGHC-028-packaged-launch-fix.md
         - .loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md
+        - .loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md
         - .loop-engineer/HANDOFF.md
   - id: L7
     name: Integration

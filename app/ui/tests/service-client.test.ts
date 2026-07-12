@@ -82,3 +82,36 @@ test("an ok:false error envelope throws the BOUNDARY error code, not protocol_mi
     );
   });
 });
+
+test("setActiveWorkspace PUTs the validated root to the settings active-workspace route", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return {
+      json: async () => ({
+        protocol: BOUNDARY_PROTOCOL_VERSION,
+        ok: true,
+        data: {
+          settings: {
+            general: { theme: "system", verboseLogging: false, telemetryEnabled: false },
+            providers: [],
+            defaultModel: null,
+            activeWorkspace: { rootPath: "C:/fixture/workspace" },
+          },
+        },
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const settings = await client.setActiveWorkspace("C:/fixture/workspace");
+    assert.deepEqual(settings.activeWorkspace, { rootPath: "C:/fixture/workspace" });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]!.url, `${BASE}/v1/settings/active-workspace`);
+    assert.equal(calls[0]!.init?.method, "PUT");
+    assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { rootPath: "C:/fixture/workspace" });
+  } finally {
+    globalThis.fetch = prev;
+  }
+});

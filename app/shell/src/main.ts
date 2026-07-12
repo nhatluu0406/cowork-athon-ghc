@@ -21,6 +21,11 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+const remoteDebugPort = process.env["COWORK_GHC_REMOTE_DEBUG_PORT"]?.trim();
+if (remoteDebugPort) {
+  app.commandLine.appendSwitch("remote-debugging-port", remoteDebugPort);
+}
+
 import { createMainWindow } from "./create-window.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { runShellLifecycle, type LifecycleApp } from "./lifecycle.js";
@@ -53,24 +58,59 @@ const here = dirname(fileURLToPath(import.meta.url));
 const DEV_APP_ROOT = join(here, "..", "..", "..");
 
 /**
- * Run-mode-aware paths: in a packaged app the pinned OpenCode binary ships via `extraResources`
- * to `<resourcesPath>/opencode/opencode.exe` and per-launch `.runtime/` state must live under the
- * WRITABLE `userData` dir (the install dir is read-only). In dev both fall back to the repo tree.
- * These become the explicit `binPath` / `runtimeRoot` the launch source hands `buildLiveCoworkOptions`.
- */
-const packaged = resolvePackagedPaths({
-  isPackaged: app.isPackaged,
-  resourcesPath: process.resourcesPath,
-  userData: app.getPath("userData"),
-  devAppRoot: DEV_APP_ROOT,
-});
-
-/**
  * Directory of the Vite-built renderer. Layout: `app/shell/dist/main.cjs` and
  * `app/ui/dist/index.html` — i.e. up out of `shell/dist` into `ui/dist`. Served over
  * `app://` rather than loaded from `file://` so the CSP header attaches deterministically.
  */
 const RENDERER_DIR = join(here, "..", "..", "ui", "dist");
+
+let lifecycleLogPath = join(DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
+let shellController: ServiceController | null = null;
+
+function resolveRuntimePaths() {
+  const packaged = resolvePackagedPaths({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    userData: app.getPath("userData"),
+    devAppRoot: DEV_APP_ROOT,
+  });
+  const settingsFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
+  lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
+  return { packaged, settingsFilePath };
+}
+
+function createShellController(settingsFilePath: string, packaged: ReturnType<typeof resolvePackagedPaths>) {
+  const liveSource = createFirstConfiguredSource([
+    createPersistedSettingsSource({
+      settingsFilePath,
+      allowedOrigins: [APP_ORIGIN],
+      binPath: packaged.binPath,
+      appRoot: DEV_APP_ROOT,
+      ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
+    }),
+    createEnvLaunchSource({
+      appRoot: DEV_APP_ROOT,
+      binPath: packaged.binPath,
+      allowedOrigins: [APP_ORIGIN],
+      settingsFilePath,
+      ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
+    }),
+  ]);
+
+  return new ServiceController({
+    log: writeLifecycleLog,
+    startService: createTieredStartService(
+      tracedStartService("live", createLiveStartService(createLiveOptionsResolver(liveSource))),
+      tracedStartService(
+        "settings_only",
+        createSettingsOnlyStartService({
+          settingsFilePath,
+          allowedOrigins: [APP_ORIGIN],
+        }),
+      ),
+    ),
+  });
+}
 
 // The privileged `app://` scheme MUST be registered before the app is ready.
 registerAppScheme(protocol);
@@ -88,24 +128,15 @@ app.on("window-all-closed", () => {
 });
 
 /**
- * The persistent settings file, resolved to a WRITABLE absolute path (packaged: Electron
- * `userData`; dev: the repo tree). Both the Tier-1 onboarding fallback and the live launch read +
- * write THIS file, so a provider/model saved during onboarding is the same state the live launch
- * consumes.
+ * The persistent settings file is resolved AFTER `app.whenReady()` so Electron's final
+ * `userData` path is used (import-time `getPath("userData")` is not stable in packaged apps).
  */
-const SETTINGS_FILE_PATH = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
-const LIFECYCLE_LOG_PATH = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
-
-function redactLifecycleLine(line: string): string {
-  return line.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]");
-}
-
 function writeLifecycleLog(line: string): void {
   writeStartupTrace(`log:${redactLifecycleLine(line)}`);
   try {
-    mkdirSync(dirname(LIFECYCLE_LOG_PATH), { recursive: true });
+    mkdirSync(dirname(lifecycleLogPath), { recursive: true });
     appendFileSync(
-      LIFECYCLE_LOG_PATH,
+      lifecycleLogPath,
       `${new Date().toISOString()} ${redactLifecycleLine(line)}\n`,
       "utf8",
     );
@@ -122,6 +153,10 @@ function writeStartupTrace(marker: string): void {
   } catch {
     // Trace is opt-in diagnostics only.
   }
+}
+
+function redactLifecycleLine(line: string): string {
+  return line.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]");
 }
 
 function tracedStartService(name: string, start: StartService): StartService {
@@ -141,47 +176,6 @@ function tracedStartService(name: string, start: StartService): StartService {
   };
 }
 
-// The live launch config comes from the FIRST configured source: the persisted onboarding settings
-// (what the user entered in the UI) take priority; the launch-env source is a fallback for bounded
-// live tests. Both make the live loopback service reachable by the renderer (`app://cowork`) and
-// share the SAME settings file the onboarding service writes.
-const liveSource = createFirstConfiguredSource([
-  createPersistedSettingsSource({
-    settingsFilePath: SETTINGS_FILE_PATH,
-    allowedOrigins: [APP_ORIGIN],
-    binPath: packaged.binPath,
-    appRoot: DEV_APP_ROOT,
-    ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
-  }),
-  createEnvLaunchSource({
-    appRoot: DEV_APP_ROOT,
-    binPath: packaged.binPath,
-    allowedOrigins: [APP_ORIGIN],
-    settingsFilePath: SETTINGS_FILE_PATH,
-    ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
-  }),
-]);
-
-// The ONE in-memory owner of the loopback service + (once connected) the supervised OpenCode child.
-// The StartService is MODE-AWARE: it tries the live path (persisted/env launch source → the REAL
-// child); when nothing is configured yet the live resolver throws `ServiceLaunchNotConfiguredError`
-// and it falls back to the Tier-1 SETTINGS-ONLY service so the shell boots into an ONBOARDING-ready
-// state (folder picker + provider/model settings reachable) — no child, no provider call. Actually
-// going live is a separate user-gated step (a "Connect" restart into the live path).
-const controller = new ServiceController({
-  log: writeLifecycleLog,
-  startService: createTieredStartService(
-    tracedStartService("live", createLiveStartService(createLiveOptionsResolver(liveSource))),
-    tracedStartService(
-      "settings_only",
-      createSettingsOnlyStartService({
-        settingsFilePath: SETTINGS_FILE_PATH,
-        allowedOrigins: [APP_ORIGIN],
-      }),
-    ),
-  ),
-});
-
 const lifecycleApp: LifecycleApp = {
   whenReady: () => app.whenReady(),
   onBeforeQuit: (listener) => {
@@ -192,19 +186,31 @@ const lifecycleApp: LifecycleApp = {
 
 void runShellLifecycle({
   app: lifecycleApp,
-  controller,
+  get controller() {
+    if (shellController === null) {
+      throw new Error("Shell controller not initialized");
+    }
+    return shellController;
+  },
   trace: writeStartupTrace,
+  prepare: () => {
+    const { packaged, settingsFilePath } = resolveRuntimePaths();
+    shellController = createShellController(settingsFilePath, packaged);
+  },
   onReady: () => {
+    if (shellController === null) {
+      throw new Error("Shell controller not initialized");
+    }
     installAppProtocol(protocol, RENDERER_DIR);
     installCsp(session.defaultSession);
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
     // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
     // now re-resolves the persisted config). Stop+start are each idempotent + own the child.
     registerIpcHandlers({
-      getBootstrap: () => controller.getBootstrap(),
+      getBootstrap: () => shellController!.getBootstrap(),
       restartService: async () => {
-        await controller.stop();
-        await controller.start();
+        await shellController!.stop();
+        await shellController!.start();
       },
     });
     createMainWindow();

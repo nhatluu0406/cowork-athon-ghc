@@ -41,6 +41,71 @@ body {
   color: var(--muted);
   margin: 0 0 1.5rem;
 }
+
+/* Workspace picker (CGHC-008). */
+.workspace-picker {
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--muted);
+  border-radius: 0.5rem;
+}
+.workspace-picker.is-active {
+  border-color: var(--ok);
+}
+.workspace-picker.is-rejected .workspace-status {
+  color: var(--err);
+}
+.workspace-choose {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--muted);
+  background: transparent;
+  color: var(--fg);
+}
+.workspace-choose:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.workspace-status {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  word-break: break-word;
+}
+.workspace-picker.is-active .workspace-status {
+  color: var(--ok);
+  font-weight: 600;
+}
+.workspace-recent-heading {
+  font-size: 0.95rem;
+  margin: 1rem 0 0.35rem;
+}
+.workspace-recent {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.workspace-recent-open {
+  font: inherit;
+  width: 100%;
+  text-align: left;
+  padding: 0.35rem 0;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  cursor: pointer;
+  word-break: break-word;
+}
+.workspace-recent-open:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+.workspace-session-hint {
+  margin-top: 0.75rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
 .status-row {
   display: flex;
   align-items: center;

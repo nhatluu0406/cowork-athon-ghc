@@ -82,6 +82,38 @@ test("before-quit stops the service once, then quits (one owner)", async () => {
   assert.equal(state.quitCalls, 1, "the app quits after stop resolves");
 });
 
+test("prepare runs after whenReady and before service start", async () => {
+  const { app } = fakeApp();
+  const { controller, calls } = fakeController();
+  const order: string[] = [];
+
+  await runShellLifecycle({
+    app: {
+      whenReady: async () => {
+        order.push("whenReady");
+      },
+      onBeforeQuit: app.onBeforeQuit,
+      quit: app.quit,
+    },
+    controller: {
+      start: async () => {
+        order.push("start");
+        await controller.start();
+      },
+      stop: controller.stop,
+    },
+    prepare: () => {
+      order.push("prepare");
+    },
+    onReady: () => {
+      order.push("onReady");
+    },
+  });
+
+  assert.deepEqual(order, ["whenReady", "prepare", "start", "onReady"]);
+  assert.equal(calls.start, 1);
+});
+
 test("a re-entrant before-quit does not stop twice", async () => {
   const { app, state } = fakeApp();
   const { controller, calls } = fakeController();

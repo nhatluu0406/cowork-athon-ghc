@@ -32,7 +32,7 @@ function main(): void {
   const note = document.createElement("p");
   note.className = "scaffold-note";
   note.textContent =
-    "Desktop scaffold — UI features arrive in CGHC-008 / 015 / 017 / 022.";
+    "Kết nối local service, chọn workspace, cấu hình provider, rồi khởi động phiên Cowork.";
   root.append(title, note);
 
   // The readiness surface renders into its OWN container so health re-polls never wipe the
@@ -68,8 +68,22 @@ function main(): void {
 /** Mount the feature views once, after a real successful health response. */
 function mountFeatures(root: HTMLElement, client: ServiceClient): void {
   const bridge = getShellBridge();
+  const sessionHint = document.createElement("p");
+  sessionHint.className = "workspace-session-hint";
+  sessionHint.textContent = "Chọn một workspace hợp lệ trước khi bắt đầu phiên làm việc.";
+
   // W1/W2/W3: native folder picker + server-validated grant + recent list.
-  mountWorkspacePicker(root, { bridge, client });
+  mountWorkspacePicker(root, {
+    bridge,
+    client,
+    onActivated: () => {
+      sessionHint.hidden = true;
+    },
+    onDeactivated: () => {
+      sessionHint.hidden = false;
+    },
+  });
+  root.append(sessionHint);
   // CGHC-022: settings view — a client of the service.
   mountSettingsView(root, { client });
   // CGHC-015: honest EV timeline. It mounts idle now; the live stream is wired once a session
