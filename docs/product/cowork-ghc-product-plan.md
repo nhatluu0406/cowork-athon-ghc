@@ -4,66 +4,65 @@ status: "active"
 updated_at: "2026-07-12"
 ---
 
-# Cowork GHC Product Plan
+# Kế hoạch sản phẩm Cowork GHC
 
-Tai lieu nay la active product plan duy nhat cho Cowork GHC. Cac tai lieu cu
-`cowork-ghc-scope-and-acceptance.md` va `cowork-ghc-master-plan.md` chi con la
-lich su de doi chieu.
+Tài liệu này là **kế hoạch sản phẩm active duy nhất** của Cowork GHC. Hai tài liệu
+`cowork-ghc-scope-and-acceptance.md` và `cowork-ghc-master-plan.md` chỉ còn là lịch
+sử để đối chiếu yêu cầu cũ.
 
-## 1. Product Vision
+## 1. Tầm nhìn sản phẩm
 
-Cowork GHC la mot ung dung desktop Windows local-first cho nguoi dung lam viec
-voi mot AI coworker trong workspace tren may cua minh. Nguoi dung chon mot thu
-muc local, cau hinh LLM endpoint cua rieng minh, tro chuyen voi agent, va cho
-phep agent doc hoac thay doi file khi can.
+Cowork GHC là ứng dụng desktop Windows local-first để người dùng làm việc với một
+AI coworker trong workspace trên chính máy của mình. Người dùng chọn một thư mục
+local, cấu hình LLM endpoint của họ, trò chuyện với agent, và cho phép agent đọc
+hoặc thay đổi file khi cần.
 
-Gia tri cot loi la mot vong lap lam viec ro rang va co kiem soat: workspace la
-trung tam, credential nam trong Windows keyring, moi hanh dong file/tool co
-permission boundary, va UI phai noi trung thuc agent dang lam gi. Cowork GHC
-cung lop trai nghiem voi Claude Cowork/OpenWork, nhung khong claim parity va
-khong clone truc tiep bat ky san pham nao.
+Giá trị chính của sản phẩm là vòng lặp làm việc rõ ràng, có kiểm soát và đáng tin:
+workspace là trung tâm, credential nằm trong Windows keyring, mọi hành động file/tool
+đều đi qua permission boundary, và UI phải nói trung thực agent đang làm gì. Cowork
+GHC thuộc cùng lớp trải nghiệm với Claude Cowork hoặc OpenWork, nhưng không claim
+parity hoàn chỉnh và không clone trực tiếp bất kỳ sản phẩm nào.
 
-## 2. Product Principles
+## 2. Nguyên tắc sản phẩm
 
-- Local-first: du lieu workspace va product state mac dinh nam tren may nguoi dung.
-- Windows-first: packaged Windows desktop app la acceptance surface hien tai.
-- Replaceable provider: DeepSeek chi la provider test hien tai; core flow khong
-  phu thuoc vinh vien vao mot endpoint.
-- Permission before mutation: doc context khong duoc bien thanh quyen sua/xoa file.
-- Secure credential storage: provider keys nam trong Windows keyring, khong vao
-  docs, logs, screenshots, transcript, localStorage, hay Git.
-- Bounded context: prior turns va attachments di qua envelope untrusted co budget.
-- Honest UI state: khong hien thi ready/done/read/sent neu state do chua duoc
-  verified.
-- Packaged acceptance: user-facing acceptance uu tien packaged app hon dev server.
-- Sequential LEAN development: mot implementation Agent lam viec tren working tree
-  tai mot thoi diem, slice nho, test tap trung.
-- Git + docs la source of truth: commit la checkpoint, `.loop-engineer/` chi la
+- Local-first: dữ liệu workspace và product state mặc định nằm trên máy người dùng.
+- Windows-first: packaged Windows desktop app là acceptance surface hiện tại.
+- Provider thay thế được: DeepSeek chỉ là provider test hiện tại; core flow không
+  phụ thuộc vĩnh viễn vào một endpoint.
+- Permission trước mutation: read context không được biến thành quyền sửa/xóa file.
+- Lưu credential an toàn: provider keys nằm trong Windows keyring, không đi vào
+  docs, logs, screenshots, transcript, localStorage hoặc Git.
+- Context có giới hạn: prior turns và attachments đi qua envelope untrusted có budget.
+- UI trung thực: không hiển thị ready/done/read/sent nếu state đó chưa được verify.
+- Packaged acceptance: acceptance cho user-facing flow ưu tiên packaged app hơn dev server.
+- Phát triển tuần tự LEAN: một implementation Agent làm việc trên working tree tại
+  một thời điểm, theo slice nhỏ và test tập trung.
+- Git + docs là source of truth: commit là checkpoint; `.loop-engineer/` chỉ là
   provenance maintenance-only.
 
-## 3. Current Verified Baseline
+## 3. Baseline hiện tại đã verify
 
-| Capability | Status | Evidence / note |
+| Năng lực | Trạng thái | Bằng chứng / ghi chú |
 |---|---|---|
-| Service lifecycle | Packaged verified | `poc-v0.1`; release regression and packaged smoke evidence exist. |
-| Workspace selection | Packaged verified | Workspace picker/recent workspace implemented; latest audit used E2E picker seam, native picker still needs true manual pass. |
-| Provider/model/keyring | Packaged verified, with UX gap | Windows keyring/provider recovery evidence exists; latest interactive pass found missing-credential preflight UX gap. |
-| OpenCode runtime | Packaged verified | Current runtime is OpenCode; replaceable runtime endpoint remains architectural boundary. |
-| Streaming | Packaged verified | Prior packaged evidence; latest UX pass did not run live streaming. |
-| Permissions | Packaged verified, not latest-live verified | Allow/Deny and deny-next-turn packaged evidence exists; latest UX pass did not re-run permission modal live. |
-| Cancellation | Packaged verified, not latest-live verified | Prior packaged acceptance; latest UX pass did not re-run cancel live. |
-| Process cleanup | Packaged verified | No orphan Cowork/OpenCode process observed after latest packaged pass. |
-| Conversations | Packaged verified | Persistence, sidebar, search, rename/delete via context menu documented. |
-| Multi-turn context | Packaged verified | Cowork conversation links multiple OpenCode runtime turns; not native OpenCode continuation after terminal. |
-| Context isolation | Packaged verified | `e40dada` and related packaged tests verify no wrapper leak in new flow. |
-| Tool activity | Packaged verified, partially latest-live verified | Activity timeline exists; latest UX pass did not run live tool flow. |
-| File changes | Automated verified and packaged verified, partial UX | File-change panel/current preview exists; full before/after diff not implemented. |
-| Attachments Phase 1 | Packaged verified with blockers | Text files in workspace, chips, errors, metadata, no raw-content persistence; budget honesty and secret-like policy remain blockers. |
-| Skills | Not started | GUI-visible capability is not available to end users. |
-| Installer/release | Partially verified | Packaged POC exists; full installed artifact/keyring/native picker/live GUI release lifecycle not complete. |
-| Web / Next.js | Deferred | Do not start now. |
+| Service lifecycle | Đã verify bằng packaged app | `poc-v0.1`; đã có release regression và packaged smoke evidence. |
+| Workspace selection | Đã verify bằng packaged app | Workspace picker/recent workspace đã có; audit mới nhất dùng E2E picker seam, native picker vẫn cần pass manual thật. |
+| Provider/model/keyring | Đã verify bằng packaged app, còn UX gap | Đã có evidence Windows keyring/provider recovery; interactive pass mới nhất phát hiện gap missing-credential preflight. |
+| OpenCode runtime | Đã verify bằng packaged app | Runtime hiện tại là OpenCode; replaceable runtime endpoint vẫn là boundary kiến trúc. |
+| Streaming | Đã verify bằng packaged app | Có evidence packaged trước đó; UX pass mới nhất không chạy live streaming. |
+| Permissions | Đã verify bằng packaged app, chưa re-verify live ở pass mới nhất | Có evidence packaged Allow/Deny và deny-next-turn; UX pass mới nhất không chạy lại permission modal live. |
+| Cancellation | Đã verify bằng packaged app, chưa re-verify live ở pass mới nhất | Có acceptance packaged trước đó; UX pass mới nhất không chạy lại cancel live. |
+| Process cleanup | Đã verify bằng packaged app | Không thấy orphan Cowork/OpenCode process sau packaged pass mới nhất. |
+| Conversations | Đã verify bằng packaged app | Persistence, sidebar, search, switch, rename/delete qua context menu đã documented. |
+| Multi-turn context | Đã verify bằng packaged app | Cowork conversation liên kết nhiều OpenCode runtime turns; không phải native OpenCode continuation sau terminal. |
+| Context isolation | Đã verify bằng packaged app | `e40dada` và các packaged tests liên quan verify không leak wrapper trong flow mới. |
+| Tool activity | Đã verify bằng packaged app, UX mới nhất chỉ partial-live | Activity timeline đã có; UX pass mới nhất không chạy live tool flow. |
+| File changes | Đã verify bằng automation và packaged app, UX còn partial | Có file-change panel/current preview; chưa có full before/after diff. |
+| Attachments Phase 1 | Đã verify bằng packaged app nhưng còn blocker | Text files trong workspace, chips, errors, metadata, no raw-content persistence; budget honesty và secret-like policy còn blocker. |
+| Skills | Chưa bắt đầu | Chưa available cho end user trong GUI. |
+| Installer/release | Verify một phần | Có packaged POC; chưa hoàn tất installed artifact/keyring/native picker/live GUI release lifecycle. |
+| Web / Next.js | Deferred | Không bắt đầu hiện tại. |
 
-## 4. Current Architecture
+## 4. Kiến trúc hiện tại
 
 ```text
 Electron renderer
@@ -73,119 +72,120 @@ Electron renderer
 -> replaceable LLM endpoint
 ```
 
-The renderer owns the GUI, not filesystem mutation. The preload/shell bridge exposes
-narrow desktop capabilities. The local service owns product logic, workspace guards,
-conversation state, provider settings, and runtime orchestration. OpenCode is the
-current agent runtime. The LLM endpoint is provider-replaceable.
+Renderer sở hữu GUI, không trực tiếp mutate filesystem. Preload/shell bridge chỉ expose
+những capability desktop hẹp. Local service sở hữu product logic, workspace guards,
+conversation state, provider settings và runtime orchestration. OpenCode là agent
+runtime hiện tại. LLM endpoint có thể thay thế theo provider.
 
-A Cowork conversation is the long-lived product identity: transcript, workspace,
-provider/model, activity, file-change and permission history. It may contain multiple
-linked OpenCode runtime turns. When an OpenCode runtime session is terminal, Cowork
-GHC creates a new linked runtime turn and sends bounded untrusted context; it does not
-claim native OpenCode continuation after terminal.
+Cowork conversation là identity dài hạn của sản phẩm: transcript, workspace,
+provider/model, activity, file-change history và permission history. Một Cowork
+conversation có thể chứa nhiều OpenCode runtime turns được liên kết. Khi một OpenCode
+runtime session đã terminal, Cowork GHC tạo runtime turn mới cùng conversation và gửi
+bounded untrusted context; sản phẩm không claim native OpenCode continuation sau terminal.
 
-## 5. Current UX Baseline
+## 5. UX baseline hiện tại
 
-- Application shell: packaged Electron desktop shell with local service readiness and
+- Application shell: packaged Electron desktop shell có local service readiness và
   provider/model status.
-- Conversation sidebar: persisted conversations, search, switch, context-menu rename/delete.
-- Workspace selection: choose active workspace, show current/recent workspace.
-- Provider settings: topbar model/status opens provider configuration and keyring state.
-- Composer: prompt entry, send/cancel states, attachment button gated by workspace.
+- Conversation sidebar: persisted conversations, search, switch, rename/delete qua
+  context menu.
+- Workspace selection: chọn active workspace, hiển thị current/recent workspace.
+- Provider settings: topbar model/status mở provider configuration và keyring state.
+- Composer: nhập prompt, send/cancel states, attachment button gated by workspace.
 - Attachments: Phase 1 text-file chips, remove, oversized/unsupported error chips,
   metadata persistence.
 - Activity panel: tool/activity timeline, permission history, file-change summary.
-- Permission presentation: Allow/Deny modal exists from prior packaged evidence.
-- File preview: bounded text preview for file-change/current content; no full diff.
-- Historical continuation: saved conversation can be reopened and continued through a
-  new linked runtime turn when needed.
+- Permission presentation: Allow/Deny modal đã có theo packaged evidence trước đó.
+- File preview: bounded text preview cho file-change/current content; chưa có full diff.
+- Historical continuation: saved conversation có thể reopen và continue qua linked runtime
+  turn mới khi cần.
 
-The UI is functional POC quality. It is not release-candidate polish.
+UI hiện ở mức **functional POC quality**, chưa phải release-candidate polish.
 
-## 6. Known Product Gaps
+## 6. Product gaps đã biết
 
-- Attachment dispatch-budget honesty: UI does not show which accepted files were
-  actually included, omitted, or truncated in the 12k dispatch prompt budget.
-- Secret-like attachments: `.env` is accepted without warning; `.pem`, `.key`, and
-  credential-like files need policy.
-- Missing-credential preflight: latest packaged UI allowed send and entered an unclear
-  running/not-connected state.
-- Settings modal focus: modal opened with focus observed on `BODY`.
-- Continuation controls in empty-state DOM: continuation wording exists in DOM before
-  a historical terminal conversation is selected.
-- Activity visibility at narrow/high-DPI: chat remains usable, but activity panel can
-  effectively disappear without a clear access affordance.
-- Live tool/file/permission GUI verification: not complete in latest interactive pass.
-- Native picker: not directly verified in latest pass; deterministic E2E picker seam was used.
-- Full before/after diff: not implemented.
-- Skills: not available to end users.
+- Attachment dispatch-budget honesty: UI chưa nói file accepted nào thật sự được included,
+  omitted hoặc truncated trong dispatch prompt budget 12k.
+- Secret-like attachments: `.env` đang được accepted không warning; `.pem`, `.key` và
+  credential-like files cần policy.
+- Missing-credential preflight: packaged UI mới nhất cho phép send rồi rơi vào trạng thái
+  running/not-connected không rõ recovery.
+- Settings modal focus: modal mở ra nhưng focus quan sát được vẫn nằm ở `BODY`.
+- Continuation controls trong empty-state DOM: continuation wording tồn tại trong DOM trước
+  khi người dùng chọn historical terminal conversation.
+- Activity visibility ở narrow/high-DPI: chat vẫn usable, nhưng activity panel có thể gần
+  như biến mất mà chưa có affordance rõ.
+- Live tool/file/permission GUI verification: chưa hoàn tất trong interactive pass mới nhất.
+- Native picker: chưa verify trực tiếp trong pass mới nhất; đã dùng deterministic E2E picker seam.
+- Full before/after diff: chưa implement.
+- Skills: chưa available cho end users.
 - Full installer/release lifecycle: installed artifact, native picker, installed keyring,
-  live streaming/tools/permissions/cancel/recovery/relaunch, high-DPI and keyboard pass
-  are not all complete in one release-candidate pass.
+  live streaming/tools/permissions/cancel/recovery/relaunch, high-DPI và keyboard pass
+  chưa được verify đầy đủ trong một release-candidate pass.
 
-## 7. Product Roadmap
+## 7. Roadmap sản phẩm
 
-### Phase A - Safety and Functional Honesty
+### Phase A - An toàn và trạng thái trung thực
 
-Entry condition: current packaged POC baseline is clean and docs agree on next slice.
+Entry condition: packaged POC baseline hiện tại sạch và docs đồng thuận về next slice.
 
 Work:
-- attachment included/omitted budget presentation;
+- presentation cho attachment included/omitted budget;
 - secret-like file policy;
 - missing credential preflight;
-- clean terminal/error recovery;
-- small settings and empty-state accessibility fixes.
+- terminal/error recovery sạch;
+- settings và empty-state accessibility fixes nhỏ.
 
-Exit acceptance: packaged app shows honest attachment inclusion state, blocks or clearly
-handles secret-like files, fails fast on missing credentials, and no longer exposes known
-empty-state/focus confusion.
+Exit acceptance: packaged app hiển thị trung thực attachment inclusion state, block hoặc
+xử lý rõ secret-like files, fail fast khi thiếu credential, và không còn các lỗi focus /
+empty-state đã biết.
 
-### Phase B - Skills Foundation
+### Phase B - Nền tảng Skills
 
-Entry condition: Phase A exits with packaged evidence.
+Entry condition: Phase A có packaged evidence.
 
 Work:
 - Skills data model;
 - local Skills discovery;
 - enable/disable;
 - prompt/runtime integration;
-- permissions and provenance;
+- permissions và provenance;
 - packaged verification.
 
-Exit acceptance: at least one local Skill can be discovered, enabled, used in a packaged
-journey, disabled, and audited/provenanced without marketplace or cloud scope.
+Exit acceptance: ít nhất một local Skill có thể được discover, enable, dùng trong packaged
+journey, disable và audit/provenance được mà không mở marketplace hoặc cloud scope.
 
-### Phase C - File Work Review
+### Phase C - Review công việc trên file
 
-Entry condition: Skills or baseline agent flow can perform meaningful file work.
+Entry condition: Skills hoặc baseline agent flow có thể làm file work có ý nghĩa.
 
 Work:
 - contextual preview;
 - create/modify/delete presentation;
 - before/after diff;
-- attachment read versus runtime read distinction;
+- phân biệt attachment read với runtime read;
 - audit visibility.
 
-Exit acceptance: user can understand what file was read, created, modified, or deleted,
-what changed, and which action was user-approved.
+Exit acceptance: người dùng hiểu file nào đã được read, created, modified hoặc deleted,
+thay đổi cụ thể là gì, và action nào đã được user-approved.
 
-### Phase D - Context Expansion
+### Phase D - Mở rộng context
 
-Entry condition: product need is explicit and Phase A attachment honesty is complete.
+Entry condition: có product need rõ ràng và Phase A attachment honesty đã hoàn tất.
 
-Work, only as needed:
+Work, chỉ làm khi cần:
 - folder context;
 - PDF;
 - image;
 - Office document;
 - drag-and-drop.
 
-Exit acceptance: each added context type has bounded size/type validation, workspace
-guarding, metadata semantics, and packaged verification. Do not build all by default.
+Exit acceptance: mỗi context type được thêm phải có size/type validation có giới hạn,
+workspace guarding, metadata semantics và packaged verification. Không mặc định build tất cả.
 
-### Phase E - Full Packaged Release Verification
+### Phase E - Full packaged release verification
 
-Entry condition: release-candidate feature surface is frozen for a pass.
+Entry condition: release-candidate feature surface đã frozen cho một pass.
 
 Work:
 - live streaming;
@@ -198,27 +198,27 @@ Work:
 - installed keyring;
 - process cleanup;
 - native picker;
-- high-DPI and keyboard pass.
+- high-DPI và keyboard pass.
 
-Exit acceptance: one documented packaged journey distinguishes direct manual/native/live
-observations from automation-only evidence and leaves no orphan processes.
+Exit acceptance: một packaged journey được documented rõ, phân biệt direct manual/native/live
+observations với automation-only evidence, và không để lại orphan processes.
 
-### Phase F - Final UX Polish
+### Phase F - Polish UX cuối
 
-Entry condition: functional states are honest and release-blocking UX gaps are closed.
+Entry condition: functional states đã trung thực và release-blocking UX gaps đã đóng.
 
 Work:
-- icons serving file/status/action recognition;
-- minimal functional animation for streaming/tool/cancel/loading;
+- icons phục vụ nhận biết file/status/action;
+- minimal functional animation cho streaming/tool/cancel/loading;
 - spacing, typography, color;
 - empty/loading/error state consistency.
 
-Exit acceptance: polish improves comprehension without adding decorative motion or new
-feature scope.
+Exit acceptance: polish giúp comprehension tốt hơn mà không thêm decorative motion hoặc
+feature scope mới.
 
-### Phase G - Distribution
+### Phase G - Phân phối
 
-Entry condition: release-candidate verification is green enough to package for users.
+Entry condition: release-candidate verification đủ xanh để package cho user.
 
 Work:
 - installer;
@@ -228,63 +228,63 @@ Work:
 - migration;
 - release candidate.
 
-Exit acceptance: install, upgrade, uninstall, keyring, workspace state, and cleanup behavior
-are verified on Windows with no secret or user-data leakage.
+Exit acceptance: install, upgrade, uninstall, keyring, workspace state và cleanup behavior
+được verify trên Windows, không leak secret hoặc user data.
 
-## 8. Explicit Non-Goals
+## 8. Non-goals rõ ràng
 
-- Do not restore the full Loop Engineer workflow.
-- Do not use default fan-out/subagents for implementation.
-- Do not turn Cowork GHC into an IDE clone.
-- Do not build a full workspace explorer before evidence shows product need.
-- Do not add a universal Preview tab in MVP.
-- Do not start web/Next.js now.
-- Do not add cloud sync or multi-user mode.
-- Do not build marketplace/cloud in Skills foundation.
-- Do not inherit OpenWork features unless Cowork GHC product ownership explicitly accepts them.
+- Không khôi phục full Loop Engineer workflow.
+- Không dùng fan-out/subagents mặc định cho implementation.
+- Không biến Cowork GHC thành IDE clone.
+- Không build full workspace explorer trước khi có evidence về product need.
+- Không thêm universal Preview tab trong MVP.
+- Không bắt đầu web/Next.js hiện tại.
+- Không thêm cloud sync hoặc multi-user mode.
+- Không build marketplace/cloud trong Skills foundation.
+- Không kế thừa OpenWork features trừ khi Product Owner explicit nhận vào Cowork GHC.
 
-## 9. Product Owner Decisions
+## 9. Product Owner decisions
 
-| Decision | Current recommendation |
+| Decision | Khuyến nghị hiện tại |
 |---|---|
-| Workspace explorer | Defer. Picker + recent workspace + activity/file preview are enough for MVP. |
-| Separate Preview tab | Defer. Use contextual right-panel preview first. |
-| Preview priority | Tool-created/modified files first; attachment input second; arbitrary workspace file preview last/defer. |
-| `.env`, `.pem`, `.key`, credential-like files | Block by default for MVP; consider explicit override later. |
-| Before/after diff | Required before release candidate; earlier if Skills increases file edits. |
-| Template/workflow replay | Requires Product Owner decision; not a prerequisite for Skills foundation unless explicitly chosen. |
-| User-visible durable audit | Requires Product Owner decision; local/internal audit expectation remains important. |
+| Workspace explorer | Defer. Picker + recent workspace + activity/file preview đủ cho MVP. |
+| Preview tab riêng | Defer. Dùng contextual right-panel preview trước. |
+| Preview priority | Tool-created/modified files trước; attachment input sau; arbitrary workspace file preview cuối/defer. |
+| `.env`, `.pem`, `.key`, credential-like files | Block by default cho MVP; cân nhắc explicit override sau. |
+| Before/after diff | Cần trước release candidate; làm sớm hơn nếu Skills làm tăng file edits. |
+| Template/workflow replay | Cần Product Owner quyết định; không phải prerequisite cho Skills foundation trừ khi được chọn rõ. |
+| User-visible durable audit | Cần Product Owner quyết định; local/internal audit expectation vẫn quan trọng. |
 
-## 10. Development Operating Model
+## 10. Operating model phát triển
 
-- One implementation Agent works on the tree at a time.
-- Cursor is the next implementation Agent after this documentation handoff.
-- Codex is used for review, audit, takeover, or verification when working tree is clean.
-- Claude Code may be used for focused review, not broad fan-out.
-- Git commit is the checkpoint; do not rely on checkpoint/task state in `.loop-engineer/`.
-- Manual packaged observation overrides automated reports when they conflict.
-- Large GUI polish is intentionally near the end, after functional truth is solid.
-- Do not push remote unless the Product Owner asks.
+- Một implementation Agent làm việc trên tree tại một thời điểm.
+- Cursor là implementation Agent tiếp theo sau handoff documentation này.
+- Codex dùng cho review, audit, takeover hoặc verification khi working tree sạch.
+- Claude Code có thể dùng cho focused review, không fan-out rộng.
+- Git commit là checkpoint; không dựa vào checkpoint/task state trong `.loop-engineer/`.
+- Manual packaged observation có ưu tiên hơn automated reports khi hai nguồn mâu thuẫn.
+- GUI polish lớn để gần cuối, sau khi functional truth đã vững.
+- Không push remote trừ khi Product Owner yêu cầu.
 
-## 11. Reconciliation of Older Claude Plans
+## 11. Reconcile các plan Claude cũ
 
-| Requirement / theme from old plans | Classification | Active handling |
+| Requirement / theme từ plan cũ | Phân loại | Cách xử lý trong plan active |
 |---|---|---|
-| Local Windows desktop app | Carried into active product plan | Product vision, principles, architecture, roadmap. |
-| Workspace picker, recent workspace, path confinement | Carried into active product plan | Baseline + Phase E native picker verification; explorer deferred. |
-| Permissioned file/tool actions | Carried into active product plan | Principle and Phase C/E verification. |
-| Provider-neutral model with Windows keyring | Carried into active product plan | Principles, architecture, baseline, Phase E. |
-| Conversation persistence and multi-turn | Already completed | Baseline notes Cowork linked runtime turns. |
-| Streaming, cancellation, provider recovery | Already completed / partially latest-verified | Baseline preserves prior packaged evidence; Phase E requires full latest live pass. |
-| Tool activity and file mutations | Already completed / still planned for review quality | Existing panel plus Phase C diff/audit improvements. |
-| Local audit events | Still planned | Product Owner decision for user-visible durable audit; audit visibility in Phase C. |
-| Skills / runtime extension | Still planned | Phase B, without marketplace/cloud. |
-| MCP/plugins | Deferred | Not in next Skills foundation unless Product Owner prioritizes. |
-| Template/workflow replay | Requires Product Owner decision | Explicit open decision. |
-| Folder/image/PDF/Office/drag-drop context | Deferred | Phase D only when product need is explicit. |
-| Web/Next.js | Deferred | Explicit non-goal now. |
-| Remote/multi-user/cloud/enterprise | Obsolete for current product | Non-goal. |
-| Loop Engineer L1-L10 execution model | Superseded | Git + docs + LEAN single-agent model replaces it. |
-| VS-01..VS-15 task graph | Superseded | Active roadmap phases A-G replace old task graph. |
-| OpenWork as source spec | Superseded | Research reference only, not source of truth. |
-| Full IDE-style workspace explorer | Deferred | Not recommended before RC. |
+| Local Windows desktop app | Đưa vào plan active | Nằm trong tầm nhìn, nguyên tắc, kiến trúc và roadmap. |
+| Workspace picker, recent workspace, path confinement | Đưa vào plan active | Baseline + Phase E native picker verification; explorer deferred. |
+| Permissioned file/tool actions | Đưa vào plan active | Nguyên tắc sản phẩm và Phase C/E verification. |
+| Provider-neutral model với Windows keyring | Đưa vào plan active | Nguyên tắc, kiến trúc, baseline, Phase E. |
+| Conversation persistence và multi-turn | Đã hoàn tất | Baseline ghi rõ Cowork linked runtime turns. |
+| Streaming, cancellation, provider recovery | Đã hoàn tất / pass mới nhất chỉ verify một phần | Giữ evidence packaged trước đó; Phase E yêu cầu full latest live pass. |
+| Tool activity và file mutations | Đã hoàn tất / vẫn planned cho review quality | Panel hiện có + Phase C diff/audit improvements. |
+| Local audit events | Vẫn planned | Product Owner quyết định phần user-visible durable audit; audit visibility ở Phase C. |
+| Skills / runtime extension | Vẫn planned | Phase B, không marketplace/cloud. |
+| MCP/plugins | Deferred | Không nằm trong Skills foundation kế tiếp trừ khi Product Owner ưu tiên. |
+| Template/workflow replay | Cần Product Owner quyết định | Giữ là open decision rõ ràng. |
+| Folder/image/PDF/Office/drag-drop context | Deferred | Phase D, chỉ làm khi product need rõ. |
+| Web/Next.js | Deferred | Non-goal hiện tại. |
+| Remote/multi-user/cloud/enterprise | Obsolete cho product hiện tại | Non-goal. |
+| Loop Engineer L1-L10 execution model | Superseded | Git + docs + LEAN single-agent model thay thế. |
+| VS-01..VS-15 task graph | Superseded | Roadmap active Phase A-G thay thế. |
+| OpenWork như source spec | Superseded | Chỉ còn là research reference, không phải source of truth. |
+| Full IDE-style workspace explorer | Deferred | Không recommend trước RC. |
