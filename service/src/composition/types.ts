@@ -28,6 +28,7 @@ import type { SessionService, RuntimeHealth, SessionStore, SendPrompt } from "..
 import type { ConversationStore } from "../conversation/index.js";
 import type { SessionStreamHub } from "../server/session-stream-hub.js";
 import type { ExtensionRegistry } from "../extensions/index.js";
+import type { SkillCatalog, SkillRoot } from "../skills/index.js";
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
@@ -40,6 +41,10 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * relative to cwd when not set by the shell.
    */
   readonly conversationsDir?: string;
+  /** Explicit, bounded roots scanned one directory deep for local Skills. */
+  readonly skillRoots?: readonly SkillRoot[];
+  /** Persisted global-local enabled registry. Default: `.runtime/skills-enabled.json`. */
+  readonly skillsStateFilePath?: string;
   /** The ONE credential store. Default: the OS keyring adapter (tests inject the memory store). */
   readonly credentialStore?: CredentialStore;
   /** Workspace validation fs probe. Default: the real `node:fs` probe. */
@@ -89,6 +94,8 @@ export interface CoworkServiceDeps {
   readonly streamHub: SessionStreamHub;
   /** File-backed conversation index (session management slice). */
   readonly conversationStore: ConversationStore;
+  /** Service-owned local Skill discovery, validation, enabled state, and snapshots. */
+  readonly skillCatalog: SkillCatalog;
   /**
    * The runtime-extension layer (CGHC-026): skill registry (RE1), MCP lifecycle (RE2), workflow
    * templates (RE4) over ONE extension-state source of truth with RE5 failure isolation. Wired

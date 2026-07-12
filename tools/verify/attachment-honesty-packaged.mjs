@@ -248,11 +248,24 @@ async function sendPrompt(prompt, expectRunning = true) {
   await ensureComposerUnlocked();
   await installAlertCatcher();
   await setComposer(prompt);
-  const disabled = await cdpEvaluate(`document.querySelector('.send-btn')?.disabled`);
+  let disabled = true;
+  const readyDeadline = Date.now() + 15_000;
+  while (Date.now() < readyDeadline) {
+    disabled = Boolean(await cdpEvaluate(`document.querySelector('.send-btn')?.disabled`));
+    if (!disabled) break;
+    await cdpEvaluate(`document.querySelector('.continuation-banner .label-btn')?.click()`);
+    await sleep(300);
+    await setComposer(prompt);
+  }
   if (disabled) throw new Error(`send disabled before prompt: ${prompt.slice(0, 40)}`);
   await cdpEvaluate(`document.querySelector('.send-btn')?.click()`);
   if (expectRunning) {
-    await waitForText(".execution-status", /Đang xử lý|Đang chờ/i, 60_000);
+    // A short response may reach terminal before the first CDP sample; both prove the send started.
+    await waitForText(
+      ".execution-status",
+      /Đang xử lý|Đang chờ|Đã hoàn tất|Hoàn thành|Có lỗi/i,
+      60_000,
+    );
   }
 }
 

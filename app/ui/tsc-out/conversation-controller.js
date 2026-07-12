@@ -217,10 +217,10 @@ export function createConversationManager(getClient) {
                 return;
             await (await client()).patchConversation(state.activeConversationId, { lastActive: true });
         },
-        async recordUserMessage(text, attachments) {
+        async recordUserMessage(text, attachments, skills) {
             if (state.activeConversationId === null)
                 return;
-            const record = await (await client()).appendConversationMessage(state.activeConversationId, "user", text, attachments);
+            const record = await (await client()).appendConversationMessage(state.activeConversationId, "user", text, attachments, skills);
             await syncRecord(record);
             await (await client()).patchConversation(state.activeConversationId, { status: "running" });
             state.runtimePhase = "running";

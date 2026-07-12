@@ -127,6 +127,38 @@ export interface ConversationMessage {
   readonly text: string;
   readonly at: string;
   readonly attachments?: readonly AttachmentMetadata[];
+  readonly skills?: readonly SkillUseMetadata[];
+}
+
+export type SkillSource = "built_in" | "user_local";
+export type SkillStatus = "enabled" | "disabled" | "invalid";
+
+export interface SkillUseMetadata {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly source: SkillSource;
+  readonly contentHash: string;
+  readonly modifiedAt: string;
+}
+
+export interface SkillView {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly version: string;
+  readonly source: SkillSource;
+  readonly status: SkillStatus;
+  readonly validationStatus: "valid" | "invalid";
+  readonly invalidReason?: string;
+  readonly contentHash?: string;
+  readonly modifiedAt?: string;
+  readonly sizeBytes?: number;
+}
+
+export interface EnabledSkillSnapshot {
+  readonly metadata: SkillUseMetadata;
+  readonly content: string;
 }
 
 /** Metadata persisted for workspace text-file attachments (no raw content). */
@@ -313,7 +345,13 @@ export interface ServiceClient {
     role: "user" | "assistant",
     text: string,
     attachments?: readonly AttachmentMetadata[],
+    skills?: readonly SkillUseMetadata[],
   ): Promise<ConversationRecord>;
+  listSkills(): Promise<readonly SkillView[]>;
+  refreshSkills(): Promise<readonly SkillView[]>;
+  setSkillEnabled(id: string, enabled: boolean): Promise<SkillView>;
+  enabledSkillSnapshots(): Promise<readonly EnabledSkillSnapshot[]>;
+  previewSkill(id: string): Promise<{ readonly content: string; readonly truncated: boolean }>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -547,7 +585,7 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       });
     },
 
-    appendConversationMessage: async (id, role, text, attachments) =>
+    appendConversationMessage: async (id, role, text, attachments, skills) =>
       (await call<{ conversation: ConversationRecord }>(
         `/v1/conversations/${encodeURIComponent(id)}/messages`,
         {
@@ -556,9 +594,29 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
             role,
             text,
             ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+            ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
           }),
         },
       )).conversation,
+
+    listSkills: async () =>
+      (await call<{ skills: readonly SkillView[] }>("/v1/skills")).skills,
+    refreshSkills: async () =>
+      (await call<{ skills: readonly SkillView[] }>("/v1/skills/refresh", {
+        method: "POST",
+        body: "{}",
+      })).skills,
+    setSkillEnabled: async (id, enabled) =>
+      (await call<{ skill: SkillView }>(`/v1/skills/${encodeURIComponent(id)}/enabled`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled }),
+      })).skill,
+    enabledSkillSnapshots: async () =>
+      (await call<{ skills: readonly EnabledSkillSnapshot[] }>("/v1/skills/enabled")).skills,
+    previewSkill: async (id) =>
+      (await call<{ preview: { readonly content: string; readonly truncated: boolean } }>(
+        `/v1/skills/${encodeURIComponent(id)}/preview`,
+      )).preview,
 
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {

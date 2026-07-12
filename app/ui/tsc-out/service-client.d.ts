@@ -91,6 +91,34 @@ export interface ConversationMessage {
     readonly text: string;
     readonly at: string;
     readonly attachments?: readonly AttachmentMetadata[];
+    readonly skills?: readonly SkillUseMetadata[];
+}
+export type SkillSource = "built_in" | "user_local";
+export type SkillStatus = "enabled" | "disabled" | "invalid";
+export interface SkillUseMetadata {
+    readonly id: string;
+    readonly name: string;
+    readonly version: string;
+    readonly source: SkillSource;
+    readonly contentHash: string;
+    readonly modifiedAt: string;
+}
+export interface SkillView {
+    readonly id: string;
+    readonly name: string;
+    readonly description: string;
+    readonly version: string;
+    readonly source: SkillSource;
+    readonly status: SkillStatus;
+    readonly validationStatus: "valid" | "invalid";
+    readonly invalidReason?: string;
+    readonly contentHash?: string;
+    readonly modifiedAt?: string;
+    readonly sizeBytes?: number;
+}
+export interface EnabledSkillSnapshot {
+    readonly metadata: SkillUseMetadata;
+    readonly content: string;
 }
 /** Metadata persisted for workspace text-file attachments (no raw content). */
 export type AttachmentInclusionStatus = "selected" | "included" | "rejected" | "omitted_by_budget";
@@ -246,7 +274,15 @@ export interface ServiceClient {
         readonly lastActive?: boolean;
     }): Promise<ConversationRecord>;
     deleteConversation(id: string): Promise<void>;
-    appendConversationMessage(id: string, role: "user" | "assistant", text: string, attachments?: readonly AttachmentMetadata[]): Promise<ConversationRecord>;
+    appendConversationMessage(id: string, role: "user" | "assistant", text: string, attachments?: readonly AttachmentMetadata[], skills?: readonly SkillUseMetadata[]): Promise<ConversationRecord>;
+    listSkills(): Promise<readonly SkillView[]>;
+    refreshSkills(): Promise<readonly SkillView[]>;
+    setSkillEnabled(id: string, enabled: boolean): Promise<SkillView>;
+    enabledSkillSnapshots(): Promise<readonly EnabledSkillSnapshot[]>;
+    previewSkill(id: string): Promise<{
+        readonly content: string;
+        readonly truncated: boolean;
+    }>;
     readWorkspaceAttachment(absolutePath: string, priorBytesUsed?: number): Promise<AttachmentReadResult>;
     /** Reconnect to an OpenCode session after service restart (when still available). */
     continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;

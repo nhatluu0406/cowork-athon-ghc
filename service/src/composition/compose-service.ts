@@ -50,6 +50,7 @@ import { ToolPermissionProxy } from "../files/index.js";
 import { createExtensionRegistry } from "../extensions/index.js";
 import { createSessionService, createSessionRouter, SessionRequestError } from "../session/index.js";
 import { createConversationStore, createConversationRouter } from "../conversation/index.js";
+import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -69,6 +70,8 @@ import { createHttpConnectorBundle } from "./http-connector-factory.js";
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
+const DEFAULT_SKILLS_DIR = ".runtime/skills";
+const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -175,6 +178,13 @@ export async function createCoworkService(
   });
   await conversationStore.recoverStaleRunning();
 
+  const skillCatalog = await createSkillCatalog({
+    roots:
+      options.skillRoots ??
+      [{ path: DEFAULT_SKILLS_DIR, source: "user_local", createIfMissing: true }],
+    stateFilePath: options.skillsStateFilePath ?? DEFAULT_SKILLS_STATE_PATH,
+  });
+
   const routers = [
     createWorkspaceRouter({
       recent: recentWorkspaces,
@@ -204,6 +214,7 @@ export async function createCoworkService(
       },
     }),
     createConversationRouter(conversationStore),
+    createSkillRouter(skillCatalog),
   ];
 
   const deps: CoworkServiceDeps = {
@@ -219,6 +230,7 @@ export async function createCoworkService(
     streamHub,
     extensions,
     conversationStore,
+    skillCatalog,
     redactError,
     buildToolPermissionProxy: (guard) =>
       new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),

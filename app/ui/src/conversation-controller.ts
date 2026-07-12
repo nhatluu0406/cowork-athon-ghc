@@ -13,6 +13,7 @@ import type {
   ConversationSummary,
   RuntimeTurnRecord,
   ServiceClient,
+  SkillUseMetadata,
 } from "./service-client.js";
 
 export type RuntimePhase =
@@ -52,7 +53,11 @@ export interface ConversationManager {
   linkRuntimeSession(runtimeSessionId: string, startedAt?: string): Promise<void>;
   completeRuntimeTurn(runtimeSessionId: string, status: RuntimeTurnRecord["status"]): Promise<void>;
   markLastActive(): Promise<void>;
-  recordUserMessage(text: string, attachments?: readonly AttachmentMetadata[]): Promise<void>;
+  recordUserMessage(
+    text: string,
+    attachments?: readonly AttachmentMetadata[],
+    skills?: readonly SkillUseMetadata[],
+  ): Promise<void>;
   recordAssistantMessage(text: string): Promise<void>;
   setRuntimePhase(phase: RuntimePhase): Promise<void>;
   markInterrupted(): Promise<void>;
@@ -282,13 +287,14 @@ export function createConversationManager(
       await (await client()).patchConversation(state.activeConversationId, { lastActive: true });
     },
 
-    async recordUserMessage(text, attachments) {
+    async recordUserMessage(text, attachments, skills) {
       if (state.activeConversationId === null) return;
       const record = await (await client()).appendConversationMessage(
         state.activeConversationId,
         "user",
         text,
         attachments,
+        skills,
       );
       await syncRecord(record);
       await (await client()).patchConversation(state.activeConversationId, { status: "running" });

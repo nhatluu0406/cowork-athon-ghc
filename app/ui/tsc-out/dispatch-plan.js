@@ -7,6 +7,7 @@ import { assembleAttachmentContext, } from "./attachment-context.js";
 import { assembleTranscriptContext } from "./transcript-context.js";
 import { USER_REQUEST_END, USER_REQUEST_START } from "./transcript-context.js";
 import { DISPATCH_MAX_CHARS } from "./attachment-limits.js";
+import { assembleSkillContext } from "./skill-context.js";
 function withInclusion(snapshot, status, reason) {
     return {
         ...snapshot.metadata,
@@ -22,18 +23,31 @@ function buildUserBlock(userPrompt) {
  * Plan the full outbound dispatch. Any selected attachment that cannot be included
  * causes fail-fast (no silent omission).
  */
-export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxChars = DISPATCH_MAX_CHARS) {
+export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxChars = DISPATCH_MAX_CHARS, skills = []) {
     const userBlock = buildUserBlock(userPrompt);
+    const skillContext = assembleSkillContext(skills);
     const entries = attachments.map((s) => ({
         relativePath: s.metadata.relativePath,
         filename: s.metadata.filename,
         status: "selected",
     }));
+    const fixedChars = userBlock.length + (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
+    if (fixedChars > maxChars - 200) {
+        const names = skills.map((skill) => skill.metadata.name).join(", ");
+        return {
+            ok: false,
+            message: `Không thể gửi: Skill không vừa ngân sách dispatch (${maxChars} ký tự). ` +
+                `Không fit: ${names || "Skill đã bật"}. Hãy disable bớt Skill hoặc rút ngắn yêu cầu.`,
+            entries,
+        };
+    }
     if (attachments.length === 0) {
-        const prior = assembleTranscriptContext(priorMessages, maxChars - userBlock.length - 4);
+        const prior = assembleTranscriptContext(priorMessages, maxChars - fixedChars - 4);
         const parts = [];
         if (prior.text.length > 0)
             parts.push(prior.text);
+        if (skillContext.text.length > 0)
+            parts.push(skillContext.text);
         parts.push(userBlock);
         const text = parts.join("\n\n");
         if (text.length > maxChars) {
@@ -50,9 +64,10 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
             entries,
             includedMetadata: [],
             priorTruncated: prior.truncated,
+            skillMetadata: skillContext.metadata,
         };
     }
-    let remaining = maxChars - userBlock.length - 4;
+    let remaining = maxChars - fixedChars - 4;
     if (remaining < 200) {
         const omitted = entries.map((e) => ({
             ...e,
@@ -93,6 +108,8 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
     const parts = [];
     if (prior.text.length > 0)
         parts.push(prior.text);
+    if (skillContext.text.length > 0)
+        parts.push(skillContext.text);
     if (attachmentAssembly.text.length > 0)
         parts.push(attachmentAssembly.text);
     parts.push(userBlock);
@@ -117,6 +134,7 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
         entries: finalEntries,
         includedMetadata,
         priorTruncated: prior.truncated,
+        skillMetadata: skillContext.metadata,
     };
 }
 function formatBudgetFailure(entries, maxChars) {

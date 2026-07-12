@@ -61,6 +61,8 @@ files:
 extraResources:
   - from: "node_modules/opencode-ai/bin/opencode.exe"
     to: "opencode/opencode.exe"
+  - from: "skills/builtin"
+    to: "skills"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.

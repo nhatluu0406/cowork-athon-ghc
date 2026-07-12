@@ -40,6 +40,12 @@ export interface TieredStartServiceOptions {
 export interface SettingsOnlyStartOptions {
   readonly settingsFilePath: string;
   readonly conversationsDir?: string;
+  readonly skillsStateFilePath?: string;
+  readonly skillRoots?: readonly {
+    readonly path: string;
+    readonly source: "built_in" | "user_local";
+    readonly createIfMissing?: boolean;
+  }[];
   readonly allowedOrigins: readonly string[];
   /** Development / verification: enable POST /v1/credentials/import-env on the service. */
   readonly allowEnvCredentialImport?: boolean;
@@ -57,6 +63,10 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
       ...(options.conversationsDir !== undefined
         ? { conversationsDir: options.conversationsDir }
         : {}),
+      ...(options.skillsStateFilePath !== undefined
+        ? { skillsStateFilePath: options.skillsStateFilePath }
+        : {}),
+      ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
       allowedOrigins: options.allowedOrigins,
       allowEnvCredentialImport: options.allowEnvCredentialImport === true,
     });
