@@ -280,6 +280,10 @@ async function main() {
     `document.querySelectorAll('.msg--user')[document.querySelectorAll('.msg--user').length - 1]?.querySelectorAll('.skill-use-chip').length ?? 0`,
   ));
   if (lastUserSkills !== 0) throw new Error("D: disabled Skill recorded on new turn");
+  const lastAssistant = String(await cdpEvaluate(
+    `[...document.querySelectorAll('.msg--assistant .msg__text')].at(-1)?.textContent ?? ''`,
+  ));
+  if (/SKILL-CYAN-582/u.test(lastAssistant)) throw new Error("D: disabled Skill still affected new turn");
   results.D = "PASS";
 
   console.log("skills: journey E — relaunch persistence");
@@ -364,6 +368,14 @@ async function main() {
   await cdpEvaluate(`document.querySelector('.permission-deny')?.click()`);
   await waitTerminal();
   if (existsSync(join(workspace, "skill-denied.txt"))) throw new Error("H: denied mutation changed file");
+  await continueIfNeeded();
+  await cdpEvaluate(`(() => {
+    const input = document.querySelector('.composer__input');
+    input.textContent = 'Turn after deny remains usable';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+  })()`);
+  const usableAfterDeny = await cdpEvaluate(`document.querySelector('.send-btn')?.disabled === false`);
+  if (!usableAfterDeny) throw new Error("H: composer not usable after Deny");
   results.H = "PASS";
 
   console.log("skills: journey I — invalid marker boundary");
