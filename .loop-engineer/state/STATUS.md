@@ -1,56 +1,36 @@
-# Cowork GHC - Status
+# Trạng thái Loop Engineer
 
-> Human view synchronized from `.loop-engineer/state/*.yaml` on 2026-07-12 (Slice 3 pass).
-> YAML remains canonical.
+Cập nhật: 2026-07-12 (Slice 4 packaged PASS)
 
-## Git anchor
+## Vòng lặp
 
-- **HEAD:** pending Slice 3 commit
-- **Slice 1:** `3856a84` (packaged service lifecycle)
-- **Slice 2:** `ff32d808` (packaged workspace selection)
-- **Slice 3:** packaged provider/credential (this commit)
+| Loop | Trạng thái | Gate |
+|------|------------|------|
+| L6 Implementation | RUNNING | PARTIAL |
+| L7 Integration | NOT_READY | — |
 
-## Current State
+**Không bắt đầu L7.**
 
-- Phase: `L6_IN_PROGRESS`
-- Loop: `L6` Implementation = `RUNNING`
-- Gate: `PARTIAL`
-- Operating mode: `LEAN`
-- Service reachability: **RESOLVED**
-- Do not start: `L7`
-- Web / Next.js: `DEFERRED`
+## Packaged đã xác minh
 
-## Packaged POC Status
+Trên `dist-app/win-unpacked/Cowork GHC.exe`:
 
-Three slices verified on `dist-app/win-unpacked/Cowork GHC.exe`:
+1. Service settings-only boot
+2. Workspace picker + persistence
+3. Provider/model + keyring + test connection
+4. **OpenCode live session** — `Bắt đầu phiên`, streaming, tạo file fixture, dừng sạch
 
-| Slice | Status | Anchor |
-|---|---|---|
-| Service lifecycle | **PASS** | `3856a84` |
-| Workspace selection | **PASS** | `ff32d808` |
-| Provider + credential | **PASS** | Slice 3 commit |
+## Chưa xác minh (package)
 
-Still unverified in the package:
+- Permission modal end-to-end
+- Cancel trong package verify
+- Hành trình stop/resume/clean đầy đủ (L9)
 
-- Live OpenCode session, streaming, permission/file-on-disk
-- Full stop/resume/clean packaged journey (L9)
+## Task
 
-## Tasks
+- `DONE`: 27 (gồm CGHC-008, CGHC-011, CGHC-019)
+- `IN_PROGRESS`: CGHC-028
 
-- `DONE`: 27 (includes `CGHC-008`, `CGHC-011`, `CGHC-019`)
-- `STALE`: 0
-- `IN_PROGRESS`: 1 (`CGHC-028`)
+## Bước tiếp theo
 
-## Credential / API Status
-
-- Bounded DeepSeek connectivity test **PASS** in packaged Slice 3 (keyring; no `.env` after relaunch).
-- No OpenCode live session yet.
-
-## Controller validation
-
-- `node tools/loop-engineer/cli.mjs verify` — run after state update
-- `node tools/loop-engineer/cli.mjs status` — L6 RUNNING, gate PARTIAL
-
-## Next Action
-
-Slice 4: OpenCode live session integration. Do not start L7.
+Slice 5 — permission + cancel packaged; sau đó stop/resume/clean. Không bắt đầu L7.
