@@ -6,7 +6,7 @@ Updated: 2026-07-12 (L6 packaged acceptance PASS)
 
 - **Baseline tag:** `poc-core-v0.1` -> `c96b5b8` (verified Slice 4 core before GUI migration)
 - **GUI shell:** `8e6ea21` - HuyTT12 application shell integrated
-- **L6 acceptance:** pending commit `test(release): complete packaged L6 acceptance`
+- **L6 acceptance:** `8df3d59` - packaged slices 5A-5E PASS
 - **Slice 1:** `3856a84` - packaged service readiness + authenticated health verification
 - **Slice 2:** `ff32d808` - packaged workspace picker, activation, persistence, relaunch restore, workspace switching
 - **Slice 3:** `8f7abff` - packaged provider/model settings + Windows keyring credential + bounded DeepSeek test connection
