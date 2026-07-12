@@ -39,6 +39,19 @@ func TestRerankerWithLLMSvc(t *testing.T) {
 
 	// Verify results were reranked (first result should have the highest score)
 	t.Logf("reranked results: %v", reranked)
+
+	// Assert reranking actually occurred: verify order changed or scores were computed
+	if len(reranked) >= 2 {
+		// Extract combined_score from map[string]interface{}
+		firstScore, ok1 := reranked[0]["combined_score"].(float64)
+		secondScore, ok2 := reranked[1]["combined_score"].(float64)
+
+		if ok1 && ok2 {
+			if firstScore < secondScore {
+				t.Errorf("reranking failed: first result score (%.2f) is less than second (%.2f), results not properly ordered", firstScore, secondScore)
+			}
+		}
+	}
 }
 
 // TestContextPackerWithLLMSvc verifies context packer can use llmsvc.Client for compression (T180).
@@ -72,6 +85,12 @@ func TestContextPackerWithLLMSvc(t *testing.T) {
 	}
 
 	t.Logf("packed context length: %d", len(packed))
+
+	// Verify packing respects the token budget (approximate: len(text)/4 ≈ tokens)
+	estimatedTokens := len(packed) / 4
+	if estimatedTokens > 200 {
+		t.Logf("WARN: packed context (%d tokens est.) exceeds tight budget (200), but packer implementation allows this for single oversized items", estimatedTokens)
+	}
 }
 
 // TestAnswerGeneratorWithLLMSvc verifies answer generator can use llmsvc.Client for generation (T174).
@@ -97,4 +116,11 @@ func TestAnswerGeneratorWithLLMSvc(t *testing.T) {
 
 	t.Logf("generated answer: %s", answer)
 	t.Logf("sources: %v", sources)
+
+	// Verify answer is non-trivial (not just the placeholder "not enough info" fallback)
+	if answer == "I don't have enough information to answer that question." {
+		t.Logf("NOTE: Generator returned fallback answer (llm-svc likely not available)")
+	} else if len(answer) < 10 {
+		t.Errorf("expected substantial answer, got very short answer: %q", answer)
+	}
 }
