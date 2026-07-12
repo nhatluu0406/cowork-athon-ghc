@@ -1,0 +1,26 @@
+checkpoint: L2
+created_at: "2026-07-11T00:40:00Z"
+run_id: RUN-0003
+loop_status: COMPLETED
+gate: PASS
+resumable: true
+inputs_fingerprint:
+  scope:
+    path: docs/product/cowork-ghc-scope-and-acceptance.md
+    sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+  reference:
+    repository: different-ai/openwork
+    commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+outputs:
+  - .loop-engineer/reports/discovery-report.md
+evidence:
+  - .loop-engineer/evidence/L2/runtime-candidates.md
+  - .loop-engineer/evidence/L2/desktop-shell-and-lifecycle.md
+  - .loop-engineer/evidence/L2/provider-and-credentials.md
+  - .loop-engineer/evidence/L2/review-product-architect.md
+  - .loop-engineer/evidence/L2/review-security.md
+  - .loop-engineer/evidence/L2/review-dispositions.md
+resume_hint: >
+  L2 is COMPLETED and valid. Re-running L2 returns SKIPPED_ALREADY_VALID unless the scope-doc
+  sha256 or the reference commit changes (fingerprint mismatch), the discovery report/evidence
+  is missing, or L2 is explicitly invalidated. Next: /loop-engineer run L3 (Architecture Candidates).

@@ -1,0 +1,16 @@
+{
+  "name": "@cowork-ghc/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared, shell-neutral contract types (EV, provider, permission, workspace, session, refs) + the enforced import-direction boundary lint. No runtime deps; safe to import from any surface (app/ui, future web).",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./boundary": "./boundary/import-direction.ts"
+  },
+  "scripts": {
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "typecheck": "tsc -b"
+  }
+}

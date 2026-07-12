@@ -1,0 +1,58 @@
+run_id: RUN-0002
+loop: L1
+mode: run
+execution: subagents
+budget: normal
+parallel_peak: 2
+status: COMPLETED
+started_at: "2026-07-10T09:10:00Z"
+completed_at: "2026-07-10T09:40:00Z"
+gate:
+  result: PASS
+  evidence:
+    - .loop-engineer/reports/requirements-baseline-review.md
+    - .loop-engineer/evidence/L1/openwork-research.md
+    - .loop-engineer/evidence/L1/reference-delta.md
+    - .loop-engineer/evidence/L1/review-test-engineer.md
+    - .loop-engineer/evidence/L1/review-security.md
+    - .loop-engineer/evidence/L1/review-dispositions.md
+agents:
+  - role: repository-researcher
+    task: L1-R1
+    outcome: DONE
+  - role: product-architect
+    task: L1-A1
+    outcome: DONE
+  - role: test-engineer
+    task: L1-REV-TEST
+    outcome: PASS_WITH_FINDINGS
+  - role: security-reviewer
+    task: L1-REV-SEC
+    outcome: PASS_WITH_FINDINGS
+classification: VALID_WITH_GAPS
+counts:
+  capabilities: 66
+  must: 41
+  should: 15
+  could: 2
+  deferred: 5
+  out_of_scope: 3
+findings:
+  critical: 0
+  high: 1
+  high_resolved: 1
+  note: "HIGH (loopback-only binding lacked a testable MUST) fixed by adding MUST P7. Mediums/Lows dispositioned in review-dispositions.md."
+summary: >
+  L1 Requirement Baseline. Classified the OpenWork analysis doc VALID_WITH_GAPS
+  (verified against reference HEAD 1897f9f; churn since doc commit is ~91% in
+  out-of-scope ee/+evals). Produced Cowork GHC's own capability matrix + testable
+  acceptance (docs/product/cowork-ghc-scope-and-acceptance.md) and updated the
+  baseline review. Two independent reviews (reviewer != implementer); one HIGH fixed.
+open_decisions_for_L3:
+  - "Credential store mechanism (Windows Credential Manager/DPAPI vs keyring) — PR9 fixed, mechanism open; ADR."
+  - "Runtime reuse (OpenCode) vs build-new — RE6; ADR."
+  - "Desktop shell (Electron vs Tauri vs other); ADR."
+  - "Provider abstraction shape fitting 5 providers now + gateway later; ADR."
+next_valid_commands:
+  - "/loop-engineer status"
+  - "/loop-engineer run L2   (Discovery — not auto-run)"

@@ -1,0 +1,218 @@
+version: 1
+loops:
+  - id: L0
+    name: Bootstrap
+    status: COMPLETED
+    depends_on: []
+    completed_at: "2026-07-10T09:05:00Z"
+    inputs: {}
+    outputs:
+      - .agent-workflow/workflow.yaml
+      - .agent-workflow/loops.yaml
+      - .agent-workflow/roles
+      - .agent-workflow/contracts
+      - .agent-workflow/schemas
+      - CLAUDE.md
+      - AGENTS.md
+      - .claude/agents
+      - .claude/rules
+      - .claude/skills/loop-engineer/SKILL.md
+      - tools/loop-engineer/cli.mjs
+      - .loop-engineer/state/project-state.yaml
+      - scripts/init.bat
+      - scripts/start.bat
+      - scripts/stop.bat
+      - scripts/clean.bat
+      - scripts/README.md
+    gate:
+      result: PASS
+      evidence:
+        - .loop-engineer/evidence/L0/bootstrap-verification.md
+  - id: L1
+    name: Requirement Baseline
+    status: COMPLETED
+    completed_at: "2026-07-10T09:40:00Z"
+    depends_on:
+      - L0
+    inputs:
+      requirements:
+        path: docs/openwork-requirements-and-basic-design.md
+        sha256: "66f5d97f5f03560e811128718f863bfb7c4f88e721f8ad6c50277ef9cb5f9c34"
+      reference:
+        repository: different-ai/openwork
+        commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+    outputs:
+      - .loop-engineer/reports/requirements-baseline-review.md
+      - docs/product/cowork-ghc-scope-and-acceptance.md
+    classification: VALID_WITH_GAPS
+    gate:
+      result: PASS
+      evidence:
+        - .loop-engineer/reports/requirements-baseline-review.md
+        - .loop-engineer/evidence/L1/openwork-research.md
+        - .loop-engineer/evidence/L1/reference-delta.md
+        - .loop-engineer/evidence/L1/review-test-engineer.md
+        - .loop-engineer/evidence/L1/review-security.md
+        - .loop-engineer/evidence/L1/review-dispositions.md
+  - id: L2
+    name: Discovery
+    status: COMPLETED
+    completed_at: "2026-07-11T00:40:00Z"
+    depends_on:
+      - L1
+    inputs:
+      scope:
+        path: docs/product/cowork-ghc-scope-and-acceptance.md
+        sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+      reference:
+        repository: different-ai/openwork
+        commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+    outputs:
+      - .loop-engineer/reports/discovery-report.md
+    gate:
+      result: PASS
+      evidence:
+        - .loop-engineer/reports/discovery-report.md
+        - .loop-engineer/evidence/L2/runtime-candidates.md
+        - .loop-engineer/evidence/L2/desktop-shell-and-lifecycle.md
+        - .loop-engineer/evidence/L2/provider-and-credentials.md
+        - .loop-engineer/evidence/L2/review-product-architect.md
+        - .loop-engineer/evidence/L2/review-security.md
+        - .loop-engineer/evidence/L2/review-dispositions.md
+  - id: L3
+    name: Architecture Candidates
+    status: COMPLETED
+    completed_at: "2026-07-11T01:30:00Z"
+    depends_on:
+      - L2
+    inputs:
+      discovery_report:
+        path: .loop-engineer/reports/discovery-report.md
+        sha256: "3bc9d6a47dc51b7611447cf49e291e7c36bae98ea7285d2eded4fcb4f78186df"
+      scope:
+        path: docs/product/cowork-ghc-scope-and-acceptance.md
+        sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+      reference:
+        repository: different-ai/openwork
+        commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+    outputs:
+      - docs/architecture/cowork-ghc-implementation-design.md
+      - docs/architecture/decisions/0001-agent-tool-runtime-and-persistence.md
+      - docs/architecture/decisions/0002-desktop-shell.md
+      - docs/architecture/decisions/0003-local-service-transport-placement-loopback.md
+      - docs/architecture/decisions/0004-windows-process-lifecycle-and-supervision.md
+      - docs/architecture/decisions/0005-provider-abstraction.md
+      - docs/architecture/decisions/0006-credential-store.md
+      - docs/architecture/decisions/README.md
+    gate:
+      result: PASS
+      evidence:
+        - docs/architecture/cowork-ghc-implementation-design.md
+        - docs/architecture/decisions/README.md
+        - .loop-engineer/evidence/L3/architecture-authoring-notes.md
+        - .loop-engineer/evidence/L3/review-security.md
+        - .loop-engineer/evidence/L3/review-dispositions.md
+  - id: L4
+    name: Architecture Review
+    status: COMPLETED
+    completed_at: "2026-07-11T02:30:00Z"
+    depends_on:
+      - L3
+    inputs:
+      implementation_design:
+        path: docs/architecture/cowork-ghc-implementation-design.md
+        sha256: "46106561c857c87e0c62a9884e03ae48b3507bcbf0f238901f6f939253c19414"
+      discovery_report:
+        path: .loop-engineer/reports/discovery-report.md
+        sha256: "3bc9d6a47dc51b7611447cf49e291e7c36bae98ea7285d2eded4fcb4f78186df"
+      scope:
+        path: docs/product/cowork-ghc-scope-and-acceptance.md
+        sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+      reference:
+        repository: different-ai/openwork
+        commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+    note: "Architecture FROZEN. Five-lens critique + threat model + reference verification. 0 Critical, 0 unresolved High (7 HIGH resolved before freeze). 3 flagged overrides RATIFIED. ADRs 0001-0006 + design doc flipped Proposed -> Accepted (Frozen). SEC-1/SEC-2 CLOSED."
+    outputs:
+      - docs/architecture/cowork-ghc-implementation-design.md
+      - docs/architecture/decisions/0001-agent-tool-runtime-and-persistence.md
+      - docs/architecture/decisions/0002-desktop-shell.md
+      - docs/architecture/decisions/0003-local-service-transport-placement-loopback.md
+      - docs/architecture/decisions/0004-windows-process-lifecycle-and-supervision.md
+      - docs/architecture/decisions/0005-provider-abstraction.md
+      - docs/architecture/decisions/0006-credential-store.md
+      - docs/architecture/decisions/README.md
+    gate:
+      result: PASS
+      evidence:
+        - .loop-engineer/evidence/L4/review-runtime.md
+        - .loop-engineer/evidence/L4/review-frontend.md
+        - .loop-engineer/evidence/L4/review-test.md
+        - .loop-engineer/evidence/L4/review-security-threatmodel.md
+        - .loop-engineer/evidence/L4/review-ux.md
+        - .loop-engineer/evidence/L4/reference-verification.md
+        - .loop-engineer/evidence/L4/review-dispositions.md
+  - id: L5
+    name: Master Plan
+    status: COMPLETED
+    completed_at: "2026-07-11T03:30:00Z"
+    depends_on:
+      - L4
+    inputs:
+      implementation_design:
+        path: docs/architecture/cowork-ghc-implementation-design.md
+        sha256: "46106561c857c87e0c62a9884e03ae48b3507bcbf0f238901f6f939253c19414"
+      scope:
+        path: docs/product/cowork-ghc-scope-and-acceptance.md
+        sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+      reference:
+        repository: different-ai/openwork
+        commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+    note: "Master Plan: 15 vertical slices, 28 executable tasks (reviewer != owner, all 41 MUST covered), perf budget, release plan, risk register, script tasks. Two independent reviews (test CHANGES_REQUIRED->resolved, security PASS_WITH_FINDINGS); 3 test HIGH resolved before freeze; 0 unresolved Critical/High. Web stays DEFERRED (ADR 0007)."
+    outputs:
+      - docs/product/cowork-ghc-master-plan.md
+      - .loop-engineer/state/tasks.yaml
+    gate:
+      result: PASS
+      evidence:
+        - docs/product/cowork-ghc-master-plan.md
+        - .loop-engineer/state/tasks.yaml
+        - .loop-engineer/evidence/L5/review-test.md
+        - .loop-engineer/evidence/L5/review-security.md
+        - .loop-engineer/evidence/L5/review-dispositions.md
+  - id: L6
+    name: Implementation
+    status: COMPLETED
+    depends_on:
+      - L5
+    note: "COMPLETED 2026-07-12. Desktop POC packaged acceptance PASS via tools/verify/l6-packaged.mjs on dist-app/win-unpacked/Cowork GHC.exe. Slices 5A–5E verified: real OpenCode permission approve/deny, clean-profile onboarding, provider credential recovery, active-session interruption/relaunch, init/stop lifecycle scripts. Permission bridge + OpenCode v1.17.11 reply contract fixed. CGHC-028 DONE (POC scope). Template/session-resume and full L9 regression deferred. Do NOT auto-start L7."
+    gate:
+      result: PASS
+      evidence:
+        - .loop-engineer/evidence/CGHC-028-l6-packaged-acceptance.md
+        - .loop-engineer/evidence/CGHC-028-release-verification.md
+        - .loop-engineer/evidence/CGHC-028-packaged-launch-fix.md
+        - .loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md
+        - .loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md
+        - .loop-engineer/evidence/CGHC-028-huytt12-gui-packaged.md
+        - tools/verify/l6-packaged.mjs
+        - .loop-engineer/HANDOFF.md
+  - id: L7
+    name: Integration
+    status: NOT_READY
+    depends_on:
+      - L6
+  - id: L8
+    name: Hardening
+    status: NOT_READY
+    depends_on:
+      - L7
+  - id: L9
+    name: Release Verification
+    status: NOT_READY
+    depends_on:
+      - L8
+  - id: L10
+    name: Retrospective and Integration Readiness
+    status: NOT_READY
+    depends_on:
+      - L9

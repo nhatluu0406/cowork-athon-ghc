@@ -1,0 +1,21 @@
+checkpoint: L6-onboarding-wave1
+created_at: "2026-07-12T04:30:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+tasks_done_total: 27
+context: "First-run onboarding: packaged app built+launched but stuck at not_connected — folder picker + LLM settings unreachable. Product owner asked to make it interactively testable + authorized using DeepSeek to check (see memory onboarding-first-run-gap + deepseek-live-test-authorization)."
+wave1_done:
+  - "Mode-aware StartService (app/shell/src/service/tiered-start-service.ts): shell tries the live path; on the typed ServiceLaunchNotConfiguredError (nothing configured) it falls back to the Tier-1 SETTINGS-ONLY service (startCoworkService) so the renderer reaches ready and the onboarding UI mounts. Any OTHER live error still propagates honestly. Wired in app/shell/src/main.ts with a shared absolute settings path (packaged: userData/.runtime/settings.json)."
+  - "CORS fix (service/src/server/http-service.ts): a previously-latent bug surfaced once the renderer could actually reach the service — the loopback service emitted NO CORS header, so the renderer origin app://cowork was blocked by CORS/preflight. Added a tightly-scoped allowlist (ServiceOptions.allowedOrigins): echoes ONLY an exact allowlisted origin (never *), answers preflight OPTIONS, absent Origin (Node/test) unaffected. Token guard + loopback Host check still apply. Shell passes allowedOrigins=[app://cowork]."
+verification:
+  packaged_ui: "CDP on the packaged win-unpacked app: 'Đã kết nối local service' status=ok; 'Chọn thư mục workspace…' (folder picker) present; 'Cài đặt' with Providers + default-model settings present; body 884→3003 chars; ZERO console errors."
+  tests: "npm test 623 pass / 0 fail (added tiered-start-service.test.ts x3 + cors.test.ts x4); tsc clean."
+review: "PENDING — security-reviewer on the CORS + tiered-start change (reviewer != implementer)."
+remaining_waves:
+  - "Wave 2: renderer key-entry gate — service-client storeCredential (POST /v1/credentials) + settings-view password field for the DeepSeek key + custom-provider fields (baseUrl/model/envVar). This is the ONE safe UI token-entry action (never paste into chat)."
+  - "Wave 3: persist the granted workspace root + custom-provider envVar/model/active selection (settings-types/store/router, schema v2); a persisted-settings live launch source sibling to env-launch-source; live path uses the SAME settings file + allowedOrigins=[app://cowork]."
+  - "Wave 4: Connect action — new IPC cowork:connect-live + bridge + handler (controller.stop()+start() → live), renderer Connect button + readiness.retry() to re-handshake onto the new live socket."
+  - "Wave 5: chat glue — session-client createSession/sendPrompt, a New-session + prompt input, startEvStream(sessionId)→timeline. Then a bounded DeepSeek live verification (keyring credential, secret-scan CLEAN)."
+notes: "OpenCode child + live DeepSeek call happen ONLY at the user-gated Connect (Wave 4) + prompt submit (Wave 5). Tier-1 onboarding spawns no child and makes no provider call. Web DEFERRED (ADR 0007)."

@@ -1,0 +1,95 @@
+run_id: RUN-0007
+loop: L6
+mode: run
+execution: subagents
+budget: normal
+parallel_peak: 3
+status: IN_PROGRESS
+started_at: "2026-07-11T04:00:00Z"
+completed_at: ""
+foundation:
+  - "package.json (npm workspaces: core/*, service, runtime, app/*)"
+  - "tsconfig.base.json (TypeScript strict) + root tsconfig.json project refs"
+  - "docs/architecture/decisions/0008-build-and-workspace-toolchain.md (additive; L4 stays COMPLETED)"
+  - "ADR README index updated (0008 row)"
+  - "Electron app scaffold (app/shell + app/ui + Vite + electron-builder skeleton + core/contracts shell-bridge) — secure renderer baseline (sandbox/contextIsolation/nodeIntegration-false/webSecurity-true, strict loopback CSP, navigation lockdown, narrow preload no ipcRenderer passthrough), ADR 0009. Security review PASS_WITH_FINDINGS (0 Crit/High); 3 MEDIUM + 2 LOW carried to CGHC-025/CGHC-028. 185 tests, tsc clean, vite build OK, verify PASS."
+wave_plan:
+  - wave: 1
+    tasks: [CGHC-001, CGHC-002, CGHC-003]
+    note: "READY roots, disjoint subtrees runtime/ | service/ | core/contracts/"
+  - wave: 2
+    tasks: [CGHC-004, CGHC-007, CGHC-009, CGHC-012, CGHC-021]
+  - wave: 3
+    tasks: [CGHC-005, CGHC-008, CGHC-010, CGHC-024]
+  - wave: 4
+    tasks: [CGHC-006, CGHC-013, CGHC-023]
+  - wave: 5
+    tasks: [CGHC-014, CGHC-016, CGHC-019, CGHC-020]
+  - wave: 6
+    tasks: [CGHC-015, CGHC-017, CGHC-018, CGHC-022]
+  - wave: 7
+    tasks: [CGHC-025, CGHC-026, CGHC-027]
+  - wave: 8
+    tasks: [CGHC-028]
+    note: "Release verification gate (L9 authority); requires the packaged build."
+agents:
+  - role: runtime-llm-engineer
+    task: CGHC-001
+    outcome: DONE
+    note: "runtime/ OpenCode pin + launch/config (XDG_DATA_HOME + OPENCODE_CONFIG_DIR isolation, no --data-dir) + keyless env-name map + process identity + version gate. 23/23 tests, tsc clean."
+  - role: code-reviewer
+    task: CGHC-001-REV
+    outcome: PASS_WITH_FINDINGS
+    note: "0 Crit/High. Citations verified against reference. M1 loopback-host + M3 scoped redaction + L5/L6 applied by author; M2 (startTime source) -> CGHC-004, M4 (live no-auth.json verify) -> CGHC-009 carried forward."
+  - role: runtime-llm-engineer
+    task: CGHC-002
+    outcome: DONE
+    note: "service/ loopback-only bind (fail-closed at construction + connection guard) + per-launch non-persistent 256-bit token (constant-time compare) + typed boundary contract/mount seam. 18/18 tests, tsc clean."
+  - role: security-reviewer
+    task: CGHC-002-REV
+    outcome: PASS_WITH_FINDINGS
+    note: "0 Crit/High. MED unrestricted requiresToken:false opt-out gated (explicit publicUnauthenticated marker + audit event); +4 LOW (error-echo, Host-header validation, timeouts, weak-token). Gating notes -> CGHC-004/007/009/016/021."
+  - role: product-architect
+    task: CGHC-003
+    outcome: DONE
+    note: "core/contracts shared EV/provider/permission/workspace/session/ref types + import-direction lint. 6/6 tests, tsc clean."
+  - role: code-reviewer
+    task: CGHC-003-REV
+    outcome: CHANGES_REQUIRED
+    note: "2 High + 1 Med. HIGH-1 secret-carrying RedactPattern removed from UI-importable barrel; HIGH-2 lint made newline-tolerant + multi-line fixture proven; MEDIUM-1 SessionStatus/TerminalState aligned + exhaustive mapping. All closed and re-verified."
+findings:
+  critical: 0
+  high: 0
+  high_raw: 2
+  medium: 5
+  low: 9
+  note: "Wave 1. CGHC-003 raised 2 High (resolved before DONE). CGHC-001/002 reviews 0 High. All Med/Low either applied in-wave or recorded as explicit carry-forward gating notes. 0 unresolved Critical/High at the wave checkpoint."
+waves_complete:
+  - wave: 1
+    tasks_done: [CGHC-001, CGHC-002, CGHC-003]
+    tests_passing: 47
+    checkpoint: .loop-engineer/checkpoints/L6-wave-1.yaml
+  - wave: 2
+    tasks_done: [CGHC-007, CGHC-009, CGHC-021, CGHC-004, CGHC-012]
+    tests_passing: "service 83 + controller 44"
+    checkpoint: .loop-engineer/checkpoints/L6-wave-2.yaml
+    note: "Batch A (security trio) + Batch B (supervision, EV). All reviewed (reviewer != owner); 0 unresolved Critical/High. CGHC-003 review found 2 High (resolved); CGHC-007 1 High (resolved); the rest PASS_WITH_FINDINGS. Two scrubbers unified to one canonical SecretScrubber. CGHC-004 owner subagent stalled -> orchestrator finished + independent code review. Top-level service/ barrel wired (workspace/credential/diagnostics/execution namespaced)."
+  - wave: 3a
+    tasks_done: [CGHC-005, CGHC-010, CGHC-027]
+    tests_passing: "service 124 + controller 55"
+    checkpoint: .loop-engineer/checkpoints/L6-wave-3a.yaml
+    note: "Reaper (identity-gated kill, never /IM; MED TOCTOU fixed), Provider port + SSRF (F1 IPv6 fail-open fixed; F2/F3 gates -> CGHC-011/012), Docs batch 1 (LANGUAGE_ONLY_CHANGE, L1-L4 valid). Repeated API stream stalls this wave; recovered by verify-on-disk + resume/finish, independent review always kept. 0 unresolved Critical/High. 11/28 tasks DONE."
+  - wave: 3b
+    tasks_done: [CGHC-011, CGHC-023]
+    tests_passing: "service 138 + controller 77"
+    checkpoint: .loop-engineer/checkpoints/L6-wave-3b.yaml
+    note: "Parallelism capped at 2 (stall-mitigation). CGHC-011 SSRF-hardened connector (F2 socket-IP-pin + F3 redirect-revalidation + cross-host non-resend; MED-1 test gap closed). CGHC-023 clean.bat allowlist: security review CHANGES_REQUIRED -> HIGH-1 case-insensitive-preserve bypass + MEDIUM-1 in-root-junction FIXED before DONE. CGHC-011 owner stalled at final file-size check; recovered by verify-on-disk. Independent review held on both. 0 unresolved Critical/High. 13/28 tasks DONE. Newly READY: CGHC-006, CGHC-020. Product owner authorized bounded DeepSeek live tests (CGHC-024/028) behind OpenCode."
+  - wave: 3b2
+    tasks_done: [CGHC-006, CGHC-013]
+    tests_passing: "service 156 + controller 84"
+    checkpoint: .loop-engineer/checkpoints/L6-wave-3b2.yaml
+    note: "CGHC-006 lifecycle scripts (thin %~dp0 entries -> lifecycle.mjs; honest exit codes 0/2/3/5/9; start NOT_READY 3 not fake; code review 0 Crit/High, LOW-2 applied). CGHC-013 session orchestration (one mechanism = OpenCode store SSOT; S3 cancel-freeze; S6 truthful status; S4 rebuild-from-store). CGHC-013 review 2 MEDIUM FIXED: MED-1 post-terminal mutation leak -> freeze-on-any-terminal + reducer defense-in-depth (additive CGHC-012 hardening, not invalidated); MED-2 reopen orphaning a live stream handle. Independent review held on both; 0 unresolved Critical/High. 15/28 tasks DONE. Newly READY: CGHC-014, CGHC-016, CGHC-019. Electron scaffold in flight."
+next_valid_commands:
+  - "/loop-engineer status"
+  - "/loop-engineer task CGHC-001"
+  - "/loop-engineer run L6   (continues remaining waves)"
