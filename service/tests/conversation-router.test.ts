@@ -45,6 +45,17 @@ test("conversation router creates, lists, patches, and deletes", async () => {
   });
   assert.equal((patched.data as { conversation: { title: string } }).conversation.title, "My chat");
 
+  const linked = await patchRoute!.handler({
+    method: "PATCH",
+    url: new URL(`http://127.0.0.1/v1/conversations/${id}`),
+    params: { id },
+    body: { runtimeSessionId: "rt-2", status: "ready" },
+  });
+  const linkedConv = (linked.data as { conversation: { runtimeSessionId: string | null; status: string } })
+    .conversation;
+  assert.equal(linkedConv.runtimeSessionId, "rt-2");
+  assert.equal(linkedConv.status, "ready");
+
   const deleteRoute = router.routes.find((r) => r.method === "DELETE");
   const deleted = await deleteRoute!.handler({
     method: "DELETE",

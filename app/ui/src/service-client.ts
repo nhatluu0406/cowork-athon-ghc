@@ -155,6 +155,14 @@ export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
   readonly activity?: PersistedActivitySnapshot;
+  readonly runtimeTurns?: readonly RuntimeTurnRecord[];
+}
+
+export interface RuntimeTurnRecord {
+  readonly runtimeSessionId: string;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly status: "running" | "completed" | "cancelled" | "errored";
 }
 
 export interface CreateConversationInput {
@@ -250,13 +258,21 @@ export interface ServiceClient {
   listConversations(query?: string): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
   getConversation(id: string): Promise<ConversationRecord>;
-    patchConversation(
+  getLastActiveConversationId(): Promise<string | null>;
+  patchConversation(
     id: string,
     patch: {
       readonly title?: string;
       readonly status?: ConversationStatus;
       readonly runtimeSessionId?: string | null;
       readonly activity?: Record<string, unknown>;
+      readonly registerRuntimeTurn?: RuntimeTurnRecord;
+      readonly completeRuntimeTurn?: {
+        readonly runtimeSessionId: string;
+        readonly status: RuntimeTurnRecord["status"];
+        readonly completedAt: string;
+      };
+      readonly lastActive?: boolean;
     },
   ): Promise<ConversationRecord>;
   deleteConversation(id: string): Promise<void>;
@@ -477,6 +493,10 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       (await call<{ conversation: ConversationRecord }>(
         `/v1/conversations/${encodeURIComponent(id)}`,
       )).conversation,
+
+    getLastActiveConversationId: async () =>
+      (await call<{ conversationId: string | null }>("/v1/conversations/last-active"))
+        .conversationId,
 
     patchConversation: async (id, patch) =>
       (await call<{ conversation: ConversationRecord }>(

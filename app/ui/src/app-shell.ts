@@ -28,7 +28,6 @@ import { getShellBridge } from "./bridge.js";
 import {
   createConversationManager,
   formatConversationMeta,
-  needsContinuation,
   type ConversationManager,
   type RuntimePhase,
 } from "./conversation-controller.js";
@@ -45,6 +44,8 @@ import {
 } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { planRuntimeTurn } from "./runtime-turn-planner.js";
+import { augmentPromptWithContext } from "./transcript-context.js";
 import {
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
@@ -55,6 +56,11 @@ import {
   mapTerminalToRuntimePhase,
   type ResolvedFinalText,
 } from "./session-finalization.js";
+
+interface RuntimeSessionReady {
+  readonly runtimeSessionId: string;
+  readonly contextMessages: readonly ConversationRecord["messages"][number][];
+}
 
 interface AppState {
   client: ServiceClient | null;
@@ -389,11 +395,10 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.chatSub.textContent =
     record?.status === "interrupted"
       ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
-      : needsContinuation(record)
-        ? "Mở lại lịch sử. Gửi tin nhắn mới cần phiên runtime tiếp nối."
-        : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
+      : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
 
-  const showContinuation = needsContinuation(record) && phase !== "running" && phase !== "starting";
+  const showContinuation =
+    record?.status === "interrupted" && phase !== "running" && phase !== "starting";
   dom.continuationBanner.hidden = !showContinuation;
   dom.continuationButton.hidden = !showContinuation;
 
@@ -554,6 +559,13 @@ async function finalizeConversationTurn(
       : mapTerminalToRuntimePhase(terminal);
   await state.conv.setRuntimePhase(phase);
   await state.conv.recordAssistantMessage(resolved.text);
+  const turnStatus =
+    terminal === "completed"
+      ? "completed"
+      : terminal === "cancelled" || terminal === "denied"
+        ? "cancelled"
+        : "errored";
+  await state.conv.completeRuntimeTurn(sessionId, turnStatus);
   await persistActivity(state);
   state.finalizingTurn = false;
   renderState(dom, state, handlers);
@@ -627,7 +639,7 @@ async function ensureRuntimeSession(
   dom: AppDom,
   readiness: ReturnType<typeof createReadinessController>,
   handlers: Parameters<typeof renderState>[2],
-): Promise<string> {
+): Promise<RuntimeSessionReady> {
   if (state.client === null) throw new Error("Service chưa sẵn sàng.");
   await refreshSettings(state, dom, handlers);
   if (
@@ -641,26 +653,20 @@ async function ensureRuntimeSession(
   const record = state.conv.state.activeRecord;
   if (record === null) throw new Error("Chưa chọn cuộc trò chuyện.");
 
-  if (state.conv.state.runtimeSessionId !== null && !needsContinuation(record)) {
-    const runtimeId = state.conv.state.runtimeSessionId;
-    try {
-      const continued = await state.client.continueRuntimeSession(runtimeId);
-      if (continued.canPrompt) {
-        state.lastView = continued.view;
-        bindEvStream(state, dom, handlers, runtimeId);
-        state.conv.state.runtimePhase = "ready";
-        return runtimeId;
-      }
-    } catch {
-      // Runtime session unavailable — create a new one below.
-    }
+  const plan = await planRuntimeTurn(state.client, record);
+
+  if (plan.action === "reuse") {
+    state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
+    bindEvStream(state, dom, handlers, plan.runtimeSessionId);
+    state.conv.state.runtimePhase = "ready";
+    return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
   }
 
   state.conv.state.runtimePhase = "starting";
   renderState(dom, state, handlers);
   const client = await ensureLive(state, readiness);
 
-  if (needsContinuation(record)) {
+  if (record.runtimeSessionId !== null) {
     await state.conv.startContinuation();
   }
 
@@ -674,7 +680,7 @@ async function ensureRuntimeSession(
   state.conv.state.runtimePhase = "ready";
   bindEvStream(state, dom, handlers, meta.id);
   renderState(dom, state, handlers);
-  return meta.id;
+  return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
 }
 
 async function switchConversation(
@@ -751,7 +757,13 @@ async function sendPrompt(
   }
   if (state.client === null || state.conv.state.activeConversationId === null) return;
 
-  const runtimeId = await ensureRuntimeSession(state, dom, readiness, handlers);
+  const priorMessages = state.conv.state.activeRecord?.messages ?? [];
+  const { runtimeSessionId, contextMessages } = await ensureRuntimeSession(
+    state,
+    dom,
+    readiness,
+    handlers,
+  );
 
   resetLiveActivity(state);
   appendMessage(dom, "user", prompt);
@@ -759,16 +771,24 @@ async function sendPrompt(
   setComposerText(dom.composerInput, "");
   state.composerDrafts.delete(state.conv.state.activeConversationId);
   await state.conv.recordUserMessage(prompt);
+  await state.conv.markLastActive();
   state.conv.state.runtimePhase = "running";
   renderState(dom, state, handlers);
 
-  const result = await state.client.sendSessionMessage(runtimeId, prompt);
+  const dispatchText =
+    contextMessages.length > 0 ? augmentPromptWithContext(contextMessages, prompt) : prompt;
+
+  const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
   if (!result.accepted) {
     if (result.reason === "session_completed") {
       await state.conv.startContinuation();
-      const retryId = await ensureRuntimeSession(state, dom, readiness, handlers);
-      const retry = await state.client.sendSessionMessage(retryId, prompt);
-      if (!retry.accepted) {
+      const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+      const retryText =
+        retry.contextMessages.length > 0
+          ? augmentPromptWithContext(retry.contextMessages, prompt)
+          : prompt;
+      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryText);
+      if (!second.accepted) {
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
       }
@@ -1043,6 +1063,7 @@ export function mountCoworkApp(root: HTMLElement): void {
   };
 
   let featuresMounted = false;
+  let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
@@ -1059,7 +1080,20 @@ export function mountCoworkApp(root: HTMLElement): void {
       dom.serviceDetail.textContent = copy.detail;
       if (readinessState.phase === "ready" && state.client !== null) {
         void refreshSettings(state, dom, handlers);
-        void state.conv.refreshList().then(() => renderState(dom, state, handlers));
+        void state.conv.refreshList().then(async () => {
+          if (!conversationRestored && state.conv.state.activeConversationId === null) {
+            const lastId = await state.client!.getLastActiveConversationId();
+            const pick = lastId ?? state.conv.state.summaries[0]?.id ?? null;
+            if (pick !== null) {
+              await state.conv.select(pick);
+              loadActivityFromRecord(state, state.conv.state.activeRecord);
+              renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
+              restoreComposerDraft(state, dom, pick);
+            }
+            conversationRestored = true;
+          }
+          renderState(dom, state, handlers);
+        });
         if (!featuresMounted) {
           featuresMounted = true;
           mountWorkspacePicker(dom.sidebar.querySelector(".workspace-slot") as HTMLElement, {

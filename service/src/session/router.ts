@@ -31,6 +31,7 @@ import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/cont
 import { BadRequestError } from "../server/http-util.js";
 import type { CreateSessionInput } from "./seams.js";
 import type { SessionService } from "./session-service.js";
+import { OpencodeHttpError } from "../runtime/opencode-http-error.js";
 
 export const SESSION_PATH = "/v1/session";
 export const SESSION_ITEM_PATH = "/v1/session/{id}";
@@ -229,6 +230,12 @@ export function createSessionRouter(
               return {
                 status: 503,
                 data: { accepted: false, reason: "runtime_not_attached", sessionId },
+              };
+            }
+            if (err instanceof OpencodeHttpError) {
+              return {
+                status: 503,
+                data: { accepted: false, reason: "runtime_unavailable", sessionId },
               };
             }
             throw err;
