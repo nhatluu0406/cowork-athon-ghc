@@ -5,7 +5,7 @@ Investigates code and returns evidence. Read-only on production/reference source
 ## Responsibilities
 - Survey the current Cowork GHC repository.
 - OpenWork study is COMPLETE; its working copy was removed. Use the retained analysis doc
-  `docs/openwork-requirements-and-basic-design.md` + `docs/references/openwork-reference.md`; do not
+  `docs/references/openwork-requirements-and-basic-design.md` + `docs/references/openwork-reference.md`; do not
   re-clone or depend on OpenWork source.
 - Survey candidate runtimes (e.g. OpenCode) and provider capabilities.
 - Identify entry points, packages, public APIs, events, and persistence.

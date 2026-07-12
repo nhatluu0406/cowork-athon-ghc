@@ -56,7 +56,7 @@ source_of_truth:
   reference_source: "REMOVED — study complete; provenance in docs/references/openwork-reference.md (never a build dependency)"
 
 documents:
-  openwork_reference: "docs/openwork-requirements-and-basic-design.md"   # research only
+  openwork_reference: "docs/references/openwork-requirements-and-basic-design.md"   # research only
   cowork_scope: "docs/product/cowork-ghc-scope-and-acceptance.md"        # produced in L1
   cowork_design: "docs/architecture/cowork-ghc-implementation-design.md" # produced in L3
   requirements_baseline_review: ".loop-engineer/reports/requirements-baseline-review.md" # produced in L1

@@ -48,7 +48,7 @@ Vietnamese when it does not affect machine state. YAML/JSON remain the machine-r
   (`CANONICAL_CRITICAL` / `CANONICAL_SUPPORTING` / `REFERENCE_ONLY` / `GENERATED_REPORT` /
   `OBSOLETE_OR_DUPLICATE`). Prioritize before L6: scope, acceptance, architecture design, key ADRs,
   master plan, security model, test strategy.
-- Do NOT translate: upstream reference kept for reference (`docs/openwork-requirements-and-basic-design.md`),
+- Do NOT translate: upstream reference kept for reference (`docs/references/openwork-requirements-and-basic-design.md`),
   license text, source-pinned content, generated API docs with no value from translation, code samples,
   commands, schemas.
 - Work is task `CGHC-DOC-001` (planned in L5), split into small parts. Acceptance: canonical content in
