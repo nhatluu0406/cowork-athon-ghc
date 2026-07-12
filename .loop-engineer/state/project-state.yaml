@@ -1,15 +1,15 @@
 version: 1
 product: Cowork GHC
-updated_at: "2026-07-12T18:00:00Z"
+updated_at: "2026-07-12T19:00:00Z"
 current_phase: L6_IN_PROGRESS
 handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
-  frozen_at: "2026-07-12T18:00:00Z"
-  note: "L6 RUNNING, gate PARTIAL. Slices 1–4 packaged PASS (service, workspace, provider/credential, OpenCode live session). Bootstrap: settings-only boot; live on explicit connectLive. CGHC-028 still IN_PROGRESS (full L9 journey). Do NOT start L7."
+  frozen_at: "2026-07-12T19:00:00Z"
+  note: "L6 RUNNING, gate PARTIAL. HuyTT12 GUI presentation integrated over verified Cowork GHC core; packaged GUI regression PASS (workspace, provider/keyring, OpenCode streaming, safe file action, cancel, clean shutdown). CGHC-028 still IN_PROGRESS (permission pending request not observed; full L9 journey remains). Do NOT start L7."
 git:
   is_repo: true
-  head: fcd15afda32b05a00de69fde478b848e54d02300
+  head: a3f259974fe54a8c39f5bdf4524a388d5db982f2
   verified_commits:
     - hash: 3856a84
       scope: "Slice 1 packaged service readiness and authenticated health verification"
@@ -21,7 +21,9 @@ git:
       scope: "Bootstrap fix: settings-only boot before live connect"
     - hash: fcd15af
       scope: "Slice 4 packaged OpenCode live session, streaming, safe workspace action"
-  note: "HEAD fcd15af. Slice 4 packaged OpenCode live session PASS."
+    - hash: a3f2599
+      scope: "HuyTT12 GUI presentation integrated over verified Cowork GHC core; packaged GUI regression"
+  note: "HEAD a3f2599. HuyTT12 GUI packaged regression PASS."
 toolchain:
   node: "v24.15.0"
   npm: "11.17.0"
