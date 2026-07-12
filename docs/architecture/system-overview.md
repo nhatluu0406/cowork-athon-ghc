@@ -44,6 +44,37 @@ workspace, provider configuration, credential presence, local URL validity, conn
 `assessSendPreflight` / `assertCreatePrerequisites` chặn tạo runtime turn khi thiếu prerequisite; không thay thế
 connectivity probe cho API key/model invalid sau request.
 
+## Boundary UI shell / product surfaces
+
+Renderer hiện dùng hướng `1a Airy`: conversation sidebar → main chat workspace → right information panel.
+Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
+integration data giả để làm đẹp layout.
+
+Top-level product surfaces được khai báo tập trung trong `app/ui/src/surface-registry.ts`:
+
+```text
+cowork
+dispatch
+gateway
+knowledge
+knowledge-graph
+microsoft
+code
+```
+
+Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`, và
+`component`. Production default chỉ expose `cowork` là `available`; D1-D4/code surfaces là hidden
+hoặc coming-later slots theo environment, không phải capability thật.
+
+D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slots.ts`:
+
+- D1 Dispatch: task summary, child tasks, cancellation, permission wait, result provenance.
+- D2 Microsoft: connection state, service list, scopes, action history, reconnect/error.
+- D3 Knowledge: index state, sources, query results, provenance, stale/rebuild state.
+- D4 Gateway: health, routes, provider/model, latency, usage/cost, fallback/error state.
+
+Không có backend adapter D1-D4 trong shell foundation này.
+
 ## Boundary process lifecycle
 
 Electron shell là owner của local service và runtime child. Shutdown chỉ dừng process do Cowork GHC sở hữu, không
