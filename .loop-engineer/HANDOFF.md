@@ -1,49 +1,64 @@
-# Cowork GHC - Handoff
+# Cowork GHC - Loop Engineer Handoff
 
-Updated: 2026-07-12 (L6 packaged acceptance PASS)
+Updated: 2026-07-12
 
-## Git anchor
+Status: `MAINTENANCE_ONLY`
 
-- **Baseline tag:** `poc-core-v0.1` -> `c96b5b8` (verified Slice 4 core before GUI migration)
-- **GUI shell:** `8e6ea21` - HuyTT12 application shell integrated
-- **L6 acceptance:** `8df3d59` - packaged slices 5A-5E PASS
-- **Slice 1:** `3856a84` - packaged service readiness + authenticated health verification
-- **Slice 2:** `ff32d808` - packaged workspace picker, activation, persistence, relaunch restore, workspace switching
-- **Slice 3:** `8f7abff` - packaged provider/model settings + Windows keyring credential + bounded DeepSeek test connection
-- **Bootstrap fix:** `bd22583` - settings-only boot before live connect
-- **Slice 4:** `fcd15af` / `c96b5b8` - packaged OpenCode live session + streaming + safe workspace action
+## Meaning
 
-## Current State
+`.loop-engineer/` now contains historical state, evidence, checkpoints, and optional verification
+tooling. It is no longer the primary day-to-day product orchestration system.
 
-- Loop: `L6` Implementation = **COMPLETED**
-- Gate: **PASS** (desktop POC packaged acceptance)
-- `CGHC-028`: **DONE**
-- Do **not** auto-start `L7`
-- Web remains `DEFERRED`
+Active project status and roadmap now live in:
 
-## Verified (Packaged)
+- `docs/product/current-status.md`
+- `docs/product/productization-roadmap.md`
+- `docs/quality/poc-acceptance.md`
+- `docs/quality/known-limitations.md`
+- `docs/architecture/system-overview.md`
 
-`dist-app/win-unpacked/Cowork GHC.exe` via `node tools/verify/l6-packaged.mjs`:
+The canonical source for active work is Git plus those lightweight product documents.
 
-| Slice | Result |
-|---|---|
-| 5A Permission approve | PASS (real modal; fixture file created) |
-| 5A Permission deny | PASS (real modal; file not created) |
-| 5B Clean-profile onboarding | PASS |
-| 5C Provider recovery | PASS (delete credential → error → restore → success) |
-| 5D Interruption + relaunch | PASS (no orphans; no stale running state) |
-| 5E Lifecycle | PASS (`init.bat`, `stop.bat`) |
-| 5F UX | PARTIAL (Vietnamese step labels, provider errors, path tooltip, disabled hints) |
+## Current Baseline
 
-Evidence: `.loop-engineer/evidence/CGHC-028-l6-packaged-acceptance.md`
+- Current HEAD at retirement: `ead01e8` (`poc-v0.1`)
+- Packaged acceptance commit: `8df3d59`
+- Core packaged live-session tag: `poc-core-v0.1` at `c96b5b8`
+- L6 Implementation: `COMPLETED`
+- Gate: `PASS`
+- `CGHC-028`: `DONE`
+- Web: `DEFERRED`
+- Do not auto-start `L7`
 
-## Carry-forward (non-blocking for L6 POC)
+## What Remains Useful Here
 
-- Template re-run / session resume packaged smoke
-- Invalid-model / bad-base-URL provider-error legs (separate from missing-credential recovery)
-- Full `start.bat` / `clean.bat` double-click evidence in L9
-- L9 scripted regression beyond `l6-packaged.mjs`
+- Historical evidence under `.loop-engineer/evidence/`
+- Loop/task provenance under `.loop-engineer/state/`
+- Optional consistency check:
 
-## Precise Next Action
+```powershell
+node tools/loop-engineer/cli.mjs verify
+```
 
-Product owner may activate **L7 Integration** when ready. First L7 work: template/session-resume packaged smoke + full L9 regression script + `start.bat`/`clean.bat` evidence.
+Future implementation agents do not need to read all evidence by default. Read evidence only when
+auditing a previous claim or preparing a release-critical verification.
+
+## Retired Behavior
+
+- Do not run the old high-token `all`, `run`, `task`, or `slice` workflow unless explicitly requested.
+- L7-L10 are not automatically executed through the old Loop Engineer workflow.
+- Do not move or delete evidence files just to tidy the archive; existing links should keep working.
+
+## Next Product Work
+
+Next slice: `Release Gap Hardening`
+
+Scope:
+
+- Verify invalid credential recovery.
+- Verify invalid model recovery.
+- Verify invalid base URL recovery.
+- Verify `start.bat` and `clean.bat` through Explorer-style invocation.
+- Consolidate one non-live release regression command where practical.
+
+After that: `Session Management and Resume`.

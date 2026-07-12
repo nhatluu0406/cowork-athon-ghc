@@ -3,10 +3,10 @@ product: Cowork GHC
 updated_at: "2026-07-12T22:00:00Z"
 current_phase: L6_COMPLETE
 handoff:
-  status: PREP_FOR_CODEX
+  status: MAINTENANCE_ONLY
   doc: .loop-engineer/HANDOFF.md
   frozen_at: "2026-07-12T22:00:00Z"
-  note: "L6 COMPLETED, gate PASS. CGHC-028 packaged POC acceptance PASS (permission approve/deny, clean-profile onboarding, provider recovery, interruption/relaunch, lifecycle init/stop). Template/session-resume and L9 full regression remain for L7+. Do NOT auto-start L7."
+  note: "L6 COMPLETED, gate PASS. CGHC-028 packaged POC acceptance PASS. Loop Engineer is now MAINTENANCE_ONLY: historical provenance plus optional `cli.mjs verify`, not the day-to-day product task system. Active status and roadmap live under docs/product, docs/quality, and docs/architecture. Do NOT auto-start L7."
 git:
   is_repo: true
   head: 8df3d59248df46998d8a0029a8a08e648932bf32
