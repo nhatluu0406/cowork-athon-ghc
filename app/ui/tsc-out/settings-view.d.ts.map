@@ -1,0 +1,1 @@
+{"version":3,"file":"settings-view.d.ts","sourceRoot":"","sources":["../src/settings-view.ts"],"names":[],"mappings":"AAAA;;;;;;;;;;;;;;;GAeG;AAEH,OAAO,KAAK,EACV,aAAa,EAGd,MAAM,qBAAqB,CAAC;AAE7B,MAAM,WAAW,gBAAgB;IAC/B,QAAQ,CAAC,MAAM,EAAE,IAAI,CAAC,aAAa,EAAE,aAAa,GAAG,eAAe,CAAC,CAAC;CACvE;AAeD,2FAA2F;AAC3F,wBAAgB,iBAAiB,CAAC,SAAS,EAAE,WAAW,EAAE,IAAI,EAAE,gBAAgB,GAAG,IAAI,CAmFtF"}

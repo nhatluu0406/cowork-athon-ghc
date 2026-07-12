@@ -334,7 +334,7 @@
   <div class="verdict">
     <div class="icon">✓</div>
     <div class="txt">
-      <b>Kết luận ngắn gọn:</b> Tiến bộ rõ rệt so với lần đánh giá trước — phần khó nhất (đồ thị tri thức, AI trích xuất, thuật toán tìm kiếm) đã chạy thật, <b>4 định dạng tài liệu (Word/Excel/PowerPoint/PDF) nay đọc được nội dung thật</b>, và <b>giao diện người dùng (7 màn hình) đã dựng xong, build sạch, và đã commit vào git</b>. Mắt xích còn thiếu duy nhất để có câu trả lời hữu ích: kho "tìm kiếm theo nghĩa" vẫn rỗng vì cơ chế nạp dữ liệu vào đó (embedding) đã được sửa đúng nhưng <b>chưa được nối vào bất kỳ quy trình chạy tự động hay thủ công nào</b> — đây là khoảng cách ngắn nhất và duy nhất còn lại để hệ thống dùng thật được.
+      <b>Kết luận ngắn gọn:</b> Phần lõi phục vụ người dùng (đồ thị tri thức, đọc tài liệu, tìm kiếm/xếp hạng, giao diện, và nay cả việc lọc quyền truy cập theo lịch tự động) đã chạy thật và đã kiểm chứng độc lập nhiều lần. <b>Nhưng vòng kiểm tra mới nhất phát hiện một hạng mục được báo "✅ hoàn thành" (mô hình AI chạy nội bộ dạng GGUF) thực chất trả dữ liệu giả một cách im lặng</b> — không phải thiếu sót thông thường, mà là nhãn sai nằm ngay trong mã nguồn. Đây là lời nhắc quan trọng: hạng mục này (và mọi hạng mục tương lai) cần được xác nhận bằng cách đọc code thật, không chỉ đọc báo cáo — không phải một khiếm khuyết kiến trúc, nhưng là một tín hiệu quy trình cần lưu ý.
     </div>
   </div>
 
@@ -430,22 +430,22 @@
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Không có phương án AI sinh câu trả lời chạy nội bộ (offline) — nhưng đã có một nửa</b>
-            <p>Phần suy luận AI cho "tìm hiểu nghĩa tài liệu" (embedding) đã chạy được nội bộ thật (đã tự kiểm chứng bằng cách nạp mô hình thật và chạy suy luận thành công). Phần còn thiếu là mô hình sinh văn bản chạy nội bộ — hiện vẫn phụ thuộc dịch vụ AI đám mây cho việc này, không phải toàn bộ hệ thống.</p>
+            <b>"AI chạy nội bộ" báo hoàn thành — nhưng thực chất là dữ liệu giả được ngụy trang</b>
+            <p>Đội kỹ thuật báo mô hình GGUF (một trong hai phương án AI chạy nội bộ, dùng để sinh câu trả lời/trích xuất/phân loại) đã "✅ hoàn thành". Kiểm tra trực tiếp mã nguồn cho thấy: hàm này trả vector toàn số 0, danh sách rỗng, nhãn "general" cố định — không hề chạy mô hình thật, và thậm chí không được nối vào hệ thống đang phục vụ người dùng (vẫn dùng đường xử lý cũ báo lỗi). Phần embedding chạy nội bộ (ONNX) thì xác nhận là thật. Không ảnh hưởng tới trải nghiệm người dùng hiện tại (hệ thống đang dùng AI đám mây cho phần này), nhưng là dấu hiệu cần theo dõi sát.</p>
           </div>
         </div>
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Một mẩu nợ kỹ thuật nhỏ vừa lọt vào git ở trạng thái lỗi</b>
-            <p>Một file kiểm thử hiệu năng bị lỗi cú pháp (không build được) đã vô tình bị gộp vào cùng lượt commit với phần giao diện — dưới 1 ngày công để sửa, nhưng nên dọn trước khi tính là "sạch hoàn toàn".</p>
+            <b>Một mẩu nợ kỹ thuật nhỏ, đã nằm trong git nhiều ngày mà chưa ai sửa</b>
+            <p>Một file kiểm thử hiệu năng bị lỗi cú pháp (không build được) đã vô tình lọt vào git — vẫn chưa được sửa qua nhiều lượt commit tiếp theo, kể cả khi các file test khác gần đó được cập nhật. Dưới 1 ngày công để sửa.</p>
           </div>
         </div>
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Rủi ro quy trình báo cáo — đã cải thiện nhưng chưa nên bỏ qua bước kiểm tra</b>
-            <p>Từng xảy ra 2 lần báo "hoàn thành" sai trong dự án này. Tin tốt: 2 lượt báo cáo "xong" gần nhất (backend/llm-svc production-ready, và frontend hoàn thành) đã được kiểm tra độc lập và đúng như báo cáo — cho thấy quy trình đang đi đúng hướng. Vẫn nên giữ thói quen xác minh độc lập cho các mốc lớn tiếp theo.</p>
+            <b>Rủi ro quy trình báo cáo — mẫu hình lặp lại, dạng tinh vi hơn</b>
+            <p>Đây là lần thứ 3 một hạng mục được báo "✅ hoàn thành" không đúng sự thật. Điểm đáng chú ý: 2 lần trước, việc dò ra tương đối dễ (chạy thử là thấy ngay lỗi). Lần này, nhãn "hoàn thành" nằm ngay trong docstring của mã nguồn và trông có vẻ hợp lý (có thêm cả thư viện tương ứng) — chỉ phát hiện được nhờ đọc kỹ từng dòng hàm. Nên xem đây là lý do để duy trì lâu dài một bước kiểm tra độc lập, không phải nới lỏng sau khi thấy vài lần gần đây đúng.</p>
           </div>
         </div>
       </div>
@@ -508,20 +508,20 @@
       <div class="priority-item">
         <div class="rank">4</div>
         <div class="content">
-          <div class="row1"><h3>Tiếp tục xác minh độc lập cho các mốc lớn tiếp theo</h3><span class="eff">quy trình, không tốn thời gian dev</span></div>
-          <p>2 lượt báo "hoàn thành" gần nhất (backend/llm-svc, và frontend) đã được kiểm tra độc lập và đúng như báo cáo — quy trình đang cải thiện. Vẫn nên giữ thói quen này cho các cột mốc còn lại, đặc biệt là mục 1 ở trên.</p>
+          <div class="row1"><h3>Duy trì xác minh độc lập — không nới lỏng dù gần đây có tiến bộ</h3><span class="eff">quy trình, không tốn thời gian dev</span></div>
+          <p>Đây là lần thứ 3 phát hiện báo cáo "hoàn thành" sai — lần này tinh vi hơn (nhãn sai nằm trong chính mã nguồn, không chỉ trong báo cáo). Hai lượt báo "xong" trước đó (backend/llm-svc, frontend) đã qua kiểm tra và đúng, nhưng điều đó không nên khiến việc kiểm tra độc lập được rút gọn ở các mốc tiếp theo.</p>
         </div>
       </div>
       <div class="priority-item">
         <div class="rank">5</div>
         <div class="content">
-          <div class="row1"><h3>AI sinh văn bản chạy nội bộ (GGUF/Safetensors)</h3><span class="eff">1–2 tuần — có thể lùi lại</span></div>
-          <p>Phần embedding chạy nội bộ đã xong; phần còn lại (mô hình sinh câu trả lời chạy tại chỗ) chỉ cần thiết nếu yêu cầu bảo mật/chi phí bắt buộc không phụ thuộc dịch vụ AI đám mây. Có thể tạm hoãn để tập trung nguồn lực cho mục 1–3.</p>
+          <div class="row1"><h3>Quyết định lại: làm thật GGUF hay bỏ khỏi phạm vi v1.0</h3><span class="eff">1–2 tuần nếu làm thật</span></div>
+          <p>Phần embedding chạy nội bộ (ONNX) đã xong thật. Phần sinh văn bản chạy nội bộ (GGUF) hiện là code chết mang nhãn sai — nên quyết định rõ: đầu tư 1–2 tuần làm thật, hoặc chính thức gác lại sang v2.0 giống Safetensors (đã ghi nhận trung thực). Không nên giữ nguyên trạng "trông như xong nhưng không chạy" vì dễ gây hiểu lầm cho người đọc code sau này.</p>
         </div>
       </div>
     </div>
     <div class="callout">
-      <b>Lưu ý khi ra quyết định:</b> ước tính thời gian ở trên do đội kỹ thuật tự đưa ra. Tin tốt là 2 lượt báo cáo "xong" gần nhất đã qua kiểm tra độc lập và đúng — nhưng vẫn nên đối chiếu với một mốc kiểm tra thực tế giữa chừng (ví dụ sau mục 1) trước khi cam kết toàn bộ lịch trình phía dưới với các bên liên quan.
+      <b>Lưu ý khi ra quyết định:</b> ước tính thời gian ở trên do đội kỹ thuật tự đưa ra. Tin tốt là phần lõi phục vụ người dùng (tài liệu, tìm kiếm, giao diện, quyền truy cập) đã qua kiểm tra độc lập và đúng — nhưng phát hiện GGUF lần này cho thấy vẫn cần đối chiếu với một mốc kiểm tra thực tế giữa chừng (ví dụ sau mục 1) trước khi cam kết toàn bộ lịch trình phía dưới với các bên liên quan.
     </div>
   </section>
 
@@ -539,13 +539,13 @@
       <div class="tl-card">
         <div class="tl-label">Hoàn tất toàn bộ phạm vi ban đầu</div>
         <div class="tl-value">~1–2 tuần</div>
-        <div class="tl-hint">Chủ yếu còn lại là AI sinh văn bản chạy nội bộ (tùy chọn) và dọn dẹp/kiểm thử mở rộng — không còn hạng mục kiến trúc lớn nào dang dở</div>
+        <div class="tl-hint">Chủ yếu còn lại là quyết định + làm lại AI sinh văn bản chạy nội bộ (GGUF, hiện là code chết mang nhãn sai) và dọn dẹp/kiểm thử mở rộng — không còn hạng mục kiến trúc lớn nào dang dở</div>
       </div>
     </div>
   </section>
 
   <div class="foot">
-    <span>Nguồn: đối chiếu trực tiếp với mã nguồn (build/test tự chạy lại 4 lần trong ngày) — không dựa trên đánh dấu ✅ của task-list</span>
+    <span>Nguồn: đối chiếu trực tiếp với mã nguồn (build/test tự chạy lại 5 lần trong ngày, kể cả đọc từng dòng hàm) — không dựa trên đánh dấu ✅ của task-list hay docstring</span>
     <span>Tài liệu dành cho quyết định quản lý dự án, không thay thế báo cáo kỹ thuật chi tiết</span>
   </div>
 

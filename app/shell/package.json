@@ -1,0 +1,19 @@
+{
+  "name": "@cowork-ghc/shell",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cowork GHC Electron desktop shell (ADR 0002). Owns ONLY native capabilities (folder picker, tray, auto-update, service supervision) and a hardened renderer host. No business logic; the renderer reaches business logic only through the loopback service (ADR 0003).",
+  "main": "./dist/main.cjs",
+  "scripts": {
+    "typecheck": "tsc -b",
+    "build": "tsc -b && node scripts/main-bundle.mjs && node scripts/preload-bundle.mjs",
+    "bundle:main": "node scripts/main-bundle.mjs",
+    "bundle:preload": "node scripts/preload-bundle.mjs",
+    "start:electron": "electron ./dist/main.cjs"
+  },
+  "dependencies": {
+    "@cowork-ghc/contracts": "*",
+    "@cowork-ghc/service": "*"
+  }
+}

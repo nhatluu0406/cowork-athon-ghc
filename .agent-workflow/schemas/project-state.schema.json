@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "cowork-ghc/project-state.schema.json",
+  "title": "Cowork GHC Project State",
+  "type": "object",
+  "required": ["version", "product", "current_phase", "loops"],
+  "additionalProperties": true,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "product": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "current_phase": { "type": "string" },
+    "git": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "is_repo": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "reference_source": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repository": { "type": "string" },
+        "path": { "type": "string" },
+        "branch": { "type": "string" },
+        "commit": { "type": "string" },
+        "doc_commit": { "type": "string" },
+        "status": { "type": "string" }
+      }
+    },
+    "loops": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "status"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "pattern": "^L[0-9]+$" },
+          "status": {
+            "type": "string",
+            "enum": ["NOT_READY", "READY", "RUNNING", "BLOCKED", "REVIEW_REQUIRED", "VERIFY_REQUIRED", "COMPLETED", "STALE", "FAILED"]
+          }
+        }
+      }
+    }
+  }
+}
