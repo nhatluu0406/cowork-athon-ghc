@@ -1,0 +1,274 @@
+/* Minimal renderer styling. No inline styles anywhere so style-src can stay 'self'. */
+:root {
+  color-scheme: light dark;
+  --fg: #1b1b1f;
+  --muted: #5c5c66;
+  --bg: #ffffff;
+  --ok: #1a7f37;
+  --err: #b3261e;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fg: #e6e6ea;
+    --muted: #a0a0aa;
+    --bg: #16161a;
+    /* Lighten status colors so error/success text clears WCAG AA (>=4.5:1) on the dark bg;
+       the light-mode values (#b3261e / #1a7f37) fail contrast against #16161a. */
+    --err: #ff6b63;
+    --ok: #5cd97a;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+}
+#app {
+  display: block;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+}
+.scaffold-title {
+  font-size: 1.25rem;
+  margin: 0 0 0.25rem;
+}
+.scaffold-note {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+.status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.status-dot.ready {
+  background: var(--ok);
+}
+.status-dot.error {
+  background: var(--err);
+}
+.status-detail {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+/* Progressive readiness surface (CGHC-025 cold-start). No inline styles; state via data-*. */
+.readiness {
+  display: block;
+}
+.readiness-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.readiness-dot[data-phase="ready"] {
+  background: var(--ok);
+}
+.readiness-dot[data-phase="unreachable"],
+.readiness-dot[data-phase="not_connected"] {
+  background: var(--err);
+}
+.readiness-runtime {
+  font-style: italic;
+}
+.readiness-recovery {
+  margin-top: 0.75rem;
+}
+.readiness-retry {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.35rem 1rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+.readiness-diagnostics {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.readiness-diagnostics summary {
+  cursor: pointer;
+}
+.readiness-diag-detail {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0.35rem 0 0;
+}
+
+/* EV timeline (CGHC-015). No inline styles; all state shown via classes + data-*. */
+.ev-timeline {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--muted);
+  padding-top: 1rem;
+}
+.ev-status {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+.ev-terminal {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+.ev-terminal[data-terminal-state="completed"] {
+  color: var(--ok);
+}
+.ev-terminal[data-terminal-state="errored"],
+.ev-terminal[data-terminal-state="denied"] {
+  color: var(--err);
+}
+.ev-timeline ul {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+.ev-timeline li {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.9rem;
+  padding: 0.15rem 0;
+}
+.ev-todo-status,
+.ev-step-status,
+.ev-tool-status,
+.ev-file-op {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.ev-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  margin: 0 0 0.75rem;
+}
+.ev-error {
+  border: 1px solid var(--err);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+}
+.ev-error-message {
+  color: var(--err);
+  margin: 0 0 0.5rem;
+}
+.ev-error-recovery {
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Permission Allow/Deny modal (CGHC-017). No inline styles; state via classes + data-*. */
+.permission-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 1.5rem;
+}
+.permission-dialog {
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--muted);
+  border-radius: 0.5rem;
+  padding: 1.25rem 1.5rem;
+  max-width: 32rem;
+  width: 100%;
+  box-shadow: 0 0.5rem 2rem rgba(0, 0, 0, 0.4);
+}
+.permission-title {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+.permission-action {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+.permission-action-kind {
+  font-weight: 600;
+}
+.permission-action-target {
+  color: var(--muted);
+  word-break: break-all;
+}
+.permission-description {
+  margin: 0 0 0.75rem;
+}
+.permission-diff {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  border: 1px solid var(--muted);
+  border-radius: 0.35rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.permission-approval {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.permission-approval[data-level="elevated"] {
+  color: var(--err);
+  font-weight: 600;
+  border: 1px solid var(--err);
+  border-radius: 0.35rem;
+  padding: 0.4rem 0.6rem;
+}
+.permission-scope {
+  border: 1px solid var(--muted);
+  border-radius: 0.35rem;
+  margin: 0 0 1rem;
+  padding: 0.4rem 0.75rem 0.6rem;
+}
+.permission-scope-legend {
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0 0.35rem;
+}
+.permission-scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 1rem;
+  font-size: 0.9rem;
+}
+.permission-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+.permission-deny,
+.permission-allow {
+  font: inherit;
+  cursor: pointer;
+  padding: 0.4rem 1.1rem;
+  border-radius: 0.35rem;
+}
+.permission-allow {
+  border: 1px solid var(--ok);
+  color: var(--ok);
+}
+.permission-deny {
+  border: 1px solid var(--err);
+  color: var(--err);
+}
+.permission-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}

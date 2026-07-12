@@ -1,0 +1,42 @@
+checkpoint: L6-composition-root-tier1
+created_at: "2026-07-11T18:40:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+tasks_done_total: 24
+note: "Composition root is cross-cutting integration debt, not a numbered CGHC task; recorded via evidence + this checkpoint. It is the satisfied prerequisite CGHC-028 depended on."
+just_finished:
+  - "COMPOSITION ROOT Tier 1 DONE — one wired LocalService mounts every router (workspace/credential/settings/provider/ev-snapshot/ev-live + auto health), cross-cutting seams wired, start seam exposed, proven by a loopback round-trip integration test."
+  - "Independent security review PASS (0 Crit/High): SSRF/rebinding, permission-Deny-blocks, one-credential-store, token guard, Tier 2 honesty all enforce at the execution boundary."
+  - "Independent architecture review: 1 HIGH (model/credential SSOT drift) + 2 LOW — ALL FIXED + re-verified."
+fixes_applied:
+  - "HIGH-1: wrapSettingsStoreWithPortSync writes setDefaultModel/setProviderCredentialRef/removeProviderCredentialRef through to the port resolver (mirrors the correct base_url pattern) — model/credential/base_url now single-source-of-truth across store + resolver + Tier 2 reads; a runtime model change takes effect with no restart."
+  - "FIX-3 (sec LOW): permission-gate explicit-deny reply is now report-and-swallowed like the fail-closed timeout path — a successful server-side Deny never surfaces as a 500 even with a rejecting/not-attached reply (finalizeDeny still records + blocks before the reply). 18 permission tests pass."
+  - "FIX-2 (arch LOW-1): tier2-seams replay returns Promise.reject (uniform async seam contract)."
+  - "FIX-4: ProviderRequestError + SettingsRequestError extend BadRequestError (SSRF/validation refusals map to 400, not 500)."
+  - "FIX-5: 5 composed-layer tests (SSOT model/credential, fail-closed timeout auto-deny, Deny-over-rejecting-reply no-unhandled, boot base_url non-reuse, value-based redaction e2e through the live path)."
+  - "FIX-6 (sec LOW doc): Tier 2 supervisor MUST inject credentials via credentialService.resolveInjection (registers value with scrubber) — documented on the not-attached seams."
+health:
+  full_suite: "415 pass / 0 fail / 0 skip (verified independently over 2 runs; an agent '365' report was a flaky tsx discovery miss, not lost tests)"
+  tsc: "clean"
+  composition_loopback_e2e: "8/8"
+  composition_ssot_redaction: "5/5"
+  permission: "18/18"
+  unresolved_critical: 0
+  unresolved_high: 0
+tier2_carry_forward:
+  - "Live OpenCode supervisor (buildLaunchSpec + credential injection into child env via resolveInjection) + live SessionStore adapter (create/list/get/rename/replay against the running child) + real RuntimeHealth + live ProviderConnector. Current defaults refuse honestly (RuntimeNotAttachedError), never fabricate."
+  - "When a session/permission HTTP router is mounted in Tier 2, map RuntimeNotAttachedError + reply-reject to typed boundary errors (not raw 500)."
+  - "NIT: settings-router base-url SSRF path still returns 500 (raw SsrfBlockedError) vs the provider endpoint path's 400 — re-wrap as SettingsRequestError when convenient."
+remaining:
+  - "CGHC-017 (permission UI, READY) — now has a genuinely wired execution boundary to prove Deny-blocks against."
+  - "CGHC-025 (cold-start/renderer hardening, READY; folds EV5 progress render + MEDIUM-5 rAF batching)."
+  - "CGHC-026 (extensions, deps met, MEDIUM/POC-budget)."
+  - "CGHC-028 (packaged E2E release verification) — LAST; folds the Tier 2 live-supervisor legs + deferred live legs."
+resume_hint: >
+  24/28 DONE + composition root Tier 1 wired (415 pass, tsc clean, all reviewed 0 Crit/High). The app
+  now assembles into one running loopback service with a single source of truth for model/credential/
+  base_url and the execution-boundary invariants proven end-to-end. Next: CGHC-017 (permission UI),
+  then CGHC-025, then CGHC-026, then CGHC-028 (which also folds in the Tier 2 live supervisor). Web
+  DEFERRED (ADR 0007). No credential gate remains.

@@ -1,0 +1,164 @@
+# Cowork GHC — Canonical Agent Workflow
+# Neutral source of truth. Claude Code (.claude/) and Codex (AGENTS.md) are adapters over this.
+# Do NOT duplicate role/loop definitions elsewhere; reference this file.
+
+version: 1
+product: "Cowork GHC"
+description: >
+  Desktop AI cowork product for Windows 11 local PC. UI is a client of a local
+  application service bound to loopback. LLM calls may go over cloud APIs.
+  OpenWork is a research reference only, never a fork/clone target.
+
+principles:
+  - "Cowork GHC is its own product; OpenWork is research reference only."
+  - "The Loop Engineer Lead orchestrates; the user is product owner with final say."
+  - "Reviewer must always differ from implementer."
+  - "No task is DONE until acceptance + tests + review + evidence exist."
+  - "Never claim completion without verification."
+  - "Never modify reference source under .loop-engineer/source/."
+  - "One source of truth per state type. Machine state is YAML/JSON; Markdown is a view."
+  - "Release target = Windows desktop app; Next.js/web is DEFERRED (ADR 0007), not built now."
+  - "Human-facing docs/ use a Vietnamese body; technical identifiers and machine/agent-facing files stay English."
+
+product_scope:
+  release_target: "Windows desktop application (local-first, packaged, stable runtime + workspace)"
+  web_status: DEFERRED            # ADR docs/architecture/decisions/0007-web-application-deferral.md
+  web_epic: CGHC-WEB-001          # backlog; not auto-READY
+  web_activation: "Desktop POC reaches L9 PASS, OR product owner activates the web phase."
+  web_future_loops: [W0, W1, W2, W3, W4, W5, W6]   # deferred proposal only; not in the active loop list
+  web_rules:
+    - "Do not install Next.js, create apps/web, add an active web loop, or build web-only auth/cloud/companion before activation."
+    - "Future loops W0-W6 must never make `/loop-engineer all` auto-run a web phase."
+
+documentation_policy:
+  human_facing_docs_language: vi   # docs/ body + headings in Vietnamese
+  identifiers_language: en         # file/ID/symbol/route/schema/command/env/framework/product names stay English
+  machine_facing_english:          # not translated
+    - CLAUDE.md
+    - AGENTS.md
+    - .agent-workflow/**
+    - .claude/**
+    - tools/loop-engineer/**
+    - .loop-engineer/state/*.yaml
+    - JSON Schema, source, test, config
+  human_view_vietnamese: [STATUS.md, TASKS.md, "product-owner reports"]
+  language_only_change: "A no-meaning translation = LANGUAGE_ONLY_CHANGE; store old+new hash + reason; confirm IDs/acceptance unchanged; MUST NOT auto-invalidate L1-L4."
+  normalization_task: CGHC-DOC-001  # planned in L5; split small; do not mass-translate
+  audit: .loop-engineer/reports/docs-language-audit.md
+  rule: .claude/rules/documentation.md
+
+source_of_truth:
+  machine_state: ".loop-engineer/state/"       # YAML files (authoritative)
+  human_view: ".loop-engineer/state/STATUS.md, .loop-engineer/state/TASKS.md"
+  canonical_roles: ".agent-workflow/roles/"
+  loop_definitions: ".agent-workflow/loops.yaml"
+  controller: "tools/loop-engineer/"
+  reference_source: "REMOVED — study complete; provenance in docs/references/openwork-reference.md (never a build dependency)"
+
+documents:
+  openwork_reference: "docs/openwork-requirements-and-basic-design.md"   # research only
+  cowork_scope: "docs/product/cowork-ghc-scope-and-acceptance.md"        # produced in L1
+  cowork_design: "docs/architecture/cowork-ghc-implementation-design.md" # produced in L3
+  requirements_baseline_review: ".loop-engineer/reports/requirements-baseline-review.md" # produced in L1
+
+roles:
+  - id: loop-engineer-lead
+    file: roles/loop-engineer-lead.md
+    kind: orchestrator
+  - id: repository-researcher
+    file: roles/repository-researcher.md
+    kind: research
+  - id: product-architect
+    file: roles/product-architect.md
+    kind: design
+  - id: runtime-llm-engineer
+    file: roles/runtime-llm-engineer.md
+    kind: implementer
+  - id: frontend-desktop-engineer
+    file: roles/frontend-desktop-engineer.md
+    kind: implementer
+  - id: ux-performance-reviewer
+    file: roles/ux-performance-reviewer.md
+    kind: reviewer
+  - id: test-engineer
+    file: roles/test-engineer.md
+    kind: implementer-verifier
+  - id: security-reviewer
+    file: roles/security-reviewer.md
+    kind: reviewer
+  - id: code-reviewer
+    file: roles/code-reviewer.md
+    kind: reviewer
+  - id: release-verifier
+    file: roles/release-verifier.md
+    kind: verifier
+
+contracts:
+  delegation: contracts/delegation.md
+  review_output: contracts/review-output.md
+  verification_output: contracts/verification-output.md
+
+schemas:
+  project_state: schemas/project-state.schema.json
+  loop: schemas/loop.schema.json
+  task: schemas/task.schema.json
+
+# Default operating mode is LEAN (token-frugal). FULL mode (fan-out) is opt-in for genuinely
+# parallel, independent workstreams. Both Claude and Codex honor this; adapters do not redefine it.
+operating_mode:
+  default: LEAN
+  lean:
+    description: "One Agent Lead works sequentially; token-frugal by default."
+    rules:
+      - "One Agent Lead, sequential. No fan-out by default; no recursive delegation."
+      - "At most one implementer at a time."
+      - "Do NOT use an LLM reviewer for small tasks; prefer deterministic tests + the controller validator."
+      - "Use an independent reviewer ONLY for: security-sensitive change, architecture change, release-critical slice, or a large change hard to verify by test."
+      - "Review per meaningful slice or git diff, not per tiny task."
+      - "Reviewer must still differ from implementer whenever a review is done."
+      - "Do NOT checkpoint after every task. Checkpoint only at: a completed user journey, before switching agent, before a risky change, at loop end, or at an important Git baseline."
+      - "Do not repeat full project context in every prompt; point to canonical state."
+      - "Do not write a report when state + test result + commit diff already say it."
+  full:
+    description: "Subagent fan-out; opt-in when the work is genuinely parallel."
+    rules:
+      - "Max 3 concurrent agents (4 at large budget); reviewer differs from implementer."
+      - "Only parallelize genuinely independent work; use git worktree if implementers risk file conflict."
+
+execution:
+  default_mode: solo             # LEAN default = solo | subagents | team (FULL mode)
+  default_parallel: 1            # LEAN default; up to 3 (4 at large budget) only in FULL mode
+  default_budget: normal         # small | normal | large
+  default_stop_on: gate          # gate | failure | blocker | never
+  rules:
+    - "LEAN is default (see operating_mode). FULL fan-out is opt-in."
+    - "Max 3 concurrent agents in FULL mode, 4 at large budget."
+    - "Never assign the same file to two implementers concurrently."
+    - "Reviewer must differ from implementer."
+    - "Use git worktree when parallel implementers risk file conflict."
+    - "Only parallelize genuinely independent work."
+
+quality_gate:
+  definition_of_done:
+    - "Acceptance criteria met."
+    - "Related tests pass."
+    - "Independent review complete."
+    - "Evidence recorded under .loop-engineer/evidence/."
+    - "No unresolved Critical/High findings."
+
+controller:
+  runtime: node
+  entry: "tools/loop-engineer/cli.mjs"
+  invoke: "node tools/loop-engineer/cli.mjs <command>"
+  commands:
+    - status
+    - bootstrap
+    - next
+    - "run <selector>"     # e.g. L3, L3-L5, L2,L4,L7
+    - "task <task-id>"
+    - "slice <slice-id>"
+    - verify
+    - resume
+    - all
+    - "dry-run <selector>"
+    - "invalidate <loop-id> --reason <text>"

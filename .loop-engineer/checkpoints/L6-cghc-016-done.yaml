@@ -1,0 +1,36 @@
+checkpoint: L6-cghc-016-done
+created_at: "2026-07-11T13:15:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+tasks_done_total: 17
+numbered_tasks_done:
+  - "CGHC-001..007, 009..013, 021, 023, 024, 027, 016 (17/28)"
+cghc_016:
+  outcome: "DONE — permission enforcement at the execution boundary; CRITICAL/load-bearing"
+  property: "no proceed() without a recorded still-valid Allow; Deny + fail-closed both actually block; enforcement at the gate not the UI"
+  coverage: "18 permission tests (round-trip, deny-no-strand w/ real session, fail-closed P6, bypass-blocked, approval-level P4, audit-no-secret P5, LOW-1 deny-transport-failure)"
+  review: "security-reviewer (!= implementer) PASS 0 Crit/High; LOW-1 fixed; LOW-2 -> CGHC-018 reply-adapter redaction obligation; LOW-3 states-map TTL follow-up"
+  seams_left:
+    - "live OpenCode reply adapter (requestId -> POST /session/{id}/permissions/{permissionID}) -> CGHC-018"
+    - "gate.pending() consumed by CGHC-017 UI"
+    - "waiting_approval needs a contract EV kind (not added; contract untouched)"
+unblocked:
+  - "CGHC-018 (file-mutation-audit) promoted BACKLOG -> READY (deps CGHC-007 + CGHC-016 satisfied)"
+in_flight:
+  - "CGHC-014 (two-hop SSE streaming) implementer running in background (ace95508480b5fe3f); UX/perf review to follow"
+health:
+  permission_suite: "18 pass / 0 fail / 0 skip"
+  tsc: "clean at CGHC-016 finalization (full-suite re-verify deferred until CGHC-014 lands to avoid mid-write compile)"
+  unresolved_critical: 0
+  unresolved_high: 0
+next:
+  - "Finish CGHC-014 (verify on-disk + UX/perf review), then full-suite + tsc re-verify"
+  - "CGHC-018 (file mutation + audit, uses PermissionGate.proceed + live reply adapter) — CRITICAL"
+  - "CGHC-015 (timeline UI, needs 014), CGHC-017 (permission UI, needs 016+015), CGHC-019/020/022/008"
+  - "CGHC-025/026; CGHC-028 packaged E2E last"
+resume_hint: >
+  CGHC-016 DONE (17/28), reviewed 0 Crit/High. CGHC-014 in flight. Continue L6 autonomously:
+  finish+review CGHC-014, then CGHC-018 (consume gate.proceed + build the live reply adapter with a
+  redacting error reporter per LOW-2), then the UI tasks and CGHC-028. No credential gate remains.

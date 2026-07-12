@@ -1,0 +1,38 @@
+checkpoint: L6-cghc-015-done
+created_at: "2026-07-11T17:20:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: null
+resumable: true
+tasks_done_total: 24
+just_finished:
+  - "CGHC-015 (EV timeline UI + LIVE SSE hop-2) DONE — 24/28. Live token-guarded GET /v1/session/stream mounted (handler owns the response after the fail-closed guard; coalesced EV frames + heartbeats; resume-from-seq dedupe so terminal is delivered exactly once; disconnect teardown) + SessionStreamHub + SseWriter + RouterRegistry mount seam (dup method+path rejected, publicUnauthenticated opt-out audited). Honest EV1-EV7 renderer (textContent only; terminal only on a real terminal; reference-based no-thrash; EV6 via shared sanitizer + keyboard recovery)."
+reviews:
+  - "Independent UX/perf review + security co-sign (both != implementer): 3 HIGH, 0 Critical, ALL FIXED + re-verified."
+  - "HIGH-1 (UX): premature EOF no longer shows a perpetual fake 'running' -> honest disconnect error + recovery/reconnect via snapshot->sinceSeq."
+  - "HIGH-S1 (sec): EV error message redacted server-side at the mapper choke point (both live stream AND snapshot) via shared browser-safe sanitizeErrorMessage; injectable redactError seam left for the composition root to seed the value-based SecretScrubber."
+  - "HIGH-S2 (sec): scrubber word-boundary bug + missing key classes (ghp_/github_pat_/JWT/AWS/Slack/Google/Bearer/base64) fixed once in the shared module; bounded quantifiers + 20k input / 2k output caps (anti-DoS)."
+  - "LOW-S5: EV route path constants centralized in @cowork-ghc/contracts; UI deleted its divergent secret regex + path copies (single source of truth verified by grep)."
+health:
+  full_suite: "402 pass / 0 fail / 0 skip"
+  tsc: "clean"
+  socket_e2e: "6/6 pass (session-stream-live-e2e)"
+  ui_tests: "14 pass (8 original + 6 review-driven)"
+  unresolved_critical: 0
+  unresolved_high: 0
+promoted_to_ready:
+  - "CGHC-017 (permission UI) — deps CGHC-016 + CGHC-015 now satisfied"
+  - "CGHC-025 (cold-start / renderer hardening) — deps CGHC-005 + CGHC-015 now satisfied"
+carry_forward:
+  - "COMPOSITION ROOT: seed the value-based SecretScrubber into createEvMapper.redactError = (msg) => sanitizeErrorMessage(scrubber.scrub(msg)) (durable half of HIGH-S1); mount the live-stream + snapshot routers on one SessionStreamHub bound to the live SessionService via RouterRegistry."
+  - "CGHC-025 owns EV5 long-running progress rendering (reducer/SessionView/contracts do not surface ProgressEvent.label/ratio yet; timeline docstring corrected to say so) + MEDIUM-5 (O(N^2) full-text re-serialize per token -> append-delta / requestAnimationFrame batching)."
+remaining:
+  - "COMPOSITION ROOT (integration debt, prereq for CGHC-028) — RouterRegistry from CGHC-015 is the mount seam."
+  - "CGHC-017 (permission UI, READY), CGHC-025 (renderer hardening, READY), CGHC-026 (extensions, deps met, MEDIUM/POC-budget)"
+  - "CGHC-028 (packaged E2E release verification) — LAST; deps still need CGHC-017 + CGHC-025"
+resume_hint: >
+  24/28 DONE, all reviewed 0 Crit/High, suite 402 pass, tsc clean. CGHC-015 fully landed incl.
+  live SSE + 3 HIGH review fixes. Next: COMPOSITION ROOT assembly (mount every router via the new
+  RouterRegistry + wire cross-cutting deps incl. seeding the value-based scrubber into the mapper
+  redactError seam + loopback round-trip integration test + start seam), then CGHC-017/025/026,
+  then CGHC-028 packaged E2E. No credential gate remains. Web DEFERRED (ADR 0007).

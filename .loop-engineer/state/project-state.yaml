@@ -1,0 +1,49 @@
+version: 1
+product: Cowork GHC
+updated_at: "2026-07-12T00:00:00Z"
+current_phase: L6_IN_PROGRESS
+handoff:
+  status: PREP_FOR_CODEX
+  doc: .loop-engineer/HANDOFF.md
+  frozen_at: "2026-07-12T00:00:00Z"
+  note: "Implementation FROZEN for Git baseline + Codex handoff. Packaged user journey (service auto-connect, folder picker, LLM settings, secure DeepSeek token input, live OpenCode session) is UNVERIFIED. GUI/UX quality vs Claude Cowork / OpenWork is UNVERIFIED. L6 stays RUNNING with gate PARTIAL. Do NOT start L7. Default operating mode is LEAN."
+git:
+  is_repo: false
+  note: "Project root is not a git repository yet. `git init` + first commit is a product-owner action (this pass only prepares a safe baseline). No history to protect."
+toolchain:
+  node: "v24.15.0"
+  npm: "11.17.0"
+  python: "3.11.8"
+  cargo: "1.96.1"
+  git: "2.52.0.windows.1"
+reference_source:
+  repository: different-ai/openwork
+  path: REMOVED
+  branch: dev
+  commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+  doc_commit: "00190e5020476478576ad21c66c1abc20d756677"
+  status: REMOVED_REFERENCE_COMPLETE
+  note: "Working copy .loop-engineer/source/openwork was REMOVED after the reference study completed (was 123M with its own nested .git). Provenance is preserved in docs/references/openwork-reference.md. Never modified, never a build dependency."
+loops:
+  - id: L0
+    status: COMPLETED
+  - id: L1
+    status: COMPLETED
+  - id: L2
+    status: COMPLETED
+  - id: L3
+    status: COMPLETED
+  - id: L4
+    status: COMPLETED
+  - id: L5
+    status: COMPLETED
+  - id: L6
+    status: RUNNING
+  - id: L7
+    status: NOT_READY
+  - id: L8
+    status: NOT_READY
+  - id: L9
+    status: NOT_READY
+  - id: L10
+    status: NOT_READY
