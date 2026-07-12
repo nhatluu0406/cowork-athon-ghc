@@ -1,17 +1,16 @@
 /**
  * HuyTT12-inspired Cowork GHC application shell.
  *
- * This is presentation + view-model only. It talks exclusively to the existing shell bridge and
- * loopback service client; it does not import the HuyTT12 main/preload backend or duplicate
- * provider, credential, filesystem, OpenCode, or DeepSeek logic.
+ * Presentation + view-model only. Talks to the shell bridge and loopback service client.
  */
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { getShellBridge } from "./bridge.js";
+import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
 import { startEvStream } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { createPermissionController } from "./permission-controller.js";
-import { createServiceClient, ServiceClientError } from "./service-client.js";
+import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
@@ -99,9 +98,23 @@ function textFromComposer(input) {
 function setComposerText(input, text) {
     input.textContent = text;
 }
-function appendMessage(dom, role, text = "") {
+function saveComposerDraft(state, dom) {
+    const id = state.conv.state.activeConversationId;
+    if (id === null)
+        return;
+    const text = textFromComposer(dom.composerInput);
+    if (text.length > 0)
+        state.composerDrafts.set(id, text);
+    else
+        state.composerDrafts.delete(id);
+}
+function restoreComposerDraft(state, dom, conversationId) {
+    const draft = conversationId === null ? "" : (state.composerDrafts.get(conversationId) ?? "");
+    setComposerText(dom.composerInput, draft);
+}
+function appendMessage(dom, role, text = "", historical = false) {
     dom.emptyState.hidden = true;
-    const row = el("div", `msg msg--${role}`);
+    const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
     if (role === "assistant")
         row.append(el("div", "msg__avatar", "AI"));
     const body = el("div", "msg__body");
@@ -116,13 +129,67 @@ function appendMessage(dom, role, text = "") {
     dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
     return row;
 }
-function renderSessionList(dom, state) {
+function clearTranscript(dom) {
+    for (const child of [...dom.transcriptInner.children]) {
+        if (child !== dom.emptyState && child !== dom.thinking)
+            child.remove();
+    }
+    dom.emptyState.hidden = false;
+}
+function renderTranscriptFromRecord(dom, record) {
+    clearTranscript(dom);
+    if (record === null || record.messages.length === 0)
+        return;
+    dom.emptyState.hidden = true;
+    for (const message of record.messages) {
+        appendMessage(dom, message.role, message.text, true);
+    }
+}
+function renderSessionList(dom, state, onSelect, onRename, onDelete) {
     dom.sessionList.replaceChildren();
-    const item = el("button", "history-item history-item--active");
-    item.type = "button";
-    item.append(el("span", "history-item__title", state.sessionId === null ? DEFAULT_TITLE : "Phiên hiện tại"));
-    item.append(el("span", "history-item__meta", phaseLabel(state.sessionPhase)));
-    dom.sessionList.append(item);
+    const { summaries, loading, listError, activeConversationId, searchQuery } = state.conv.state;
+    if (loading) {
+        dom.sessionList.append(el("p", "sidebar__empty", "Đang tải…"));
+        return;
+    }
+    if (listError !== null) {
+        dom.sessionList.append(el("p", "sidebar__empty", listError));
+        return;
+    }
+    if (summaries.length === 0) {
+        dom.sessionList.append(el("p", "sidebar__empty", searchQuery.length > 0 ? "Không tìm thấy cuộc trò chuyện." : "Chưa có cuộc trò chuyện."));
+        return;
+    }
+    for (const summary of summaries) {
+        const item = el("button", "history-item");
+        if (summary.id === activeConversationId)
+            item.classList.add("history-item--active");
+        item.type = "button";
+        item.append(el("span", "history-item__title", summary.title));
+        item.append(el("span", "history-item__meta", formatConversationMeta(summary)));
+        item.addEventListener("click", () => onSelect(summary.id));
+        item.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            const action = window.prompt("Đổi tên (nhập tiêu đề mới) hoặc gõ DELETE để xóa:", summary.title);
+            if (action === null)
+                return;
+            if (action.trim().toUpperCase() === "DELETE") {
+                onDelete(summary.id);
+                return;
+            }
+            const trimmed = action.trim();
+            if (trimmed.length > 0 && trimmed !== summary.title)
+                onRename(summary.id, trimmed);
+        });
+        dom.sessionList.append(item);
+    }
+}
+function stepLabel(label) {
+    if (label === "Step started")
+        return "Đang thực hiện bước";
+    if (label === "Step finished")
+        return "Hoàn tất bước";
+    return label;
 }
 function renderRightPanel(dom, view) {
     dom.planSteps.replaceChildren();
@@ -138,7 +205,7 @@ function renderRightPanel(dom, view) {
     for (const step of view.steps) {
         const row = el("div", `plan-step plan-step--${step.status}`);
         row.append(el("span", "plan-step__dot"));
-        row.append(el("span", "plan-step__label", step.label || "Đang phân tích"));
+        row.append(el("span", "plan-step__label", stepLabel(step.label) || "Đang phân tích"));
         dom.planSteps.append(row);
     }
     for (const tool of view.toolCalls) {
@@ -159,26 +226,39 @@ function renderRightPanel(dom, view) {
     }
     dom.inputFiles.replaceChildren(el("p", "panel-empty", "Chưa khả dụng"));
 }
-function renderState(dom, state) {
+function renderState(dom, state, handlers) {
+    const phase = state.conv.state.runtimePhase;
+    const record = state.conv.state.activeRecord;
     dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
+    dom.workspaceLabel.title = state.activeWorkspace ?? "";
     dom.modelLabel.textContent = modelSummary(state.settings);
-    dom.executionStatus.textContent = phaseLabel(state.sessionPhase);
-    dom.composer.classList.toggle("is-running", state.sessionPhase === "running" || state.sessionPhase === "cancelling");
-    dom.thinking.hidden = state.sessionPhase !== "running" && state.sessionPhase !== "starting" && state.sessionPhase !== "cancelling";
+    dom.executionStatus.textContent = phaseLabel(phase);
+    dom.chatTitle.textContent = record?.title ?? DEFAULT_TITLE;
+    dom.chatSub.textContent =
+        record?.status === "interrupted"
+            ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
+            : needsContinuation(record)
+                ? "Mở lại lịch sử. Gửi tin nhắn mới cần phiên runtime tiếp nối."
+                : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
+    const showContinuation = needsContinuation(record) && phase !== "running" && phase !== "starting";
+    dom.continuationBanner.hidden = !showContinuation;
+    dom.continuationButton.hidden = !showContinuation;
+    dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
+    dom.thinking.hidden = phase !== "running" && phase !== "starting" && phase !== "cancelling";
     dom.sendButton.disabled =
-        state.sessionPhase === "starting" ||
-            state.sessionPhase === "running" ||
-            state.sessionPhase === "cancelling" ||
-            textFromComposer(dom.composerInput).length === 0;
-    dom.cancelButton.hidden = state.sessionPhase !== "running" && state.sessionPhase !== "cancelling";
-    dom.cancelButton.disabled = state.sessionPhase !== "running";
-    for (const button of dom.startButtons) {
-        button.disabled = state.sessionPhase === "starting" || state.sessionPhase === "running" || state.activeWorkspace === null;
-    }
-    renderSessionList(dom, state);
+        phase === "starting" ||
+            phase === "running" ||
+            phase === "cancelling" ||
+            textFromComposer(dom.composerInput).length === 0 ||
+            state.activeWorkspace === null;
+    dom.cancelButton.hidden = phase !== "running" && phase !== "cancelling";
+    dom.cancelButton.disabled = phase !== "running";
+    dom.newConversationButton.disabled =
+        phase === "starting" || phase === "running" || state.activeWorkspace === null;
+    renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
     renderRightPanel(dom, state.lastView);
 }
-async function refreshSettings(state, dom) {
+async function refreshSettings(state, dom, handlers) {
     if (state.client === null)
         return;
     try {
@@ -188,7 +268,7 @@ async function refreshSettings(state, dom) {
     catch {
         state.settings = null;
     }
-    renderState(dom, state);
+    renderState(dom, state, handlers);
 }
 async function awaitLiveClient(state, readiness) {
     readiness.retry();
@@ -206,97 +286,201 @@ async function awaitLiveClient(state, readiness) {
     }
     throw new Error("Không kết nối lại được local service.");
 }
-async function startSession(state, dom, readiness) {
-    if (state.client === null)
-        throw new Error("Service chưa sẵn sàng.");
-    await refreshSettings(state, dom);
-    if (state.activeWorkspace === null || state.settings?.defaultModel === null || state.settings?.defaultModel === undefined) {
-        throw new Error("Chọn workspace và cấu hình model trước khi bắt đầu phiên.");
-    }
-    state.sessionPhase = "starting";
-    state.lastView = initialSessionView("");
-    state.assistantText = "";
+function stopStream(state) {
     state.stream?.stop();
     state.stream = null;
-    renderState(dom, state);
-    await getShellBridge().connectLive();
-    const client = await awaitLiveClient(state, readiness);
-    const bootstrap = await getShellBridge().getBootstrap();
-    if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken)
-        throw new Error("Shell chưa cung cấp kết nối live.");
-    state.bootstrap = bootstrap;
-    const meta = await client.createSession({
-        workspaceId: state.activeWorkspace,
-        title: DEFAULT_TITLE,
-        model: state.settings.defaultModel,
-    });
-    state.sessionId = meta.id;
-    state.sessionPhase = "ready";
-    state.lastView = initialSessionView(meta.id);
-    state.assistantText = "";
+    state.streamSessionId = null;
+}
+function bindEvStream(state, dom, handlers, sessionId) {
+    const bootstrap = state.bootstrap;
+    if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined)
+        return;
+    stopStream(state);
+    state.streamSessionId = sessionId;
     state.stream = startEvStream({
         baseUrl: bootstrap.serviceBaseUrl,
         clientToken: bootstrap.clientToken,
-        sessionId: meta.id,
+        sessionId,
         onView: (view) => {
+            if (!state.conv.shouldApplyStreamView(sessionId))
+                return;
             state.lastView = view;
             state.assistantText = view.text;
             const assistant = state.activeAssistant?.querySelector(".msg__text p") ?? null;
             if (assistant !== null)
                 assistant.textContent = view.text;
             if (view.terminal === "completed")
-                state.sessionPhase = "completed";
+                void state.conv.setRuntimePhase("completed");
             if (view.terminal === "cancelled")
-                state.sessionPhase = "cancelled";
+                void state.conv.setRuntimePhase("cancelled");
             if (view.terminal === "errored" || view.terminal === "denied") {
-                state.sessionPhase = "failed";
-                if (view.error?.message)
+                void state.conv.setRuntimePhase("failed");
+                if (view.error?.message && view.text.trim().length === 0) {
                     appendMessage(dom, "assistant", view.error.message);
+                }
             }
-            renderState(dom, state);
+            if (view.terminal !== null) {
+                void state.conv.recordAssistantMessage(view.text).then(() => renderState(dom, state, handlers));
+            }
+            renderState(dom, state, handlers);
         },
         onError: (message) => {
-            state.sessionPhase = "failed";
+            if (!state.conv.shouldApplyStreamView(sessionId))
+                return;
+            void state.conv.setRuntimePhase("failed");
             appendMessage(dom, "assistant", message);
-            renderState(dom, state);
+            renderState(dom, state, handlers);
         },
     });
-    renderState(dom, state);
 }
-async function sendPrompt(state, dom, readiness) {
+async function ensureLive(state, readiness) {
+    await getShellBridge().connectLive();
+    const client = await awaitLiveClient(state, readiness);
+    const bootstrap = await getShellBridge().getBootstrap();
+    if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken)
+        throw new Error("Shell chưa cung cấp kết nối live.");
+    state.bootstrap = bootstrap;
+    return client;
+}
+async function ensureRuntimeSession(state, dom, readiness, handlers) {
+    if (state.client === null)
+        throw new Error("Service chưa sẵn sàng.");
+    await refreshSettings(state, dom, handlers);
+    if (state.activeWorkspace === null ||
+        state.settings?.defaultModel === null ||
+        state.settings?.defaultModel === undefined) {
+        throw new Error("Chọn workspace và cấu hình model trước.");
+    }
+    const record = state.conv.state.activeRecord;
+    if (record === null)
+        throw new Error("Chưa chọn cuộc trò chuyện.");
+    if (state.conv.state.runtimeSessionId !== null && !needsContinuation(record)) {
+        const runtimeId = state.conv.state.runtimeSessionId;
+        try {
+            const continued = await state.client.continueRuntimeSession(runtimeId);
+            if (continued.canPrompt) {
+                state.lastView = continued.view;
+                bindEvStream(state, dom, handlers, runtimeId);
+                state.conv.state.runtimePhase = "ready";
+                return runtimeId;
+            }
+        }
+        catch {
+            // Runtime session unavailable — create a new one below.
+        }
+    }
+    state.conv.state.runtimePhase = "starting";
+    renderState(dom, state, handlers);
+    const client = await ensureLive(state, readiness);
+    if (needsContinuation(record)) {
+        await state.conv.startContinuation();
+    }
+    const meta = await client.createSession({
+        workspaceId: state.activeWorkspace,
+        title: record.title,
+        model: state.settings.defaultModel,
+    });
+    await state.conv.linkRuntimeSession(meta.id);
+    state.lastView = initialSessionView(meta.id);
+    state.conv.state.runtimePhase = "ready";
+    bindEvStream(state, dom, handlers, meta.id);
+    renderState(dom, state, handlers);
+    return meta.id;
+}
+async function switchConversation(state, dom, handlers, id) {
+    const currentId = state.conv.state.activeConversationId;
+    if (currentId === id)
+        return;
+    const unsent = textFromComposer(dom.composerInput);
+    if (unsent.length > 0 && currentId !== null) {
+        const ok = window.confirm("Bỏ nội dung chưa gửi và chuyển cuộc trò chuyện?");
+        if (!ok)
+            return;
+    }
+    saveComposerDraft(state, dom);
+    stopStream(state);
+    state.activeAssistant = null;
+    state.assistantText = "";
+    state.lastView = initialSessionView("");
+    await state.conv.select(id);
+    renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
+    restoreComposerDraft(state, dom, id);
+    renderState(dom, state, handlers);
+    dom.composerInput.focus();
+}
+async function newConversation(state, dom, handlers) {
+    if (state.client === null)
+        throw new Error("Service chưa sẵn sàng.");
+    await refreshSettings(state, dom, handlers);
+    if (state.activeWorkspace === null)
+        throw new Error("Chọn workspace trước.");
+    const unsent = textFromComposer(dom.composerInput);
+    if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
+        const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
+        if (!ok)
+            return;
+    }
+    saveComposerDraft(state, dom);
+    stopStream(state);
+    state.activeAssistant = null;
+    state.assistantText = "";
+    state.lastView = initialSessionView("");
+    const model = state.settings?.defaultModel;
+    await state.conv.createNew(state.activeWorkspace, model?.providerID, model?.modelID);
+    clearTranscript(dom);
+    setComposerText(dom.composerInput, "");
+    renderState(dom, state, handlers);
+    dom.composerInput.focus();
+}
+async function sendPrompt(state, dom, readiness, handlers) {
     const prompt = textFromComposer(dom.composerInput);
     if (prompt.length === 0)
         return;
-    if (state.sessionId === null || state.sessionPhase === "completed" || state.sessionPhase === "cancelled" || state.sessionPhase === "failed") {
-        await startSession(state, dom, readiness);
+    if (state.conv.state.activeConversationId === null) {
+        await newConversation(state, dom, handlers);
     }
-    if (state.client === null || state.sessionId === null)
+    if (state.client === null || state.conv.state.activeConversationId === null)
         return;
+    const runtimeId = await ensureRuntimeSession(state, dom, readiness, handlers);
     appendMessage(dom, "user", prompt);
     state.activeAssistant = appendMessage(dom, "assistant", "");
     setComposerText(dom.composerInput, "");
-    state.sessionPhase = "running";
-    renderState(dom, state);
-    const result = await state.client.sendSessionMessage(state.sessionId, prompt);
+    state.composerDrafts.delete(state.conv.state.activeConversationId);
+    await state.conv.recordUserMessage(prompt);
+    state.conv.state.runtimePhase = "running";
+    renderState(dom, state, handlers);
+    const result = await state.client.sendSessionMessage(runtimeId, prompt);
     if (!result.accepted) {
-        state.sessionPhase = "failed";
-        appendMessage(dom, "assistant", result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.");
-        renderState(dom, state);
+        if (result.reason === "session_completed") {
+            await state.conv.startContinuation();
+            const retryId = await ensureRuntimeSession(state, dom, readiness, handlers);
+            const retry = await state.client.sendSessionMessage(retryId, prompt);
+            if (!retry.accepted) {
+                await state.conv.setRuntimePhase("failed");
+                appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
+            }
+        }
+        else {
+            await state.conv.setRuntimePhase("failed");
+            appendMessage(dom, "assistant", result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.");
+        }
+        renderState(dom, state, handlers);
     }
 }
-async function cancelRun(state, dom) {
-    if (state.client === null || state.sessionId === null || state.sessionPhase !== "running")
+async function cancelRun(state, dom, handlers) {
+    const runtimeId = state.conv.state.runtimeSessionId;
+    if (state.client === null || runtimeId === null || state.conv.state.runtimePhase !== "running")
         return;
-    state.sessionPhase = "cancelling";
-    renderState(dom, state);
+    state.conv.state.runtimePhase = "cancelling";
+    renderState(dom, state, handlers);
     await Promise.race([
-        state.client.cancelSession(state.sessionId).catch(() => undefined),
+        state.client.cancelSession(runtimeId).catch(() => undefined),
         new Promise((resolve) => setTimeout(resolve, 8_000)),
     ]);
-    state.stream?.stop();
-    state.sessionPhase = "cancelled";
+    stopStream(state);
+    await state.conv.setRuntimePhase("cancelled");
     state.lastView = { ...state.lastView, status: "cancelled", terminal: "cancelled" };
-    renderState(dom, state);
+    renderState(dom, state, handlers);
 }
 function createShell(root) {
     root.className = "app-shell";
@@ -318,32 +502,39 @@ function createShell(root) {
     skillsTab.type = "button";
     skillsTab.disabled = true;
     nav.append(coworkTab, skillsTab);
-    const newButton = el("button", "sidebar__new-btn", "Bắt đầu phiên");
-    newButton.type = "button";
+    const newConversationButton = el("button", "sidebar__new-btn", "Cuộc trò chuyện mới");
+    newConversationButton.type = "button";
     const workspaceBox = el("section", "workspace-slot");
     const workspaceLabel = el("p", "workspace-context", "Chưa chọn workspace");
+    const sessionSearch = el("input", "sidebar__search");
+    sessionSearch.type = "search";
+    sessionSearch.placeholder = "Tìm cuộc trò chuyện…";
+    sessionSearch.setAttribute("aria-label", "Tìm cuộc trò chuyện");
     const sessionList = el("div", "sidebar__history");
-    sidebar.append(nav, newButton, workspaceLabel, workspaceBox, el("h2", "sidebar__heading", "Phiên"), sessionList);
+    sidebar.append(nav, newConversationButton, workspaceLabel, workspaceBox, sessionSearch, el("h2", "sidebar__heading", "Phiên"), sessionList);
     const chat = el("section", "chat-area");
     const header = el("div", "chat-header");
     const headerInfo = el("div", "chat-header__info");
-    headerInfo.append(el("div", "chat-header__title", DEFAULT_TITLE), el("div", "chat-header__sub", "Cowork GHC sử dụng workspace và provider đã cấu hình."));
+    const chatTitle = el("div", "chat-header__title", DEFAULT_TITLE);
+    const chatSub = el("div", "chat-header__sub", "Cowork GHC sử dụng workspace và provider đã cấu hình.");
+    headerInfo.append(chatTitle, chatSub);
     const headerActions = el("div", "chat-header__actions");
-    const startButton = el("button", "label-btn", "Bắt đầu phiên");
-    startButton.type = "button";
     const skillsButton = el("button", "label-btn label-btn--disabled", "Skills: Chưa khả dụng");
     skillsButton.type = "button";
     skillsButton.disabled = true;
-    headerActions.append(startButton, skillsButton);
+    headerActions.append(skillsButton);
     header.append(el("div", "chat-header__icon", "AI"), headerInfo, headerActions);
+    const continuationBanner = el("div", "continuation-banner");
+    continuationBanner.hidden = true;
+    continuationBanner.append(el("span", "continuation-banner__text", "Đây là lịch sử đã lưu — không phải phiên runtime đang chạy."));
+    const continuationButton = el("button", "label-btn", "Tạo phiên tiếp nối");
+    continuationButton.type = "button";
+    continuationBanner.append(continuationButton);
     const transcript = el("div", "transcript");
     const transcriptInner = el("div", "transcript__inner");
     const emptyState = el("div", "empty-state");
     emptyState.append(el("h2", "empty-state__title", "Bắt đầu làm việc với Cowork GHC"));
-    emptyState.append(el("p", "empty-state__copy", "Chọn workspace, cấu hình provider/model, rồi bắt đầu phiên OpenCode khi bạn sẵn sàng."));
-    const emptyStart = el("button", "primary-btn", "Bắt đầu phiên");
-    emptyStart.type = "button";
-    emptyState.append(emptyStart);
+    emptyState.append(el("p", "empty-state__copy", "Chọn workspace, cấu hình provider/model, rồi tạo cuộc trò chuyện mới hoặc gửi yêu cầu."));
     const thinking = el("div", "thinking");
     thinking.hidden = true;
     thinking.append(el("span", "thinking__dots", "..."), el("span", "thinking__label", "Đang xử lý"));
@@ -370,7 +561,7 @@ function createShell(root) {
     const composerHint = el("div", "composer__hint", "Enter để gửi, Shift+Enter xuống dòng");
     composerBox.append(composerInput, composerBar);
     composer.append(composerBox, composerHint);
-    chat.append(header, transcript, composer);
+    chat.append(header, continuationBanner, transcript, composer);
     const rightPanel = el("aside", "right-panel");
     const rpHeader = el("div", "rp-header");
     rpHeader.append(el("span", "rp-header__title", "Hoạt động"));
@@ -392,7 +583,7 @@ function createShell(root) {
     workspace.append(sidebar, chat, rightPanel);
     const statusbar = el("footer", "statusbar");
     const serviceDetail = el("span", "statusbar__left", "Đang khởi động");
-    statusbar.append(serviceDetail, el("span", "statusbar__right", "OpenCode chỉ chạy khi bạn bắt đầu phiên."));
+    statusbar.append(serviceDetail, el("span", "statusbar__right", "OpenCode chỉ chạy khi bạn gửi yêu cầu."));
     const settingsModal = el("div", "modal");
     settingsModal.hidden = true;
     const settingsPanel = el("div", "modal__panel");
@@ -420,7 +611,12 @@ function createShell(root) {
         serviceDetail,
         workspaceLabel,
         modelLabel,
+        sessionSearch,
         sessionList,
+        chatTitle,
+        chatSub,
+        continuationBanner,
+        continuationButton,
         transcriptInner,
         emptyState,
         thinking,
@@ -429,7 +625,7 @@ function createShell(root) {
         composerHint,
         sendButton,
         cancelButton,
-        startButtons: [newButton, startButton, emptyStart],
+        newConversationButton,
         settingsModal,
         settingsBody,
         planSteps,
@@ -448,14 +644,44 @@ export function mountCoworkApp(root) {
         bootstrap: null,
         settings: null,
         activeWorkspace: null,
-        sessionId: null,
-        sessionPhase: "idle",
+        conv: createConversationManager(() => state.client),
         stream: null,
+        streamSessionId: null,
         lastView: initialSessionView(""),
         assistantText: "",
         activeAssistant: null,
+        composerDrafts: new Map(),
+    };
+    const handlers = {
+        onSelect: (id) => {
+            void switchConversation(state, dom, handlers, id).catch((error) => {
+                appendMessage(dom, "assistant", safeError(error));
+                renderState(dom, state, handlers);
+            });
+        },
+        onRename: (id, title) => {
+            void state.conv.rename(id, title).then(() => renderState(dom, state, handlers));
+        },
+        onDelete: (id) => {
+            if (!window.confirm("Xóa cuộc trò chuyện này? Workspace và khoá provider không bị xóa."))
+                return;
+            const wasActive = state.conv.state.activeConversationId === id;
+            void (async () => {
+                if (wasActive && state.conv.state.runtimePhase === "running" && state.conv.state.runtimeSessionId !== null) {
+                    await state.client?.cancelSession(state.conv.state.runtimeSessionId).catch(() => undefined);
+                    stopStream(state);
+                }
+                await state.conv.deleteConversation(id);
+                if (wasActive) {
+                    clearTranscript(dom);
+                    setComposerText(dom.composerInput, "");
+                }
+                renderState(dom, state, handlers);
+            })();
+        },
     };
     let featuresMounted = false;
+    let searchTimer = null;
     const dynamicClient = createDynamicClient(state);
     const readiness = createReadinessController({
         getBootstrap: () => getShellBridge().getBootstrap(),
@@ -470,7 +696,8 @@ export function mountCoworkApp(root) {
             dom.serviceStatus.classList.toggle("is-ok", copy.ok);
             dom.serviceDetail.textContent = copy.detail;
             if (readinessState.phase === "ready" && state.client !== null) {
-                void refreshSettings(state, dom);
+                void refreshSettings(state, dom, handlers);
+                void state.conv.refreshList().then(() => renderState(dom, state, handlers));
                 if (!featuresMounted) {
                     featuresMounted = true;
                     mountWorkspacePicker(dom.sidebar.querySelector(".workspace-slot"), {
@@ -478,12 +705,12 @@ export function mountCoworkApp(root) {
                         client: dynamicClient,
                         onActivated: (rootPath) => {
                             state.activeWorkspace = rootPath;
-                            void refreshSettings(state, dom);
-                            renderState(dom, state);
+                            void refreshSettings(state, dom, handlers);
+                            renderState(dom, state, handlers);
                         },
                         onDeactivated: () => {
                             state.activeWorkspace = null;
-                            renderState(dom, state);
+                            renderState(dom, state, handlers);
                         },
                     });
                     mountLlmSettingsPanel(dom.settingsBody, {
@@ -497,35 +724,42 @@ export function mountCoworkApp(root) {
             }
         },
     });
-    const runStart = () => {
-        void (async () => {
-            try {
-                await startSession(state, dom, readiness);
-            }
-            catch (error) {
-                state.sessionPhase = "failed";
-                appendMessage(dom, "assistant", safeError(error));
-                renderState(dom, state);
-            }
-        })();
-    };
-    for (const button of dom.startButtons)
-        button.addEventListener("click", runStart);
-    dom.sendButton.addEventListener("click", () => {
-        void sendPrompt(state, dom, readiness).catch((error) => {
-            state.sessionPhase = "failed";
+    dom.newConversationButton.addEventListener("click", () => {
+        void newConversation(state, dom, handlers).catch((error) => {
             appendMessage(dom, "assistant", safeError(error));
-            renderState(dom, state);
+            renderState(dom, state, handlers);
+        });
+    });
+    dom.continuationButton.addEventListener("click", () => {
+        void (async () => {
+            await state.conv.startContinuation();
+            dom.continuationBanner.hidden = true;
+            dom.composerInput.focus();
+            renderState(dom, state, handlers);
+        })();
+    });
+    dom.sessionSearch.addEventListener("input", () => {
+        if (searchTimer !== null)
+            clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            void state.conv.setSearch(dom.sessionSearch.value).then(() => renderState(dom, state, handlers));
+        }, 200);
+    });
+    dom.sendButton.addEventListener("click", () => {
+        void sendPrompt(state, dom, readiness, handlers).catch((error) => {
+            void state.conv.setRuntimePhase("failed");
+            appendMessage(dom, "assistant", safeError(error));
+            renderState(dom, state, handlers);
         });
     });
     dom.cancelButton.addEventListener("click", () => {
-        void cancelRun(state, dom).catch((error) => {
-            state.sessionPhase = "failed";
+        void cancelRun(state, dom, handlers).catch((error) => {
+            void state.conv.setRuntimePhase("failed");
             appendMessage(dom, "assistant", safeError(error));
-            renderState(dom, state);
+            renderState(dom, state, handlers);
         });
     });
-    dom.composerInput.addEventListener("input", () => renderState(dom, state));
+    dom.composerInput.addEventListener("input", () => renderState(dom, state, handlers));
     dom.composerInput.addEventListener("keydown", (event) => {
         if (!(event instanceof KeyboardEvent))
             return;
@@ -534,7 +768,19 @@ export function mountCoworkApp(root) {
             dom.sendButton.click();
         }
     });
-    renderState(dom, state);
+    dom.chatTitle.addEventListener("dblclick", () => {
+        const id = state.conv.state.activeConversationId;
+        if (id === null)
+            return;
+        const next = window.prompt("Đổi tên cuộc trò chuyện:", state.conv.state.activeRecord?.title ?? "");
+        if (next === null)
+            return;
+        const trimmed = next.trim();
+        if (trimmed.length === 0)
+            return;
+        handlers.onRename(id, trimmed);
+    });
+    renderState(dom, state, handlers);
     readiness.start();
 }
 //# sourceMappingURL=app-shell.js.map

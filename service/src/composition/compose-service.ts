@@ -48,6 +48,7 @@ import {
 import { ToolPermissionProxy } from "../files/index.js";
 import { createExtensionRegistry } from "../extensions/index.js";
 import { createSessionService, createSessionRouter } from "../session/index.js";
+import { createConversationStore, createConversationRouter } from "../conversation/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -66,6 +67,7 @@ import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./t
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
+const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -165,6 +167,13 @@ export async function createCoworkService(
   };
 
   const recentWorkspaces = createRecentWorkspaces();
+
+  const conversationStore = createConversationStore({
+    rootDir: options.conversationsDir ?? DEFAULT_CONVERSATIONS_DIR,
+    now,
+  });
+  await conversationStore.recoverStaleRunning();
+
   const routers = [
     createWorkspaceRouter({
       recent: recentWorkspaces,
@@ -182,6 +191,7 @@ export async function createCoworkService(
     // The session boundary: create/list/send-prompt/cancel. Tier 1 mounts it with the honest
     // not-attached SendPrompt so it compiles + errors truthfully without a child; live fills it.
     createSessionRouter(sessionService, options.sendPrompt ?? notAttachedSendPrompt()),
+    createConversationRouter(conversationStore),
   ];
 
   const deps: CoworkServiceDeps = {
@@ -196,6 +206,7 @@ export async function createCoworkService(
     sessionService,
     streamHub,
     extensions,
+    conversationStore,
     redactError,
     buildToolPermissionProxy: (guard) =>
       new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),

@@ -13,6 +13,7 @@
  * closure only — never placed in the DOM, `localStorage`, or logs.
  */
 import { type BoundaryErrorCode, type CredentialRef, type HealthData, type ModelRef, type ProviderDescriptor, type SessionMeta, type TestResult, type WorkspaceGrant } from "@cowork-ghc/contracts";
+import type { SessionView } from "@cowork-ghc/service/execution";
 import { type DecidePermissionInput, type PendingPermissionView, type PermissionDecisionResponse } from "./permission-client.js";
 export type { DecidePermissionInput, PendingPermissionView, PermissionDecisionResponse, } from "./permission-client.js";
 /**
@@ -83,6 +84,42 @@ export interface CreateSessionInput {
     readonly title?: string;
     readonly model?: ModelRef;
 }
+export type ConversationStatus = "draft" | "ready" | "running" | "completed" | "cancelled" | "errored" | "interrupted";
+export interface ConversationMessage {
+    readonly id: string;
+    readonly role: "user" | "assistant";
+    readonly text: string;
+    readonly at: string;
+}
+export interface ConversationSummary {
+    readonly id: string;
+    readonly title: string;
+    readonly workspacePath: string;
+    readonly providerId?: string;
+    readonly modelId?: string;
+    readonly runtimeSessionId: string | null;
+    readonly parentId?: string;
+    readonly status: ConversationStatus;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly messageCount: number;
+}
+export interface ConversationRecord extends ConversationSummary {
+    readonly messages: readonly ConversationMessage[];
+    readonly model?: ModelRef;
+}
+export interface CreateConversationInput {
+    readonly workspacePath: string;
+    readonly title?: string;
+    readonly providerId?: string;
+    readonly modelId?: string;
+    readonly parentId?: string;
+}
+export interface ContinueSessionResult {
+    readonly session: SessionMeta;
+    readonly view: SessionView;
+    readonly canPrompt: boolean;
+}
 /** Result of clearing a per-session model override (LOW-1). */
 export interface ClearSessionModelResult {
     readonly cleared: boolean;
@@ -151,6 +188,19 @@ export interface ServiceClient {
     sendSessionMessage(sessionId: string, text: string): Promise<SendSessionMessageResult>;
     /** Request cancellation of the in-flight run. */
     cancelSession(sessionId: string): Promise<void>;
+    /** List persisted conversations (optional local search query). */
+    listConversations(query?: string): Promise<readonly ConversationSummary[]>;
+    createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
+    getConversation(id: string): Promise<ConversationRecord>;
+    patchConversation(id: string, patch: {
+        readonly title?: string;
+        readonly status?: ConversationStatus;
+        readonly runtimeSessionId?: string | null;
+    }): Promise<ConversationRecord>;
+    deleteConversation(id: string): Promise<void>;
+    appendConversationMessage(id: string, role: "user" | "assistant", text: string): Promise<ConversationRecord>;
+    /** Reconnect to an OpenCode session after service restart (when still available). */
+    continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
     /**
      * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
      * never fabricates activity — the list is empty when nothing is awaiting a decision.

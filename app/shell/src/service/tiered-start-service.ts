@@ -39,6 +39,7 @@ export interface TieredStartServiceOptions {
 /** Options for the Tier-1 settings-only fallback start. */
 export interface SettingsOnlyStartOptions {
   readonly settingsFilePath: string;
+  readonly conversationsDir?: string;
   readonly allowedOrigins: readonly string[];
   /** Development / verification: enable POST /v1/credentials/import-env on the service. */
   readonly allowEnvCredentialImport?: boolean;
@@ -53,6 +54,9 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
   return async (): Promise<StartedService> => {
     const { running } = await startCoworkService({
       settingsFilePath: options.settingsFilePath,
+      ...(options.conversationsDir !== undefined
+        ? { conversationsDir: options.conversationsDir }
+        : {}),
       allowedOrigins: options.allowedOrigins,
       allowEnvCredentialImport: options.allowEnvCredentialImport === true,
     });

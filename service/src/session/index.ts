@@ -32,6 +32,8 @@ export {
   createSessionRouter,
   SessionRequestError,
   SESSION_PATH,
+  SESSION_ITEM_PATH,
+  SESSION_CONTINUE_PATH,
   SESSION_MESSAGE_PATH,
   SESSION_CANCEL_PATH,
   type SendPrompt,

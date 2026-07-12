@@ -25,6 +25,7 @@ import type { WorkspaceGuard } from "../workspace/index.js";
 import type { PermissionGate, RuntimeReplyPort, InMemoryAuditSink } from "../permission/index.js";
 import type { ToolPermissionProxy } from "../files/index.js";
 import type { SessionService, RuntimeHealth, SessionStore, SendPrompt } from "../session/index.js";
+import type { ConversationStore } from "../conversation/index.js";
 import type { SessionStreamHub } from "../server/session-stream-hub.js";
 import type { ExtensionRegistry } from "../extensions/index.js";
 
@@ -34,6 +35,11 @@ export interface CoworkServiceOptions extends ServiceOptions {
   readonly settingsFs?: SettingsFs;
   /** Settings file path when {@link settingsFs} is not supplied. Default: `.runtime/settings.json`. */
   readonly settingsFilePath?: string;
+  /**
+   * Directory for persisted conversation records (user-data). Default: `.runtime/conversations`
+   * relative to cwd when not set by the shell.
+   */
+  readonly conversationsDir?: string;
   /** The ONE credential store. Default: the OS keyring adapter (tests inject the memory store). */
   readonly credentialStore?: CredentialStore;
   /** Workspace validation fs probe. Default: the real `node:fs` probe. */
@@ -81,6 +87,8 @@ export interface CoworkServiceDeps {
   readonly permissionAudit: InMemoryAuditSink;
   readonly sessionService: SessionService;
   readonly streamHub: SessionStreamHub;
+  /** File-backed conversation index (session management slice). */
+  readonly conversationStore: ConversationStore;
   /**
    * The runtime-extension layer (CGHC-026): skill registry (RE1), MCP lifecycle (RE2), workflow
    * templates (RE4) over ONE extension-state source of truth with RE5 failure isolation. Wired
