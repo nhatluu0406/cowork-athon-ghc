@@ -19,6 +19,7 @@ import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { mountSettingsView } from "./settings-view.js";
 import { createTimelineView } from "./timeline-view.js";
 import { createPermissionController } from "./permission-controller.js";
+import { mountSessionPanel } from "./session-panel.js";
 
 function main(): void {
   const root = document.getElementById("app");
@@ -57,7 +58,7 @@ function main(): void {
       view.update(state);
       if (state.phase === "ready" && !featuresMounted && activeClient !== null) {
         featuresMounted = true;
-        mountFeatures(root, activeClient);
+        mountFeatures(root, () => activeClient, readiness);
       }
     },
   });
@@ -67,8 +68,14 @@ function main(): void {
 }
 
 /** Mount the feature views once, after a real successful health response. */
-function mountFeatures(root: HTMLElement, client: ServiceClient): void {
+function mountFeatures(
+  root: HTMLElement,
+  getClient: () => ServiceClient | null,
+  readiness: ReturnType<typeof createReadinessController>,
+): void {
   const bridge = getShellBridge();
+  const client = getClient();
+  if (client === null) return;
   const sessionHint = document.createElement("p");
   sessionHint.className = "workspace-session-hint";
   sessionHint.textContent = "Chọn một workspace hợp lệ trước khi bắt đầu phiên làm việc.";
@@ -89,12 +96,16 @@ function mountFeatures(root: HTMLElement, client: ServiceClient): void {
     client,
     getBootstrap: () => bridge.getBootstrap(),
   });
-  // General settings (theme, logging).
-  mountSettingsView(root, { client });
-  // CGHC-015: honest EV timeline. It mounts idle now; the live stream is wired once a session
-  // exists (a later task). No fabricated activity.
   const timeline = createTimelineView(root);
   timeline.update(initialSessionView(""));
+  mountSessionPanel(root, {
+    bridge,
+    getClient,
+    reconnect: () => readiness.retry(),
+    timeline,
+  });
+  // General settings (theme, logging).
+  mountSettingsView(root, { client });
   // CGHC-017: Allow/Deny permission modal. It polls the real pending list; a Deny maps to a real
   // server-side block at the execution boundary.
   const permissions = createPermissionController({ client, container: root });

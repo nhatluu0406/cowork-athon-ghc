@@ -37,10 +37,7 @@ import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
 import { resolvePackagedPaths } from "./service/packaged-paths.js";
-import {
-  createSettingsOnlyStartService,
-  createTieredStartService,
-} from "./service/tiered-start-service.js";
+import { createSettingsOnlyStartService } from "./service/tiered-start-service.js";
 import { createHealthVerifiedStartService } from "./service/wait-for-health.js";
 import {
   createFirstConfiguredSource,
@@ -108,17 +105,14 @@ function createShellController(settingsFilePath: string, packaged: ReturnType<ty
     allowEnvCredentialImport: envCredentialImportEnabled(),
   };
   const settingsOnlyStart = createSettingsOnlyStartService(settingsOnlyOptions);
-  const liveTieredStart = createTieredStartService(
-    createLiveStartService(createLiveOptionsResolver(liveSource)),
-    settingsOnlyStart,
-    { fallbackOnLiveSpawnFailure: true },
-  );
+  const liveStart = createLiveStartService(createLiveOptionsResolver(liveSource));
 
   return new ServiceController({
     log: writeLifecycleLog,
     allowEnvCredentialImport: envCredentialImportEnabled(),
     startService: tracedStartService("settings_only", settingsOnlyStart),
-    startLiveService: tracedStartService("live", liveTieredStart),
+    // User-gated connectLive must fail honestly — never silently degrade to settings-only.
+    startLiveService: tracedStartService("live", liveStart),
   });
 }
 

@@ -18,6 +18,8 @@
  * keyring store it opens is shared into `service.credentialStore` (the "one store" invariant).
  */
 
+import { existsSync, statSync } from "node:fs";
+
 import { credential, diagnostics } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
 
@@ -65,6 +67,7 @@ export function createPersistedSettingsSource(
 
     const workspace = reader.activeWorkspace();
     if (workspace === undefined) return null; // no workspace granted yet → not configured
+    if (!isUsableWorkspaceRoot(workspace.rootPath)) return null;
 
     const model = reader.defaultModel();
     if (model === undefined) return null; // no default model chosen yet
@@ -109,6 +112,16 @@ export function createPersistedSettingsSource(
       ...(options.runtimeRoot !== undefined ? { runtimeRoot: options.runtimeRoot } : {}),
     };
   };
+}
+
+/** True when the persisted workspace root still exists and is a writable directory. */
+function isUsableWorkspaceRoot(rootPath: string): boolean {
+  try {
+    if (!existsSync(rootPath)) return false;
+    return statSync(rootPath).isDirectory();
+  } catch {
+    return false;
+  }
 }
 
 /** Open the settings reader: the injected fake in tests, else the real Node settings store. */

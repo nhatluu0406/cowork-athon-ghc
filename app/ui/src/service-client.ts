@@ -21,6 +21,7 @@ import {
   type ModelRef,
   type ProviderDescriptor,
   type ResponseEnvelope,
+  type SessionMeta,
   type TestResult,
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
@@ -98,6 +99,18 @@ export interface SettingsView {
   readonly activeWorkspace: { readonly rootPath: string } | null;
 }
 
+/** Result of dispatching a prompt to a live session. */
+export type SendSessionMessageResult =
+  | { readonly accepted: true; readonly sessionId: string }
+  | { readonly accepted: false; readonly reason: string; readonly sessionId: string };
+
+/** Input for creating a session bound to the active workspace. */
+export interface CreateSessionInput {
+  readonly workspaceId: string;
+  readonly title?: string;
+  readonly model?: ModelRef;
+}
+
 /** Result of clearing a per-session model override (LOW-1). */
 export interface ClearSessionModelResult {
   readonly cleared: boolean;
@@ -167,6 +180,12 @@ export interface ServiceClient {
   setActiveWorkspace(rootPath: string): Promise<SettingsView>;
   /** Clear a per-session model override so the session reverts to the default (LOW-1). */
   clearSessionModel(sessionId: string): Promise<ClearSessionModelResult>;
+  /** Create a live session for the selected workspace. */
+  createSession(input: CreateSessionInput): Promise<SessionMeta>;
+  /** Dispatch a prompt to the live session (202 when accepted). */
+  sendSessionMessage(sessionId: string, text: string): Promise<SendSessionMessageResult>;
+  /** Request cancellation of the in-flight run. */
+  cancelSession(sessionId: string): Promise<void>;
   /**
    * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
    * never fabricates activity — the list is empty when nothing is awaiting a decision.
@@ -318,6 +337,36 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         method: "DELETE",
         body: JSON.stringify({ sessionId }),
       }),
+
+    createSession: async (input) =>
+      (await call<{ session: SessionMeta }>("/v1/session", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })).session,
+
+    sendSessionMessage: async (sessionId, text) => {
+      const data = await call<{
+        accepted: boolean;
+        sessionId: string;
+        reason?: string;
+      }>(`/v1/session/${encodeURIComponent(sessionId)}/message`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      });
+      if (data.accepted) return { accepted: true, sessionId: data.sessionId };
+      return {
+        accepted: false,
+        sessionId: data.sessionId,
+        reason: data.reason ?? "runtime_unavailable",
+      };
+    },
+
+    cancelSession: async (sessionId) => {
+      await call<{ cancelled: boolean; sessionId: string }>(
+        `/v1/session/${encodeURIComponent(sessionId)}/cancel`,
+        { method: "POST", body: "{}" },
+      );
+    },
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,

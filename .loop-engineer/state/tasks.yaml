@@ -799,9 +799,10 @@ tasks:
       - ".loop-engineer/checkpoints/L6-cghc-028-launch-fix.yaml"
       - "tools/verify/wave-c-report.json"
       - "tools/verify/leg4-report.json"
+      - ".loop-engineer/evidence/CGHC-028-slice4-packaged-opencode-session.md"
     risks:
       - "Using a dev server as false release evidence"
-    notes: "HANDOFF ANCHOR (reconciled 2026-07-12, HEAD ff32d808): release-verify gate keeps L6 at gate=PARTIAL. Slice 1 PASS (3856a84). Slice 2 PASS (ff32d808; CGHC-008 DONE). Service reachability RESOLVED. Still IN_PROGRESS: provider/model settings UI, secure keyring credential entry, DeepSeek test connection, live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey remain UNVERIFIED in the package. No live DeepSeek request in packaged slices 1–2. DO NOT mark DONE until acceptance bullets 3-5 pass through the PACKAGED GUI. DO NOT start L7."
+    notes: "HANDOFF ANCHOR (2026-07-12): L6 gate=PARTIAL. Slice 1–4 packaged PASS on dist-app/win-unpacked/Cowork GHC.exe. Slice 4: explicit Bắt đầu phiên → connectLive → OpenCode v1.17.11 → session → streaming → safe file action → clean stop (tools/verify/slice4-session-packaged.mjs). Still IN_PROGRESS: permission modal in package, cancel leg, full stop/resume/clean L9 journey, provider-error packaged E2E. DO NOT mark DONE until acceptance bullets 3–5 fully pass. DO NOT start L7."
 
 # backlog: deferred epics / proposals recorded by the product owner. NOT schema-valid executable
 # tasks (no owner/reviewer; product-only priority labels). The controller validates only `tasks`,

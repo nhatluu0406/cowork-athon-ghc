@@ -115,3 +115,111 @@ test("setActiveWorkspace PUTs the validated root to the settings active-workspac
     globalThis.fetch = prev;
   }
 });
+
+test("createSession POSTs workspace + model to /v1/session", async () => {
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    assert.equal(String(url), `${BASE}/v1/session`);
+    assert.equal(init?.method, "POST");
+    return {
+      json: async () => ({
+        protocol: BOUNDARY_PROTOCOL_VERSION,
+        ok: true,
+        data: {
+          session: {
+            id: "sess-1",
+            title: "T",
+            workspaceId: "C:/ws",
+            status: "idle",
+            createdAt: "2026-07-12T00:00:00.000Z",
+            updatedAt: "2026-07-12T00:00:00.000Z",
+          },
+        },
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const meta = await client.createSession({
+      workspaceId: "C:/ws",
+      title: "T",
+      model: { providerID: "custom-openai-compat", modelID: "deepseek-chat" },
+    });
+    assert.equal(meta.id, "sess-1");
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
+test("sendSessionMessage surfaces runtime_not_attached honestly", async () => {
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async () => ({
+    json: async () => ({
+      protocol: BOUNDARY_PROTOCOL_VERSION,
+      ok: true,
+      data: { accepted: false, reason: "runtime_not_attached", sessionId: "sess-1" },
+    }),
+  })) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const result = await client.sendSessionMessage("sess-1", "hi");
+    assert.equal(result.accepted, false);
+    if (!result.accepted) assert.equal(result.reason, "runtime_not_attached");
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
+test("createSession POSTs workspace + model to /v1/session", async () => {
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    assert.equal(String(url), `${BASE}/v1/session`);
+    assert.equal(init?.method, "POST");
+    return {
+      json: async () => ({
+        protocol: BOUNDARY_PROTOCOL_VERSION,
+        ok: true,
+        data: {
+          session: {
+            id: "sess-1",
+            title: "T",
+            workspaceId: "C:/ws",
+            status: "idle",
+            createdAt: "2026-07-12T00:00:00.000Z",
+            updatedAt: "2026-07-12T00:00:00.000Z",
+          },
+        },
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const meta = await client.createSession({
+      workspaceId: "C:/ws",
+      title: "T",
+      model: { providerID: "custom-openai-compat", modelID: "deepseek-chat" },
+    });
+    assert.equal(meta.id, "sess-1");
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
+test("sendSessionMessage surfaces runtime_not_attached honestly", async () => {
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async () => ({
+    json: async () => ({
+      protocol: BOUNDARY_PROTOCOL_VERSION,
+      ok: true,
+      data: { accepted: false, reason: "runtime_not_attached", sessionId: "sess-1" },
+    }),
+  })) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const result = await client.sendSessionMessage("sess-1", "hi");
+    assert.equal(result.accepted, false);
+    if (!result.accepted) assert.equal(result.reason, "runtime_not_attached");
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
