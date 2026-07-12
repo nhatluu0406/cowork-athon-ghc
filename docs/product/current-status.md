@@ -16,7 +16,7 @@ and the current working tree instead.
 | Field | Value |
 |---|---|
 | Slice | Attachment Honesty and Secret-File Safety |
-| Feature commit | _(see git log after commit)_ |
+| Feature commit | `3cc4ba6` — fix(attachments): make dispatch inclusion explicit and block secret files |
 | Implementation Agent | Cursor |
 | Packaged journeys | `attachment-honesty-packaged.mjs` A–J PASS (2026-07-12) |
 | Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
