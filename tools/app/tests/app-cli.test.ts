@@ -87,7 +87,7 @@ test("start launches the injected fake electron ONCE and records the PID", () =>
     let spawnCalls = 0;
     let recordedPid: number | null = null;
     const code = cmdStart(root, {
-      exists: (p: string) => p.endsWith("main.js"), // packaged absent, dev main present
+      exists: (p: string) => p.endsWith("main.cjs"), // packaged absent, dev main present
       electronPath: "C:/fake/electron.exe",
       spawn: () => { spawnCalls += 1; return { pid: 4242, unref: () => {} }; },
       recordPid: (_root: string, pid: number) => { recordedPid = pid; },
@@ -110,7 +110,7 @@ test("start refuses when not initialized (run init first)", () => {
   }
 });
 
-test("start refuses when the app is not built (no main.js, no packaged exe)", () => {
+test("start refuses when the app is not built (no main.cjs, no packaged exe)", () => {
   const root = tempRoot();
   try {
     mkdirSync(join(root, ".runtime"), { recursive: true });

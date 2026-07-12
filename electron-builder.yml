@@ -1,13 +1,13 @@
 # electron-builder — SKELETON only (CGHC scaffold). The full packaged installer + smoke
 # test is CGHC-028; this file records the target shape and is intentionally NOT run here.
 #
-# Layout: Electron main = app/shell/dist/main.js; renderer = app/ui/dist (Vite build).
+# Layout: Electron main = app\shell\dist\main.cjs; renderer = app/ui/dist (Vite build).
 appId: com.coworkghc.desktop
 productName: Cowork GHC
 
 # Point the packager at the shell's compiled main entry (root package.json has no "main").
 extraMetadata:
-  main: app/shell/dist/main.js
+  main: app\shell\dist\main.cjs
 
 directories:
   output: release

@@ -793,6 +793,7 @@ tasks:
     evidence:
       - ".loop-engineer/evidence/CGHC-028-release-verification.md"
       - ".loop-engineer/evidence/CGHC-028-packaged-launch-fix.md"
+      - ".loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md"
       - ".loop-engineer/checkpoints/L6-cghc-028-launch-fix.yaml"
       - "tools/verify/wave-c-report.json"
       - "tools/verify/leg4-report.json"

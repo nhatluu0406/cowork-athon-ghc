@@ -32,7 +32,7 @@ before the window closes. Press a key to close. Logs are written (redacted) unde
 ## start.bat — start Cowork GHC
 - Ensures the environment is initialized (prompts you to run `init.bat` otherwise).
 - Launches the desktop app: a packaged build under `dist-app/` if present, otherwise the
-  development Electron run of `app/shell/dist/main.js`. The Electron main process is the
+  development Electron run of `app/shell/dist/main.cjs`. The Electron main process is the
   ONE owner that brings up the live loopback service + the supervised OpenCode child.
 - Tracks the launched app's PID under `.runtime/pids/app-shell.json` (Win32-identity
   captured when available) so `stop.bat` can terminate exactly that process, never by name.

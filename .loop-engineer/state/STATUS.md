@@ -3,21 +3,24 @@
 > Generated view. Source of truth is the `.yaml` files in this directory.
 > Read via: `node tools/loop-engineer/cli.mjs status`
 
-**Phase:** L6 — Implementation (RUNNING, gate PARTIAL — FROZEN for Codex handoff)
+**Phase:** L6 — Implementation (RUNNING, gate PARTIAL — Codex Slice 1 active)
 **Run:** RUN-0007 (IN_PROGRESS)
 **Updated:** 2026-07-12
 **Chế độ mặc định:** `LEAN` (một Agent Lead tuần tự; xem `.agent-workflow/workflow.yaml`)
 
-## ⚠️ Freeze & Handoff (product owner, 2026-07-12)
+## ⚠️ Current Packaged POC Status (2026-07-12)
 
-Repository được **đóng băng để tạo Git baseline và bàn giao cho Codex**. Không phát triển tính năng
-mới, không sửa GUI, không chạy L7, không gọi live LLM trong pass này. Đọc `.loop-engineer/HANDOFF.md` trước.
+Codex đang thực hiện L6 theo chế độ `LEAN`. Không chạy L7, không build web, không gọi live LLM khi
+chưa đến slice live verification.
 
 **Trạng thái sản phẩm trung thực (on-disk):**
-- Packaged `.exe` đã build (NSIS setup + portable + win-unpacked); GUI mở được (đã sửa lỗi launch-crash `require is not defined`).
-- **CHƯA có usable packaged user journey.** Local service chưa tự khởi động/kết nối thành công từ packaged app.
+- Packaged `.exe` đã build (NSIS setup + portable + win-unpacked); Codex Slice 1 verified packaged
+  app boots when `ELECTRON_RUN_AS_NODE` is scrubbed and starts a token-guarded settings-only loopback service.
+- **CHƯA có usable packaged user journey.** Live restart into OpenCode sau khi workspace/provider/credential
+  được cấu hình vẫn chưa verify từ packaged GUI.
 - **UNVERIFIED trong packaged app:** folder/workspace picker, provider/model/credential settings, luồng nhập
   DeepSeek token an toàn, live OpenCode session. Chất lượng GUI/UX so với Claude Cowork / OpenWork = `UNVERIFIED`.
+- Evidence mới: `.loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md`.
 - **L6 = RUNNING, gate = `PARTIAL`.** Không bắt đầu L7.
 - **Task reopen → `STALE`** (unit evidence vẫn hợp lệ, cần re-verify end-to-end trong package): `CGHC-008`
   (workspace picker), `CGHC-011` (secure add-credential + test-connection), `CGHC-019` (provider/model settings).
@@ -34,7 +37,7 @@ mới, không sửa GUI, không chạy L7, không gọi live LLM trong pass này
 | L3 | Architecture Candidates | COMPLETED | PASS |
 | L4 | Architecture Review | COMPLETED | PASS (FROZEN) |
 | L5 | Master Plan | COMPLETED | PASS |
-| L6 | Implementation | RUNNING | **PARTIAL** (frozen; packaged journey UNVERIFIED) |
+| L6 | Implementation | RUNNING | **PARTIAL** (packaged onboarding service verified; full journey UNVERIFIED) |
 | L7 | Integration | NOT_READY | — |
 | L8 | Hardening | NOT_READY | — |
 | L9 | Release Verification | NOT_READY | — |

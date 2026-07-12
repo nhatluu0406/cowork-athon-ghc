@@ -74,7 +74,12 @@ export async function buildMainBundle(options = {}) {
     // appRoot / renderer-dir / preload-path math depends on it.
     define: { "import.meta.url": "__coworkImportMetaUrl" },
     banner: {
-      js: "const __coworkImportMetaUrl = require('node:url').pathToFileURL(__filename).href;",
+      js: [
+        "const __coworkImportMetaUrl = require('node:url').pathToFileURL(__filename).href;",
+        "if (process.env.COWORK_GHC_STARTUP_TRACE) {",
+        "  try { require('node:fs').appendFileSync(process.env.COWORK_GHC_STARTUP_TRACE, 'main_bundle_loaded\\n'); } catch {}",
+        "}",
+      ].join("\n"),
     },
     sourcemap: false,
     legalComments: "none",

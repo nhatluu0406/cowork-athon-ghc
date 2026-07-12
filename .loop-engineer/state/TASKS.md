@@ -6,7 +6,7 @@
 L5 (Master Plan) tạo **28 executable task** (`CGHC-001`..`CGHC-028`). Một task chỉ `DONE` khi có
 acceptance + tests pass + review độc lập (reviewer ≠ owner) + evidence + không còn finding Critical/High.
 
-**Tổng hợp (2026-07-12, freeze cho Codex handoff):** 24 `DONE` · 3 `STALE` (reopen) · 1 `IN_PROGRESS`.
+**Tổng hợp (2026-07-12, Codex Slice 1):** 24 `DONE` · 3 `STALE` (reopen) · 1 `IN_PROGRESS`.
 
 ## Executable tasks
 
@@ -56,6 +56,9 @@ trong packaged app**. Không reopen task infra/security đã có evidence hợp 
 
 `CGHC-028` (release-verify) giữ `IN_PROGRESS` làm **anchor**: L6 gate = `PARTIAL` cho tới khi mọi task
 `DONE` và packaged E2E PASS. Không bắt đầu L7.
+
+Codex Slice 1 evidence mới: `CGHC-028-slice1-packaged-service-lifecycle.md` chứng minh packaged
+`win-unpacked` boot + settings-only loopback listener + PID cleanup; live OpenCode packaged GUI flow vẫn pending.
 
 ## Backlog (deferred — chưa phải executable task)
 
