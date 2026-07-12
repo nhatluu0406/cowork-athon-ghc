@@ -7,6 +7,11 @@ loop: "L5"
 architecture_freeze: "L4 (ADR 0001-0006 Accepted, ADR 0007 DEFERRED), 2026-07-11"
 ---
 
+> **Superseded:** This document is historical Claude planning provenance. It is not
+> the active source of truth. Use
+> [docs/product/cowork-ghc-product-plan.md](./cowork-ghc-product-plan.md) for the
+> current product plan. Keep this file for requirement reconciliation only.
+
 # Cowork GHC — Kế hoạch tổng thể (Master Plan)
 
 > Loop L5 là loop **lập kế hoạch (planning)**. Kiến trúc đã **FROZEN ở L4** (ADR

@@ -29,7 +29,7 @@ updated_at: "2026-07-12"
 
 ## Release
 
-- L9 release verification đầy đủ chưa bắt đầu.
+- Full L9 / release-candidate verification PASS is incomplete. Partial packaged evidence exists, but the latest interactive UX pass did not complete live streaming/tool/file/permission/cancel/provider-recovery/native-picker journeys in one release-candidate run.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
 
 ## Attachments (Phase 1)
