@@ -8,15 +8,12 @@ read by non-Claude agents, and do not depend on `.claude/`. A Codex-usable skill
 ## Current status (read before doing anything) — 2026-07-12
 - **Project:** Cowork GHC — desktop AI cowork product for Windows 11. **Desktop POC is the active scope.**
 - **Web (Next.js) = `DEFERRED`** (ADR 0007). Do not build it.
-- **Current loop: L6 (Implementation) = `RUNNING`, gate `PARTIAL`.** Packaged user-journey acceptance is
-  **NOT met** (service auto-connect, folder picker, LLM settings, secure token input, live session all
-  UNVERIFIED in the package). Reopened to `STALE`: `CGHC-008`, `CGHC-011`, `CGHC-019`. **Do NOT start L7.**
-- **Default operating mode = `LEAN`** (one Agent Lead, sequential, token-frugal; see
-  `.agent-workflow/workflow.yaml` → `operating_mode`).
-- **Agent Lead decides technical details** autonomously within scope. The **product owner supplies the
-  DeepSeek token ONLY via the secure credential flow** (OS keyring; never in chat/source/logs/`.env`).
-- **Canonical machine state:** `.loop-engineer/state/` (YAML). **Handoff brief:** `.loop-engineer/HANDOFF.md`.
-  Layout map: `.loop-engineer/MANIFEST.md`.
+- **Loop:** `L6` Implementation = `RUNNING`, gate `PARTIAL`. **Do NOT start L7.**
+- **Packaged slices verified:** Slice 1 service lifecycle (`3856a84`); Slice 2 workspace (`ff32d808`, `CGHC-008` DONE); Slice 3 provider/credential (`CGHC-011`, `CGHC-019` DONE).
+- **Next slice:** OpenCode live session integration (bounded). Do **not** start L7.
+- **Default operating mode = `LEAN`** (see `.agent-workflow/workflow.yaml` → `operating_mode`).
+- **Canonical machine state:** `.loop-engineer/state/*.yaml`. **Handoff:** `.loop-engineer/HANDOFF.md`.
+- **DeepSeek token:** product owner supplies via secure credential flow (OS keyring); never in chat/source/logs/`.env` commits.
 
 ## Read these first
 - Canonical workflow: `.agent-workflow/workflow.yaml`

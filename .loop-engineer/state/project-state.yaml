@@ -1,21 +1,23 @@
 version: 1
 product: Cowork GHC
-updated_at: "2026-07-12T04:43:00Z"
+updated_at: "2026-07-12T12:00:00Z"
 current_phase: L6_IN_PROGRESS
 handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
-  frozen_at: "2026-07-12T04:43:00Z"
-  note: "Reconciled 2026-07-12 with Git HEAD ff32d808. L6 RUNNING, gate PARTIAL. Slice 1 packaged service lifecycle PASS (3856a84: authenticated health before service_started). Slice 2 packaged workspace selection PASS (ff32d808: picker, activation, persistence, relaunch restore, workspace switch). CGHC-008 DONE. Service reachability is RESOLVED (not open). Provider/model settings + secure credential flow remain next (CGHC-011, CGHC-019). No DeepSeek live request. Do NOT start L7. LEAN mode."
+  frozen_at: "2026-07-12T12:00:00Z"
+  note: "L6 RUNNING, gate PARTIAL. Slices 1–3 packaged PASS on dist-app/win-unpacked/Cowork GHC.exe. CGHC-008, CGHC-011, CGHC-019 DONE. Service reachability RESOLVED. Bounded DeepSeek test connection verified via keyring (no .env after relaunch). OpenCode live session NOT started. Do NOT start L7. LEAN mode."
 git:
   is_repo: true
-  head: ff32d8087e54433a925d020075f5105c2f0f413e
+  head: e99c3b14a25162a66cfb20171c8d0be8a6f033bf
   verified_commits:
     - hash: 3856a84
       scope: "Slice 1 packaged service readiness and authenticated health verification"
     - hash: ff32d808
       scope: "Slice 2 packaged workspace picker, activation, persistence, relaunch restore, and workspace switching"
-  note: "HEAD ff32d808. Prior checkpoint referencing bcffc9d and unresolved service reachability is superseded."
+    - hash: e99c3b1
+      scope: "Slice 3 packaged provider/model settings, Windows keyring credential, bounded DeepSeek test connection"
+  note: "HEAD e99c3b1. Slice 3 packaged provider/credential PASS."
 toolchain:
   node: "v24.15.0"
   npm: "11.17.0"

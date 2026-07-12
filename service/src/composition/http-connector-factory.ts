@@ -1,0 +1,52 @@
+/**
+ * Factory for the real HTTP provider connector used by settings-only onboarding (CGHC-011).
+ *
+ * Test connection does NOT require an OpenCode child — only the loopback credential service,
+ * SSRF policy, and the IP-pinned probe. Tier 2 streaming still uses the same connector seam
+ * when live; until then `probe` is fully functional for onboarding.
+ */
+
+import type { ProviderId } from "@cowork-ghc/contracts";
+import type { CredentialService } from "../credential/index.js";
+import type { SettingsStore } from "../diagnostics/index.js";
+import {
+  createHttpConnector,
+  createProviderPort,
+  createSsrfPolicy,
+  providerEnvSpec,
+  isCustomEndpoint,
+  type DnsResolver,
+  type ProviderConnector,
+  type ProviderPort,
+  type SsrfPolicy,
+} from "../provider/index.js";
+
+export interface HttpConnectorBundle {
+  readonly ssrf: SsrfPolicy;
+  readonly providerPort: ProviderPort;
+  readonly connector: ProviderConnector;
+}
+
+/** Wire the SSRF policy, provider port, and HTTP probe connector (lazy credential lookup). */
+export function createHttpConnectorBundle(
+  credentialService: CredentialService,
+  settingsStore: SettingsStore,
+  dnsResolver: DnsResolver,
+): HttpConnectorBundle {
+  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  let port!: ProviderPort;
+  const connector = createHttpConnector({
+    ssrf,
+    credentials: credentialService,
+    credentialRefFor: (id) => port.credentialRefFor(id),
+    envSpecFor: (id: ProviderId) => {
+      if (isCustomEndpoint(id)) {
+        const envVar = settingsStore.providerSettings(id)?.envVar;
+        return providerEnvSpec(id, envVar);
+      }
+      return providerEnvSpec(id);
+    },
+  });
+  port = createProviderPort({ ssrf, connector });
+  return { ssrf, providerPort: port, connector };
+}

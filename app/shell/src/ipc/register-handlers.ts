@@ -41,6 +41,9 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     return {
       serviceBaseUrl: bootstrap.serviceBaseUrl,
       clientToken: bootstrap.clientToken,
+      ...(bootstrap.allowEnvCredentialImport === true
+        ? { allowEnvCredentialImport: true as const }
+        : {}),
     };
   });
 

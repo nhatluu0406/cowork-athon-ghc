@@ -47,8 +47,14 @@ export interface CoworkServiceOptions extends ServiceOptions {
   /** Permission fail-closed timeout (P6) in ms. Default: 120000. */
   readonly permissionTimeoutMs?: number;
 
+  /** Allow POST /v1/credentials/import-env (development / verification only). Default: false. */
+  readonly allowEnvCredentialImport?: boolean;
+
   // ---- Tier 2 seams (default: honest not-attached doubles; CGHC-028 fills these) ----
-  /** Provider wire probe/cancel over the child. Default: unreachable probe, no-op cancel. */
+  /**
+   * Provider wire probe/cancel. Default: real HTTP probe connector (CGHC-011 onboarding).
+   * Tests may inject a fake; live streaming may replace cancel later (CGHC-028).
+   */
   readonly connector?: ProviderConnector;
   /** Outbound runtime permission-reply port. Default: rejects with RuntimeNotAttachedError. */
   readonly runtimeReply?: RuntimeReplyPort;

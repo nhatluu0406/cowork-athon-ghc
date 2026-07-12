@@ -23,6 +23,11 @@ export interface RendererBootstrap {
   readonly serviceBaseUrl: string;
   /** Per-launch client token to present on every boundary request (Bearer). Secret. */
   readonly clientToken: string;
+  /**
+   * When true, the service exposes POST /v1/credentials/import-env (development / verification
+   * only). The renderer may offer a dev-only import action; never used in normal production UX.
+   */
+  readonly allowEnvCredentialImport?: boolean;
 }
 
 /** Result of the native folder picker (W1). `rootPath` is present only when not canceled. */
