@@ -17,6 +17,7 @@
  */
 
 import { app, BrowserWindow, protocol, session } from "electron";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,7 +27,7 @@ import { runShellLifecycle, type LifecycleApp } from "./lifecycle.js";
 import { hardenWebContents } from "./security/navigation.js";
 import { installCsp } from "./security/csp.js";
 import { APP_ORIGIN, installAppProtocol, registerAppScheme } from "./security/app-protocol.js";
-import { ServiceController } from "./service/service-controller.js";
+import { ServiceController, type StartService } from "./service/service-controller.js";
 import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
@@ -35,6 +36,7 @@ import {
   createSettingsOnlyStartService,
   createTieredStartService,
 } from "./service/tiered-start-service.js";
+import { createHealthVerifiedStartService } from "./service/wait-for-health.js";
 import {
   createFirstConfiguredSource,
   createPersistedSettingsSource,
@@ -92,6 +94,52 @@ app.on("window-all-closed", () => {
  * consumes.
  */
 const SETTINGS_FILE_PATH = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
+const LIFECYCLE_LOG_PATH = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
+
+function redactLifecycleLine(line: string): string {
+  return line.replace(/[A-Za-z0-9_-]{32,}/g, "[redacted]");
+}
+
+function writeLifecycleLog(line: string): void {
+  writeStartupTrace(`log:${redactLifecycleLine(line)}`);
+  try {
+    mkdirSync(dirname(LIFECYCLE_LOG_PATH), { recursive: true });
+    appendFileSync(
+      LIFECYCLE_LOG_PATH,
+      `${new Date().toISOString()} ${redactLifecycleLine(line)}\n`,
+      "utf8",
+    );
+  } catch {
+    // Diagnostics are best-effort; logging must never block app startup or shutdown.
+  }
+}
+
+function writeStartupTrace(marker: string): void {
+  const tracePath = process.env["COWORK_GHC_STARTUP_TRACE"];
+  if (tracePath === undefined || tracePath.trim() === "") return;
+  try {
+    appendFileSync(tracePath, `${marker}\n`, "utf8");
+  } catch {
+    // Trace is opt-in diagnostics only.
+  }
+}
+
+function tracedStartService(name: string, start: StartService): StartService {
+  const verified = createHealthVerifiedStartService(start);
+  return async () => {
+    writeLifecycleLog(`${name}_starting`);
+    try {
+      const service = await verified();
+      writeLifecycleLog(`${name}_ready: ${service.baseUrl}`);
+      writeLifecycleLog(`${name}_started: ${service.baseUrl}`);
+      return service;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      writeLifecycleLog(`${name}_failed: ${message}`);
+      throw error;
+    }
+  };
+}
 
 // The live launch config comes from the FIRST configured source: the persisted onboarding settings
 // (what the user entered in the UI) take priority; the launch-env source is a fallback for bounded
@@ -121,12 +169,16 @@ const liveSource = createFirstConfiguredSource([
 // state (folder picker + provider/model settings reachable) — no child, no provider call. Actually
 // going live is a separate user-gated step (a "Connect" restart into the live path).
 const controller = new ServiceController({
+  log: writeLifecycleLog,
   startService: createTieredStartService(
-    createLiveStartService(createLiveOptionsResolver(liveSource)),
-    createSettingsOnlyStartService({
-      settingsFilePath: SETTINGS_FILE_PATH,
-      allowedOrigins: [APP_ORIGIN],
-    }),
+    tracedStartService("live", createLiveStartService(createLiveOptionsResolver(liveSource))),
+    tracedStartService(
+      "settings_only",
+      createSettingsOnlyStartService({
+        settingsFilePath: SETTINGS_FILE_PATH,
+        allowedOrigins: [APP_ORIGIN],
+      }),
+    ),
   ),
 });
 
@@ -141,6 +193,7 @@ const lifecycleApp: LifecycleApp = {
 void runShellLifecycle({
   app: lifecycleApp,
   controller,
+  trace: writeStartupTrace,
   onReady: () => {
     installAppProtocol(protocol, RENDERER_DIR);
     installCsp(session.defaultSession);

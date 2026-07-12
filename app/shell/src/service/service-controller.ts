@@ -86,11 +86,12 @@ export class ServiceController {
   private async runStart(): Promise<void> {
     this.status = "starting";
     this.failureMessage = null;
+    this.log("service_starting");
     try {
       const started = await this.startFn();
       this.started = started;
       this.status = "running";
-      this.log("service_started");
+      this.log(`service_started: ${started.baseUrl}`);
     } catch (err) {
       // HONEST failure: no started handle, no fake ready — the renderer gets the empty
       // handshake and the readiness surface renders `not_connected`. Never rethrow so the

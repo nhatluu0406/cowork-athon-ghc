@@ -1,12 +1,12 @@
 version: 1
 product: Cowork GHC
-updated_at: "2026-07-12T00:00:00Z"
+updated_at: "2026-07-12T23:59:00Z"
 current_phase: L6_IN_PROGRESS
 handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
   frozen_at: "2026-07-12T00:00:00Z"
-  note: "Codex Slice 1 baseline 2026-07-12: packaged app now boots from rebuilt win-unpacked when ELECTRON_RUN_AS_NODE is not inherited, starts a token-guarded settings-only loopback service, and cleans up owned processes. Full packaged user journey (folder picker, LLM settings, secure DeepSeek token input, live OpenCode session) remains UNVERIFIED. GUI/UX quality vs Claude Cowork / OpenWork remains UNVERIFIED. L6 stays RUNNING with gate PARTIAL. Do NOT start L7. Default operating mode is LEAN."
+  note: "Codex checkpoint 2026-07-12 (service reachability): L6 remains RUNNING with gate PARTIAL. Packaged service reachability blocker RESOLVED: settings-only loopback service now verifies authenticated GET /v1/health before reporting service_started; packaged probe to reported baseUrl returns 401 without token (expected token-guarded boundary) and listener is owned by the packaged main PID until clean stop. Focused shell tests (wait-for-health, service-controller, lifecycle, tiered-start) pass; package:win rebuild and packaged verification pass with zero Cowork/OpenCode orphans after root PID stop. Uncommitted renderer workspace-selection wiring (settings.activeWorkspace persistence) remains partial and is NOT packaged-GUI verified. Native folder picker, provider/model settings, secure keyring credential UI, DeepSeek test connection, and live OpenCode session remain UNVERIFIED in the package. No live DeepSeek request was made. Do NOT start L7. Default operating mode is LEAN."
 git:
   is_repo: false
   note: "Project root is not a git repository yet. `git init` + first commit is a product-owner action (this pass only prepares a safe baseline). No history to protect."
