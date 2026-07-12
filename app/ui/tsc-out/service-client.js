@@ -52,6 +52,49 @@ export function createServiceClient(baseUrl, clientToken) {
         }),
         recentWorkspaces: async () => (await call("/v1/workspace/recent")).recent,
         getSettings: async () => (await call("/v1/settings")).settings,
+        listProviders: async () => (await call("/v1/providers")).providers,
+        storeProviderCredential: async (providerId, secret) => {
+            const { ref } = await call("/v1/credentials", {
+                method: "POST",
+                body: JSON.stringify({ providerId, secret }),
+            });
+            return (await call("/v1/settings/providers/credential", {
+                method: "PUT",
+                body: JSON.stringify({ providerId, ref }),
+            })).settings;
+        },
+        importProviderCredentialFromEnv: async (providerId, envVar) => {
+            const { ref } = await call("/v1/credentials/import-env", {
+                method: "POST",
+                body: JSON.stringify({ providerId, envVar }),
+            });
+            return (await call("/v1/settings/providers/credential", {
+                method: "PUT",
+                body: JSON.stringify({ providerId, ref }),
+            })).settings;
+        },
+        removeProviderCredential: async (providerId) => {
+            const settings = (await call("/v1/settings")).settings;
+            const row = settings.providers.find((p) => p.providerId === providerId);
+            if (row?.hasCredential && row.credentialAccount !== undefined) {
+                await call("/v1/credentials", {
+                    method: "DELETE",
+                    body: JSON.stringify({ ref: { store: "os", account: row.credentialAccount } }),
+                });
+            }
+            return (await call("/v1/settings/providers/credential", {
+                method: "DELETE",
+                body: JSON.stringify({ providerId }),
+            })).settings;
+        },
+        setProviderEnvVar: async (providerId, envVar) => (await call("/v1/settings/providers/env-var", {
+            method: "PUT",
+            body: JSON.stringify({ providerId, envVar }),
+        })).settings,
+        testProviderConnection: async (providerId) => (await call("/v1/providers/test-connection", {
+            method: "POST",
+            body: JSON.stringify({ providerId }),
+        })).result,
         updateGeneral: async (patch) => (await call("/v1/settings/general", {
             method: "PATCH",
             body: JSON.stringify(patch),
@@ -72,10 +115,34 @@ export function createServiceClient(baseUrl, clientToken) {
             method: "PUT",
             body: JSON.stringify({ model }),
         })).settings,
+        setActiveWorkspace: async (rootPath) => (await call("/v1/settings/active-workspace", {
+            method: "PUT",
+            body: JSON.stringify({ rootPath }),
+        })).settings,
         clearSessionModel: (sessionId) => call("/v1/settings/model/session", {
             method: "DELETE",
             body: JSON.stringify({ sessionId }),
         }),
+        createSession: async (input) => (await call("/v1/session", {
+            method: "POST",
+            body: JSON.stringify(input),
+        })).session,
+        sendSessionMessage: async (sessionId, text) => {
+            const data = await call(`/v1/session/${encodeURIComponent(sessionId)}/message`, {
+                method: "POST",
+                body: JSON.stringify({ text }),
+            });
+            if (data.accepted)
+                return { accepted: true, sessionId: data.sessionId };
+            return {
+                accepted: false,
+                sessionId: data.sessionId,
+                reason: data.reason ?? "runtime_unavailable",
+            };
+        },
+        cancelSession: async (sessionId) => {
+            await call(`/v1/session/${encodeURIComponent(sessionId)}/cancel`, { method: "POST", body: "{}" });
+        },
         listPendingPermissions: permission.listPendingPermissions,
         decidePermission: permission.decidePermission,
     };

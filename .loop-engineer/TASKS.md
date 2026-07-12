@@ -5,19 +5,13 @@
 
 ## Summary
 
-- `DONE`: 27
-- `IN_PROGRESS`: 1 (`CGHC-028`)
+- `DONE`: 28 (includes `CGHC-028`)
+- `IN_PROGRESS`: 0
 
-## Active Task
+## L6 Anchor
 
-| ID | Capability | Status | Current note |
-|---|---|---|---|
-| `CGHC-028` | release-verification | `IN_PROGRESS` | HuyTT12 GUI packaged integration PASS; permission request, stop/resume/clean, provider-error, template/session resume remain open. |
-
-## Done Anchors
-
-`CGHC-008`, `CGHC-011`, and `CGHC-019` are packaged-verified. HuyTT12 GUI presentation is integrated into `app/ui` over the verified core.
+`CGHC-028` release-verification **DONE** — packaged POC acceptance PASS via `tools/verify/l6-packaged.mjs`.
 
 ## Next Product Slice
 
-Continue `CGHC-028` packaged verification. Do not start L7.
+L7 Integration is `NOT_READY` until product owner activates. Carry-forward: template/session-resume smoke, full L9 regression, `start.bat`/`clean.bat` evidence.

@@ -84,7 +84,7 @@ test("a successful reply POSTs the mapped OpenCode response body", async () => {
   await port.reply({ requestId: "req-7", decision: "allow", scope: "always" });
   await port.reply({ requestId: "req-8", decision: "deny" });
 
-  assert.deepEqual(calls[0]?.body, { response: "always" });
-  assert.deepEqual(calls[1]?.body, { response: "reject" });
+  assert.deepEqual(calls[0]?.body, { reply: "always" });
+  assert.deepEqual(calls[1]?.body, { reply: "reject" });
   assert.equal(calls[0]?.url, `${BASE_URL}/permission/req-7/reply`);
 });

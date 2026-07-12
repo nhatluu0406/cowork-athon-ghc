@@ -12,7 +12,7 @@
  * typed methods, each mapping to a declared boundary route. The token is held in a
  * closure only — never placed in the DOM, `localStorage`, or logs.
  */
-import { type BoundaryErrorCode, type CredentialRef, type HealthData, type ModelRef, type WorkspaceGrant } from "@cowork-ghc/contracts";
+import { type BoundaryErrorCode, type CredentialRef, type HealthData, type ModelRef, type ProviderDescriptor, type SessionMeta, type TestResult, type WorkspaceGrant } from "@cowork-ghc/contracts";
 import { type DecidePermissionInput, type PendingPermissionView, type PermissionDecisionResponse } from "./permission-client.js";
 export type { DecidePermissionInput, PendingPermissionView, PermissionDecisionResponse, } from "./permission-client.js";
 /**
@@ -57,12 +57,31 @@ export interface ProviderSettingsView {
     readonly hasCredential: boolean;
     readonly credentialAccount?: string;
     readonly baseUrl?: string;
+    readonly envVar?: string;
 }
 /** The non-secret settings projection the service returns to the renderer (CGHC-022 SD1). */
 export interface SettingsView {
     readonly general: GeneralSettingsView;
     readonly providers: readonly ProviderSettingsView[];
     readonly defaultModel: ModelRef | null;
+    readonly activeWorkspace: {
+        readonly rootPath: string;
+    } | null;
+}
+/** Result of dispatching a prompt to a live session. */
+export type SendSessionMessageResult = {
+    readonly accepted: true;
+    readonly sessionId: string;
+} | {
+    readonly accepted: false;
+    readonly reason: string;
+    readonly sessionId: string;
+};
+/** Input for creating a session bound to the active workspace. */
+export interface CreateSessionInput {
+    readonly workspaceId: string;
+    readonly title?: string;
+    readonly model?: ModelRef;
 }
 /** Result of clearing a per-session model override (LOW-1). */
 export interface ClearSessionModelResult {
@@ -94,6 +113,21 @@ export interface ServiceClient {
     recentWorkspaces(): Promise<readonly RecentWorkspaceView[]>;
     /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
     getSettings(): Promise<SettingsView>;
+    /** List provider descriptors exposed by the service (provider-neutral). */
+    listProviders(): Promise<readonly ProviderDescriptor[]>;
+    /**
+     * Store a credential in the OS keyring and bind its handle to the provider in settings.
+     * The secret is sent once over the authenticated loopback boundary and never returned.
+     */
+    storeProviderCredential(providerId: string, secret: string): Promise<SettingsView>;
+    /** Remove the keyring entry and clear the provider credential binding. */
+    removeProviderCredential(providerId: string): Promise<SettingsView>;
+    /** Development / verification only: import a credential from a named process env var. */
+    importProviderCredentialFromEnv(providerId: string, envVar: string): Promise<SettingsView>;
+    /** Set the child env-var NAME for a custom OpenAI-compatible provider (non-secret). */
+    setProviderEnvVar(providerId: string, envVar: string): Promise<SettingsView>;
+    /** Bounded provider connectivity test (resolves credential from keyring). */
+    testProviderConnection(providerId: string): Promise<TestResult>;
     /** Patch general settings; returns the updated settings view. */
     updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
     /**
@@ -107,8 +141,16 @@ export interface ServiceClient {
     setProviderBaseUrl(providerId: string, baseUrl: string): Promise<SettingsView>;
     /** Set (or clear with `null`) the persisted default-model preference (SSOT = service). */
     setDefaultModel(model: ModelRef | null): Promise<SettingsView>;
+    /** Persist the server-validated active workspace root used by live launch. */
+    setActiveWorkspace(rootPath: string): Promise<SettingsView>;
     /** Clear a per-session model override so the session reverts to the default (LOW-1). */
     clearSessionModel(sessionId: string): Promise<ClearSessionModelResult>;
+    /** Create a live session for the selected workspace. */
+    createSession(input: CreateSessionInput): Promise<SessionMeta>;
+    /** Dispatch a prompt to the live session (202 when accepted). */
+    sendSessionMessage(sessionId: string, text: string): Promise<SendSessionMessageResult>;
+    /** Request cancellation of the in-flight run. */
+    cancelSession(sessionId: string): Promise<void>;
     /**
      * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
      * never fabricates activity — the list is empty when nothing is awaiting a decision.

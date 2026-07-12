@@ -121,9 +121,10 @@ export class ToolPermissionProxy {
       return this.submit(event, kind, undefined);
     }
 
-    // File tools: confine the primary target (and destination for a move) real path.
+    // File tools: when OpenCode omits a concrete path (glob-only permission.asked), still surface
+    // the request to the gate so the UI can approve/deny — OpenCode blocks until the reply.
     if (event.path === undefined || event.path.length === 0) {
-      return this.refuse(event.requestId, "missing_path");
+      return this.submit(event, kind, undefined);
     }
     let targetReal: string;
     try {

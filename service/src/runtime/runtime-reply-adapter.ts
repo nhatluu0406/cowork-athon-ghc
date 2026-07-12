@@ -8,8 +8,8 @@
  * already report-and-swallows a failed Deny reply, so a real server-side Deny still blocks even
  * if this delivery fails.
  *
- * ROUTE (flag for Wave C live confirmation): `POST /permission/{requestId}/reply` with body
- * `{ decision, scope? }`. This is the request-id-addressed reply route documented in ADR 0001
+ * ROUTE: `POST /permission/{requestId}/reply` with body `{ reply: "once" | "always" | "reject" }`.
+ * This is the request-id-addressed reply route documented in ADR 0001
  * and the OpenWork reference (`permission/:requestId/reply`); the {@link PermissionReply} carries
  * only `requestId` (no `sessionId`), so the request-id route — not a session-scoped variant — is
  * the correct shape. NOT confirmed against the pinned server in-repo.
@@ -18,6 +18,14 @@
 import type { PermissionReply } from "@cowork-ghc/contracts";
 import type { RuntimeReplyPort } from "../permission/index.js";
 import type { OpencodeHttp } from "./opencode-client.js";
+
+/** OpenCode v1.17.11 reply vocabulary (POST /permission/{id}/reply). */
+type OpencodeReplyValue = "once" | "always" | "reject";
+
+function mapOpencodeReply(reply: PermissionReply): OpencodeReplyValue {
+  if (reply.decision === "deny") return "reject";
+  return reply.scope === "always" ? "always" : "once";
+}
 
 export interface OpencodeRuntimeReplyOptions {
   readonly http: OpencodeHttp;
@@ -28,10 +36,7 @@ export function createOpencodeRuntimeReply(
 ): RuntimeReplyPort {
   return {
     reply(reply: PermissionReply): Promise<void> {
-      // Secret-free body: an enum decision + optional allow scope (never a path/credential).
-      const body = reply.scope !== undefined
-        ? { decision: reply.decision, scope: reply.scope }
-        : { decision: reply.decision };
+      const body = { reply: mapOpencodeReply(reply) };
       return options.http.send({
         operation: "permission.reply",
         method: "POST",

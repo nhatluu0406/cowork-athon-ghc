@@ -47,6 +47,11 @@ export interface EventPumpOptions {
   readonly maxReconnects?: number;
   /** Optional redacted-diagnostic sink; omitted → silent (never logs secrets). */
   readonly onDiagnostic?: (message: string) => void;
+  /**
+   * Optional hook invoked for every decoded frame BEFORE session demux (e.g. permission bridge).
+   * Must not throw — failures are reported via {@link onDiagnostic} when provided.
+   */
+  readonly onFrame?: (frame: { type: string }) => void | Promise<void>;
 }
 
 export interface EventPump {
@@ -103,7 +108,15 @@ export function createEventPump(options: EventPumpOptions): EventPump {
       const trimmed = block.trim();
       if (trimmed.length === 0) continue;
       const frame = decodeSseFrame(trimmed);
-      if (frame !== null) dispatch(frame);
+      if (frame !== null) {
+        const hook = options.onFrame?.(frame);
+        if (hook !== undefined) {
+          void hook.catch((err: unknown) => {
+            diagnostic(`onFrame hook error: ${errText(err)}`);
+          });
+        }
+        dispatch(frame);
+      }
     }
     return remainder;
   }

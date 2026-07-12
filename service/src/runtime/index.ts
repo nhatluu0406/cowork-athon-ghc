@@ -36,6 +36,7 @@ export {
 export {
   buildOpencodeConfig,
   writeOpencodeConfig,
+  LIVE_SESSION_PERMISSION_POLICY,
   type OpencodeProviderConfig,
 } from "./opencode-config.js";
 
@@ -95,3 +96,9 @@ export {
   type EventPumpTarget,
   type PumpRunController,
 } from "./event-pump.js";
+
+export {
+  createPermissionBridge,
+  type PermissionBridge,
+  type PermissionBridgeOptions,
+} from "./permission-bridge.js";

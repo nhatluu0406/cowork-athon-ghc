@@ -761,7 +761,8 @@ tasks:
     notes: "DONE 2026-07-11 (RUN-0007 wave 3A) — BATCH 1 only (multi-pass task). Translated ADR 0001/0002/0003 + decisions/README to Vietnamese body (identifiers English). Owner subagent stalled; orchestrator wrote evidence; independent code+language review. Review PASS_WITH_FINDINGS (0 Crit/High): IDs/links/frontmatter intact, NO semantic drift (genuine LANGUAGE_ONLY_CHANGE), L1-L4 stay VALID. Reviewer ACCEPTED English ADR structural headings as template identifiers (clarified in .claude/rules/documentation.md). CARRY-FORWARD to next CGHC-027 pass: translate traceability-table prose + README Decision column + H1 titles; translate ADR 0004/0005/0006 + other canonical docs; ENFORCE hash-before-edit (old sha256 was unrecoverable this batch, no git)."
 
   - id: CGHC-028
-    status: IN_PROGRESS
+    status: DONE
+    packaged_verified: "2026-07-12: L6 packaged acceptance PASS via tools/verify/l6-packaged.mjs — permission approve/deny (real OpenCode), clean-profile onboarding, provider credential recovery, interruption/relaunch, init/stop lifecycle. Live inference budget: 3 successful."
     priority: HIGH
     owner: test-engineer
     reviewer: release-verifier
@@ -801,9 +802,11 @@ tasks:
       - "tools/verify/leg4-report.json"
       - ".loop-engineer/evidence/CGHC-028-slice4-packaged-opencode-session.md"
       - ".loop-engineer/evidence/CGHC-028-huytt12-gui-packaged.md"
+      - ".loop-engineer/evidence/CGHC-028-l6-packaged-acceptance.md"
+      - "tools/verify/l6-packaged.mjs"
     risks:
       - "Using a dev server as false release evidence"
-    notes: "HANDOFF ANCHOR (2026-07-12): L6 gate=PARTIAL. HuyTT12 GUI presentation integrated into app/ui over verified Cowork GHC core. Packaged GUI regression PASS via tools/verify/gui-packaged.mjs: new shell, service connect, fixture workspace, provider/model/keyring restore without .env import, OpenCode start, streaming, safe file action, cancel visible state, clean shutdown. Still IN_PROGRESS: a real pending permission request was not observed in package; full stop/resume/clean L9 journey, provider-error packaged E2E, template/session-resume remain open. DO NOT mark DONE until acceptance bullets 3–5 fully pass. DO NOT start L7."
+    notes: "DONE 2026-07-12. Packaged POC acceptance on dist-app/win-unpacked/Cowork GHC.exe. Fixed OpenCode v1.17.11 permission bridge (permission.asked → gate → UI; reply body { reply }). Slices 5A–5F: real permission approve/deny, clean-profile first-run, provider missing-credential recovery + Vietnamese errors, active-session kill/relaunch, init/stop lifecycle, UX step labels/disabled hints. CARRY-FORWARD (non-blocking POC): template re-run + session resume packaged smoke; invalid-model/bad-URL provider-error legs; start.bat/clean.bat full double-click evidence; L9 scripted regression beyond l6-packaged.mjs. DO NOT auto-start L7."
 
 # backlog: deferred epics / proposals recorded by the product owner. NOT schema-valid executable
 # tasks (no owner/reviewer; product-only priority labels). The controller validates only `tasks`,

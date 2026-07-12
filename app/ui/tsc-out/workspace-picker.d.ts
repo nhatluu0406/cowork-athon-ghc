@@ -9,6 +9,8 @@
  *    and does NOT become the active workspace — no session is started here.
  *  - W2: the recent list is fetched from the service (single source of truth) with a per-entry
  *    `available` flag; an unavailable (removed/renamed) entry renders disabled, not hidden.
+ *  - Persistence: on mount the last saved `settings.activeWorkspace` is revalidated through the
+ *    service before the UI shows an active state. Activation persists via `setActiveWorkspace`.
  *
  * DOM is built with `textContent` only (no HTML parsing), controls are keyboard-reachable and
  * labelled, and no secret is ever written into the DOM.
@@ -17,9 +19,11 @@ import type { CoworkShellBridge } from "@cowork-ghc/contracts";
 import type { ServiceClient } from "./service-client.js";
 export interface WorkspacePickerDeps {
     readonly bridge: Pick<CoworkShellBridge, "pickWorkspaceFolder">;
-    readonly client: Pick<ServiceClient, "grantWorkspace" | "recentWorkspaces">;
+    readonly client: Pick<ServiceClient, "grantWorkspace" | "recentWorkspaces" | "setActiveWorkspace" | "getSettings">;
     /** Notified when a folder is validated + granted (becomes the active workspace). */
     readonly onActivated?: (rootPath: string) => void;
+    /** Notified when no valid workspace is active (idle, failed restore, or first launch). */
+    readonly onDeactivated?: () => void;
 }
 /** Mount the workspace picker into `container` and load the recent list. */
 export declare function mountWorkspacePicker(container: HTMLElement, deps: WorkspacePickerDeps): void;
