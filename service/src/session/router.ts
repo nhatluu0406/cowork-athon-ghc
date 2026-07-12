@@ -33,6 +33,8 @@ import type { CreateSessionInput } from "./seams.js";
 import type { SessionService } from "./session-service.js";
 
 export const SESSION_PATH = "/v1/session";
+export const SESSION_ITEM_PATH = "/v1/session/{id}";
+export const SESSION_CONTINUE_PATH = "/v1/session/{id}/continue";
 export const SESSION_MESSAGE_PATH = "/v1/session/{id}/message";
 export const SESSION_CANCEL_PATH = "/v1/session/{id}/cancel";
 
@@ -144,6 +146,53 @@ export function createSessionRouter(
           status: 200,
           data: { sessions: await sessionService.list() },
         }),
+      },
+      {
+        method: "GET",
+        path: SESSION_ITEM_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const sessionId = requireSessionId(ctx.params);
+          const view = sessionService.view(sessionId);
+          if (view === undefined) {
+            try {
+              const reopened = await sessionService.continueSession(sessionId);
+              return {
+                status: 200,
+                data: {
+                  session: reopened.meta,
+                  view: reopened.view,
+                  resumed: true,
+                },
+              };
+            } catch {
+              return notFound(sessionId);
+            }
+          }
+          const list = await sessionService.list();
+          const meta = list.find((s) => s.id === sessionId);
+          if (meta === undefined) return notFound(sessionId);
+          return { status: 200, data: { session: meta, view, resumed: false } };
+        },
+      },
+      {
+        method: "POST",
+        path: SESSION_CONTINUE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const sessionId = requireSessionId(ctx.params);
+          try {
+            const reopened = await sessionService.continueSession(sessionId);
+            return {
+              status: 200,
+              data: {
+                session: reopened.meta,
+                view: reopened.view,
+                canPrompt: reopened.view.terminal === null,
+              },
+            };
+          } catch {
+            return notFound(sessionId);
+          }
+        },
       },
       {
         method: "POST",

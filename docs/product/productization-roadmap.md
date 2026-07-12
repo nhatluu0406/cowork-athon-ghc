@@ -22,11 +22,13 @@ Mục tiêu: biến packaged POC thành release candidate đáng tin hơn mà kh
 
 Mục tiêu: người dùng quản lý, mở lại và tiếp tục phiên một cách rõ ràng.
 
-- Danh sách session gần đây.
-- Resume packaged smoke cho session đã có.
-- Template re-run hoặc workflow replay ở mức POC.
-- Trạng thái session rõ ràng: running, completed, cancelled, errored.
-- Hành vi khi app bị đóng giữa phiên.
+- ~~Danh sách cuộc trò chuyện persisted (sidebar, search, switch).~~ **DONE** (2026-07-12)
+- ~~Mở lại transcript sau relaunch.~~ **DONE**
+- ~~Tạo phiên tiếp nối khi OpenCode session terminal.~~ **DONE**
+- ~~Trạng thái: running, completed, cancelled, errored, interrupted.~~ **DONE**
+- ~~Xóa metadata session (không xóa workspace/credential).~~ **DONE**
+- Template re-run / workflow replay — **chưa** (ngoài scope slice này).
+- Packaged live journey đầy đủ — deterministic trong `session-management-packaged.mjs`; live inference tùy chọn (`COWORK_SESSION_LIVE=1`).
 
 ## 3. Tool activity and file-change presentation
 

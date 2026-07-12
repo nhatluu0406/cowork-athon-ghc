@@ -8,36 +8,42 @@ updated_at: "2026-07-12"
 
 ## Mốc Git
 
-- `HEAD` hiện tại: pending commit `test(release): harden provider recovery and Windows scripts`.
+- `HEAD` hiện tại: pending commit `feat(session): add persistent conversation management and resume`.
+- Mốc trước: `ffe4c01` — `test(release): harden provider recovery and Windows scripts`.
 - Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
-- Mốc product docs: `7d4813f` — `chore(project): retire Loop Engineer and establish product docs`.
 
 ## Trạng thái POC
 
-Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Release Gap Hardening** vừa hoàn tất:
-recovery provider (invalid key / model / base URL), `start.bat` / `clean.bat`, và lệnh regression không-live `npm run verify:release`.
+Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Session Management and Resume** vừa hoàn tất:
+cuộc trò chuyện lưu trong user-data, danh sách sidebar, mở lại lịch sử, đổi tên, tìm kiếm cục bộ, xóa metadata, trạng thái gián đoạn, và **tạo phiên tiếp nối** khi OpenCode session đã terminal.
 
 Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, `docs/architecture/`. `.loop-engineer/` chỉ `MAINTENANCE_ONLY`.
+
+## Semantics resume (trung thực)
+
+| Hành vi | Hỗ trợ |
+|---|---|
+| **Mở lại** — hiển thị transcript đã lưu sau relaunch | Có — từ `userData/.runtime/conversations/` |
+| **Tiếp tục** — cùng OpenCode session ID, gửi prompt mới khi session chưa terminal | Có khi runtime còn sống và `continueSession` trả `canPrompt: true` |
+| **Tạo phiên tiếp nối** — OpenCode session mới sau completed/cancelled/interrupted | Có — runtime session ID mới, transcript Cowork giữ nguyên |
+
+Không claim multi-turn trên cùng OpenCode session sau terminal (POC vẫn single-turn per runtime session — HTTP 409 `session_completed`).
 
 ## Năng lực đã qua packaged verification
 
 - Vòng đời local service, workspace, provider/model, Windows keyring, OpenCode, streaming.
-- Permission approve/deny, cancellation, interruption cleanup, clean-profile onboarding.
-- **Invalid API key recovery** — lỗi tiếng Việt, không lộ secret, khôi phục không cần restart.
-- **Invalid model recovery** — probe chat completion, lỗi `model_invalid`, khôi phục model hợp lệ.
-- **Invalid base URL recovery** — lỗi mạng/base URL, khôi phục DeepSeek URL.
-- `init.bat`, `stop.bat`, `start.bat` (không duplicate launch), `clean.bat` (`--yes` + xác nhận tương tác).
+- Permission, cancellation, interruption cleanup, provider recovery, lifecycle scripts.
+- **Conversation persistence** — index + record JSON, atomic write, recover `running` → `interrupted` on boot.
+- **Multi-conversation UI** — sidebar, search, switch, rename, delete (metadata only).
 
 ## Slice khuyến nghị tiếp theo
 
-**Session Management and Resume** — danh sách session, resume packaged smoke, template re-run POC.
+**Attachments and context input** (roadmap §3) — hoặc polish UX session (loading/error) nếu ưu tiên release candidate.
 
 ## Lệnh kiểm tra nhẹ
 
 ```powershell
 npm run verify:release
-node tools/verify/provider-recovery-packaged.mjs   # cần .env + dist-app; tối đa 3 live request
-node tools/verify/minimal-packaged-smoke.mjs       # smoke cuối; 1 live test connection
+node tools/verify/session-management-packaged.mjs
+node tools/verify/minimal-packaged-smoke.mjs   # optional; 1 live test connection
 ```
-
-Không chạy live regression đầy đủ trừ khi đang verify user-facing release-critical.

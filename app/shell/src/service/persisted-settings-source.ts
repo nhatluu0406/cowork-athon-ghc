@@ -19,6 +19,7 @@
  */
 
 import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 import { credential, diagnostics } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
@@ -105,6 +106,9 @@ export function createPersistedSettingsSource(
       service: {
         credentialStore: store,
         settingsFilePath: options.settingsFilePath,
+        ...(options.runtimeRoot !== undefined
+          ? { conversationsDir: join(options.runtimeRoot, ".runtime", "conversations") }
+          : {}),
         ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
       },
       ...(options.binPath !== undefined ? { binPath: options.binPath } : {}),
