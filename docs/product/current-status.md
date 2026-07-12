@@ -8,8 +8,8 @@ updated_at: "2026-07-12"
 
 ## Mốc Git
 
-- `HEAD` hiện tại: pending commit `fix(session): make multi-turn conversations reliable`.
-- Mốc trước: `dd21a64` — `fix(session): finalize tool-using conversations correctly`.
+- `HEAD` hiện tại: pending commit `test(session): verify multi-turn tool recovery`.
+- Mốc trước: `d3d836e` — `fix(session): make multi-turn conversations reliable`.
 - Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
 
 ## Trạng thái POC
@@ -57,6 +57,7 @@ Không claim native OpenCode multi-turn continuation khi Cowork GHC tạo linked
 - Activity timeline + file-change panel + permission history + file preview API.
 - Conversation finalization — tool turn kết thúc đúng.
 - **Multi-turn** — ORANGE-731 ba lượt + relaunch + file create (`multi-turn-packaged.mjs`, ≤4 live).
+- **Multi-turn tool regression** — create/modify/read file + deny/recovery trong cùng conversation (`multi-turn-tool-packaged.mjs`, ≤4 live).
 
 ## Slice khuyến nghị tiếp theo
 
@@ -66,6 +67,7 @@ Không claim native OpenCode multi-turn continuation khi Cowork GHC tạo linked
 
 ```powershell
 npm run verify:release
+node tools/verify/multi-turn-tool-packaged.mjs
 node tools/verify/multi-turn-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 node tools/verify/session-management-packaged.mjs
