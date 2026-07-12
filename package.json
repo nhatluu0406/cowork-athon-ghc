@@ -1,42 +1,44 @@
 {
-  "name": "cowork-ghc",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Cowork GHC — desktop AI cowork product for Windows 11 local PC",
-  "type": "module",
-  "main": "app\\shell\\dist\\main.cjs",
-  "engines": {
-    "node": ">=22"
-  },
-  "workspaces": [
-    "core/*",
-    "service",
-    "runtime",
-    "app/*"
-  ],
+  "name": "cowork-local",
+  "version": "2.0.0",
+  "description": "Cowork Local — AI Desktop Assistant by FPT Software",
+  "main": "dist/main/index.js",
   "scripts": {
-    "typecheck": "tsc -b",
-    "test": "node --import tsx --test \"**/*.test.ts\"",
-    "build:renderer": "npm run build --workspace @cowork-ghc/ui",
-    "dev:renderer": "npm run dev --workspace @cowork-ghc/ui",
-    "build:shell": "npm run build --workspace @cowork-ghc/shell",
-    "build:app": "npm run build:renderer && npm run build:shell",
-    "package:win": "npm run build:app && electron-builder --win --config app/shell/electron-builder.yml",
-    "app": "node tools/app/cli.mjs",
-    "clean": "node tools/loop-engineer/lifecycle.mjs clean"
-  },
-  "dependencies": {
-    "@napi-rs/keyring": "1.3.0"
+    "build": "node esbuild.config.mjs",
+    "dev:build": "node esbuild.config.mjs --watch",
+    "start": "npm run build && electron .",
+    "dev": "electron . --enable-logging",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "package": "electron-builder"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "tsx": "^4.19.0",
-    "typescript": "^5.7.0",
-    "vite": "^6.0.0"
+    "@types/node": "^20.19.43",
+    "electron": "^35.0.0",
+    "esbuild": "^0.23.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
   },
-  "optionalDependencies": {
-    "@napi-rs/keyring-win32-x64-msvc": "1.3.0"
+  "build": {
+    "appId": "com.fptsoftware.cowork-local",
+    "productName": "Cowork Local",
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": "nsis"
+    }
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "marked": "^18.0.6",
+    "pdf-parse": "^1.1.1",
+    "pptxgenjs": "^4.0.1",
+    "xlsx": "^0.18.5"
   }
 }

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cowork Local</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-shell" id="app">
+
+  <!-- ═══ TITLEBAR ═══════════════════════════════════════════ -->
+  <header class="titlebar" id="titlebar">
+    <!-- macOS: traffic-lights live here; we just provide the drag area -->
+    <div class="titlebar__macos-pad" id="macos-pad"></div>
+
+    <!-- Windows/Linux custom controls (hidden on macOS via JS) -->
+    <div class="titlebar__win-controls" id="win-controls">
+      <button class="win-btn win-btn--min" id="btn-min" aria-label="Minimise">
+        <i data-lucide="minus"></i>
+      </button>
+      <button class="win-btn win-btn--max" id="btn-max" aria-label="Maximise">
+        <i data-lucide="square"></i>
+      </button>
+      <button class="win-btn win-btn--close" id="btn-close" aria-label="Close">
+        <i data-lucide="x"></i>
+      </button>
+    </div>
+
+    <span class="titlebar__label">Cowork Local v2.0</span>
+    <div class="titlebar__spacer"></div>
+  </header>
+
+  <!-- ═══ TOP BAR ════════════════════════════════════════════ -->
+  <div class="topbar">
+    <img class="topbar__logo" src="assets/fpt-logo-color.png" alt="FPT Software">
+    <span class="topbar__name">Cowork Local</span>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__gateway">
+      <i data-lucide="server"></i>
+      <span>Internal Gateway</span>
+      <i data-lucide="chevron-down"></i>
+    </div>
+    <button class="icon-btn" id="btn-settings" aria-label="Settings">
+      <i data-lucide="settings"></i>
+    </button>
+    <span class="avatar" aria-label="Profile">RD</span>
+  </div>
+
+  <!-- ═══ WORKSPACE ══════════════════════════════════════════ -->
+  <main class="workspace">
+
+    <!-- ── Sidebar ─────────────────────────────────────────── -->
+    <aside class="sidebar" id="sidebar" data-expanded="true">
+      <div class="sidebar__top">
+        <nav class="sidebar-tabs" role="tablist">
+          <button class="sidebar-tab sidebar-tab--active" data-tab="cowork" role="tab" aria-selected="true" title="Cowork">
+            <i data-lucide="message-square"></i><span>Cowork</span>
+          </button>
+          <button class="sidebar-tab" data-tab="code" role="tab" aria-selected="false" title="Code">
+            <i data-lucide="code-xml"></i><span>Code</span>
+          </button>
+          <button class="sidebar-tab" data-tab="rag" role="tab" aria-selected="false" title="Structure (RAG)">
+            <i data-lucide="workflow"></i><span>Structure</span>
+          </button>
+        </nav>
+        <button class="sidebar__new-btn" id="btn-new-chat">
+          <i data-lucide="plus"></i>Cuộc trò chuyện mới
+        </button>
+        <div class="sidebar__search">
+          <i data-lucide="search"></i>
+          <span>Tìm lịch sử…</span>
+        </div>
+      </div>
+
+      <div class="sidebar__history" id="history-list"></div><!-- /.sidebar__history -->
+
+      <button class="sidebar__collapse" id="btn-collapse-sidebar">
+        <i data-lucide="panel-left-close"></i>
+        <span>Thu gọn</span>
+      </button>
+    </aside>
+
+    <!-- ── Chat area ───────────────────────────────────────── -->
+    <section class="chat-area" id="chat-area">
+
+      <!-- Chat header -->
+      <div class="chat-header">
+        <div class="chat-header__icon">
+          <i data-lucide="message-square"></i>
+        </div>
+        <div class="chat-header__info">
+          <div class="chat-header__title"><span id="chat-title">Cuộc trò chuyện mới</span></div>
+          <div class="chat-header__sub"><span id="chat-sub">Internal Agent</span></div>
+        </div>
+        <div class="chat-header__actions">
+          <button class="label-btn" id="btn-skills">
+            <i data-lucide="sparkles"></i>Skills
+          </button>
+          <button class="icon-btn" aria-label="New conversation">
+            <i data-lucide="square-pen"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Transcript -->
+      <div class="transcript" id="transcript">
+        <div class="transcript__inner">
+
+          <!-- Thinking indicator -->
+          <div class="thinking" id="thinking">
+            <div class="thinking__dots">
+              <span></span><span></span><span></span>
+            </div>
+            <span class="thinking__label">Đang tạo…</span>
+          </div>
+
+        </div><!-- /.transcript__inner -->
+      </div><!-- /.transcript -->
+
+      <!-- Composer -->
+      <div class="composer">
+        <div class="composer__box">
+          <div class="skill-popup" id="skill-popup" hidden></div>
+          <div class="composer__attachments" id="composer-attachments" hidden></div>
+          <div
+            class="composer__input"
+            id="composer-input"
+            contenteditable="true"
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Nhập yêu cầu"
+            data-placeholder="Nhập yêu cầu hoặc đính kèm tệp để xử lí…"
+          ></div>
+          <div class="composer__bar">
+            <button class="icon-btn" aria-label="Đính kèm">
+              <i data-lucide="plus"></i>
+            </button>
+            <div class="model-picker">
+              <i data-lucide="bot"></i>
+              <span>claude-sonnet-4</span>
+              <i data-lucide="chevron-down"></i>
+            </div>
+            <button class="text-btn" aria-label="Nén">
+              <i data-lucide="archive-restore"></i>Nén
+            </button>
+            <div class="composer__spacer"></div>
+            <button class="stop-btn" id="btn-stop" aria-label="Dừng" title="Dừng" hidden>
+              <i data-lucide="square"></i>
+            </button>
+            <button class="send-btn" id="btn-send" aria-label="Gửi">
+              <i data-lucide="arrow-up"></i>
+            </button>
+          </div>
+        </div>
+        <div class="composer__hint">Enter để gửi · Shift+Enter xuống dòng · chạy song song tối đa 5 tin</div>
+      </div>
+
+    </section><!-- /.chat-area -->
+
+    <!-- ── Right Panel ─────────────────────────────────────── -->
+    <aside class="right-panel" id="right-panel" data-expanded="true">
+      <div class="rp-header">
+        <button class="icon-btn" id="btn-collapse-panel" aria-label="Thu gọn bảng">
+          <i data-lucide="panel-right-close"></i>
+        </button>
+        <span class="rp-header__title">Bảng điều khiển</span>
+      </div>
+
+      <!-- Plan card -->
+      <div class="plan-card">
+        <div class="plan-card__hd">
+          <i data-lucide="list-checks"></i>
+          <span>Kế hoạch</span>
+        </div>
+        <div class="plan-card__steps" id="plan-card-steps"></div>
+      </div>
+
+      <!-- Output files -->
+      <div class="file-section">
+        <div class="file-section__label">
+          <i data-lucide="folder-output"></i>Tệp đầu ra
+        </div>
+        <div id="output-files"></div>
+      </div>
+
+      <!-- Input files -->
+      <div class="file-section">
+        <div class="file-section__label">
+          <i data-lucide="folder-input"></i>Tệp đầu vào
+        </div>
+        <div id="input-files"></div>
+      </div>
+
+    </aside><!-- /.right-panel -->
+
+  </main><!-- /.workspace -->
+
+  <!-- ═══ STATUS BAR ══════════════════════════════════════════ -->
+  <footer class="statusbar">
+    <span class="statusbar__left">
+      <span class="run-dot"></span>Đang xử lí…
+    </span>
+    <span class="statusbar__right">Made by Ryu.D_FPT</span>
+  </footer>
+
+</div><!-- /#app -->
+
+<!-- ═══ SETTINGS MODAL ═════════════════════════════════════════ -->
+<div class="modal" id="settings-modal" hidden>
+  <div class="modal__panel">
+    <h2>Settings</h2>
+    <label>Provider
+      <select id="settings-provider">
+        <option value="openai_compat">OpenAI-compatible (Internal Gateway)</option>
+        <option value="anthropic">Anthropic Claude</option>
+      </select>
+    </label>
+    <label>Base URL <input type="text" id="settings-base-url"></label>
+    <label>API Key <input type="password" id="settings-api-key"></label>
+    <label>Model <input type="text" id="settings-model"></label>
+    <div class="modal__actions">
+      <button id="settings-cancel">Cancel</button>
+      <button id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SKILLS MODALS ═════════════════════════════════════════ -->
+<div class="modal" id="skills-modal" hidden>
+  <div class="modal__panel modal__panel--wide">
+    <h2>Skills</h2>
+    <p class="modal-hint">Tick to enable a skill. Enabled skills are followed by the agent.</p>
+    <div class="skills-list" id="skills-list"></div>
+    <div class="modal__actions">
+      <button id="skills-generate" class="primary">✨ Auto-generate</button>
+      <button id="skills-import">Import…</button>
+      <button id="skills-edit">Edit</button>
+      <button id="skills-delete">Delete</button>
+      <button id="skills-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="skill-edit-modal" hidden>
+  <div class="modal__panel modal__panel--wide">
+    <h2 id="skill-edit-title">Edit skill</h2>
+    <label>Name <input type="text" id="skill-name" placeholder="e.g. Always write unit tests"></label>
+    <label>Short description <input type="text" id="skill-description"></label>
+    <label>Instructions <textarea id="skill-instructions" rows="9" placeholder="Describe the rules / guidance the agent must follow…"></textarea></label>
+    <div class="modal__actions">
+      <button id="skill-gen-instructions">✨ Generate from description</button>
+      <button id="skill-edit-cancel">Cancel</button>
+      <button id="skill-edit-save" class="primary">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="skill-gen-modal" hidden>
+  <div class="modal__panel">
+    <h2>Auto-generate skill</h2>
+    <label>Describe the skill you want (what should the agent do?)
+      <textarea id="skill-gen-desc" rows="6"></textarea>
+    </label>
+    <div class="modal__actions">
+      <button id="skill-gen-cancel">Cancel</button>
+      <button id="skill-gen-ok" class="primary">Generate</button>
+    </div>
+  </div>
+</div>
+
+<script src="index.js"></script>
+</body>
+</html>
