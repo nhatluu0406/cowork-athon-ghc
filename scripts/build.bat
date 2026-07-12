@@ -28,6 +28,15 @@ echo.
 
 cd /d "%ROOT%"
 
+set "STAGE=stop-running-app"
+echo [Cowork GHC] Stage: stop any running packaged app
+node "%ROOT%\tools\app\cli.mjs" stop --root "%ROOT%" >nul 2>nul
+taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+call :wait_exe_unlocked
+if errorlevel 1 goto :locked
+echo [Cowork GHC] Stage: packaged app is stopped
+echo.
+
 set "STAGE=typecheck"
 echo [Cowork GHC] Stage: npm run typecheck
 call npm run typecheck
@@ -58,6 +67,14 @@ echo [Cowork GHC] build: FAILED at stage %STAGE% (exit code %ERRORLEVEL%)
 pause
 exit /b %ERRORLEVEL%
 
+:locked
+echo.
+echo [Cowork GHC] build: FAILED - packaged executable is still locked:
+echo   %EXE%
+echo Close Cowork GHC windows and retry scripts\build.bat.
+pause
+exit /b 7
+
 :noexe
 echo.
 echo [Cowork GHC] build: FAILED - packaged executable was not created:
@@ -82,3 +99,12 @@ echo [Cowork GHC] ERROR: Node.js not found on PATH.
 echo Install Node.js LTS from https://nodejs.org and run scripts\init.bat first.
 pause
 exit /b 9
+
+:wait_exe_unlocked
+if not exist "%EXE%" exit /b 0
+for /L %%A in (1,1,20) do (
+  powershell -NoProfile -ExecutionPolicy Bypass -Command "$p = $env:EXE; try { $fs = [System.IO.File]::Open($p, 'Open', 'ReadWrite', 'None'); $fs.Close(); exit 0 } catch { exit 1 }" >nul 2>nul
+  if not errorlevel 1 exit /b 0
+  timeout /t 1 /nobreak >nul
+)
+exit /b 1
