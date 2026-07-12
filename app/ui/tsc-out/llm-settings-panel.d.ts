@@ -6,10 +6,12 @@
  * written into persistent renderer state beyond the password field (cleared after save).
  */
 import type { RendererBootstrap } from "@cowork-ghc/contracts";
-import type { ServiceClient } from "./service-client.js";
+import type { ServiceClient, SettingsView } from "./service-client.js";
 export interface LlmSettingsPanelDeps {
     readonly client: Pick<ServiceClient, "getSettings" | "listProviders" | "setProviderBaseUrl" | "setProviderEnvVar" | "setDefaultModel" | "storeProviderCredential" | "removeProviderCredential" | "importProviderCredentialFromEnv" | "testProviderConnection">;
     readonly getBootstrap?: () => Promise<RendererBootstrap>;
+    readonly onSettingsUpdated?: (view: SettingsView) => void;
+    readonly onConnectionTestResult?: (ok: boolean) => void;
 }
 /** Mount the LLM settings panel into `container`. */
 export declare function mountLlmSettingsPanel(container: HTMLElement, deps: LlmSettingsPanelDeps): void;

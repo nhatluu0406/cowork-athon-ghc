@@ -5,6 +5,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -134,9 +135,7 @@ async function setComposer(text) {
 }
 
 function launch(extraEnv, profileDir) {
-  const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
-  return spawn(EXE, [`--user-data-dir=${profileDir}`], { env, stdio: "ignore", windowsHide: true });
+  return spawn(EXE, [`--user-data-dir=${profileDir}`], { env: packagedChildEnv(extraEnv), stdio: "ignore", windowsHide: true });
 }
 
 async function stopAll(proc) {
@@ -179,7 +178,7 @@ async function onboard(fixture, profileDir, attachEnv = {}) {
   await waitForTrace(/settings_only_started:|service_started:/);
   await waitForSelector(".app-shell");
   await installAlertCatcher();
-  await waitForText(".topbar__status", /Đã kết nối local service/i);
+  await waitForText(".topbar__status", LOCAL_SERVICE_READY);
   await cdpEvaluate(`document.querySelector('.workspace-choose')?.click()`);
   await waitForText(".workspace-context", /cghc-honesty-ws-/i);
   await cdpEvaluate(`document.querySelector('.topbar__gateway')?.click()`);

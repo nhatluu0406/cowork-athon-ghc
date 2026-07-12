@@ -33,6 +33,19 @@ import {
   type RuntimePhase,
 } from "./conversation-controller.js";
 import { createReadinessController, type ReadinessState } from "./readiness-controller.js";
+import {
+  assessSendPreflight,
+  buildReadinessInput,
+  localServiceStatus,
+  providerStatus,
+  shouldShowContinuationBanner,
+  type ConnectionTestState,
+} from "./provider-readiness.js";
+import {
+  closeModalWithFocus,
+  createModalKeyHandler,
+  openModalWithFocus,
+} from "./modal-focus.js";
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { createPermissionController } from "./permission-controller.js";
@@ -92,11 +105,14 @@ interface AppState {
   finalizingTurn: boolean;
   pendingAttachments: PendingAttachment[];
   continuationUnlocked: boolean;
+  localServiceReady: boolean;
+  connectionTestState: ConnectionTestState;
 }
 
 interface AppDom {
   root: HTMLElement;
   serviceStatus: HTMLElement;
+  providerStatus: HTMLElement;
   serviceDetail: HTMLElement;
   workspaceLabel: HTMLElement;
   modelLabel: HTMLElement;
@@ -104,6 +120,8 @@ interface AppDom {
   sessionList: HTMLElement;
   chatTitle: HTMLElement;
   chatSub: HTMLElement;
+  chat: HTMLElement;
+  transcript: HTMLElement;
   continuationBanner: HTMLElement;
   continuationButton: HTMLButtonElement;
   transcriptInner: HTMLElement;
@@ -112,18 +130,27 @@ interface AppDom {
   composer: HTMLElement;
   composerInput: HTMLElement;
   composerHint: HTMLElement;
+  composerPreflight: HTMLElement;
+  composerPreflightMessage: HTMLElement;
+  composerPreflightCta: HTMLButtonElement;
   attachButton: HTMLButtonElement;
   attachmentChips: HTMLElement;
   sendButton: HTMLButtonElement;
   cancelButton: HTMLButtonElement;
   newConversationButton: HTMLButtonElement;
   settingsModal: HTMLElement;
+  settingsPanel: HTMLElement;
   settingsBody: HTMLElement;
+  settingsButton: HTMLButtonElement;
+  closeSettingsButton: HTMLButtonElement;
+  settingsOpener: HTMLElement | null;
+  modalKeyHandler: (event: KeyboardEvent) => void;
   activityPanel: ActivityPanelDom;
   executionStatus: HTMLElement;
   permissionSummary: HTMLElement;
   sidebar: HTMLElement;
   rightPanel: HTMLElement;
+  activityMobileToggle: HTMLButtonElement;
 }
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
@@ -143,13 +170,6 @@ function shortPath(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length <= 2) return path;
   return `.../${parts.slice(-2).join("/")}`;
-}
-
-function modelSummary(settings: SettingsView | null): string {
-  if (settings?.defaultModel === null || settings?.defaultModel === undefined) return "Chưa cấu hình model";
-  const row = settings.providers.find((p) => p.providerId === settings.defaultModel?.providerID);
-  const cred = row?.hasCredential ? "đã có khoá" : "chưa có khoá";
-  return `${settings.defaultModel.modelID} (${cred})`;
 }
 
 function phaseLabel(phase: RuntimePhase): string {
@@ -177,25 +197,26 @@ function phaseLabel(phase: RuntimePhase): string {
   }
 }
 
-function readinessCopy(state: ReadinessState): { label: string; detail: string; ok: boolean } {
-  switch (state.phase) {
-    case "starting":
-      return { label: "Đang khởi động service", detail: "Đang nhận cấu hình kết nối.", ok: false };
-    case "connecting":
-      return { label: "Đang kết nối service", detail: `Lần thử ${state.attempt}.`, ok: false };
-    case "ready":
-      return { label: "Đã kết nối local service", detail: "Cowork GHC core sẵn sàng.", ok: true };
-    case "not_connected":
-      return { label: "Chưa kết nối", detail: state.detail, ok: false };
-    case "unreachable":
-      return { label: "Không kết nối được", detail: state.detail, ok: false };
-  }
-}
-
 function safeError(error: unknown): string {
   if (error instanceof ServiceClientError) return sanitizeErrorMessage(error.message);
   if (error instanceof Error) return sanitizeErrorMessage(error.message);
   return "Có lỗi xảy ra.";
+}
+
+function renderComposerPreflight(
+  dom: AppDom,
+  preflight: ReturnType<typeof assessSendPreflight>,
+  hasPrompt: boolean,
+): void {
+  const show =
+    hasPrompt &&
+    !preflight.canSend &&
+    preflight.showSettingsCta &&
+    preflight.message.length > 0;
+  dom.composerPreflight.hidden = !show;
+  if (!show) return;
+  dom.composerPreflightMessage.textContent = preflight.message;
+  dom.composerPreflightCta.hidden = !preflight.showSettingsCta;
 }
 
 function createDynamicClient(state: AppState): ServiceClient {
@@ -478,7 +499,10 @@ function renderState(dom: AppDom, state: AppState, handlers: {
 
   dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
   dom.workspaceLabel.title = state.activeWorkspace ?? "";
-  dom.modelLabel.textContent = modelSummary(state.settings);
+  const providerCopy = providerStatus(state.settings, state.connectionTestState);
+  dom.providerStatus.textContent = providerCopy.label;
+  dom.providerStatus.title = providerCopy.detail;
+  dom.providerStatus.classList.toggle("is-ok", providerCopy.ok);
   dom.executionStatus.textContent = phaseLabel(phase);
   dom.chatTitle.textContent = record?.title ?? DEFAULT_TITLE;
   dom.chatSub.textContent =
@@ -486,11 +510,26 @@ function renderState(dom: AppDom, state: AppState, handlers: {
       ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
       : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
 
-  const showContinuation = isComposerLocked(state);
-  dom.continuationBanner.hidden = !showContinuation;
-  dom.continuationButton.hidden = !showContinuation;
+  const showContinuation = shouldShowContinuationBanner(
+    state.conv.state.activeConversationId,
+    record,
+    phase,
+  );
+  if (showContinuation) {
+    if (!dom.continuationBanner.isConnected) {
+      dom.chat.insertBefore(dom.continuationBanner, dom.transcript);
+    }
+    dom.continuationBanner.hidden = false;
+    dom.continuationButton.hidden = false;
+  } else if (dom.continuationBanner.isConnected) {
+    dom.continuationBanner.remove();
+  }
 
   const locked = isComposerLocked(state);
+  const readinessInput = buildReadinessInput(state.localServiceReady, state);
+  const sendPreflight = assessSendPreflight(readinessInput);
+  const composerText = textFromComposer(dom.composerInput);
+  renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
   dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
   dom.composer.classList.toggle("is-locked", locked);
   dom.composerInput.contentEditable = locked ? "false" : "true";
@@ -506,8 +545,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "starting" ||
     phase === "running" ||
     phase === "cancelling" ||
-    textFromComposer(dom.composerInput).length === 0 ||
-    state.activeWorkspace === null;
+    composerText.length === 0;
   dom.cancelButton.hidden = phase !== "running" && phase !== "cancelling";
   dom.cancelButton.disabled = phase !== "running";
   dom.newConversationButton.disabled =
@@ -746,12 +784,19 @@ async function ensureRuntimeSession(
 ): Promise<RuntimeSessionReady> {
   if (state.client === null) throw new Error("Service chưa sẵn sàng.");
   await refreshSettings(state, dom, handlers);
-  if (
-    state.activeWorkspace === null ||
-    state.settings?.defaultModel === null ||
-    state.settings?.defaultModel === undefined
-  ) {
-    throw new Error("Chọn workspace và cấu hình model trước.");
+
+  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  if (!preflight.canSend) {
+    renderComposerPreflight(dom, preflight, true);
+    throw new Error(preflight.message);
+  }
+  if (state.activeWorkspace === null) {
+    throw new Error("Chọn workspace trước.");
+  }
+
+  const model = state.settings?.defaultModel;
+  if (model === null || model === undefined) {
+    throw new Error("Cấu hình model chưa hợp lệ.");
   }
 
   const record = state.conv.state.activeRecord;
@@ -777,7 +822,7 @@ async function ensureRuntimeSession(
   const meta = await client.createSession({
     workspaceId: state.activeWorkspace,
     title: record.title,
-    model: state.settings.defaultModel,
+    model,
   });
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
@@ -979,6 +1024,13 @@ async function sendPrompt(
 
   if (isComposerLocked(state)) return;
 
+  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  if (!preflight.canSend) {
+    renderComposerPreflight(dom, preflight, true);
+    renderState(dom, state, handlers);
+    return;
+  }
+
   const pendingSnapshot = [...state.pendingAttachments];
   const { snapshots, errors } = await readAttachmentSnapshots(state, pendingSnapshot);
   if (errors.length > 0) {
@@ -1087,12 +1139,14 @@ function createShell(root: HTMLElement): AppDom {
 
   const topbar = el("header", "topbar");
   topbar.append(el("div", "topbar__brand", "Cowork GHC"));
-  const serviceStatus = el("span", "topbar__status", "Đang khởi động");
-  const modelLabel = el("button", "topbar__gateway", "Chưa cấu hình model");
-  modelLabel.type = "button";
-  const settingsButton = el("button", "icon-btn", "Cài đặt");
+  const serviceStatus = el("span", "topbar__status", "Local service: Đang khởi động");
+  const providerStatus = el("button", "topbar__gateway topbar__provider-status", "Provider: Chưa cấu hình");
+  providerStatus.type = "button";
+  const modelLabel = providerStatus;
+  const settingsButton = el("button", "icon-btn", "Cài đặt") as HTMLButtonElement;
   settingsButton.type = "button";
-  topbar.append(el("div", "topbar__spacer"), serviceStatus, modelLabel, settingsButton);
+  settingsButton.setAttribute("aria-label", "Mở cài đặt");
+  topbar.append(el("div", "topbar__spacer"), serviceStatus, providerStatus, settingsButton);
 
   const workspace = el("main", "workspace");
   const sidebar = el("aside", "sidebar");
@@ -1132,7 +1186,11 @@ function createShell(root: HTMLElement): AppDom {
   const skillsButton = el("button", "label-btn label-btn--disabled", "Skills: Chưa khả dụng");
   skillsButton.type = "button";
   skillsButton.disabled = true;
-  headerActions.append(skillsButton);
+  const activityMobileToggle = el("button", "label-btn activity-mobile-toggle", "Hoạt động") as HTMLButtonElement;
+  activityMobileToggle.type = "button";
+  activityMobileToggle.setAttribute("aria-label", "Mở bảng hoạt động");
+  activityMobileToggle.setAttribute("aria-expanded", "false");
+  headerActions.append(activityMobileToggle, skillsButton);
   header.append(el("div", "chat-header__icon", "AI"), headerInfo, headerActions);
 
   const continuationBanner = el("div", "continuation-banner");
@@ -1183,10 +1241,17 @@ function createShell(root: HTMLElement): AppDom {
     cancelButton,
     sendButton,
   );
+  const composerPreflight = el("div", "composer-preflight");
+  composerPreflight.hidden = true;
+  composerPreflight.setAttribute("role", "status");
+  const composerPreflightMessage = el("p", "composer-preflight__message");
+  const composerPreflightCta = el("button", "label-btn composer-preflight__cta", "Mở cài đặt provider") as HTMLButtonElement;
+  composerPreflightCta.type = "button";
+  composerPreflight.append(composerPreflightMessage, composerPreflightCta);
   const composerHint = el("div", "composer__hint", "Enter để gửi, Shift+Enter xuống dòng");
-  composerBox.append(composerInput, attachmentChips, composerBar);
+  composerBox.append(composerInput, attachmentChips, composerPreflight, composerBar);
   composer.append(composerBox, composerHint);
-  chat.append(header, continuationBanner, transcript, composer);
+  chat.append(header, transcript, composer);
 
   const rightPanel = el("aside", "right-panel");
   const rpHeader = el("div", "rp-header");
@@ -1215,31 +1280,38 @@ function createShell(root: HTMLElement): AppDom {
 
   const settingsModal = el("div", "modal");
   settingsModal.hidden = true;
+  settingsModal.setAttribute("role", "dialog");
+  settingsModal.setAttribute("aria-modal", "true");
+  settingsModal.setAttribute("aria-label", "Cài đặt");
+  settingsModal.setAttribute("aria-hidden", "true");
   const settingsPanel = el("div", "modal__panel");
   const settingsHeader = el("div", "modal__header");
-  settingsHeader.append(el("h2", "modal__title", "Cài đặt"));
-  const closeSettings = el("button", "icon-btn", "Đóng");
+  const modalTitle = el("h2", "modal__title", "Cài đặt");
+  modalTitle.tabIndex = -1;
+  settingsHeader.append(modalTitle);
+  const closeSettings = el("button", "icon-btn", "Đóng") as HTMLButtonElement;
   closeSettings.type = "button";
   settingsHeader.append(closeSettings);
   const settingsBody = el("div", "modal__body");
   settingsPanel.append(settingsHeader, settingsBody);
   settingsModal.append(settingsPanel);
 
+  let settingsOpener: HTMLElement | null = null;
+  const modalKeyHandler = createModalKeyHandler({
+    panel: settingsPanel,
+    closeButton: closeSettings,
+    onClose: () => {
+      closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
+      settingsOpener = null;
+    },
+  });
+
   root.append(topbar, workspace, statusbar, settingsModal);
 
-  settingsButton.addEventListener("click", () => {
-    settingsModal.hidden = false;
-  });
-  modelLabel.addEventListener("click", () => {
-    settingsModal.hidden = false;
-  });
-  closeSettings.addEventListener("click", () => {
-    settingsModal.hidden = true;
-  });
-
-  return {
+  const domPartial = {
     root,
     serviceStatus,
+    providerStatus,
     serviceDetail,
     workspaceLabel,
     modelLabel,
@@ -1247,6 +1319,8 @@ function createShell(root: HTMLElement): AppDom {
     sessionList,
     chatTitle,
     chatSub,
+    chat,
+    transcript,
     continuationBanner,
     continuationButton,
     transcriptInner,
@@ -1255,19 +1329,57 @@ function createShell(root: HTMLElement): AppDom {
     composer,
     composerInput,
     composerHint,
+    composerPreflight,
+    composerPreflightMessage,
+    composerPreflightCta,
     attachButton,
     attachmentChips,
     sendButton,
     cancelButton,
     newConversationButton,
     settingsModal,
+    settingsPanel,
     settingsBody,
+    settingsButton,
+    closeSettingsButton: closeSettings,
+    settingsOpener: null as HTMLElement | null,
+    modalKeyHandler,
     activityPanel: createActivityPanel(rightPanel),
     executionStatus,
     permissionSummary,
     sidebar,
     rightPanel,
+    activityMobileToggle,
   };
+
+  const openSettings = (): void => {
+    settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
+    const initial =
+      settingsBody.querySelector<HTMLElement>(".llm-provider-select") ??
+      settingsBody.querySelector<HTMLElement>(".llm-settings-title") ??
+      closeSettings;
+    openModalWithFocus(settingsModal, initial, modalKeyHandler);
+  };
+
+  settingsButton.addEventListener("click", openSettings);
+  providerStatus.addEventListener("click", openSettings);
+  composerPreflightCta.addEventListener("click", openSettings);
+  closeSettings.addEventListener("click", () => {
+    closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
+    settingsOpener = null;
+  });
+
+  activityMobileToggle.addEventListener("click", () => {
+    const open = workspace.classList.toggle("activity-drawer-open");
+    activityMobileToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    activityMobileToggle.textContent = open ? "Ẩn hoạt động" : "Hoạt động";
+    domPartial.activityPanel.toggle.setAttribute(
+      "aria-label",
+      open ? "Thu gọn bảng hoạt động" : "Mở rộng bảng hoạt động",
+    );
+  });
+
+  return domPartial;
 }
 
 export function mountCoworkApp(root: HTMLElement): void {
@@ -1293,6 +1405,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     finalizingTurn: false,
     pendingAttachments: [],
     continuationUnlocked: true,
+    localServiceReady: false,
+    connectionTestState: "unknown",
   };
 
   const handlers = {
@@ -1335,10 +1449,11 @@ export function mountCoworkApp(root: HTMLElement): void {
       return state.client;
     },
     onState: (readinessState) => {
-      const copy = readinessCopy(readinessState);
+      const copy = localServiceStatus(readinessState);
       dom.serviceStatus.textContent = copy.label;
       dom.serviceStatus.classList.toggle("is-ok", copy.ok);
       dom.serviceDetail.textContent = copy.detail;
+      state.localServiceReady = readinessState.phase === "ready";
       if (readinessState.phase === "ready" && state.client !== null) {
         void refreshSettings(state, dom, handlers);
         void state.conv.refreshList().then(async () => {
@@ -1374,6 +1489,15 @@ export function mountCoworkApp(root: HTMLElement): void {
           mountLlmSettingsPanel(dom.settingsBody, {
             client: dynamicClient,
             getBootstrap: () => getShellBridge().getBootstrap(),
+            onSettingsUpdated: (view) => {
+              state.settings = view;
+              state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              renderState(dom, state, handlers);
+            },
+            onConnectionTestResult: (ok) => {
+              state.connectionTestState = ok ? "ok" : "failed";
+              renderState(dom, state, handlers);
+            },
           });
           mountSettingsView(dom.settingsBody, { client: dynamicClient });
           const permissions = createPermissionController({
@@ -1454,7 +1578,9 @@ export function mountCoworkApp(root: HTMLElement): void {
     void (async () => {
       await state.conv.startContinuation();
       state.continuationUnlocked = true;
-      dom.continuationBanner.hidden = true;
+      if (dom.continuationBanner.isConnected) {
+        dom.continuationBanner.remove();
+      }
       dom.composerInput.focus();
       renderState(dom, state, handlers);
     })();
@@ -1476,6 +1602,12 @@ export function mountCoworkApp(root: HTMLElement): void {
 
   dom.sendButton.addEventListener("click", () => {
     void sendPrompt(state, dom, readiness, handlers).catch((error) => {
+      const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+      if (!preflight.canSend) {
+        renderComposerPreflight(dom, preflight, true);
+        renderState(dom, state, handlers);
+        return;
+      }
       void state.conv.setRuntimePhase("failed");
       appendMessage(dom, "assistant", safeError(error));
       renderState(dom, state, handlers);
