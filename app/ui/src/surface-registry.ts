@@ -11,6 +11,8 @@ export type ProductSurfaceId =
 
 export type SurfaceAvailability =
   | "available"
+  | "awaiting_integration"
+  | "planned"
   | "not_configured"
   | "backend_unavailable"
   | "coming_later"
@@ -23,6 +25,8 @@ export interface ProductSurfaceDefinition {
   readonly featureFlag: string;
   readonly requiredCapability: string;
   readonly availability: SurfaceAvailability;
+  readonly dependency?: "D1" | "D2" | "D3" | "D4";
+  readonly description: string;
   readonly component: string;
 }
 
@@ -38,6 +42,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     featureFlag: "core.cowork",
     requiredCapability: "conversation_runtime",
     availability: "available",
+    description: "Conversation workspace với runtime OpenCode hiện tại.",
     component: "CoworkShellSurface",
   },
   {
@@ -46,7 +51,9 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     icon: "dispatch",
     featureFlag: "d1.dispatch",
     requiredCapability: "external_dispatch_backend",
-    availability: "hidden",
+    availability: "awaiting_integration",
+    dependency: "D1",
+    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Dispatch chưa được merge vào Cowork GHC.",
     component: "DispatchIntegrationSlot",
   },
   {
@@ -55,7 +62,9 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     icon: "gateway",
     featureFlag: "d4.gateway",
     requiredCapability: "advanced_gateway_backend",
-    availability: "hidden",
+    availability: "awaiting_integration",
+    dependency: "D4",
+    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Gateway chưa được merge vào Cowork GHC.",
     component: "GatewayIntegrationSlot",
   },
   {
@@ -64,25 +73,31 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     icon: "knowledge",
     featureFlag: "d3.knowledge",
     requiredCapability: "knowledge_index_backend",
-    availability: "hidden",
+    availability: "awaiting_integration",
+    dependency: "D3",
+    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Knowledge chưa được merge vào Cowork GHC.",
     component: "KnowledgeIntegrationSlot",
   },
   {
     id: "knowledge-graph",
-    label: "Graph",
+    label: "Knowledge Graph",
     icon: "knowledge-graph",
     featureFlag: "d3.knowledge_graph",
     requiredCapability: "knowledge_graph_backend",
-    availability: "hidden",
+    availability: "awaiting_integration",
+    dependency: "D3",
+    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Knowledge Graph chưa được merge vào Cowork GHC.",
     component: "KnowledgeGraphIntegrationSlot",
   },
   {
     id: "microsoft",
-    label: "Microsoft",
+    label: "Microsoft 365",
     icon: "microsoft",
     featureFlag: "d2.microsoft",
     requiredCapability: "microsoft_connector_backend",
-    availability: "hidden",
+    availability: "awaiting_integration",
+    dependency: "D2",
+    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Microsoft 365 chưa được merge vào Cowork GHC.",
     component: "MicrosoftIntegrationSlot",
   },
   {
@@ -91,18 +106,16 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     icon: "code",
     featureFlag: "code.workspace",
     requiredCapability: "workspace_code_surface",
-    availability: "hidden",
+    availability: "planned",
+    description: "Surface Code được lên kế hoạch sau navigator/preview read-only; chưa có editor hoặc terminal.",
     component: "CodeIntegrationSlot",
   },
 ]);
 
 export function createSurfaceRegistry(
-  env: SurfaceRegistryEnv = {},
+  _env: SurfaceRegistryEnv = {},
 ): readonly ProductSurfaceDefinition[] {
-  if (env.revealFutureSurfaces !== true) return BASE_SURFACES;
-  return BASE_SURFACES.map((surface) =>
-    surface.id === "cowork" ? surface : { ...surface, availability: "coming_later" },
-  );
+  return BASE_SURFACES;
 }
 
 export function visibleProductSurfaces(

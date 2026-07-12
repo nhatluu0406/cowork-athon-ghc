@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@cowork-ghc/contracts": "*",
-    "@cowork-ghc/service": "*"
+    "@cowork-ghc/service": "*",
+    "@fontsource/be-vietnam-pro": "^5.2.8"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "20.10.6",

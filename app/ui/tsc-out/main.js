@@ -6,6 +6,9 @@
  * runtime business logic.
  */
 import { mountCoworkApp } from "./app-shell.js";
+import "@fontsource/be-vietnam-pro/400.css";
+import "@fontsource/be-vietnam-pro/500.css";
+import "@fontsource/be-vietnam-pro/600.css";
 function main() {
     const root = document.getElementById("app");
     if (!(root instanceof HTMLElement)) {

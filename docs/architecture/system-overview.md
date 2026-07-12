@@ -46,7 +46,8 @@ connectivity probe cho API key/model invalid sau request.
 
 ## Boundary UI shell / product surfaces
 
-Renderer hiện dùng hướng `1a Airy`: conversation sidebar → main chat workspace → right information panel.
+Renderer hiện dùng hướng hybrid `1a Airy + 1b rail`: 56px product rail → contextual
+sidebar → main chat workspace → right information panel.
 Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
 integration data giả để làm đẹp layout.
 
@@ -62,9 +63,11 @@ microsoft
 code
 ```
 
-Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`, và
-`component`. Production default chỉ expose `cowork` là `available`; D1-D4/code surfaces là hidden
-hoặc coming-later slots theo environment, không phải capability thật.
+Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`,
+`dependency`, `description`, và `component`. Production default expose toàn bộ product rail:
+`cowork` là `available`; Dispatch/Gateway/Knowledge/Knowledge Graph/Microsoft 365 là
+`awaiting_integration` với dependency D1-D4 cụ thể; `code` là `planned`. Các surface này
+không phải capability backend thật và không render mock production data.
 
 D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slots.ts`:
 
@@ -74,6 +77,23 @@ D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slo
 - D4 Gateway: health, routes, provider/model, latency, usage/cost, fallback/error state.
 
 Không có backend adapter D1-D4 trong shell foundation này.
+
+## Boundary Minimal Workspace Navigator
+
+Renderer không đọc filesystem. Workspace Navigator gọi service route `GET /v1/workspace/list`
+để list direct children của active workspace hoặc folder đã expand. Service:
+
+- validate active workspace root server-side;
+- dùng workspace guard + realpath confinement;
+- không follow symlink/reparse point ra ngoài workspace;
+- sort folder trước file;
+- giới hạn số entry mỗi request;
+- không recursive scan mặc định;
+- không đọc file content khi chỉ listing.
+
+Selected workspace file preview đi qua `GET /v1/workspace/file-preview`, bounded 64 KiB,
+text-only. Binary/unsupported trả trạng thái không xem trước. Direct editor, save/undo,
+PDF, Office, and image preview are not started.
 
 ## Boundary process lifecycle
 
