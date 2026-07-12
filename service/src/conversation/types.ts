@@ -16,6 +16,13 @@ export type ConversationStatus =
   | "errored"
   | "interrupted";
 
+/** Inclusion outcome for a workspace attachment on a specific turn. */
+export type AttachmentInclusionStatus =
+  | "selected"
+  | "included"
+  | "rejected"
+  | "omitted_by_budget";
+
 /** Metadata persisted for workspace text-file attachments (no raw content). */
 export interface AttachmentMetadata {
   readonly relativePath: string;
@@ -25,6 +32,8 @@ export interface AttachmentMetadata {
   readonly contentHash: string;
   readonly truncated: boolean;
   readonly maxBytesApplied: number;
+  readonly inclusionStatus?: AttachmentInclusionStatus;
+  readonly inclusionReason?: string;
 }
 
 export interface ConversationMessage {

@@ -18,6 +18,24 @@ import type {
 import { IpcChannel } from "./channels.js";
 import type { ShellBootstrap } from "../bootstrap.js";
 
+/** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
+let e2eAttachmentQueue: string[] | null = null;
+
+function consumeE2eAttachmentPath(): string | undefined {
+  const queueEnv = process.env["COWORK_GHC_E2E_ATTACHMENT_QUEUE"]?.trim();
+  if (queueEnv !== undefined && queueEnv !== "") {
+    if (e2eAttachmentQueue === null) {
+      e2eAttachmentQueue = queueEnv
+        .split("|")
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0);
+    }
+    return e2eAttachmentQueue.shift();
+  }
+  const single = process.env["COWORK_GHC_E2E_ATTACHMENT_PATH"]?.trim();
+  return single !== undefined && single !== "" ? single : undefined;
+}
+
 /**
  * Register all native-capability IPC handlers. Call once, after `app.whenReady()`.
  *
@@ -81,8 +99,8 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.handle(
     IpcChannel.PickWorkspaceFile,
     async (event: IpcMainInvokeEvent, workspaceRoot: string): Promise<PickedWorkspaceFile> => {
-      const fixturePath = process.env["COWORK_GHC_E2E_ATTACHMENT_PATH"]?.trim();
-      if (fixturePath !== undefined && fixturePath !== "") {
+      const fixturePath = consumeE2eAttachmentPath();
+      if (fixturePath !== undefined) {
         return { canceled: false, filePath: fixturePath };
       }
 

@@ -16,7 +16,8 @@ import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
-import { augmentDispatchPrompt } from "./attachment-context.js";
+import { planDispatchPrompt } from "./attachment-context.js";
+import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import { createPendingAttachmentId, totalValidBytes, } from "./attachment-pending.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
@@ -143,8 +144,17 @@ function renderAttachmentMetaList(attachments) {
     for (const att of attachments) {
         const chip = el("span", "attachment-chip attachment-chip--historical");
         chip.title = att.relativePath;
-        const trunc = att.truncated ? " (đã cắt)" : "";
-        chip.textContent = `📎 ${att.filename}${trunc}`;
+        const status = att.inclusionStatus ?? "included";
+        const statusNote = status === "included"
+            ? att.truncated
+                ? " (đã cắt)"
+                : ""
+            : status === "omitted_by_budget"
+                ? " (không gửi — vượt ngân sách)"
+                : status === "rejected"
+                    ? " (bị từ chối)"
+                    : "";
+        chip.textContent = `📎 ${att.filename}${statusNote}`;
         wrap.append(chip);
     }
     return wrap;
@@ -624,11 +634,10 @@ async function newConversation(state, dom, handlers) {
 }
 async function readAttachmentSnapshots(state, pending) {
     if (state.client === null || state.activeWorkspace === null) {
-        return { snapshots: [], metadata: [], errors: ["Service chưa sẵn sàng."] };
+        return { snapshots: [], errors: ["Service chưa sẵn sàng."] };
     }
     const valid = pending.filter((p) => p.status === "valid");
     const snapshots = [];
-    const metadata = [];
     const errors = [];
     let priorBytes = 0;
     for (const item of valid) {
@@ -641,10 +650,9 @@ async function readAttachmentSnapshots(state, pending) {
             continue;
         }
         snapshots.push({ metadata: result.metadata, content: result.content });
-        metadata.push(result.metadata);
         priorBytes += result.content.length;
     }
-    return { snapshots, metadata, errors };
+    return { snapshots, errors };
 }
 async function pickAttachment(state, dom, handlers) {
     if (state.activeWorkspace === null) {
@@ -659,6 +667,7 @@ async function pickAttachment(state, dom, handlers) {
     const priorBytes = totalValidBytes(state.pendingAttachments);
     const result = await state.client.readWorkspaceAttachment(picked.filePath, priorBytes);
     if (!result.ok) {
+        const isSecret = result.reason === "secret_file";
         state.pendingAttachments = [
             ...state.pendingAttachments,
             {
@@ -666,7 +675,7 @@ async function pickAttachment(state, dom, handlers) {
                 relativePath: picked.filePath,
                 filename: picked.filePath.split(/[\\/]/).pop() ?? picked.filePath,
                 status: "error",
-                errorMessage: result.message,
+                errorMessage: isSecret ? SECRET_ATTACHMENT_MESSAGE : result.message,
             },
         ];
         renderState(dom, state, handlers);
@@ -684,7 +693,7 @@ async function pickAttachment(state, dom, handlers) {
     ];
     renderState(dom, state, handlers);
 }
-function recordAttachmentActivity(state, metadata, errors) {
+function recordAttachmentActivity(state, included, rejected) {
     const base = state.activitySnapshot ?? {
         items: [],
         fileChanges: [],
@@ -695,13 +704,13 @@ function recordAttachmentActivity(state, metadata, errors) {
     const items = [...base.items];
     let seq = items.length > 0 ? Math.max(...items.map((i) => i.seq)) + 1 : 1;
     const at = new Date().toISOString();
-    for (const att of metadata) {
+    for (const att of included) {
         items.push({
             id: `att-${seq}`,
             kind: "file",
             label: att.truncated
-                ? `Đã đọc ngữ cảnh tệp (đã cắt): ${att.filename}`
-                : `Đã đọc ngữ cảnh tệp: ${att.filename}`,
+                ? `Đã đưa tệp vào ngữ cảnh (đã cắt): ${att.filename}`
+                : `Đã đưa tệp vào ngữ cảnh: ${att.filename}`,
             status: "success",
             at,
             seq,
@@ -710,18 +719,19 @@ function recordAttachmentActivity(state, metadata, errors) {
         });
         seq += 1;
     }
-    for (const err of errors) {
+    for (const rej of rejected) {
         items.push({
             id: `att-err-${seq}`,
             kind: "error",
-            label: `Lỗi đính kèm: ${err}`,
+            label: `Tệp đính kèm bị từ chối: ${rej.filename}`,
             status: "failed",
             at,
             seq,
+            detail: rej.reason,
         });
         seq += 1;
     }
-    const readPaths = [...new Set([...base.readPaths, ...metadata.map((m) => m.relativePath)])];
+    const readPaths = [...new Set([...base.readPaths, ...included.map((m) => m.relativePath)])];
     state.activitySnapshot = { ...base, items, readPaths };
     state.activityLive = true;
 }
@@ -732,8 +742,8 @@ async function sendPrompt(state, dom, readiness, handlers) {
     if (isComposerLocked(state))
         return;
     const pendingSnapshot = [...state.pendingAttachments];
-    const { snapshots, metadata, errors } = await readAttachmentSnapshots(state, pendingSnapshot);
-    if (errors.length > 0 && snapshots.length === 0 && pendingSnapshot.some((p) => p.status === "valid")) {
+    const { snapshots, errors } = await readAttachmentSnapshots(state, pendingSnapshot);
+    if (errors.length > 0) {
         window.alert(errors.join("\n"));
         return;
     }
@@ -743,31 +753,41 @@ async function sendPrompt(state, dom, readiness, handlers) {
     if (state.client === null || state.conv.state.activeConversationId === null)
         return;
     const priorMessages = state.conv.state.activeRecord?.messages ?? [];
-    const { runtimeSessionId, contextMessages } = await ensureRuntimeSession(state, dom, readiness, handlers);
+    const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt);
+    if (!dispatchPlan.ok) {
+        window.alert(dispatchPlan.message);
+        return;
+    }
+    const { runtimeSessionId } = await ensureRuntimeSession(state, dom, readiness, handlers);
     resetLiveActivity(state);
-    recordAttachmentActivity(state, metadata, errors);
-    const userRow = appendMessage(dom, "user", prompt, false, metadata.length > 0 ? metadata : undefined);
-    void userRow;
+    const includedMetadata = dispatchPlan.includedMetadata;
+    appendMessage(dom, "user", prompt, false, includedMetadata.length > 0 ? includedMetadata : undefined);
     state.activeAssistant = appendMessage(dom, "assistant", "");
     const pendingCleared = state.pendingAttachments;
     setComposerText(dom.composerInput, "");
     state.pendingAttachments = [];
     state.composerDrafts.delete(state.conv.state.activeConversationId);
-    await state.conv.recordUserMessage(prompt, metadata.length > 0 ? metadata : undefined);
+    await state.conv.recordUserMessage(prompt, includedMetadata.length > 0 ? includedMetadata : undefined);
     await state.conv.markLastActive();
     state.conv.state.runtimePhase = "running";
     state.continuationUnlocked = true;
+    recordAttachmentActivity(state, includedMetadata, []);
     renderState(dom, state, handlers);
-    const dispatch = augmentDispatchPrompt(contextMessages, snapshots, prompt);
-    const dispatchText = dispatch.text;
+    const dispatchText = dispatchPlan.text;
     const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     if (!result.accepted) {
         state.pendingAttachments = pendingCleared;
         if (result.reason === "session_completed") {
             await state.conv.startContinuation();
             const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-            const retryDispatch = augmentDispatchPrompt(retry.contextMessages, snapshots, prompt);
-            const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryDispatch.text);
+            const retryPlan = planDispatchPrompt(retry.contextMessages, snapshots, prompt);
+            if (!retryPlan.ok) {
+                await state.conv.setRuntimePhase("failed");
+                appendMessage(dom, "assistant", retryPlan.message);
+                renderState(dom, state, handlers);
+                return;
+            }
+            const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
             if (!second.accepted) {
                 await state.conv.setRuntimePhase("failed");
                 appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");

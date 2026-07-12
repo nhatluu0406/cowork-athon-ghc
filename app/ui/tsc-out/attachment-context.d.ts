@@ -6,6 +6,7 @@
  */
 import type { AttachmentMetadata, ConversationMessage } from "./service-client.js";
 import { containsTransportArtifact } from "./transcript-context.js";
+import { planDispatchPrompt, type DispatchPlan } from "./dispatch-plan.js";
 export declare const ATTACHMENT_ENVELOPE_START = "<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>";
 export declare const ATTACHMENT_ENVELOPE_END = "<<<END_CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>";
 export interface AttachmentSnapshot {
@@ -30,9 +31,11 @@ export interface DispatchAssembly {
 }
 /**
  * Assemble the full outbound dispatch: prior turns + attachments + current user request.
- * Budget is shared across all sections.
+ * @deprecated Prefer {@link planDispatchPrompt} for explicit inclusion/fail-fast semantics.
  */
 export declare function augmentDispatchPrompt(priorMessages: readonly ConversationMessage[], attachments: readonly AttachmentSnapshot[], userPrompt: string, maxChars?: number): DispatchAssembly;
+/** Explicit dispatch plan with per-file inclusion status (fail-fast on omission). */
+export { planDispatchPrompt, type DispatchPlan };
 /** Re-export for transport artifact detection in assistant output sanitization. */
 export { containsTransportArtifact };
 //# sourceMappingURL=attachment-context.d.ts.map
