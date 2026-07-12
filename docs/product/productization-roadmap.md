@@ -12,12 +12,11 @@ Web support vẫn `DEFERRED`. Roadmap này chỉ áp dụng cho Windows desktop 
 
 Mục tiêu: biến packaged POC thành release candidate đáng tin hơn mà không mở rộng tính năng lớn.
 
-- Xác minh invalid credential recovery.
-- Xác minh invalid model recovery.
-- Xác minh invalid base URL recovery.
-- Xác minh `start.bat` và `clean.bat` theo kiểu Explorer.
-- Gom một lệnh regression không-live nếu khả thi.
-- Chuẩn hóa báo cáo release-gap ngắn trong `docs/quality/`.
+- ~~Xác minh invalid credential recovery.~~ **DONE** (2026-07-12)
+- ~~Xác minh invalid model recovery.~~ **DONE**
+- ~~Xác minh invalid base URL recovery.~~ **DONE**
+- ~~Xác minh `start.bat` và `clean.bat` theo kiểu Explorer.~~ **DONE**
+- ~~Gom một lệnh regression không-live.~~ **DONE** — `npm run verify:release`
 
 ## 2. Session management and resume
 

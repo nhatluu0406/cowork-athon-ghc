@@ -48,6 +48,26 @@ function customModelsUrl(target: ConnectTarget): string {
   return url.href;
 }
 
+/** Chat-completions URL for model validation on OpenAI-compatible endpoints. */
+export function chatCompletionUrl(target: ConnectTarget): string {
+  const url = new URL(target.url.href);
+  const base = url.pathname.endsWith("/") ? url.pathname.slice(0, -1) : url.pathname;
+  url.pathname = `${base}/chat/completions`;
+  url.search = "";
+  url.hash = "";
+  return url.href;
+}
+
+/** Minimal bounded body that exercises the configured model id (one token max). */
+export function minimalChatCompletionBody(modelId: string): string {
+  return JSON.stringify({
+    model: modelId,
+    messages: [{ role: "user", content: "ping" }],
+    max_tokens: 1,
+    stream: false,
+  });
+}
+
 /**
  * The probe URL for a provider (NO secret). Built-ins use a fixed vendor endpoint; the
  * custom OpenAI-compatible endpoint derives it from its SSRF-validated `base_url` target.

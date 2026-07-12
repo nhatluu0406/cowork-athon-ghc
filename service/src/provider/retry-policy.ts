@@ -21,6 +21,7 @@ import type { ProviderError, ProviderErrorKind } from "@cowork-ghc/contracts";
 /** Kinds that must never be retried, whatever the taxonomy hint says. */
 const NON_RETRYABLE_KINDS: ReadonlySet<ProviderErrorKind> = new Set([
   "auth_invalid",
+  "model_invalid",
   "unknown",
 ]);
 

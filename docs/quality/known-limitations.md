@@ -6,24 +6,16 @@ updated_at: "2026-07-12"
 
 # Known limitations
 
-## Provider và recovery
-
-- Invalid API key chưa được verify riêng.
-- Invalid model chưa được verify riêng.
-- Invalid base URL chưa được verify riêng.
-- Provider recovery hiện đã có missing-credential path, nhưng chưa đủ toàn bộ ma trận lỗi.
-
 ## Session
 
 - Session resume/template re-run chưa fully verified.
 - Session history và session management còn incomplete.
 - Multi-session UX chưa productized.
 
-## Lifecycle và release
+## Release
 
-- Complete Explorer double-click evidence cho `start.bat` và `clean.bat` còn incomplete.
-- Release regression không-live chưa được gom thành một command duy nhất.
-- L9 release verification chưa bắt đầu và không được auto-start từ workflow cũ.
+- L9 release verification đầy đủ chưa bắt đầu.
+- Regression packaged đầy đủ (permission + file + interruption) không chạy mặc định sau mỗi thay đổi nhỏ — dùng `verify:release` + smoke tối thiểu.
 
 ## Tính năng chưa có
 

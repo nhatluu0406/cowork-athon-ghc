@@ -3,15 +3,14 @@ setlocal EnableExtensions
 rem Cowork GHC - clean.bat : delete generated/downloaded data ONLY. Double-click safe.
 rem Preserves source, docs, .git, .agent-workflow, .claude, .loop-engineer state/evidence,
 rem the reference source, credentials, and your workspace. See scripts\cleanup-manifest.json.
+rem Automated test mode: clean.bat --yes
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 title Cowork GHC - clean
 
 where node >nul 2>nul
-if errorlevel 1 goto :nonode
+if errorlevel 1 goto nonode
 
-set "CONFIRM="
-if /i "%~1"=="--yes" set "CONFIRM=--yes"
-if defined CONFIRM goto :do_clean
+if /i "%~1"=="--yes" goto run_clean
 
 echo [Cowork GHC] clean.bat removes generated/downloaded data only.
 echo Preserved: source code, docs, .git, .agent-workflow, .claude,
@@ -22,16 +21,15 @@ echo.
 node "%ROOT%\tools\app\cli.mjs" clean --root "%ROOT%"
 echo.
 set /p ANS=Proceed with deletion? [y/N]
-if /i "%ANS%"=="y" set "CONFIRM=--yes"
-if not defined CONFIRM (
+if /i not "%ANS%"=="y" (
   echo Cancelled. Nothing was deleted.
   pause
   exit /b 0
 )
 
-:do_clean
+:run_clean
 echo.
-node "%ROOT%\tools\app\cli.mjs" clean --root "%ROOT%" %CONFIRM%
+node "%ROOT%\tools\app\cli.mjs" clean --root "%ROOT%" --yes
 set "RC=%ERRORLEVEL%"
 echo.
 if "%RC%"=="0" (
