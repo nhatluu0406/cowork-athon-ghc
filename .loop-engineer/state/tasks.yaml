@@ -197,7 +197,7 @@ tasks:
     evidence:
       - ".loop-engineer/evidence/CGHC-008-workspace-picker.md"
       - ".loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md"
-    completion_note: "DONE 2026-07-11 (RUN-0007) unit + bridge acceptance; RE-VERIFIED 2026-07-12 packaged Slice 2. Native picker via preload IPC; grant + setActiveWorkspace through authenticated loopback service; persistence under %APPDATA%/cowork-ghc/.runtime/settings.json after deferring userData path resolution to post-whenReady prepare hook. Packaged verify: pick fixture A → persist → relaunch restore → change to fixture B → clean stop. Focused tests 20/20 PASS (workspace-picker, service-client, preload-bridge, lifecycle)."
+    completion_note: "DONE 2026-07-11 (RUN-0007) unit + bridge acceptance; RE-VERIFIED 2026-07-12 packaged Slice 2 in commit ff32d808. Native picker via preload IPC; grant + setActiveWorkspace through authenticated loopback service; persistence under %APPDATA%/cowork-ghc/.runtime/settings.json (userData path deferred to post-whenReady prepare hook). Packaged evidence: picker → activate → persist → relaunch restore → workspace switch → clean stop (.loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md)."
     dependencies:
       - "CGHC-002"
       - "CGHC-007"
@@ -800,7 +800,7 @@ tasks:
       - "tools/verify/leg4-report.json"
     risks:
       - "Using a dev server as false release evidence"
-    notes: "HANDOFF ANCHOR (updated 2026-07-12): release-verify gate keeps L6 at gate=PARTIAL. Packaged Slice 1 (service reachability) and Slice 2 (workspace picker + persistence + restore) verified on dist-app/win-unpacked/Cowork GHC.exe. Still IN_PROGRESS: provider/model settings UI, secure keyring credential entry, DeepSeek test connection, live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey remain UNVERIFIED in the package. No live DeepSeek request. DO NOT mark DONE until acceptance bullets 3-5 pass through the PACKAGED GUI. DO NOT start L7."
+    notes: "HANDOFF ANCHOR (reconciled 2026-07-12, HEAD ff32d808): release-verify gate keeps L6 at gate=PARTIAL. Slice 1 PASS (3856a84). Slice 2 PASS (ff32d808; CGHC-008 DONE). Service reachability RESOLVED. Still IN_PROGRESS: provider/model settings UI, secure keyring credential entry, DeepSeek test connection, live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey remain UNVERIFIED in the package. No live DeepSeek request in packaged slices 1–2. DO NOT mark DONE until acceptance bullets 3-5 pass through the PACKAGED GUI. DO NOT start L7."
 
 # backlog: deferred epics / proposals recorded by the product owner. NOT schema-valid executable
 # tasks (no owner/reviewer; product-only priority labels). The controller validates only `tasks`,
