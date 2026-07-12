@@ -1,0 +1,83 @@
+# electron-builder packaging config for Cowork GHC (CGHC-028 Wave B2b).
+#
+# RUN FROM THE REPO ROOT (projectDir = repo root), e.g. `electron-builder --win --config
+# app/shell/electron-builder.yml`. All `files` / `directories.output` globs below are therefore
+# RELATIVE TO THE REPO ROOT, not to this file. `electronVersion` is read from the root
+# package.json `devDependencies.electron`. The packaged app entry is the root package.json
+# `main` field (`app\shell\dist\main.cjs`) — a `.cjs` esbuild bundle (CommonJS). The
+# backslash form is intentional on Windows: electron-builder's asar stores Windows-style paths,
+# and the Windows asar reader resolves `app\shell\dist\main.cjs`.
+#
+# `extraMetadata.main` is deliberately NOT used: injecting it makes electron-builder rewrite the
+# source root package.json in place (stripping `scripts`, adding `main`) and the async restore is
+# unreliable under `--dir`, which corrupts the working tree. Setting `main` directly in the source
+# manifest gives electron-builder nothing to inject, so it never mutates the checked-in package.json.
+#
+# Wave C runs the actual `electron-builder` to produce the installer/portable + a packaged smoke
+# test. This file only DECLARES the packaging contract; it is validated by a config parse here.
+appId: com.coworkghc.desktop
+productName: Cowork GHC
+copyright: Copyright (c) 2026 Cowork GHC
+
+directories:
+  # Packaged artifacts land at repo-root/dist-app (kept out of any workspace dist/).
+  output: dist-app
+
+asar: true
+# The native keyring addon MUST be unpacked from the asar archive: a `.node` addon cannot be
+# loaded from inside asar. `@napi-rs/keyring` loads its platform binding from the sibling
+# `@napi-rs/keyring-win32-x64-msvc` package, so BOTH are unpacked. (The OpenCode binary is NOT
+# in the asar at all — it ships via `extraResources` below.)
+asarUnpack:
+  - "**/node_modules/@napi-rs/keyring/**"
+  - "**/node_modules/@napi-rs/keyring-win32-x64-msvc/**"
+
+# The Electron main is a SINGLE esbuild bundle (`app/shell/dist/main.cjs`) that INLINES every
+# `@cowork-ghc/*` workspace module + all pure-JS deps. The `tsc -b` step also emits the loose,
+# unbundled ESM shell tree (`main.js`, `preload.js`, `create-window.js`, `security/*.js`, ...)
+# next to the bundles; those `.js` files are NEVER the runtime entry and are EXPLICITLY excluded
+# below (`!app/shell/dist/**/*.js`) so the asar ships ONLY the `.cjs` bundles from the shell. This
+# also removes the exact ESM `main.js` whose top-level `require` threw `ReferenceError: require is
+# not defined in ES module scope` — keeping it out of the artifact prevents a silent regression if
+# the entry is ever mis-pointed. Only the bundled main + preload (`.cjs`), the renderer (`app/ui/
+# dist`, whose own `.js` are Vite output and MUST stay), the root-hoisted native keyring, and the
+# manifests go into the asar. Sourcemaps/TS/build metadata are excluded.
+files:
+  - "app/shell/dist/**"
+  - "app/ui/dist/**"
+  - "node_modules/@napi-rs/keyring/**"
+  - "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
+  - "package.json"
+  - "app/shell/package.json"
+  - "!app/shell/dist/**/*.js"
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/*.tsbuildinfo"
+  - "!**/tsconfig*.json"
+
+# The pinned 157MB OpenCode binary is spawned as a real child process from disk, so it ships
+# OUTSIDE the asar via extraResources → `<resourcesPath>/opencode/opencode.exe`. The packaged
+# shell resolves the binary from `process.resourcesPath` (see packaged-paths.ts).
+extraResources:
+  - from: "node_modules/opencode-ai/bin/opencode.exe"
+    to: "opencode/opencode.exe"
+  - from: "skills/builtin"
+    to: "skills"
+
+# Windows only; no code-signing (no certificate available). electron-builder skips signing
+# cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.
+win:
+  target:
+    - nsis
+    - portable
+  signAndEditExecutable: false
+forceCodeSigning: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: "${productName}-${version}-setup.${ext}"
+
+portable:
+  artifactName: "${productName}-${version}-portable.${ext}"

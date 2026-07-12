@@ -1,0 +1,3 @@
+- [Repo structure](project_repo_structure.md) — two merged monorepos (M365KG + Cowork GHC), zero wiring before REQ-205
+- [Cowork GHC governance](cowork-ghc-governance.md) — real rules are AGENTS.md/CLAUDE.md/.agent-workflow/roles, not .specify constitution.md
+- [ID scheme](id-scheme.md) — REQ-<num>-<AREA>-<seq>-<slug>, not plain REQ-XXX
