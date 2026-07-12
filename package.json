@@ -1,0 +1,34 @@
+{
+  "name": "cowork-ghc",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Cowork GHC — desktop AI cowork product for Windows 11 local PC",
+  "type": "module",
+  "main": "app/shell/dist/main.cjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "core/*",
+    "service",
+    "runtime",
+    "app/*"
+  ],
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "node --import tsx --test \"**/*.test.ts\"",
+    "build:renderer": "npm run build --workspace @cowork-ghc/ui",
+    "dev:renderer": "npm run dev --workspace @cowork-ghc/ui",
+    "build:shell": "npm run build --workspace @cowork-ghc/shell",
+    "build:app": "npm run build:renderer && npm run build:shell",
+    "package:win": "npm run build:app && electron-builder --win --config app/shell/electron-builder.yml",
+    "app": "node tools/app/cli.mjs",
+    "clean": "node tools/loop-engineer/lifecycle.mjs clean"
+  },
+  "dependencies": {
+    "@napi-rs/keyring": "1.3.0"
+  },
+  "optionalDependencies": {
+    "@napi-rs/keyring-win32-x64-msvc": "1.3.0"
+  }
+}

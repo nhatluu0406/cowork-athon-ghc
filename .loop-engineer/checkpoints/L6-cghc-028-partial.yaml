@@ -1,0 +1,40 @@
+checkpoint: L6-cghc-028-partial
+created_at: "2026-07-12T01:30:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: "MANUAL_INTERACTIVE_VERIFICATION (release-verifier co-sign = PARTIAL)"
+resumable: true
+tasks_done_total: 27
+cghc_028_status: "IN_PROGRESS / release-candidate — co-sign PARTIAL; NOT DONE (bullets 3-5 need the packaged GUI)"
+summary: >
+  27/28 tasks fully DONE (all independently reviewed, 0 unresolved Critical/High). CGHC-028 (L9 packaged
+  release verification) is a strong RELEASE-CANDIDATE at PARTIAL: everything automatable + the bounded live
+  legs are PASS-grade, but the interactive-GUI + installed-artifact legs are not headlessly automatable and
+  the live budget is spent (3/3), so an honest full PASS requires a manual desktop pass + fresh live auth.
+pass_grade_proven:
+  - "Installer built: NSIS setup (115M) + portable + win-unpacked. app.asar has the real esbuild-bundled main (182KB, @cowork-ghc inlined); keyring native .node asarUnpacked; opencode.exe (157.6M) extraResources; sourcemaps excluded; signing skipped cleanly."
+  - "Headless boot smoke: STAYED_ALIVE 8s, empty stderr (no MODULE_NOT_FOUND/native crash), no fabricated ready, no orphan process."
+  - "Four .bat thin + %~dp0 root-independent + delegate to tools/app/cli.mjs + honest exit codes; cli.mjs status=0; clean allowlist preserves source/docs/state/credentials/workspace + refuses traversal."
+  - "Full suite 616 pass / 0 fail; tsc -b clean."
+  - "LIVE (bounded, cumulative 3/3 successful, secret-scan CLEAN): service-layer critical path (real opencode.exe+DeepSeek -> EV7 completed -> ready.txt on disk -> resume -> stop no-orphan); PR7 provider-error (distinct errored, secret-free); template re-run + resume; product-boundary over HTTP (leg4: POST /v1/session=201 -> token-guarded SSE -> POST message=202 -> real completed EV7)."
+partial_needs_manual_interactive:
+  - "Run Cowork GHC-0.0.0-setup.exe: clean-profile install -> run from installed location -> uninstall."
+  - "Full packaged GUI click-through: native folder picker (workspace grant), provider/model in UI, new session, streaming render, permission Allow AND Deny modal + on-disk verification, stop, reopen+resume, template re-run."
+  - "PR7 rendered in the packaged UI error surface via click-through."
+  - "Keyring credential round-trip from the installed location (asarUnpack .node resolves under Program-Files/portable)."
+  - "One packaged interactive smoke chaining critical-path + provider-error + template re-run + session resume."
+  - "A 4th LIVE request through a packaged interactive smoke needs FRESH product-owner authorization (budget 3/3 spent)."
+carry_forward:
+  - "S4 resume terminal-status fidelity (OpenCode does not persist session.idle/terminal as a replayable part) — MEDIUM."
+  - "PR7 401 -> reconfigure_credential mapper name-set (normalize OpenCode session.error to ProviderAuthError) — LOW."
+  - "Multi-turn-per-session streaming — single-turn is now honest (409 session_completed); multi-turn is a follow-up."
+bugs_caught_by_packaged_build:
+  - "vite.config.ts block-comment terminator (**/*.map contains */ which closed the comment) broke vite build — invisible to npm test/tsc; FIXED."
+  - "electron-builder monorepo asar-completeness: root had no prod deps so the collector shipped no node_modules/opencode/keyring; FIXED by bundling main + declaring keyring + extraResources opencode + packaged-aware paths."
+resume_hint: >
+  27/28 DONE + CGHC-028 PARTIAL release-candidate. The product is fully assembled + boots + streams a live
+  chat end-to-end through the real HTTP boundary; a complete Windows installer is produced. The ONLY remaining
+  work for a full CGHC-028 PASS is a MANUAL interactive verification pass on a real desktop (install/uninstall,
+  packaged GUI click-through incl. permission Allow/Deny, keyring-from-installed, one packaged interactive
+  smoke) + FRESH product-owner authorization for a 4th bounded live request. Web DEFERRED (ADR 0007). No
+  credential gate remains; the remaining gate is human/manual, not code.

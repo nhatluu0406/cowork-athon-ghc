@@ -1,0 +1,25 @@
+{
+  "name": "@cowork-ghc/service",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cowork GHC local application service — the loopback execution/permission boundary (ADR 0003).",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./execution": "./src/execution/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "test": "node --import tsx --test \"tests/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@cowork-ghc/contracts": "*",
+    "@cowork-ghc/runtime": "*",
+    "@napi-rs/keyring": "1.3.0"
+  }
+}

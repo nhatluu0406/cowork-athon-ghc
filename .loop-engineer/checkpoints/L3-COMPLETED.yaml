@@ -1,0 +1,33 @@
+checkpoint: L3
+created_at: "2026-07-11T01:30:00Z"
+run_id: RUN-0004
+loop_status: COMPLETED
+gate: PASS
+resumable: true
+inputs_fingerprint:
+  discovery_report:
+    path: .loop-engineer/reports/discovery-report.md
+    sha256: "3bc9d6a47dc51b7611447cf49e291e7c36bae98ea7285d2eded4fcb4f78186df"
+  scope:
+    path: docs/product/cowork-ghc-scope-and-acceptance.md
+    sha256: "e9244d47692a3380f06e4b2252514f502938e7a92f49afdd73a3cdbf911be96e"
+  reference:
+    repository: different-ai/openwork
+    commit: "1897f9f38ee35338bdb99a993ea07c5c9cd9b827"
+outputs:
+  - docs/architecture/cowork-ghc-implementation-design.md
+  - docs/architecture/decisions/0001-agent-tool-runtime-and-persistence.md
+  - docs/architecture/decisions/0002-desktop-shell.md
+  - docs/architecture/decisions/0003-local-service-transport-placement-loopback.md
+  - docs/architecture/decisions/0004-windows-process-lifecycle-and-supervision.md
+  - docs/architecture/decisions/0005-provider-abstraction.md
+  - docs/architecture/decisions/0006-credential-store.md
+  - docs/architecture/decisions/README.md
+evidence:
+  - .loop-engineer/evidence/L3/architecture-authoring-notes.md
+  - .loop-engineer/evidence/L3/review-security.md
+  - .loop-engineer/evidence/L3/review-dispositions.md
+resume_hint: >
+  L3 is COMPLETED and valid. Re-running L3 returns SKIPPED_ALREADY_VALID unless the discovery-report
+  sha256, the scope-doc sha256, or the reference commit changes, an output is missing, or L3 is
+  explicitly invalidated. ADRs are Status: Proposed — L4 freezes them. Next: /loop-engineer run L4.

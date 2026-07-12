@@ -1,0 +1,169 @@
+/**
+ * LIVE composition entrypoint (CGHC-028 Wave A2) — the Tier 2 wire.
+ *
+ * Tier 1 `createCoworkService` stays intact for the pure in-process service (tests + the honest
+ * not-attached defaults). This entrypoint ADDS a live variant: it takes a started/ready OpenCode
+ * supervisor, builds the three LIVE HTTP adapters bound to `supervisor.baseUrl`, and injects them
+ * as the four Tier 2 seams so the boundary talks to a real child instead of the reject-everything
+ * doubles. It also SEEDS the shared value-based {@link SecretScrubber} with the resolved credential
+ * value(s) so `redactError = sanitizeErrorMessage(scrubber.scrub(...))` masks the REAL key even
+ * before the shape sanitizer, and it OWNS a single shutdown that stops both the loopback socket and
+ * the supervised child.
+ *
+ * ORDER (why): the adapters read `supervisor.baseUrl` LAZILY per call, so the service is assembled
+ * first, the child is started next (making a health round-trip real), the scrubber is seeded, and
+ * only then is the loopback socket opened. Shutdown reverses ownership: stop the socket (no new
+ * requests) THEN stop the child (ONE owner of the child lifecycle).
+ *
+ * FIX-6 (value-scrub invariant): the PRODUCTION caller must seed via
+ * `deps.credentialService.resolveInjection(...)` (which registers the value with THIS shared
+ * scrubber) rather than reading the OS keyring directly, so a short/unshaped custom-endpoint key is
+ * value-redacted before any `session.error` EV message can carry it. The supervisor independently
+ * injects the key into the child ENV at launch; both paths read the ONE credential store.
+ */
+
+import type { RuntimeProcessIdentity } from "@cowork-ghc/runtime";
+import type { WorkspaceId } from "@cowork-ghc/contracts";
+import type { SecretScrubber } from "../diagnostics/index.js";
+import type { RunningService } from "../start.js";
+import type { RuntimeHealth } from "../session/index.js";
+import type { SupervisorStartSpec } from "../runtime/index.js";
+import {
+  createEventPump,
+  createOpencodeConnector,
+  createOpencodeHttp,
+  createOpencodeRuntimeReply,
+  createOpencodeSendPrompt,
+  createOpencodeSessionStore,
+  type EventPump,
+} from "../runtime/index.js";
+import { createCoworkService } from "./compose-service.js";
+import type { CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
+
+/**
+ * The narrow supervisor surface the live wire consumes (satisfied by {@link
+ * import("../runtime/index.js").OpencodeSupervisor}). Injectable so tests point a fake at a fake
+ * loopback server. Extends {@link RuntimeHealth} so it IS the live `runtimeHealth` seam.
+ */
+export interface LiveRuntimeSupervisor extends RuntimeHealth {
+  start(spec: SupervisorStartSpec): Promise<RuntimeProcessIdentity>;
+  stop(): Promise<void>;
+  readonly baseUrl: string | null;
+}
+
+export interface LiveCoworkServiceOptions {
+  /** The child supervisor (Wave A1). Its `isAlive()` becomes the live `runtimeHealth` seam. */
+  readonly supervisor: LiveRuntimeSupervisor;
+  /** Everything the supervisor needs to launch the one child. */
+  readonly startSpec: SupervisorStartSpec;
+  /** The single workspace this child serves (its launch `cwd`); stamped on every stored session. */
+  readonly workspaceId: WorkspaceId;
+  /** Tier 1 bind options + seams (settingsFs, credentialStore, dnsResolver, …). */
+  readonly service?: CoworkServiceOptions;
+  /** Optional loopback bearer token if the child is configured with auth (default: none). */
+  readonly authToken?: string;
+  /** Per-request HTTP bound for the adapters (default 15s). */
+  readonly requestTimeoutMs?: number;
+  /** Injectable fetch (default global). Tests use the real loopback fake server. */
+  readonly fetch?: typeof fetch;
+  /** Fallback clock for session timestamps + the composition now(). */
+  readonly now?: () => string;
+  /**
+   * Seed the shared value-based scrubber with the resolved credential value(s) so redaction is
+   * active over real keys. Production wires this to `deps.credentialService.resolveInjection(...)`
+   * (FIX-6). Called after the child is up and before the socket opens.
+   */
+  readonly seedScrubber?: (scrubber: SecretScrubber, deps: CoworkServiceDeps) => void | Promise<void>;
+}
+
+export interface LiveCoworkService {
+  readonly running: RunningService;
+  readonly deps: CoworkServiceDeps;
+  readonly supervisor: LiveRuntimeSupervisor;
+  readonly identity: RuntimeProcessIdentity;
+  /** Stop the loopback socket THEN the supervised child (ONE owner). Idempotent-friendly. */
+  stop(): Promise<void>;
+}
+
+export async function startLiveCoworkService(
+  options: LiveCoworkServiceOptions,
+): Promise<LiveCoworkService> {
+  const { supervisor, startSpec, workspaceId } = options;
+
+  // The adapters read the child base URL lazily, so they can be built before start().
+  const http = createOpencodeHttp({
+    baseUrl: () => supervisor.baseUrl,
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+    ...(options.authToken !== undefined ? { authToken: options.authToken } : {}),
+    ...(options.requestTimeoutMs !== undefined ? { timeoutMs: options.requestTimeoutMs } : {}),
+  });
+  const sessionStore = createOpencodeSessionStore({
+    http,
+    workspaceId,
+    ...(options.now !== undefined ? { now: options.now } : {}),
+  });
+  const runtimeReply = createOpencodeRuntimeReply({ http });
+  const connector = createOpencodeConnector({ http });
+  // Live prompt-dispatch: POST /session/{id}/message on the child. The EV response streams back
+  // out-of-band on `/event` (consumed by the pump below), never in this POST's response.
+  const sendPrompt = createOpencodeSendPrompt({ http });
+
+  // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).
+  const composed = await createCoworkService({
+    ...(options.service ?? {}),
+    ...(options.now !== undefined ? { now: options.now } : {}),
+    runtimeHealth: supervisor,
+    sessionStore,
+    runtimeReply,
+    connector,
+    sendPrompt,
+  });
+
+  // The live `/event` → hub pump. It feeds each raw child frame into the session's hub run
+  // (the hub owns the single mapper/fold/coalesce/fan-out), so the SSE route has frames to stream.
+  const pump: EventPump = createEventPump({
+    baseUrl: () => supervisor.baseUrl,
+    target: {
+      knows: (sessionId) => composed.deps.sessionService.view(sessionId) !== undefined,
+      open: (sessionId) => composed.deps.streamHub.open(sessionId),
+    },
+    redactError: composed.deps.redactError,
+    ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
+  });
+
+  // Bring up the child (real health round-trip), seed the scrubber, open the socket, THEN start
+  // the `/event` pump (the child is ready, so `/event` is reachable).
+  const identity = await supervisor.start(startSpec);
+  try {
+    if (options.seedScrubber !== undefined) {
+      await options.seedScrubber(composed.deps.scrubber, composed.deps);
+    }
+    const running = await composed.start();
+    pump.start();
+    return {
+      running,
+      deps: composed.deps,
+      supervisor,
+      identity,
+      // Ordered teardown (ONE owner): stop the socket (no new requests) → stop the pump (close
+      // the `/event` consumer) → stop the child. The pump reads FROM the child, so it must be
+      // torn down before the child is killed. Each step is protected so a later step always runs.
+      stop: async (): Promise<void> => {
+        try {
+          await running.service.stop();
+        } finally {
+          try {
+            await pump.stop();
+          } finally {
+            await supervisor.stop();
+          }
+        }
+      },
+    };
+  } catch (err) {
+    // Never leak a started child (or a running pump) if the socket/seed failed after start().
+    await pump.stop().catch(() => undefined);
+    await supervisor.stop().catch(() => undefined);
+    throw err;
+  }
+}
