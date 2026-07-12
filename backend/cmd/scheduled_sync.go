@@ -19,7 +19,8 @@ import (
 // POST /api/m365/sync call. A failure syncing one connection is logged and
 // skipped rather than aborting the whole tick, so one bad connection can't
 // starve the rest.
-func runScheduledDeltaSync(ctx context.Context, deps *api.M365Deps, logger *slog.Logger) error {
+// Group G: permissionExtractor populates permission_cache via RefreshCache after each sync.
+func runScheduledDeltaSync(ctx context.Context, deps *api.M365Deps, permissionExtractor *connectors.PermissionExtractor, logger *slog.Logger) error {
 	rows, err := deps.DB.QueryContext(ctx,
 		`SELECT id, type, tenant_id, config_json FROM m365_connections WHERE status = 'active' ORDER BY id`)
 	if err != nil {
@@ -51,7 +52,7 @@ func runScheduledDeltaSync(ctx context.Context, deps *api.M365Deps, logger *slog
 	}
 
 	for _, c := range conns {
-		if err := syncOneConnection(ctx, deps.DB, deps.M365ClientID, deps.M365Secret, c.id, c.connType, c.tenantID, c.config); err != nil {
+		if err := syncOneConnection(ctx, deps.DB, deps.M365ClientID, deps.M365Secret, c.id, c.connType, c.tenantID, c.config, permissionExtractor); err != nil {
 			logger.ErrorContext(ctx, "scheduled delta sync: connection failed", "connection_id", c.id, "type", c.connType, "err", err)
 			continue
 		}
@@ -61,7 +62,7 @@ func runScheduledDeltaSync(ctx context.Context, deps *api.M365Deps, logger *slog
 	return nil
 }
 
-func syncOneConnection(ctx context.Context, db *sql.DB, m365ClientID, m365Secret string, connID int64, connType, tenantID string, config map[string]string) error {
+func syncOneConnection(ctx context.Context, db *sql.DB, m365ClientID, m365Secret string, connID int64, connType, tenantID string, config map[string]string, permissionExtractor *connectors.PermissionExtractor) error {
 	tokenFunc := func() (string, error) {
 		if m365ClientID == "" || m365Secret == "" || tenantID == "" {
 			return "", fmt.Errorf("m365 connector: M365_CLIENT_ID/M365_CLIENT_SECRET/tenant_id not configured")
@@ -88,6 +89,16 @@ func syncOneConnection(ctx context.Context, db *sql.DB, m365ClientID, m365Secret
 
 		if _, err := coordinator.SyncOneDrive(ctx, tenantID, driveID); err != nil {
 			return fmt.Errorf("onedrive sync failed: %w", err)
+		}
+
+		// Group G (T150): Refresh permission cache after delta sync.
+		// RefreshCache fetches latest ACLs from MS Graph for all ingested files
+		// and populates permission_cache. Full re-pull strategy per spec §18.5.
+		if permissionExtractor != nil {
+			if err := permissionExtractor.RefreshCache(ctx); err != nil {
+				slog.WarnContext(ctx, "failed to refresh permission cache after OneDrive sync", "err", err)
+				// Don't fail the whole sync if permission refresh fails — log and continue
+			}
 		}
 		return nil
 

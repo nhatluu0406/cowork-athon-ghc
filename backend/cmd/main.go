@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 	"github.com/rad-system/m365-knowledge-graph/internal/brain"
 	"github.com/rad-system/m365-knowledge-graph/internal/common"
+	"github.com/rad-system/m365-knowledge-graph/internal/connectors"
 	"github.com/rad-system/m365-knowledge-graph/internal/embedding"
 	"github.com/rad-system/m365-knowledge-graph/internal/feedback"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
@@ -200,6 +202,18 @@ func main() {
 		M365Secret:   cfg.M365ClientSecret,
 	}
 
+	// Group G: Permission extraction during ingestion (T149-T151).
+	// PermissionExtractor is wired into scheduled delta sync to populate
+	// permission_cache via ExtractAndCache as files are ingested.
+	graphClient := connectors.NewGraphClient(func() (string, error) {
+		tokenResp, err := entraAuth.ClientCredentialsToken(context.Background())
+		if err != nil {
+			return "", fmt.Errorf("failed to get app-only token for permission extraction: %w", err)
+		}
+		return tokenResp.AccessToken, nil
+	})
+	permissionExtractor := connectors.NewPermissionExtractor(db.Conn(), graphClient)
+
 	// T114: Initialize router and register all handler groups
 	router := api.NewRouter()
 	registerRoutes(router, hub, feedbackStore, feedbackAnalyzer, retriever,
@@ -217,7 +231,8 @@ func main() {
 		// which mirrors HandleM365Sync's per-connection logic across every
 		// active m365_connections row instead of relying only on the manual
 		// POST /api/m365/sync endpoint).
-		return runScheduledDeltaSync(ctx, m365Deps, logger)
+		// Group G: Pass permissionExtractor so RefreshCache is called after sync.
+		return runScheduledDeltaSync(ctx, m365Deps, permissionExtractor, logger)
 	})
 	defer deltaSyncScheduler.Stop()
 	logger.Info("delta sync scheduler started", "interval", cfg.DeltaSyncInterval)
