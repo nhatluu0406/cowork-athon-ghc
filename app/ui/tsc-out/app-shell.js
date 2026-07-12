@@ -5,7 +5,7 @@
  */
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
-import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, showFileReview, snapshotToPersisted, } from "./activity-panel.js";
+import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, showFileReview, showWorkspaceFilePreview, snapshotToPersisted, } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
@@ -17,6 +17,7 @@ import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt } from "./attachment-context.js";
@@ -24,6 +25,8 @@ import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import { createPendingAttachmentId, totalValidBytes, } from "./attachment-pending.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
+import { createProductIcon } from "./product-icons.js";
+import { PRODUCT_SURFACES, visibleProductSurfaces } from "./surface-registry.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -31,6 +34,36 @@ function el(tag, className, text) {
     if (text !== undefined)
         node.textContent = text;
     return node;
+}
+function icon(name, label) {
+    return createProductIcon(name, label);
+}
+function appendIconLabel(parent, iconName, label) {
+    parent.append(icon(iconName), el("span", "icon-label", label));
+}
+function setIconLabel(parent, iconName, label) {
+    parent.replaceChildren();
+    appendIconLabel(parent, iconName, label);
+}
+function renderIntegrationSurface(container, surface) {
+    container.replaceChildren();
+    const card = el("section", "integration-empty");
+    const eyebrow = surface.availability === "planned"
+        ? "Planned"
+        : surface.dependency !== undefined
+            ? `Chờ tích hợp ${surface.dependency}`
+            : "Chưa khả dụng";
+    const iconWrap = el("div", "integration-empty__icon");
+    iconWrap.append(icon(surface.icon, surface.label));
+    card.append(iconWrap, el("p", "integration-empty__eyebrow", eyebrow), el("h1", "integration-empty__title", surface.label));
+    card.append(el("p", "integration-empty__copy", surface.description));
+    if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
+        card.append(el("p", "integration-empty__note", `Không hiển thị dữ liệu giả cho ${surface.dependency}; surface này chỉ xác nhận điều hướng và contract UI.`));
+    }
+    container.append(card);
+}
+function surfaceById(id) {
+    return PRODUCT_SURFACES.find((surface) => surface.id === id) ?? PRODUCT_SURFACES[0];
 }
 function shortPath(path) {
     const parts = path.split(/[\\/]/).filter(Boolean);
@@ -156,7 +189,7 @@ function renderAttachmentMetaList(attachments) {
                 : status === "rejected"
                     ? " (bị từ chối)"
                     : "";
-        chip.textContent = `📎 ${att.filename}${statusNote}`;
+        chip.append(icon("attachment"), el("span", "attachment-chip__label", `${att.filename}${statusNote}`));
         wrap.append(chip);
     }
     return wrap;
@@ -172,10 +205,11 @@ function renderPendingAttachmentChips(dom, pending, onRemove) {
         const chip = el("span", `attachment-chip${item.status === "error" ? " attachment-chip--error" : ""}`);
         chip.title = item.relativePath;
         const trunc = item.metadata?.truncated === true ? " (đã cắt)" : "";
-        chip.append(el("span", "attachment-chip__label", item.status === "error" ? `⚠ ${item.filename}` : `📎 ${item.filename}${trunc}`));
-        const remove = el("button", "attachment-chip__remove", "×");
+        chip.append(icon(item.status === "error" ? "permission" : "attachment"), el("span", "attachment-chip__label", `${item.filename}${trunc}`));
+        const remove = el("button", "attachment-chip__remove");
         remove.type = "button";
         remove.setAttribute("aria-label", `Gỡ ${item.filename}`);
+        remove.append(icon("file-delete", "Gỡ tệp"));
         remove.addEventListener("click", () => onRemove(item.id));
         chip.append(remove);
         if (item.status === "error" && item.errorMessage !== undefined) {
@@ -228,7 +262,14 @@ function renderSessionList(dom, state, onSelect, onRename, onDelete) {
         const item = el("button", "history-item");
         if (summary.id === activeConversationId)
             item.classList.add("history-item--active");
+        if (summary.status === "running")
+            item.classList.add("history-item--running");
+        if (summary.status === "interrupted")
+            item.classList.add("history-item--interrupted");
+        if (summary.status === "completed")
+            item.classList.add("history-item--historical");
         item.type = "button";
+        item.dataset["status"] = summary.status;
         item.append(el("span", "history-item__title", summary.title));
         item.append(el("span", "history-item__meta", formatConversationMeta(summary)));
         item.addEventListener("click", () => onSelect(summary.id));
@@ -283,6 +324,39 @@ async function capturePermissionBeforeSnapshot(state, request) {
             relativePath,
             before,
             ...(op !== undefined ? { operation: op } : {}),
+        });
+    }
+    catch {
+        // best effort
+    }
+}
+const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit", "patch", "multiedit", "delete"]);
+async function captureBeforeOnToolStart(state, event) {
+    if (state.client === null || state.activeWorkspace === null)
+        return;
+    if (event.status !== "running" && event.status !== "pending")
+        return;
+    if (!FILE_MUTATION_TOOL_NAMES.has(event.toolName))
+        return;
+    if (event.summary === undefined || event.summary.length === 0)
+        return;
+    const relativePath = toRelativePath(event.summary, state.activeWorkspace);
+    if (relativePath.length === 0 || relativePath.startsWith("..."))
+        return;
+    for (const entry of state.pendingBeforeSnapshots.values()) {
+        if (entry.relativePath === relativePath)
+            return;
+    }
+    try {
+        const before = await state.client.captureFileReviewSnapshot(relativePath);
+        state.pendingBeforeSnapshots.set(`tool:${event.callId}`, {
+            relativePath,
+            before,
+            operation: event.toolName === "write"
+                ? "create"
+                : event.toolName === "delete"
+                    ? "delete"
+                    : "edit",
         });
     }
     catch {
@@ -411,10 +485,21 @@ function resetLiveActivity(state) {
 function renderState(dom, state, handlers) {
     const phase = state.conv.state.runtimePhase;
     const record = state.conv.state.activeRecord;
+    const activeSurface = surfaceById(state.activeSurface);
+    for (const [id, button] of dom.surfaceButtons) {
+        button.setAttribute("aria-current", id === state.activeSurface ? "page" : "false");
+    }
+    const isCoworkSurface = state.activeSurface === "cowork";
+    dom.chat.hidden = !isCoworkSurface;
+    dom.integrationSurface.hidden = isCoworkSurface;
+    dom.sidebar.classList.toggle("sidebar--surface-muted", !isCoworkSurface);
+    if (!isCoworkSurface) {
+        renderIntegrationSurface(dom.integrationSurface, activeSurface);
+    }
     dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
     dom.workspaceLabel.title = state.activeWorkspace ?? "";
     const providerCopy = providerStatus(state.settings, state.connectionTestState);
-    dom.providerStatus.textContent = providerCopy.label;
+    setIconLabel(dom.providerStatus, "gateway", providerCopy.label);
     dom.providerStatus.title = providerCopy.detail;
     dom.providerStatus.classList.toggle("is-ok", providerCopy.ok);
     dom.executionStatus.textContent = phaseLabel(phase);
@@ -514,6 +599,10 @@ function startStreamWatchdog(state, dom, sessionId, handlers) {
     state.streamWatchdog = setInterval(() => {
         if (state.conv.state.runtimePhase !== "running" && state.conv.state.runtimePhase !== "cancelling") {
             stopStreamWatchdog(state);
+            return;
+        }
+        if (state.permissionHistory.some((entry) => entry.decision === "pending")) {
+            touchStreamActivity(state);
             return;
         }
         const idleFor = Date.now() - state.lastStreamActivityAt;
@@ -627,6 +716,9 @@ function bindEvStream(state, dom, handlers, sessionId) {
             touchStreamActivity(state);
             state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
             refreshActivityUi(state, dom);
+            if (event.kind === "tool_call") {
+                void captureBeforeOnToolStart(state, event);
+            }
             if (event.kind === "file_mutation") {
                 void finalizeFileMutationReview(state, event, sessionId, dom);
             }
@@ -968,27 +1060,58 @@ function createShell(root) {
     root.className = "app-shell";
     root.replaceChildren();
     const topbar = el("header", "topbar");
-    topbar.append(el("div", "topbar__brand", "Cowork GHC"));
-    const serviceStatus = el("span", "topbar__status", "Local service: Đang khởi động");
-    const providerStatus = el("button", "topbar__gateway topbar__provider-status", "Provider: Chưa cấu hình");
+    const brand = el("div", "topbar__brand");
+    appendIconLabel(brand, "cowork", "Cowork GHC");
+    topbar.append(brand);
+    const serviceStatus = el("span", "topbar__status no-drag", "Local service: Đang khởi động");
+    const providerStatus = el("button", "topbar__gateway topbar__provider-status no-drag");
     providerStatus.type = "button";
+    appendIconLabel(providerStatus, "gateway", "Provider: Chưa cấu hình");
     const modelLabel = providerStatus;
-    const settingsButton = el("button", "icon-btn", "Cài đặt");
+    const settingsButton = el("button", "icon-btn no-drag");
     settingsButton.type = "button";
     settingsButton.setAttribute("aria-label", "Mở cài đặt");
+    settingsButton.append(icon("settings"), el("span", "icon-label", "Cài đặt"));
     topbar.append(el("div", "topbar__spacer"), serviceStatus, providerStatus, settingsButton);
     const workspace = el("main", "workspace");
+    const productRail = el("aside", "product-rail");
+    productRail.setAttribute("aria-label", "Product surfaces");
+    const railBrand = el("div", "product-rail__brand");
+    railBrand.append(icon("cowork", "Cowork GHC"));
+    productRail.append(railBrand);
+    const railNav = el("nav", "product-rail__nav");
+    const surfaceButtons = new Map();
+    for (const surface of visibleProductSurfaces(PRODUCT_SURFACES)) {
+        const item = el("button", `product-rail__item product-rail__item--${surface.availability}`);
+        item.type = "button";
+        item.dataset["surfaceId"] = surface.id;
+        item.title =
+            surface.dependency !== undefined
+                ? `${surface.label} - Chờ tích hợp ${surface.dependency}`
+                : surface.label;
+        item.setAttribute("aria-label", item.title);
+        item.setAttribute("aria-current", surface.id === "cowork" ? "page" : "false");
+        item.append(icon(surface.icon, surface.label));
+        railNav.append(item);
+        surfaceButtons.set(surface.id, item);
+    }
+    productRail.append(railNav);
     const sidebar = el("aside", "sidebar");
-    const nav = el("nav", "sidebar-tabs");
-    const coworkTab = el("button", "sidebar-tab sidebar-tab--active", "Cowork");
-    coworkTab.type = "button";
-    coworkTab.setAttribute("aria-selected", "true");
-    const skillsTab = el("button", "sidebar-tab", "Skills");
-    skillsTab.type = "button";
-    skillsTab.setAttribute("aria-selected", "false");
-    nav.append(coworkTab, skillsTab);
-    const newConversationButton = el("button", "sidebar__new-btn", "Cuộc trò chuyện mới");
+    const sidebarBrand = el("div", "sidebar-brand");
+    const sidebarBrandMark = el("div", "sidebar-brand__mark");
+    sidebarBrandMark.append(icon("cowork", "Cowork GHC"));
+    const sidebarBrandText = el("div", "sidebar-brand__text");
+    sidebarBrandText.append(el("strong", "sidebar-brand__name", "Cowork GHC"));
+    sidebarBrandText.append(el("span", "sidebar-brand__copy", "AI cowork workspace"));
+    const sidebarToggle = el("button", "sidebar-collapse", "Thu gọn");
+    sidebarToggle.type = "button";
+    sidebarToggle.setAttribute("aria-expanded", "true");
+    sidebarBrand.append(sidebarBrandMark, sidebarBrandText, sidebarToggle);
+    const coworkTab = el("button", "sidebar-tab sidebar-tab--active");
+    const skillsTab = el("button", "sidebar-tab");
+    const newConversationButton = el("button", "sidebar__new-btn");
     newConversationButton.type = "button";
+    appendIconLabel(newConversationButton, "conversation", "Cuộc trò chuyện mới");
     const workspaceBox = el("section", "workspace-slot");
     const workspaceLabel = el("p", "workspace-context", "Chưa chọn workspace");
     const sessionSearch = el("input", "sidebar__search");
@@ -996,11 +1119,12 @@ function createShell(root) {
     sessionSearch.placeholder = "Tìm cuộc trò chuyện…";
     sessionSearch.setAttribute("aria-label", "Tìm cuộc trò chuyện");
     const sessionList = el("div", "sidebar__history");
+    const workspaceNavigatorSlot = el("section", "workspace-nav");
     const coworkSidebarPanel = el("div", "sidebar__cowork-panel");
-    coworkSidebarPanel.append(newConversationButton, workspaceLabel, workspaceBox, sessionSearch, el("h2", "sidebar__heading", "Phiên"), sessionList);
+    coworkSidebarPanel.append(newConversationButton, workspaceLabel, workspaceBox, sessionSearch, el("h2", "sidebar__heading", "Phiên"), sessionList, workspaceNavigatorSlot);
     const skillsPanel = el("section", "skills-panel");
     skillsPanel.hidden = true;
-    sidebar.append(nav, coworkSidebarPanel, skillsPanel);
+    sidebar.append(sidebarBrand, coworkSidebarPanel, skillsPanel);
     const chat = el("section", "chat-area");
     const header = el("div", "chat-header");
     const headerInfo = el("div", "chat-header__info");
@@ -1008,14 +1132,18 @@ function createShell(root) {
     const chatSub = el("div", "chat-header__sub", "Cowork GHC sử dụng workspace và provider đã cấu hình.");
     headerInfo.append(chatTitle, chatSub);
     const headerActions = el("div", "chat-header__actions");
-    const skillsButton = el("button", "label-btn skills-open", "Skills: 0 bật");
+    const skillsButton = el("button", "label-btn skills-open");
     skillsButton.type = "button";
-    const activityMobileToggle = el("button", "label-btn activity-mobile-toggle", "Hoạt động");
+    appendIconLabel(skillsButton, "skills", "Skills: 0 bật");
+    const activityMobileToggle = el("button", "label-btn activity-mobile-toggle");
     activityMobileToggle.type = "button";
     activityMobileToggle.setAttribute("aria-label", "Mở bảng hoạt động");
     activityMobileToggle.setAttribute("aria-expanded", "false");
+    appendIconLabel(activityMobileToggle, "panel", "Thông tin");
     headerActions.append(activityMobileToggle, skillsButton);
-    header.append(el("div", "chat-header__icon", "AI"), headerInfo, headerActions);
+    const chatIcon = el("div", "chat-header__icon");
+    chatIcon.append(icon("cowork", "Cowork"));
+    header.append(chatIcon, headerInfo, headerActions);
     const continuationBanner = el("div", "continuation-banner");
     continuationBanner.hidden = true;
     continuationBanner.append(el("span", "continuation-banner__text", "Đây là lịch sử đã lưu — không phải phiên runtime đang chạy."));
@@ -1041,10 +1169,11 @@ function createShell(root) {
     composerInput.setAttribute("aria-label", "Nhập yêu cầu");
     composerInput.setAttribute("data-placeholder", "Nhập yêu cầu cho Cowork GHC...");
     const composerBar = el("div", "composer__bar");
-    const attachButton = el("button", "icon-btn attach-btn", "+");
+    const attachButton = el("button", "icon-btn attach-btn");
     attachButton.type = "button";
     attachButton.title = "Đính kèm tệp văn bản trong workspace";
     attachButton.setAttribute("aria-label", "Đính kèm");
+    attachButton.append(icon("attachment"));
     const attachLabel = el("span", "model-picker attach-label", "Đính kèm");
     const cancelButton = el("button", "stop-btn", "Dừng");
     cancelButton.type = "button";
@@ -1065,9 +1194,13 @@ function createShell(root) {
     composerBox.append(composerInput, attachmentChips, composerPreflight, composerBar);
     composer.append(composerBox, composerHint);
     chat.append(header, transcript, composer);
+    const integrationSurface = el("section", "integration-surface");
+    integrationSurface.hidden = true;
     const rightPanel = el("aside", "right-panel");
     const rpHeader = el("div", "rp-header");
-    rpHeader.append(el("span", "rp-header__title", "Hoạt động"));
+    const rpTitle = el("span", "rp-header__title");
+    appendIconLabel(rpTitle, "panel", "Thông tin");
+    rpHeader.append(rpTitle);
     const executionStatus = el("p", "execution-status", "Chưa bắt đầu");
     const planCard = el("section", "plan-card");
     planCard.append(el("div", "plan-card__hd", "Kế hoạch"));
@@ -1083,7 +1216,7 @@ function createShell(root) {
     inputSection.append(inputFiles);
     const permissionSummary = el("p", "permission-summary", "Quyền: chưa có yêu cầu.");
     rightPanel.append(rpHeader, executionStatus, planCard, outputSection, inputSection, permissionSummary);
-    workspace.append(sidebar, chat, rightPanel);
+    workspace.append(productRail, sidebar, chat, integrationSurface, rightPanel);
     const statusbar = el("footer", "statusbar");
     const serviceDetail = el("span", "statusbar__left", "Đang khởi động");
     statusbar.append(serviceDetail, el("span", "statusbar__right", "OpenCode chỉ chạy khi bạn gửi yêu cầu."));
@@ -1156,11 +1289,16 @@ function createShell(root) {
         sidebar,
         rightPanel,
         activityMobileToggle,
+        sidebarToggle,
         coworkTab,
         skillsTab,
         coworkSidebarPanel,
         skillsPanel,
         skillsButton,
+        productRail,
+        surfaceButtons,
+        integrationSurface,
+        workspaceNavigatorSlot,
     };
     const openSettings = () => {
         settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
@@ -1179,8 +1317,13 @@ function createShell(root) {
     activityMobileToggle.addEventListener("click", () => {
         const open = workspace.classList.toggle("activity-drawer-open");
         activityMobileToggle.setAttribute("aria-expanded", open ? "true" : "false");
-        activityMobileToggle.textContent = open ? "Ẩn hoạt động" : "Hoạt động";
+        setIconLabel(activityMobileToggle, "panel", open ? "Ẩn thông tin" : "Thông tin");
         domPartial.activityPanel.toggle.setAttribute("aria-label", open ? "Thu gọn bảng hoạt động" : "Mở rộng bảng hoạt động");
+    });
+    sidebarToggle.addEventListener("click", () => {
+        const collapsed = workspace.classList.toggle("sidebar-collapsed");
+        sidebarToggle.textContent = collapsed ? "Mở" : "Thu gọn";
+        sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     });
     const showSkills = (show) => {
         coworkSidebarPanel.hidden = show;
@@ -1222,6 +1365,7 @@ export function mountCoworkApp(root) {
         continuationUnlocked: true,
         localServiceReady: false,
         connectionTestState: "unknown",
+        activeSurface: "cowork",
     };
     const handlers = {
         onSelect: (id) => {
@@ -1251,9 +1395,18 @@ export function mountCoworkApp(root) {
             })();
         },
     };
+    for (const [id, button] of dom.surfaceButtons) {
+        button.addEventListener("click", () => {
+            state.activeSurface = id;
+            dom.coworkSidebarPanel.hidden = false;
+            dom.skillsPanel.hidden = true;
+            renderState(dom, state, handlers);
+        });
+    }
     let featuresMounted = false;
     let conversationRestored = false;
     let searchTimer = null;
+    let workspaceNavigator = null;
     const dynamicClient = createDynamicClient(state);
     const readiness = createReadinessController({
         getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1293,11 +1446,22 @@ export function mountCoworkApp(root) {
                         onActivated: (rootPath) => {
                             state.activeWorkspace = rootPath;
                             void refreshSettings(state, dom, handlers);
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
                         onDeactivated: () => {
                             state.activeWorkspace = null;
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
+                        },
+                    });
+                    workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
+                        client: dynamicClient,
+                        getWorkspaceRoot: () => state.activeWorkspace,
+                        onFileSelected: (relativePath) => {
+                            if (state.client === null)
+                                return;
+                            void showWorkspaceFilePreview(dom.activityPanel, state.client, relativePath);
                         },
                     });
                     mountLlmSettingsPanel(dom.settingsBody, {
@@ -1306,6 +1470,7 @@ export function mountCoworkApp(root) {
                         onSettingsUpdated: (view) => {
                             state.settings = view;
                             state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
                         onConnectionTestResult: (ok) => {
@@ -1316,13 +1481,14 @@ export function mountCoworkApp(root) {
                     mountSettingsView(dom.settingsBody, { client: dynamicClient });
                     mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
                         const enabled = skills.filter((skill) => skill.status === "enabled").length;
-                        dom.skillsButton.textContent = `Skills: ${enabled} bật`;
+                        setIconLabel(dom.skillsButton, "skills", `Skills: ${enabled} bật`);
                         dom.skillsButton.setAttribute("aria-label", `Mở Skills, ${enabled} đang bật`);
                     });
                     const permissions = createPermissionController({
                         client: dynamicClient,
                         container: dom.root,
                         onPending: (request) => {
+                            touchStreamActivity(state);
                             void capturePermissionBeforeSnapshot(state, request);
                             const target = request.action.targetPath !== undefined
                                 ? toRelativePath(request.action.targetPath, state.activeWorkspace)
@@ -1340,6 +1506,7 @@ export function mountCoworkApp(root) {
                             }
                         },
                         onDecision: ({ request, outcome, requestedDecision }) => {
+                            touchStreamActivity(state);
                             const target = request.action.targetPath !== undefined
                                 ? toRelativePath(request.action.targetPath, state.activeWorkspace)
                                 : request.action.description;

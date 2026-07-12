@@ -19,8 +19,10 @@ export interface ActivityPanelDom {
   readonly permissionHistory: HTMLElement;
   readonly outputFiles: HTMLElement;
   readonly inputFiles: HTMLElement;
+  readonly workspacePreview: HTMLElement;
   readonly preview: HTMLElement;
   readonly toggle: HTMLButtonElement;
+  readonly tabs: readonly HTMLButtonElement[];
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -84,6 +86,7 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
   planCard?.setAttribute("aria-label", "Kế hoạch");
 
   const panelTabs = el("div", "rp-tabs");
+  const tabButtons: HTMLButtonElement[] = [];
   const tabData = [
     ["Kế hoạch", "plan"],
     ["Hoạt động", "activity"],
@@ -96,6 +99,7 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
     button.dataset["section"] = key;
     if (key === "activity") button.classList.add("rp-tab--active");
     panelTabs.append(button);
+    tabButtons.push(button);
   }
   header?.after(panelTabs);
 
@@ -119,6 +123,7 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
 
   const preview = el("section", "file-preview");
   preview.hidden = true;
+  preview.dataset["panelTab"] = "review";
   preview.append(el("div", "file-preview__label", "Xem lại thay đổi"));
   preview.append(el("div", "file-preview__meta"));
   preview.append(el("pre", "file-preview__body"));
@@ -129,12 +134,60 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
   const insertBefore = outputSection ?? null;
   rightPanel.insertBefore(permSection, insertBefore);
 
+  planCard?.setAttribute("data-panel-tab", "plan");
+  timelineSection.dataset["panelTab"] = "activity";
+  permSection.dataset["panelTab"] = "activity";
+  outputSection?.setAttribute("data-panel-tab", "files");
+  inputSections[1]?.setAttribute("data-panel-tab", "files");
+  const workspacePreview = el("section", "file-preview file-preview--workspace");
+  workspacePreview.dataset["panelTab"] = "files";
+  workspacePreview.hidden = true;
+  workspacePreview.append(el("div", "file-preview__label", "Tệp workspace"));
+  workspacePreview.append(el("div", "file-preview__meta"));
+  workspacePreview.append(el("pre", "file-preview__body"));
+  const workspaceActions = el("div", "file-preview__actions");
+  workspacePreview.append(workspaceActions);
+  inputSections[1]?.after(workspacePreview);
+
+  const activateTab = (key: string): void => {
+    for (const button of tabButtons) {
+      button.classList.toggle("rp-tab--active", button.dataset["section"] === key);
+      button.setAttribute("aria-selected", button.dataset["section"] === key ? "true" : "false");
+    }
+    for (const section of rightPanel.querySelectorAll<HTMLElement>("[data-panel-tab]")) {
+      const inactive = section.dataset["panelTab"] !== key;
+      const unloadedWorkspacePreview =
+        section.classList.contains("file-preview--workspace") && !section.classList.contains("file-preview--loaded");
+      section.hidden = inactive || unloadedWorkspacePreview;
+    }
+  };
+  for (const button of tabButtons) {
+    button.addEventListener("click", () => activateTab(button.dataset["section"] ?? "activity"));
+  }
+  activateTab("activity");
+
   toggle.addEventListener("click", () => {
     const collapsed = rightPanel.classList.toggle("right-panel--collapsed");
     toggle.textContent = collapsed ? "Mở rộng" : "Thu gọn";
   });
 
-  return { root: rightPanel, plan, timeline, permissionHistory, outputFiles, inputFiles, preview, toggle };
+  return {
+    root: rightPanel,
+    plan,
+    timeline,
+    permissionHistory,
+    outputFiles,
+    inputFiles,
+    workspacePreview,
+    preview,
+    toggle,
+    tabs: tabButtons,
+  };
+}
+
+export function activateActivityPanelTab(dom: ActivityPanelDom, key: "plan" | "activity" | "files" | "review"): void {
+  const tab = dom.tabs.find((button) => button.dataset["section"] === key);
+  tab?.click();
 }
 
 export function renderActivityPanel(
@@ -259,6 +312,7 @@ function formatReviewBody(review: FileReviewArtifact): string {
 }
 
 export function showFileReview(dom: ActivityPanelDom, review: FileReviewArtifact): void {
+  activateActivityPanelTab(dom, "review");
   const meta = dom.preview.querySelector(".file-preview__meta") as HTMLElement;
   const body = dom.preview.querySelector(".file-preview__body") as HTMLElement;
   const actions = dom.preview.querySelector(".file-preview__actions") as HTMLElement;
@@ -286,6 +340,43 @@ export function showFileReview(dom: ActivityPanelDom, review: FileReviewArtifact
   actions.append(copyBtn);
 }
 
+export async function showWorkspaceFilePreview(
+  dom: ActivityPanelDom,
+  client: ServiceClient,
+  relativePath: string,
+): Promise<void> {
+  activateActivityPanelTab(dom, "files");
+  const meta = dom.workspacePreview.querySelector(".file-preview__meta") as HTMLElement;
+  const body = dom.workspacePreview.querySelector(".file-preview__body") as HTMLElement;
+  const actions = dom.workspacePreview.querySelector(".file-preview__actions") as HTMLElement;
+  dom.workspacePreview.classList.add("file-preview--loaded");
+  dom.workspacePreview.hidden = false;
+  meta.replaceChildren(el("p", "", relativePath));
+  body.textContent = "Đang tải xem trước...";
+  actions.replaceChildren();
+  const copyBtn = el("button", "file-preview__copy", "Sao chép relative path") as HTMLButtonElement;
+  copyBtn.type = "button";
+  copyBtn.addEventListener("click", () => {
+    void navigator.clipboard.writeText(relativePath);
+  });
+  actions.append(copyBtn);
+  try {
+    const result = await client.previewWorkspaceFile(relativePath);
+    if (result.kind === "binary") {
+      body.textContent = "Chưa hỗ trợ xem trước loại tệp này.";
+      return;
+    }
+    if (result.kind === "missing") {
+      body.textContent = "Không tìm thấy tệp trong workspace.";
+      return;
+    }
+    const suffix = result.truncated ? "\n\n[Đã cắt bớt — tệp lớn hơn giới hạn xem trước 64 KiB]" : "";
+    body.textContent = `${result.content ?? ""}${suffix}`;
+  } catch (error) {
+    body.textContent = error instanceof Error ? error.message : "Không tải được xem trước.";
+  }
+}
+
 /** @deprecated Use showFileReview when a persisted artifact exists. */
 export async function showFilePreview(
   dom: ActivityPanelDom,
@@ -297,6 +388,7 @@ export async function showFilePreview(
     showFileReview(dom, review);
     return;
   }
+  activateActivityPanelTab(dom, "files");
   const body = dom.preview.querySelector(".file-preview__body") as HTMLElement;
   dom.preview.hidden = false;
   if (change.operation === "delete") {

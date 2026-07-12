@@ -15,15 +15,21 @@ export type ProductIconName =
   | "code"
   | "conversation"
   | "workspace"
+  | "folder"
+  | "file"
   | "skills"
   | "attachment"
+  | "search"
+  | "refresh"
   | "file-create"
   | "file-modify"
   | "file-delete"
   | "permission"
   | "settings"
   | "activity"
-  | "panel";
+  | "panel"
+  | "expand"
+  | "collapse";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -37,8 +43,12 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   code: ["M9 7 5 12l4 5M15 7l4 5-4 5", "M13 5l-2 14"],
   conversation: ["M5 6h14v9H9l-4 4V6Z"],
   workspace: ["M4 7h7l2 2h7v9H4V7Z"],
+  folder: ["M4 7h6l2 2h8v9H4V7Z"],
+  file: ["M7 4h7l4 4v12H7V4Z", "M14 4v5h5"],
   skills: ["M12 4l2.2 4.5 4.8.7-3.5 3.4.8 4.8L12 15.2 7.7 17.4l.8-4.8L5 9.2l4.8-.7L12 4Z"],
   attachment: ["M8 12l5.8-5.8a3 3 0 1 1 4.2 4.2L10.8 17.6a4 4 0 1 1-5.6-5.6l7-7"],
+  search: ["M10.5 18a7.5 7.5 0 1 1 5.3-2.2L20 20"],
+  refresh: ["M20 6v5h-5", "M4 18v-5h5", "M18 9a6 6 0 0 0-10-3L4 10M6 15a6 6 0 0 0 10 3l4-4"],
   "file-create": ["M7 4h7l3 3v13H7V4Z", "M14 4v4h4M12 10v6M9 13h6"],
   "file-modify": ["M7 4h7l3 3v13H7V4Z", "M14 4v4h4M10 15l5-5 2 2-5 5h-2v-2Z"],
   "file-delete": ["M7 7h10M10 7V5h4v2M9 10l1 8M15 10l-1 8M8 7l1 13h6l1-13"],
@@ -46,6 +56,8 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z", "M4 12h3M17 12h3M12 4v3M12 17v3M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 6.3l-2.1 2.1M8.4 15.6l-2.1 2.1"],
   activity: ["M5 12h3l2-5 4 10 2-5h3"],
   panel: ["M4 5h16v14H4V5Z", "M14 5v14"],
+  expand: ["M9 6l6 6-6 6"],
+  collapse: ["M6 9l6 6 6-6"],
 });
 
 export function createProductIcon(name: ProductIconName, label?: string): SVGSVGElement {

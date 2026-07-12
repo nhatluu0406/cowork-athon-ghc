@@ -116,6 +116,38 @@ test("setActiveWorkspace PUTs the validated root to the settings active-workspac
   }
 });
 
+test("listWorkspaceChildren GETs the typed workspace list route", async () => {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const prev = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    return {
+      json: async () => ({
+        protocol: BOUNDARY_PROTOCOL_VERSION,
+        ok: true,
+        data: {
+          tree: {
+            rootName: "repo",
+            parentPath: "src",
+            entries: [{ name: "main.ts", relativePath: "src/main.ts", kind: "file", extension: ".ts" }],
+            truncated: false,
+            limit: 50,
+          },
+        },
+      }),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const client = createServiceClient(BASE, TOKEN);
+    const result = await client.listWorkspaceChildren("src", 50);
+    assert.equal(result.entries[0]?.relativePath, "src/main.ts");
+    assert.equal(calls[0]!.url, `${BASE}/v1/workspace/list?path=src&limit=50`);
+    assert.equal(calls[0]!.init?.method, undefined);
+  } finally {
+    globalThis.fetch = prev;
+  }
+});
+
 test("createSession POSTs workspace + model to /v1/session", async () => {
   const prev = globalThis.fetch;
   globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
