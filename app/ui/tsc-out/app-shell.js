@@ -4,6 +4,8 @@
  * Presentation + view-model only. Talks to the shell bridge and loopback service client.
  */
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
+import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
+import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, snapshotToPersisted, } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
@@ -19,11 +21,6 @@ function el(tag, className, text) {
     node.className = className;
     if (text !== undefined)
         node.textContent = text;
-    return node;
-}
-function icon(name) {
-    const node = el("span", "cg-icon", name);
-    node.setAttribute("aria-hidden", "true");
     return node;
 }
 function shortPath(path) {
@@ -184,47 +181,65 @@ function renderSessionList(dom, state, onSelect, onRename, onDelete) {
         dom.sessionList.append(item);
     }
 }
-function stepLabel(label) {
-    if (label === "Step started")
-        return "Đang thực hiện bước";
-    if (label === "Step finished")
-        return "Hoàn tất bước";
-    return label;
+function permissionActionLabel(kind) {
+    switch (kind) {
+        case "file_create":
+            return "Tạo tệp";
+        case "file_edit":
+            return "Sửa tệp";
+        case "file_delete":
+            return "Xóa tệp";
+        case "file_move":
+            return "Di chuyển tệp";
+        case "command_exec":
+            return "Chạy lệnh";
+        default:
+            return "Yêu cầu quyền";
+    }
 }
-function renderRightPanel(dom, view) {
-    dom.planSteps.replaceChildren();
-    if (view.todos.length === 0 && view.steps.length === 0 && view.toolCalls.length === 0) {
-        dom.planSteps.append(el("p", "panel-empty", "Chưa có hoạt động."));
+function rebuildActivitySnapshot(state) {
+    if (state.evEvents.length > 0) {
+        return buildActivitySnapshot(state.evEvents, state.activeWorkspace, state.permissionHistory, !state.activityLive);
     }
-    for (const todo of view.todos) {
-        const row = el("div", `plan-step plan-step--${todo.status}`);
-        row.append(el("span", "plan-step__dot"));
-        row.append(el("span", "plan-step__label", todo.title));
-        dom.planSteps.append(row);
+    if (state.lastView.sessionId.length > 0 && state.activityLive) {
+        return snapshotFromSessionView(state.lastView, state.activeWorkspace, state.permissionHistory, false);
     }
-    for (const step of view.steps) {
-        const row = el("div", `plan-step plan-step--${step.status}`);
-        row.append(el("span", "plan-step__dot"));
-        row.append(el("span", "plan-step__label", stepLabel(step.label) || "Đang phân tích"));
-        dom.planSteps.append(row);
+    return buildActivitySnapshot([], state.activeWorkspace, state.permissionHistory, !state.activityLive);
+}
+function refreshActivityUi(state, dom) {
+    state.activitySnapshot = rebuildActivitySnapshot(state);
+    renderActivityPanel(dom.activityPanel, state.activitySnapshot);
+}
+async function persistActivity(state) {
+    const id = state.conv.state.activeConversationId;
+    if (state.client === null || id === null || state.activitySnapshot === null)
+        return;
+    try {
+        await state.client.patchConversation(id, {
+            activity: snapshotToPersisted(state.activitySnapshot),
+        });
     }
-    for (const tool of view.toolCalls) {
-        const row = el("div", `plan-step plan-step--${tool.status}`);
-        row.append(el("span", "plan-step__dot"));
-        row.append(el("span", "plan-step__label", tool.summary ?? `Đang sử dụng công cụ: ${tool.toolName}`));
-        dom.planSteps.append(row);
+    catch {
+        // best effort
     }
-    dom.outputFiles.replaceChildren();
-    const mutations = view.fileMutations;
-    if (mutations.length === 0)
-        dom.outputFiles.append(el("p", "panel-empty", "Chưa có thay đổi tệp."));
-    for (const mutation of mutations) {
-        const row = el("div", "file-row");
-        row.append(icon("file"));
-        row.append(el("span", "file-row__name", `${mutation.operation}: ${shortPath(mutation.path)}`));
-        dom.outputFiles.append(row);
+}
+function loadActivityFromRecord(state, record) {
+    state.evEvents = [];
+    state.permissionHistory = [];
+    state.activityLive = false;
+    const persisted = persistedToSnapshot(record?.activity);
+    if (persisted !== null) {
+        state.activitySnapshot = persisted;
+        state.permissionHistory = [...persisted.permissionHistory];
+        return;
     }
-    dom.inputFiles.replaceChildren(el("p", "panel-empty", "Chưa khả dụng"));
+    state.activitySnapshot = null;
+}
+function resetLiveActivity(state) {
+    state.evEvents = [];
+    state.permissionHistory = [];
+    state.activityLive = true;
+    state.activitySnapshot = null;
 }
 function renderState(dom, state, handlers) {
     const phase = state.conv.state.runtimePhase;
@@ -256,7 +271,7 @@ function renderState(dom, state, handlers) {
     dom.newConversationButton.disabled =
         phase === "starting" || phase === "running" || state.activeWorkspace === null;
     renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
-    renderRightPanel(dom, state.lastView);
+    refreshActivityUi(state, dom);
 }
 async function refreshSettings(state, dom, handlers) {
     if (state.client === null)
@@ -301,6 +316,12 @@ function bindEvStream(state, dom, handlers, sessionId) {
         baseUrl: bootstrap.serviceBaseUrl,
         clientToken: bootstrap.clientToken,
         sessionId,
+        onEvent: (event) => {
+            if (!state.conv.shouldApplyStreamView(sessionId))
+                return;
+            state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
+            refreshActivityUi(state, dom);
+        },
         onView: (view) => {
             if (!state.conv.shouldApplyStreamView(sessionId))
                 return;
@@ -319,8 +340,13 @@ function bindEvStream(state, dom, handlers, sessionId) {
                     appendMessage(dom, "assistant", view.error.message);
                 }
             }
+            refreshActivityUi(state, dom);
             if (view.terminal !== null) {
-                void state.conv.recordAssistantMessage(view.text).then(() => renderState(dom, state, handlers));
+                state.activityLive = false;
+                void state.conv.recordAssistantMessage(view.text).then(async () => {
+                    await persistActivity(state);
+                    renderState(dom, state, handlers);
+                });
             }
             renderState(dom, state, handlers);
         },
@@ -403,6 +429,7 @@ async function switchConversation(state, dom, handlers, id) {
     state.assistantText = "";
     state.lastView = initialSessionView("");
     await state.conv.select(id);
+    loadActivityFromRecord(state, state.conv.state.activeRecord);
     renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
     restoreComposerDraft(state, dom, id);
     renderState(dom, state, handlers);
@@ -429,6 +456,7 @@ async function newConversation(state, dom, handlers) {
     await state.conv.createNew(state.activeWorkspace, model?.providerID, model?.modelID);
     clearTranscript(dom);
     setComposerText(dom.composerInput, "");
+    resetLiveActivity(state);
     renderState(dom, state, handlers);
     dom.composerInput.focus();
 }
@@ -442,6 +470,7 @@ async function sendPrompt(state, dom, readiness, handlers) {
     if (state.client === null || state.conv.state.activeConversationId === null)
         return;
     const runtimeId = await ensureRuntimeSession(state, dom, readiness, handlers);
+    resetLiveActivity(state);
     appendMessage(dom, "user", prompt);
     state.activeAssistant = appendMessage(dom, "assistant", "");
     setComposerText(dom.composerInput, "");
@@ -478,7 +507,12 @@ async function cancelRun(state, dom, handlers) {
         new Promise((resolve) => setTimeout(resolve, 8_000)),
     ]);
     stopStream(state);
+    state.activityLive = false;
+    if (state.activitySnapshot !== null) {
+        state.activitySnapshot = markRunningAsCancelled(state.activitySnapshot);
+    }
     await state.conv.setRuntimePhase("cancelled");
+    await persistActivity(state);
     state.lastView = { ...state.lastView, status: "cancelled", terminal: "cancelled" };
     renderState(dom, state, handlers);
 }
@@ -575,7 +609,7 @@ function createShell(root) {
     const outputFiles = el("div", "output-files");
     outputSection.append(outputFiles);
     const inputSection = el("section", "file-section");
-    inputSection.append(el("div", "file-section__label", "Tệp đầu vào"));
+    inputSection.append(el("div", "file-section__label", "Tệp đã đọc"));
     const inputFiles = el("div", "input-files");
     inputSection.append(inputFiles);
     const permissionSummary = el("p", "permission-summary", "Quyền: chưa có yêu cầu.");
@@ -628,9 +662,7 @@ function createShell(root) {
         newConversationButton,
         settingsModal,
         settingsBody,
-        planSteps,
-        outputFiles,
-        inputFiles,
+        activityPanel: createActivityPanel(rightPanel),
         executionStatus,
         permissionSummary,
         sidebar,
@@ -651,6 +683,10 @@ export function mountCoworkApp(root) {
         assistantText: "",
         activeAssistant: null,
         composerDrafts: new Map(),
+        evEvents: [],
+        permissionHistory: [],
+        activitySnapshot: null,
+        activityLive: false,
     };
     const handlers = {
         onSelect: (id) => {
@@ -718,8 +754,66 @@ export function mountCoworkApp(root) {
                         getBootstrap: () => getShellBridge().getBootstrap(),
                     });
                     mountSettingsView(dom.settingsBody, { client: dynamicClient });
-                    const permissions = createPermissionController({ client: dynamicClient, container: dom.root });
+                    const permissions = createPermissionController({
+                        client: dynamicClient,
+                        container: dom.root,
+                        onPending: (request) => {
+                            const target = request.action.targetPath !== undefined
+                                ? toRelativePath(request.action.targetPath, state.activeWorkspace)
+                                : request.action.description;
+                            const entry = permissionEntryFromDecision({
+                                requestId: request.requestId,
+                                actionLabel: permissionActionLabel(request.action.kind),
+                                targetSummary: target,
+                                decision: "pending",
+                                at: request.requestedAt,
+                            });
+                            if (!state.permissionHistory.some((p) => p.requestId === request.requestId)) {
+                                state.permissionHistory = [...state.permissionHistory, entry];
+                                refreshActivityUi(state, dom);
+                            }
+                        },
+                        onDecision: ({ request, outcome, requestedDecision }) => {
+                            const target = request.action.targetPath !== undefined
+                                ? toRelativePath(request.action.targetPath, state.activeWorkspace)
+                                : request.action.description;
+                            const decision = outcome.status !== "resolved"
+                                ? "denied"
+                                : requestedDecision === "deny"
+                                    ? "denied"
+                                    : outcome.scope === "always"
+                                        ? "allowed_always"
+                                        : "allowed_once";
+                            const entry = permissionEntryFromDecision({
+                                requestId: request.requestId,
+                                actionLabel: permissionActionLabel(request.action.kind),
+                                targetSummary: target,
+                                decision,
+                                at: request.requestedAt,
+                            });
+                            state.permissionHistory = [
+                                ...state.permissionHistory.filter((p) => p.requestId !== request.requestId),
+                                entry,
+                            ];
+                            refreshActivityUi(state, dom);
+                            void persistActivity(state);
+                        },
+                    });
                     permissions.start();
+                    dom.activityPanel.outputFiles.addEventListener("click", (event) => {
+                        const target = event.target;
+                        const row = target.closest(".file-row--clickable");
+                        if (row === null || state.client === null)
+                            return;
+                        const relativePath = row.dataset["relativePath"];
+                        const operation = row.dataset["operation"];
+                        if (relativePath === undefined || operation === undefined)
+                            return;
+                        const change = state.activitySnapshot?.fileChanges.find((c) => c.relativePath === relativePath && c.operation === operation);
+                        if (change === undefined)
+                            return;
+                        void showFilePreview(dom.activityPanel, state.client, change);
+                    });
                 }
             }
         },

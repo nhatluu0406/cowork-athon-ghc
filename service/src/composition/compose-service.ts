@@ -179,6 +179,10 @@ export async function createCoworkService(
       recent: recentWorkspaces,
       fsProbe: options.workspaceFsProbe ?? nodeFsProbe(),
       existsProbe: options.workspaceExistsProbe ?? nodeExistenceProbe,
+      activeWorkspaceRoot: () => {
+        const ws = settingsStore.activeWorkspace();
+        return ws?.rootPath;
+      },
     }),
     createCredentialRouter(credentialService, {
       allowEnvImport: options.allowEnvCredentialImport === true,

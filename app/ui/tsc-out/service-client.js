@@ -163,6 +163,7 @@ export function createServiceClient(baseUrl, clientToken) {
         },
         appendConversationMessage: async (id, role, text) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ role, text }) })).conversation,
         continueRuntimeSession: async (sessionId) => call(`/v1/session/${encodeURIComponent(sessionId)}/continue`, { method: "POST", body: "{}" }),
+        previewWorkspaceFile: async (relativePath) => (await call(`/v1/workspace/file-preview?path=${encodeURIComponent(relativePath)}`)).preview,
         listPendingPermissions: permission.listPendingPermissions,
         decidePermission: permission.decidePermission,
     };

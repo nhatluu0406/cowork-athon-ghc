@@ -5,7 +5,7 @@
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import { BadRequestError } from "../server/http-util.js";
 import type { ConversationStore } from "./store.js";
-import type { ConversationStatus } from "./types.js";
+import type { ConversationStatus, PersistedActivitySnapshot } from "./types.js";
 import { normalizeTitle } from "./title.js";
 
 export const CONVERSATIONS_PATH = "/v1/conversations";
@@ -111,6 +111,13 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
           }
           if (typeof rec["runtimeSessionId"] === "string") {
             const conversation = await store.setRuntimeSession(id, rec["runtimeSessionId"]);
+            return { status: 200, data: { conversation } };
+          }
+          if (rec["activity"] !== undefined && typeof rec["activity"] === "object") {
+            const conversation = await store.setActivity(
+              id,
+              rec["activity"] as PersistedActivitySnapshot,
+            );
             return { status: 200, data: { conversation } };
           }
           throw new ConversationRequestError("No supported patch fields.");

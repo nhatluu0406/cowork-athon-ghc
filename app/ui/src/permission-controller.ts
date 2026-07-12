@@ -14,7 +14,7 @@
  *    fabricated success.
  */
 
-import type { PermissionDecision, PermissionScope } from "@cowork-ghc/contracts";
+import type { EvEvent, PermissionDecision, PermissionScope } from "@cowork-ghc/contracts";
 import { sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { openPermissionModal, type PermissionModalHandle } from "./permission-modal.js";
 import type {
@@ -55,6 +55,14 @@ export interface PermissionControllerDeps {
   readonly timer?: PermissionControllerTimer;
   /** Visibility seam; defaults to the `document` visibility API. Tests inject a fake. */
   readonly visibility?: PermissionControllerVisibility;
+  /** Fired when a pending permission is shown (read-only history seed). */
+  readonly onPending?: (request: PendingPermissionView) => void;
+  /** Fired after a decision POST returns (resolved / already_resolved). */
+  readonly onDecision?: (input: {
+    readonly request: PendingPermissionView;
+    readonly outcome: PermissionDecisionResponse;
+    readonly requestedDecision: PermissionDecision;
+  }) => void;
 }
 
 export interface PermissionControllerHandle {
@@ -99,6 +107,7 @@ export function createPermissionController(
   let polling = false;
   // Guards against interleaving: a decision in flight must not be clobbered by a poll.
   let deciding = false;
+  let lastPending: PendingPermissionView | null = null;
   // The last failed-decision error, kept so a re-opened modal for the SAME request still shows
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
@@ -148,6 +157,9 @@ export function createPermissionController(
           : { requestId, decision: "deny" },
       );
       applyOutcome(outcome, requestedDecision);
+      if (lastPending !== null) {
+        deps.onDecision?.({ request: lastPending, outcome, requestedDecision });
+      }
     } catch (error) {
       // Never leak a raw stack/secret; show a scrubbed, recovery-oriented note AND remember it so
       // the follow-up refresh (which re-opens the still-pending modal) does not erase it.
@@ -182,6 +194,8 @@ export function createPermissionController(
       },
       { queueCount: waiting },
     );
+    lastPending = head;
+    deps.onPending?.(head);
   };
 
   async function refresh(): Promise<void> {

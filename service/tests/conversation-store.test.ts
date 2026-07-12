@@ -76,6 +76,25 @@ test("normalizeTitle enforces length and rejects empty", () => {
   assert.equal(normalizeTitle("  OK title  "), "OK title");
 });
 
+test("setActivity persists redacted activity snapshot on conversation", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cghc-conv-"));
+  const store = createConversationStore({ rootDir: dir, now: FIXED_NOW });
+  const created = await store.create({ workspacePath: "C:/ws" });
+  const activity = {
+    items: [{ id: "t1", kind: "terminal" as const, label: "Đã hoàn thành", status: "success" as const, at: FIXED_NOW(), seq: 1, historical: true }],
+    fileChanges: [{ id: "f1", operation: "create" as const, relativePath: "notes.txt", at: FIXED_NOW(), seq: 2, verified: true as const }],
+    permissionHistory: [],
+    readPaths: [],
+    terminalState: "completed" as const,
+  };
+  const updated = await store.setActivity(created.id, activity);
+  assert.equal(updated.activity?.fileChanges.length, 1);
+  const raw = await readFile(join(dir, `${created.id}.json`), "utf8");
+  assert.doesNotMatch(raw, /api[_-]?key/i);
+  assert.doesNotMatch(raw, /Bearer /);
+  await rm(dir, { recursive: true, force: true });
+});
+
 test("conversation records do not persist credential fields", async () => {
   const dir = await mkdtemp(join(tmpdir(), "cghc-conv-"));
   const store = createConversationStore({ rootDir: dir, now: FIXED_NOW });

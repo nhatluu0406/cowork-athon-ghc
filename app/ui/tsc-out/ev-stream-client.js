@@ -94,6 +94,7 @@ export function startEvStream(deps) {
     };
     const apply = (event) => {
         view = reduceEv(view, event);
+        deps.onEvent?.(event);
         emit();
     };
     /** Inject an honest disconnect into the view so the timeline shows error + recovery. */

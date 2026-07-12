@@ -42,6 +42,7 @@ export function createPermissionController(deps) {
     let polling = false;
     // Guards against interleaving: a decision in flight must not be clobbered by a poll.
     let deciding = false;
+    let lastPending = null;
     // The last failed-decision error, kept so a re-opened modal for the SAME request still shows
     // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
     let lastError = null;
@@ -86,6 +87,9 @@ export function createPermissionController(deps) {
                 ? { requestId, decision: "allow", scope: scope ?? "once" }
                 : { requestId, decision: "deny" });
             applyOutcome(outcome, requestedDecision);
+            if (lastPending !== null) {
+                deps.onDecision?.({ request: lastPending, outcome, requestedDecision });
+            }
         }
         catch (error) {
             // Never leak a raw stack/secret; show a scrubbed, recovery-oriented note AND remember it so
@@ -117,6 +121,8 @@ export function createPermissionController(deps) {
             onAllow: (scope) => void decide(head.requestId, true, scope),
             onDeny: () => void decide(head.requestId, false),
         }, { queueCount: waiting });
+        lastPending = head;
+        deps.onPending?.(head);
     };
     async function refresh() {
         if (deciding)
