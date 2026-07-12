@@ -7,15 +7,12 @@
 
 import type { AttachmentMetadata, ConversationMessage } from "./service-client.js";
 import {
-  CONTEXT_ENVELOPE_END,
-  CONTEXT_ENVELOPE_START,
   USER_REQUEST_END,
   USER_REQUEST_START,
-  assembleTranscriptContext,
   containsTransportArtifact,
-  type AssembledContext,
 } from "./transcript-context.js";
 import { DISPATCH_MAX_CHARS } from "./attachment-limits.js";
+import { planDispatchPrompt, type DispatchPlan } from "./dispatch-plan.js";
 
 export const ATTACHMENT_ENVELOPE_START = "<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>";
 export const ATTACHMENT_ENVELOPE_END = "<<<END_CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>";
@@ -102,7 +99,7 @@ export interface DispatchAssembly {
 
 /**
  * Assemble the full outbound dispatch: prior turns + attachments + current user request.
- * Budget is shared across all sections.
+ * @deprecated Prefer {@link planDispatchPrompt} for explicit inclusion/fail-fast semantics.
  */
 export function augmentDispatchPrompt(
   priorMessages: readonly ConversationMessage[],
@@ -110,37 +107,24 @@ export function augmentDispatchPrompt(
   userPrompt: string,
   maxChars: number = DISPATCH_MAX_CHARS,
 ): DispatchAssembly {
-  const trimmed = userPrompt.trim();
-  const userBlock = `${USER_REQUEST_START}\n${trimmed}\n${USER_REQUEST_END}`;
-  const fixedOverhead = userBlock.length + 4;
-
-  let remaining = maxChars - fixedOverhead;
-  if (remaining < 200) {
+  const plan = planDispatchPrompt(priorMessages, attachments, userPrompt, maxChars);
+  if (!plan.ok) {
+    const userBlock = `${USER_REQUEST_START}\n${userPrompt.trim()}\n${USER_REQUEST_END}`;
     return {
       text: userBlock,
       priorTruncated: false,
       attachmentTruncated: attachments.length > 0,
     };
   }
-
-  const priorBudget = Math.floor(remaining * 0.55);
-  const prior: AssembledContext = assembleTranscriptContext(priorMessages, priorBudget);
-  remaining -= prior.text.length > 0 ? prior.text.length + 2 : 0;
-
-  const attachmentAssembly = assembleAttachmentContext(attachments, remaining);
-  remaining -= attachmentAssembly.text.length > 0 ? attachmentAssembly.text.length + 2 : 0;
-
-  const parts: string[] = [];
-  if (prior.text.length > 0) parts.push(prior.text);
-  if (attachmentAssembly.text.length > 0) parts.push(attachmentAssembly.text);
-  parts.push(userBlock);
-
   return {
-    text: parts.join("\n\n"),
-    priorTruncated: prior.truncated,
-    attachmentTruncated: attachmentAssembly.truncated,
+    text: plan.text,
+    priorTruncated: plan.priorTruncated,
+    attachmentTruncated: false,
   };
 }
+
+/** Explicit dispatch plan with per-file inclusion status (fail-fast on omission). */
+export { planDispatchPrompt, type DispatchPlan };
 
 /** Re-export for transport artifact detection in assistant output sanitization. */
 export { containsTransportArtifact };

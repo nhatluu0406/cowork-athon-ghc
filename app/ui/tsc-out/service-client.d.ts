@@ -93,6 +93,7 @@ export interface ConversationMessage {
     readonly attachments?: readonly AttachmentMetadata[];
 }
 /** Metadata persisted for workspace text-file attachments (no raw content). */
+export type AttachmentInclusionStatus = "selected" | "included" | "rejected" | "omitted_by_budget";
 export interface AttachmentMetadata {
     readonly relativePath: string;
     readonly filename: string;
@@ -101,6 +102,8 @@ export interface AttachmentMetadata {
     readonly contentHash: string;
     readonly truncated: boolean;
     readonly maxBytesApplied: number;
+    readonly inclusionStatus?: AttachmentInclusionStatus;
+    readonly inclusionReason?: string;
 }
 export type AttachmentReadResult = {
     readonly ok: true;

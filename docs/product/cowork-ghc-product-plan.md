@@ -57,7 +57,7 @@ parity hoàn chỉnh và không clone trực tiếp bất kỳ sản phẩm nào
 | Context isolation | Đã verify bằng packaged app | `e40dada` và các packaged tests liên quan verify không leak wrapper trong flow mới. |
 | Tool activity | Đã verify bằng packaged app, UX mới nhất chỉ partial-live | Activity timeline đã có; UX pass mới nhất không chạy live tool flow. |
 | File changes | Đã verify bằng automation và packaged app, UX còn partial | Có file-change panel/current preview; chưa có full before/after diff. |
-| Attachments Phase 1 | Đã verify bằng packaged app nhưng còn blocker | Text files trong workspace, chips, errors, metadata, no raw-content persistence; budget honesty và secret-like policy còn blocker. |
+| Attachments Phase 1 | Đã verify bằng packaged app; còn follow-up bắt buộc trước Skills. | Text files, chips, metadata, dispatch preflight honesty, secret-like blocking; folder/image/PDF/Office chưa có. |
 | Skills | Chưa bắt đầu | Chưa available cho end user trong GUI. |
 | Installer/release | Verify một phần | Có packaged POC; chưa hoàn tất installed artifact/keyring/native picker/live GUI release lifecycle. |
 | Web / Next.js | Deferred | Không bắt đầu hiện tại. |
@@ -104,10 +104,6 @@ UI hiện ở mức **functional POC quality**, chưa phải release-candidate p
 
 ## 6. Product gaps đã biết
 
-- Attachment dispatch-budget honesty: UI chưa nói file accepted nào thật sự được included,
-  omitted hoặc truncated trong dispatch prompt budget 12k.
-- Secret-like attachments: `.env` đang được accepted không warning; `.pem`, `.key` và
-  credential-like files cần policy.
 - Missing-credential preflight: packaged UI mới nhất cho phép send rồi rơi vào trạng thái
   running/not-connected không rõ recovery.
 - Settings modal focus: modal mở ra nhưng focus quan sát được vẫn nằm ở `BODY`.
@@ -255,7 +251,53 @@ Exit acceptance: install, upgrade, uninstall, keyring, workspace state và clean
 | Template/workflow replay | Cần Product Owner quyết định; không phải prerequisite cho Skills foundation trừ khi được chọn rõ. |
 | User-visible durable audit | Cần Product Owner quyết định; local/internal audit expectation vẫn quan trọng. |
 
-## 10. Operating model phát triển
+## 10. Định hướng trải nghiệm workspace sau MVP
+
+Các capability dưới đây là hướng phát triển dài hạn. **Không** nằm trong scope slice hiện tại
+(Attachment Honesty / Provider Readiness) và không khóa layout UI cuối.
+
+### Minimal Workspace Navigator
+
+- Danh sách file/folder trong active workspace.
+- Icon loại file.
+- Search/filter.
+- Recent và changed files.
+- Không biến ứng dụng thành IDE clone.
+
+### Rich File Viewing
+
+- Xem text/Markdown/source.
+- Image và PDF.
+- Office preview khi có pipeline phù hợp.
+- Open file bằng ứng dụng mặc định của Windows.
+- Contextual preview/diff cho file agent tạo hoặc sửa.
+
+Capability quan trọng hơn layout cuối — không bắt buộc phải là một tab `Preview` riêng.
+
+### Direct Editing
+
+- Text/Markdown/source editing trước.
+- Save/discard/undo.
+- Dirty state.
+- Conflict detection khi file thay đổi bên ngoài.
+- Office embedded editing **chưa cam kết**.
+
+### Office Direction
+
+Phân biệt rõ:
+
+```text
+Office context/read
+Office preview
+Open in native Office app
+AI-assisted modification
+Embedded manual Office editing
+```
+
+Chỉ ba capability đầu và **AI-assisted modification** là hướng phát triển có thể cân nhắc sau.
+Cowork GHC **không** cam kết xây một Office editor hoàn chỉnh trong sản phẩm.
+
+## 11. Operating model phát triển
 
 - Một implementation Agent làm việc trên tree tại một thời điểm.
 - Cursor là implementation Agent tiếp theo sau handoff documentation này.
@@ -266,7 +308,7 @@ Exit acceptance: install, upgrade, uninstall, keyring, workspace state và clean
 - GUI polish lớn để gần cuối, sau khi functional truth đã vững.
 - Không push remote trừ khi Product Owner yêu cầu.
 
-## 11. Reconcile các plan Claude cũ
+## 12. Reconcile các plan Claude cũ
 
 | Requirement / theme từ plan cũ | Phân loại | Cách xử lý trong plan active |
 |---|---|---|
