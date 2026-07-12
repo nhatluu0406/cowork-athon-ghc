@@ -39,6 +39,11 @@ plaintext. Khi runtime cần key, key được inject vào child process qua env
 Provider/model là cấu hình thay thế được. DeepSeek là endpoint đầu tiên đã verify, không phải ràng buộc domain.
 Custom base URL đi qua policy kiểm soát SSRF ở service.
 
+**Readiness model** (`provider-readiness.ts` UI + `assessProviderReadiness` service): phân tách local service,
+workspace, provider configuration, credential presence, local URL validity, connectivity test result, và runtime phase.
+`assessSendPreflight` / `assertCreatePrerequisites` chặn tạo runtime turn khi thiếu prerequisite; không thay thế
+connectivity probe cho API key/model invalid sau request.
+
 ## Boundary process lifecycle
 
 Electron shell là owner của local service và runtime child. Shutdown chỉ dừng process do Cowork GHC sở hữu, không

@@ -263,6 +263,7 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 - Actual behavior: `minimal-packaged-smoke.mjs` timed out waiting for local service because it inherited `ELECTRON_RUN_AS_NODE=1`; manual relaunch after removing it worked.
 - Evidence: `01-clean-profile-launch.png`; startup trace contained `settings_only_ready` after env removal.
 - Recommendation: Update packaged verification scripts/runbook to delete `ELECTRON_RUN_AS_NODE` before spawning packaged Electron. Application code change is not required unless the product wants a startup hard-assert.
+- **Resolution (2026-07-12):** `packagedChildEnv()` strips `ELECTRON_RUN_AS_NODE`; `provider-readiness-packaged.mjs` journey I PASS.
 - Timing: Now
 - Verification source: Observed directly in packaged UI plus launch trace.
 
@@ -275,6 +276,7 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 - Actual behavior: Visual screenshot mainly reads correctly, but DOM text includes `Đây là lịch sử đã lưu...` and `Tiếp tục cuộc trò chuyện này` in the empty state.
 - Evidence: `01-clean-profile-launch.png`.
 - Recommendation: Treat as functional UX/a11y cleanup: ensure hidden continuation controls are not announced or reachable in first-run empty state.
+- **Resolution (2026-07-12):** Continuation banner removed from DOM until terminal historical conversation selected; `provider-readiness-packaged.mjs` journey G PASS.
 - Timing: Before Release Candidate
 - Verification source: Observed directly in packaged UI/DOM.
 
@@ -299,6 +301,7 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 - Actual behavior: Settings modal opens with useful content, but focus was not placed inside the modal.
 - Evidence: `08-provider-settings-missing-credential.png`.
 - Recommendation: Add a focused keyboard/accessibility pass for settings modal focus placement and close/escape behavior.
+- **Resolution (2026-07-12):** `modal-focus.ts` focus trap + Escape; `provider-readiness-packaged.mjs` journey F PASS.
 - Timing: Before Release Candidate
 - Verification source: Observed directly in packaged UI/DOM.
 
@@ -347,6 +350,7 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 - Actual behavior: UI moved into an unclear in-progress/disconnected state.
 - Evidence: `08b-missing-credential-send-error.png`, `09-narrow-high-dpi-layout.png`.
 - Recommendation: Treat missing credential as a preflight readiness blocker before creating/running a conversation, or surface a terminal error with a direct settings action and recovery.
+- **Resolution (2026-07-12):** `assessSendPreflight` + service `assessProviderReadiness`; composer preflight banner + settings CTA; journeys B–C PASS.
 - Timing: Now
 - Verification source: Observed directly in packaged UI.
 
@@ -359,6 +363,7 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 - Actual behavior: Chat gets priority, activity appears unavailable/zero-width in the measured layout.
 - Evidence: `09-narrow-high-dpi-layout.png`, `09b-activity-panel-collapsed.png`.
 - Recommendation: Before RC, decide whether narrow desktop needs a visible activity toggle/drawer. This is functional only if common laptop/DPI sizes hide activity without recovery.
+- **Resolution (2026-07-12):** `.activity-mobile-toggle` opens drawer; journey H PASS.
 - Timing: Before Release Candidate
 - Verification source: Observed directly in packaged UI/DOM.
 
@@ -366,8 +371,13 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 
 | Prior finding | Status after packaged pass | Notes |
 |---|---|---|
-| Attachment dispatch-budget omission | Partially confirmed | Code path confirmed; not sent to live model. UI still does not expose included/omitted files. |
-| `.env` allowed without warning | Confirmed by packaged UI | Fake `.env` accepted; no warning. |
+| Attachment dispatch-budget omission | Resolved (attachment honesty slice) | UI preflight fail-fast + inclusion metadata; packaged journeys PASS. |
+| `.env` allowed without warning | Resolved (attachment honesty slice) | Secret-like policy blocks before read. |
+| Missing-credential preflight | Resolved (provider readiness slice) | `provider-readiness-packaged.mjs` B–C PASS. |
+| Settings modal focus | Resolved (provider readiness slice) | Journey F PASS. |
+| Empty-state continuation DOM | Resolved (provider readiness slice) | Journey G PASS. |
+| ELECTRON_RUN_AS_NODE launch hygiene | Resolved (provider readiness slice) | `packagedChildEnv`; journey I PASS. |
+| Narrow activity affordance | Resolved (provider readiness slice) | Journey H PASS. |
 | File-level truncation unreachable | Still code-only inference | Oversized file is rejected with error chip; no truncation observed. |
 | HEAD wording in current-status | Superseded | Docs consolidation removed the moving HEAD field and lists verified slice commits instead. |
 | L9 status wording | Superseded | Docs consolidation now states that partial packaged evidence exists while full L9 / release-candidate PASS is incomplete. |
@@ -382,9 +392,9 @@ Scope note: this pass directly observed the packaged renderer through CDP screen
 3. Preview priority: tool-created/modified file preview first; attachment input preview second; arbitrary workspace file preview last/defer.
 4. Before/after diff: before RC if file modification remains a core user-facing workflow; before Skills only if Skills will increase autonomous file edits.
 5. `.env` and secret-like attachment policy: block by default now, with later explicit override if Product Owner wants power-user behavior.
-6. Functional UX before Skills: attachment budget honesty, secret-file blocking, missing-credential preflight, settings modal focus, clearer hidden/continuation state.
+6. Functional UX before Skills: **Phase A closed** — attachment honesty, secret blocking, provider readiness preflight, settings focus, continuation empty-state, narrow activity toggle.
 7. Visual polish to leave until final: icons beyond file/status clarity, decorative animation, color/spacing refinement.
-8. Next slice: Attachment honesty and safety remains the best next slice, with missing-credential preflight folded into release-gap hardening if it is small.
+8. Next slice: **Skills Foundation** (do not start until Product Owner approves).
 
 ### Not Verified In This Pass
 

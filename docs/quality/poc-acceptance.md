@@ -45,6 +45,7 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Last-active conversation on relaunch | PASS | `GET /v1/conversations/last-active` + UI auto-select |
 | Workspace text file attachments (Phase 1) | PASS | `attachments-packaged.mjs` journeys A–J; `service/tests/workspace-attachment-read.test.ts` |
 | Attachment dispatch honesty + secret-file safety | PASS | `attachment-honesty-packaged.mjs` journeys A–J; `dispatch-plan.test.ts`, `attachment-secret-policy.test.ts` |
+| Provider readiness + functional UX preflight | PASS | `provider-readiness-packaged.mjs` journeys A–J; `provider-readiness.test.ts`, service `assessProviderReadiness` |
 
 ## Regression không-live
 
@@ -64,6 +65,7 @@ node tools/verify/minimal-packaged-smoke.mjs
 node tools/verify/multi-turn-context-packaged.mjs
 node tools/verify/attachments-packaged.mjs
 node tools/verify/attachment-honesty-packaged.mjs
+node tools/verify/provider-readiness-packaged.mjs
 node tools/verify/multi-turn-tool-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 ```
