@@ -9,7 +9,7 @@ handoff:
   note: "L6 COMPLETED, gate PASS. CGHC-028 packaged POC acceptance PASS (permission approve/deny, clean-profile onboarding, provider recovery, interruption/relaunch, lifecycle init/stop). Template/session-resume and L9 full regression remain for L7+. Do NOT auto-start L7."
 git:
   is_repo: true
-  head: a3f259974fe54a8c39f5bdf4524a388d5db982f2
+  head: 8df3d59248df46998d8a0029a8a08e648932bf32
   verified_commits:
     - hash: 3856a84
       scope: "Slice 1 packaged service readiness and authenticated health verification"
@@ -25,7 +25,8 @@ git:
       scope: "HuyTT12 GUI presentation integrated over verified Cowork GHC core; packaged GUI regression"
     - hash: 8e6ea21
       scope: "HuyTT12 application shell integrated into app/ui"
-  note: "HEAD pending commit test(release): complete packaged L6 acceptance."
+    - hash: 8df3d59
+      scope: "L6 packaged acceptance: permission bridge, slices 5A-5E, tools/verify/l6-packaged.mjs PASS"
 toolchain:
   node: "v24.15.0"
   npm: "11.17.0"
