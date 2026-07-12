@@ -27,6 +27,7 @@ Mục tiêu: người dùng quản lý, mở lại và tiếp tục phiên một
 - ~~Tạo phiên tiếp nối khi OpenCode session terminal.~~ **DONE**
 - ~~Trạng thái: running, completed, cancelled, errored, interrupted.~~ **DONE**
 - ~~Xóa metadata session (không xóa workspace/credential).~~ **DONE**
+- ~~**Multi-turn trong cùng Cowork conversation** — runtime turn liên kết, context bounded, relaunch restore.~~ **DONE** (2026-07-12) — `multi-turn-packaged.mjs`
 - Template re-run / workflow replay — **chưa** (ngoài scope slice này).
 - Packaged live journey đầy đủ — deterministic trong `session-management-packaged.mjs`; live inference tùy chọn (`COWORK_SESSION_LIVE=1`).
 

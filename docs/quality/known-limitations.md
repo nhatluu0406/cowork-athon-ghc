@@ -14,20 +14,22 @@ updated_at: "2026-07-12"
 - Activity lịch sử không replay animation live khi mở lại conversation.
 - OpenCode `permission.asked` / `permission.replied` không map sang timeline — quyền qua API Cowork + modal.
 
-## Session
+## Session & multi-turn
 
-- **Tiếp tục** (cùng OpenCode session ID) chỉ khả dụng khi runtime session chưa terminal và service có thể `continueSession`. Sau relaunch app, thường cần **tạo phiên tiếp nối** để gửi prompt mới.
-- POC vẫn **single-turn per OpenCode runtime session** — re-prompt cùng session sau terminal trả HTTP 409; UI tạo runtime session mới liên kết cùng Cowork conversation. Gửi tin nhắn thứ hai trong cùng conversation cần `startContinuation` + session mới; đôi khi gặp lỗi service tạm thời (`Internal boundary error`) — dùng cuộc trò chuyện mới nếu cần.
-- Trạng thái `completed_without_final_message` hiển thị khi tool hoàn tất nhưng runtime không trả text cuối; UI dùng fallback tiếng Việt, không fabricate model output.
-- Grace window ngắn (~120ms service, ~200ms UI) cho token đến sau `session.idle`; không phải sleep tùy ý dài.
-- Không hỗ trợ nhiều runtime session chạy song song.
+- **Một OpenCode runtime session = một lượt** — sau terminal, Cowork GHC tạo runtime turn mới liên kết cùng conversation; không re-prompt session đã terminal (OpenCode trả 409).
+- **Reuse** cùng OpenCode session chỉ khi `canPrompt === true` và session chưa terminal.
+- **Context continuity** dùng khối transcript bounded (~12k ký tự), deterministic — không phải native OpenCode `/continue`; có thể cắt bớt lượt cũ khi vượt budget.
+- **Một runtime execution active** — không chạy song song nhiều OpenCode session cho cùng conversation.
+- Sau relaunch app, conversation gần nhất được chọn lại; transcript hiển thị ngay; không tự khởi động OpenCode cho đến khi user gửi tin.
+- Trạng thái `completed_without_final_message` khi tool hoàn tất nhưng runtime không trả text cuối; UI dùng fallback tiếng Việt.
+- Grace window ngắn (~120ms service, ~200ms UI) cho token sau `session.idle`.
 - Template re-run / workflow replay chưa có.
 - Rename/delete qua context menu (chuột phải) — chưa có menu riêng trong sidebar.
 
 ## Release
 
 - L9 release verification đầy đủ chưa bắt đầu.
-- Regression packaged đầy đủ (permission + file + interruption) không chạy mặc định sau mỗi thay đổi nhỏ — dùng `verify:release` + `session-management-packaged.mjs`.
+- Packaged live deny/cancel recovery trong **cùng** conversation: unit test + `conversation-finalization-packaged.mjs` (conversation riêng cho deny); chưa có journey live riêng cho deny→next-turn trong `multi-turn-packaged.mjs`.
 
 ## Tính năng chưa có
 

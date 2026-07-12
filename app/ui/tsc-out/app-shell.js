@@ -7,7 +7,7 @@ import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/ex
 import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
 import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, snapshotToPersisted, } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
-import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
+import { createConversationManager, formatConversationMeta, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
 import { startEvStream } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
@@ -15,6 +15,8 @@ import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { planRuntimeTurn } from "./runtime-turn-planner.js";
+import { augmentPromptWithContext } from "./transcript-context.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
@@ -257,10 +259,8 @@ function renderState(dom, state, handlers) {
     dom.chatSub.textContent =
         record?.status === "interrupted"
             ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
-            : needsContinuation(record)
-                ? "Mở lại lịch sử. Gửi tin nhắn mới cần phiên runtime tiếp nối."
-                : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
-    const showContinuation = needsContinuation(record) && phase !== "running" && phase !== "starting";
+            : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
+    const showContinuation = record?.status === "interrupted" && phase !== "running" && phase !== "starting";
     dom.continuationBanner.hidden = !showContinuation;
     dom.continuationButton.hidden = !showContinuation;
     dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
@@ -405,6 +405,12 @@ async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
         : mapTerminalToRuntimePhase(terminal);
     await state.conv.setRuntimePhase(phase);
     await state.conv.recordAssistantMessage(resolved.text);
+    const turnStatus = terminal === "completed"
+        ? "completed"
+        : terminal === "cancelled" || terminal === "denied"
+            ? "cancelled"
+            : "errored";
+    await state.conv.completeRuntimeTurn(sessionId, turnStatus);
     await persistActivity(state);
     state.finalizingTurn = false;
     renderState(dom, state, handlers);
@@ -478,25 +484,17 @@ async function ensureRuntimeSession(state, dom, readiness, handlers) {
     const record = state.conv.state.activeRecord;
     if (record === null)
         throw new Error("Chưa chọn cuộc trò chuyện.");
-    if (state.conv.state.runtimeSessionId !== null && !needsContinuation(record)) {
-        const runtimeId = state.conv.state.runtimeSessionId;
-        try {
-            const continued = await state.client.continueRuntimeSession(runtimeId);
-            if (continued.canPrompt) {
-                state.lastView = continued.view;
-                bindEvStream(state, dom, handlers, runtimeId);
-                state.conv.state.runtimePhase = "ready";
-                return runtimeId;
-            }
-        }
-        catch {
-            // Runtime session unavailable — create a new one below.
-        }
+    const plan = await planRuntimeTurn(state.client, record);
+    if (plan.action === "reuse") {
+        state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
+        bindEvStream(state, dom, handlers, plan.runtimeSessionId);
+        state.conv.state.runtimePhase = "ready";
+        return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
     }
     state.conv.state.runtimePhase = "starting";
     renderState(dom, state, handlers);
     const client = await ensureLive(state, readiness);
-    if (needsContinuation(record)) {
+    if (record.runtimeSessionId !== null) {
         await state.conv.startContinuation();
     }
     const meta = await client.createSession({
@@ -509,7 +507,7 @@ async function ensureRuntimeSession(state, dom, readiness, handlers) {
     state.conv.state.runtimePhase = "ready";
     bindEvStream(state, dom, handlers, meta.id);
     renderState(dom, state, handlers);
-    return meta.id;
+    return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
 }
 async function switchConversation(state, dom, handlers, id) {
     const currentId = state.conv.state.activeConversationId;
@@ -567,22 +565,28 @@ async function sendPrompt(state, dom, readiness, handlers) {
     }
     if (state.client === null || state.conv.state.activeConversationId === null)
         return;
-    const runtimeId = await ensureRuntimeSession(state, dom, readiness, handlers);
+    const priorMessages = state.conv.state.activeRecord?.messages ?? [];
+    const { runtimeSessionId, contextMessages } = await ensureRuntimeSession(state, dom, readiness, handlers);
     resetLiveActivity(state);
     appendMessage(dom, "user", prompt);
     state.activeAssistant = appendMessage(dom, "assistant", "");
     setComposerText(dom.composerInput, "");
     state.composerDrafts.delete(state.conv.state.activeConversationId);
     await state.conv.recordUserMessage(prompt);
+    await state.conv.markLastActive();
     state.conv.state.runtimePhase = "running";
     renderState(dom, state, handlers);
-    const result = await state.client.sendSessionMessage(runtimeId, prompt);
+    const dispatchText = contextMessages.length > 0 ? augmentPromptWithContext(contextMessages, prompt) : prompt;
+    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     if (!result.accepted) {
         if (result.reason === "session_completed") {
             await state.conv.startContinuation();
-            const retryId = await ensureRuntimeSession(state, dom, readiness, handlers);
-            const retry = await state.client.sendSessionMessage(retryId, prompt);
-            if (!retry.accepted) {
+            const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+            const retryText = retry.contextMessages.length > 0
+                ? augmentPromptWithContext(retry.contextMessages, prompt)
+                : prompt;
+            const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryText);
+            if (!second.accepted) {
                 await state.conv.setRuntimePhase("failed");
                 appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
             }
@@ -818,6 +822,7 @@ export function mountCoworkApp(root) {
         },
     };
     let featuresMounted = false;
+    let conversationRestored = false;
     let searchTimer = null;
     const dynamicClient = createDynamicClient(state);
     const readiness = createReadinessController({
@@ -834,7 +839,20 @@ export function mountCoworkApp(root) {
             dom.serviceDetail.textContent = copy.detail;
             if (readinessState.phase === "ready" && state.client !== null) {
                 void refreshSettings(state, dom, handlers);
-                void state.conv.refreshList().then(() => renderState(dom, state, handlers));
+                void state.conv.refreshList().then(async () => {
+                    if (!conversationRestored && state.conv.state.activeConversationId === null) {
+                        const lastId = await state.client.getLastActiveConversationId();
+                        const pick = lastId ?? state.conv.state.summaries[0]?.id ?? null;
+                        if (pick !== null) {
+                            await state.conv.select(pick);
+                            loadActivityFromRecord(state, state.conv.state.activeRecord);
+                            renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
+                            restoreComposerDraft(state, dom, pick);
+                        }
+                        conversationRestored = true;
+                    }
+                    renderState(dom, state, handlers);
+                });
                 if (!featuresMounted) {
                     featuresMounted = true;
                     mountWorkspacePicker(dom.sidebar.querySelector(".workspace-slot"), {

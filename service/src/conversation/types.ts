@@ -23,6 +23,14 @@ export interface ConversationMessage {
   readonly at: string;
 }
 
+/** One OpenCode runtime session linked to a Cowork conversation (a single turn). */
+export interface RuntimeTurnRecord {
+  readonly runtimeSessionId: string;
+  readonly startedAt: string;
+  readonly completedAt?: string;
+  readonly status: "running" | "completed" | "cancelled" | "errored";
+}
+
 /** Redacted activity metadata persisted for session reopen (no secrets / raw EV). */
 export interface PersistedActivitySnapshot {
   readonly items: readonly {
@@ -79,6 +87,8 @@ export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
   readonly activity?: PersistedActivitySnapshot;
+  /** Historical OpenCode runtime turns for this conversation (newest last). */
+  readonly runtimeTurns?: readonly RuntimeTurnRecord[];
 }
 
 export interface CreateConversationInput {
@@ -87,6 +97,20 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+}
+
+/** Atomic patch for conversation records (router applies all fields in one write). */
+export interface ConversationPatch {
+  readonly title?: string;
+  readonly status?: ConversationStatus;
+  readonly runtimeSessionId?: string | null;
+  readonly activity?: PersistedActivitySnapshot;
+  readonly registerRuntimeTurn?: RuntimeTurnRecord;
+  readonly completeRuntimeTurn?: {
+    readonly runtimeSessionId: string;
+    readonly status: RuntimeTurnRecord["status"];
+    readonly completedAt: string;
+  };
 }
 
 export interface AppendMessageInput {
