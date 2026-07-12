@@ -36,6 +36,7 @@ import {
   type ChildSpawner,
   type HealthProbe,
   type OpencodeProviderConfig,
+  LIVE_SESSION_PERMISSION_POLICY,
   type PortChecker,
   type ProcessTimesProbe,
   type ResolveInjections,
@@ -220,6 +221,7 @@ async function resolveProvider(
     envVar,
     models: [model],
     baseUrl,
+    permission: { ...LIVE_SESSION_PERMISSION_POLICY },
   };
   return { spec, providerConfig };
 }

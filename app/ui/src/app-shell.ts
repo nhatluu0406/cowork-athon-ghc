@@ -180,6 +180,12 @@ function renderSessionList(dom: AppDom, state: AppState): void {
   dom.sessionList.append(item);
 }
 
+function stepLabel(label: string): string {
+  if (label === "Step started") return "Đang thực hiện bước";
+  if (label === "Step finished") return "Hoàn tất bước";
+  return label;
+}
+
 function renderRightPanel(dom: AppDom, view: SessionView): void {
   dom.planSteps.replaceChildren();
   if (view.todos.length === 0 && view.steps.length === 0 && view.toolCalls.length === 0) {
@@ -194,7 +200,7 @@ function renderRightPanel(dom: AppDom, view: SessionView): void {
   for (const step of view.steps) {
     const row = el("div", `plan-step plan-step--${step.status}`);
     row.append(el("span", "plan-step__dot"));
-    row.append(el("span", "plan-step__label", step.label || "Đang phân tích"));
+    row.append(el("span", "plan-step__label", stepLabel(step.label) || "Đang phân tích"));
     dom.planSteps.append(row);
   }
   for (const tool of view.toolCalls) {
@@ -219,6 +225,7 @@ function renderRightPanel(dom: AppDom, view: SessionView): void {
 
 function renderState(dom: AppDom, state: AppState): void {
   dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
+  dom.workspaceLabel.title = state.activeWorkspace ?? "";
   dom.modelLabel.textContent = modelSummary(state.settings);
   dom.executionStatus.textContent = phaseLabel(state.sessionPhase);
   dom.composer.classList.toggle("is-running", state.sessionPhase === "running" || state.sessionPhase === "cancelling");
@@ -231,7 +238,19 @@ function renderState(dom: AppDom, state: AppState): void {
   dom.cancelButton.hidden = state.sessionPhase !== "running" && state.sessionPhase !== "cancelling";
   dom.cancelButton.disabled = state.sessionPhase !== "running";
   for (const button of dom.startButtons) {
-    button.disabled = state.sessionPhase === "starting" || state.sessionPhase === "running" || state.activeWorkspace === null;
+    const blocked =
+      state.sessionPhase === "starting" ||
+      state.sessionPhase === "running" ||
+      state.activeWorkspace === null ||
+      state.settings?.defaultModel === null ||
+      state.settings?.defaultModel === undefined;
+    button.disabled = blocked;
+    button.title =
+      state.activeWorkspace === null
+        ? "Chọn workspace trước"
+        : state.settings?.defaultModel === null || state.settings?.defaultModel === undefined
+          ? "Cấu hình provider và model trong Cài đặt"
+          : "";
   }
   renderSessionList(dom, state);
   renderRightPanel(dom, state.lastView);
@@ -314,7 +333,9 @@ async function startSession(
       if (view.terminal === "cancelled") state.sessionPhase = "cancelled";
       if (view.terminal === "errored" || view.terminal === "denied") {
         state.sessionPhase = "failed";
-        if (view.error?.message) appendMessage(dom, "assistant", view.error.message);
+        if (view.error?.message && view.text.trim().length === 0) {
+          appendMessage(dom, "assistant", view.error.message);
+        }
       }
       renderState(dom, state);
     },

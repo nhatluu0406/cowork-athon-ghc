@@ -5,7 +5,7 @@
  * {@link RuntimeReplyPort} so the runtime is never stranded. This is the concrete adapter that
  * turns a {@link PermissionReply} into the OpenCode POST:
  *   `POST {baseUrl}/permission/{requestID}/reply`  (default; requestId == the runtime permissionID)
- * with a body mapping the decision + scope to OpenCode's `{ response: "once" | "always" | "reject" }`.
+ * with a body mapping the decision + scope to OpenCode's `{ reply: "once" | "always" | "reject" }`.
  * The alternate `/session/{id}/permissions/{permissionID}` form is supported by injecting a custom
  * `endpoint` builder (it needs a requestId→sessionId lookup the reply object does not carry).
  *
@@ -55,7 +55,7 @@ export interface LiveRuntimeReplyOptions {
   readonly onReplyError?: (message: string, requestId: string) => void;
 }
 
-function mapResponse(reply: PermissionReply): RuntimeReplyResponse {
+function mapReply(reply: PermissionReply): RuntimeReplyResponse {
   if (reply.decision === "deny") return "reject";
   return reply.scope === "always" ? "always" : "once";
 }
@@ -104,7 +104,7 @@ export function createLiveRuntimeReplyPort(
   return {
     async reply(reply: PermissionReply): Promise<void> {
       const url = endpoint(reply.requestId);
-      const body = { response: mapResponse(reply) };
+      const body = { reply: mapReply(reply) };
       try {
         await transport.post(url, body, headers);
       } catch (rawError) {

@@ -43,6 +43,23 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+function userFacingProviderError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("authentication was rejected") || lower.includes("auth")) {
+    return "Xác thực bị từ chối. Hãy kiểm tra lại khoá API.";
+  }
+  if (lower.includes("rate-limit")) return "Nhà cung cấp đang giới hạn tần suất. Thử lại sau.";
+  if (lower.includes("network error") || lower.includes("could not reach")) {
+    return "Không kết nối được tới nhà cung cấp. Kiểm tra mạng hoặc base URL.";
+  }
+  if (lower.includes("time bound") || lower.includes("timeout")) {
+    return "Nhà cung cấp không phản hồi kịp thời. Thử lại.";
+  }
+  if (lower.includes("unavailable")) return "Nhà cung cấp tạm thời không khả dụng. Thử lại sau.";
+  if (lower.includes("unrecognized reason")) return "Yêu cầu thất bại. Kiểm tra cấu hình và thử lại.";
+  return message;
+}
+
 function providerRow(settings: SettingsView, providerId: string) {
   return settings.providers.find((p) => p.providerId === providerId);
 }
@@ -272,10 +289,10 @@ export function mountLlmSettingsPanel(container: HTMLElement, deps: LlmSettingsP
         if (result.ok) {
           setStatus("Kết nối thành công.", "ok");
         } else {
-          setStatus(result.error?.message ?? "Kiểm tra kết nối thất bại.", "err");
+          setStatus(userFacingProviderError(result.error?.message ?? "Kiểm tra kết nối thất bại."), "err");
         }
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Kiểm tra kết nối thất bại.", "err");
+        setStatus(userFacingProviderError(error instanceof Error ? error.message : "Kiểm tra kết nối thất bại."), "err");
       } finally {
         testBtn.disabled = false;
       }

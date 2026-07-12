@@ -181,17 +181,20 @@ loops:
         - .loop-engineer/evidence/L5/review-dispositions.md
   - id: L6
     name: Implementation
-    status: RUNNING
+    status: COMPLETED
     depends_on:
       - L5
-    note: "Reconciled 2026-07-12 (HEAD ff32d808). L6 RUNNING, gate PARTIAL. Slice 1 PASS at 3856a84 (packaged service readiness + authenticated health verification). Slice 2 PASS at ff32d808 (workspace picker, activation, persistence, relaunch restore, workspace switch; tools/verify/slice2-workspace-packaged.mjs). CGHC-008 DONE. Service reachability RESOLVED. Still unverified in package: provider/model/credential settings UI, DeepSeek test connection, live OpenCode session, streaming, permission/file journey. No DeepSeek live request. Do NOT start L7."
+    note: "COMPLETED 2026-07-12. Desktop POC packaged acceptance PASS via tools/verify/l6-packaged.mjs on dist-app/win-unpacked/Cowork GHC.exe. Slices 5A–5E verified: real OpenCode permission approve/deny, clean-profile onboarding, provider credential recovery, active-session interruption/relaunch, init/stop lifecycle scripts. Permission bridge + OpenCode v1.17.11 reply contract fixed. CGHC-028 DONE (POC scope). Template/session-resume and full L9 regression deferred. Do NOT auto-start L7."
     gate:
-      result: PARTIAL
+      result: PASS
       evidence:
+        - .loop-engineer/evidence/CGHC-028-l6-packaged-acceptance.md
         - .loop-engineer/evidence/CGHC-028-release-verification.md
         - .loop-engineer/evidence/CGHC-028-packaged-launch-fix.md
         - .loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md
         - .loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md
+        - .loop-engineer/evidence/CGHC-028-huytt12-gui-packaged.md
+        - tools/verify/l6-packaged.mjs
         - .loop-engineer/HANDOFF.md
   - id: L7
     name: Integration
