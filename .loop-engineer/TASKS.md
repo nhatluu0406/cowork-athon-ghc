@@ -1,22 +1,26 @@
 # Cowork GHC - Tasks
 
-> Human view synchronized from `.loop-engineer/state/tasks.yaml` on 2026-07-12.
+> Human view synchronized from `.loop-engineer/state/tasks.yaml` on 2026-07-12 (reconciliation pass).
 > `tasks.yaml` remains canonical.
+
+## Git anchor
+
+- **HEAD:** `ff32d8087e54433a925d020075f5105c2f0f413e`
 
 ## Summary
 
 - `DONE`: 25
 - `STALE`: 2
 - `IN_PROGRESS`: 1
-- Newly completed in this checkpoint: `CGHC-008`
+- Reconciliation confirms: `CGHC-008` **DONE** (packaged evidence in commit `ff32d808`)
 
 ## Active / Reopened Tasks
 
 | ID | Capability | Status | Current note |
 |---|---|---|---|
-| `CGHC-011` | add-credential-test-connection | `STALE` | Service connector evidence remains valid. Packaged secure credential entry and DeepSeek test connection remain unverified. |
-| `CGHC-019` | model-config-switch | `STALE` | Backend/model-switch evidence remains valid. Packaged provider/model settings UI remains unverified. |
-| `CGHC-028` | release-verification | `IN_PROGRESS` | Slices 1–2 packaged verified (service reachability + workspace picker/persistence). Full packaged POC journey still unverified. |
+| `CGHC-011` | add-credential-test-connection | `STALE` | Backend evidence valid. Packaged secure credential entry and DeepSeek test connection unverified. |
+| `CGHC-019` | model-config-switch | `STALE` | Backend evidence valid. Packaged provider/model settings UI unverified. |
+| `CGHC-028` | release-verification | `IN_PROGRESS` | Slices 1–2 packaged PASS (`3856a84`, `ff32d808`). Full packaged POC journey still unverified. |
 
 ## Done Tasks
 

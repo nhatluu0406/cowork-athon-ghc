@@ -1,7 +1,13 @@
 # Cowork GHC - Status
 
-> Human view synchronized from `.loop-engineer/state/*.yaml` on 2026-07-12.
+> Human view synchronized from `.loop-engineer/state/*.yaml` on 2026-07-12 (reconciliation pass).
 > YAML remains canonical.
+
+## Git anchor
+
+- **HEAD:** `ff32d8087e54433a925d020075f5105c2f0f413e`
+- **Slice 1:** `3856a84` (packaged service lifecycle)
+- **Slice 2:** `ff32d808` (packaged workspace selection)
 
 ## Current State
 
@@ -9,25 +15,25 @@
 - Loop: `L6` Implementation = `RUNNING`
 - Gate: `PARTIAL`
 - Operating mode: `LEAN`
-- Active product slice: Slice 2 workspace selection **DONE**; next is provider/model + credential settings (Slice 3)
+- Service reachability: **RESOLVED** (not open)
 - Do not start: `L7`
 - Web / Next.js: `DEFERRED`
 
 ## Packaged POC Status
 
-The packaged desktop POC is not complete end-to-end but two slices are verified.
+Two slices verified on `dist-app/win-unpacked/Cowork GHC.exe`:
 
-Verified in package (`dist-app/win-unpacked/Cowork GHC.exe`):
-
-- **Slice 1**: settings-only service reachability; authenticated health before `service_started`; clean PID stop.
-- **Slice 2**: native workspace picker seam → grant → `setActiveWorkspace` persistence under `%APPDATA%/cowork-ghc/.runtime/settings.json` → relaunch restore → workspace change.
+| Slice | Status | Commit |
+|---|---|---|
+| Service lifecycle | **PASS** | `3856a84` |
+| Workspace selection | **PASS** | `ff32d808` |
 
 Still unverified in the package:
 
 - Provider/model settings UI
 - Secure credential entry through Windows keyring
 - DeepSeek test connection
-- Live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey
+- Live OpenCode session, streaming, permission/file-on-disk, full stop/resume/clean journey
 
 ## Tasks
 
@@ -37,14 +43,13 @@ Still unverified in the package:
 
 ## Credential / API Status
 
-- No DeepSeek credential was read, printed, logged, or used in this checkpoint.
+- No DeepSeek live request in packaged slices 1–2.
 
-## Focused Validation Run
+## Controller validation
 
-- `node --import tsx --test app/ui/tests/workspace-picker.test.ts app/ui/tests/service-client.test.ts app/shell/tests/preload-bridge.test.ts app/shell/tests/lifecycle.test.ts` — **20/20 PASS**
-- `npm run package:win` — PASS
-- `node tools/verify/slice2-workspace-packaged.mjs` — PASS
+- `node tools/loop-engineer/cli.mjs verify` — PASS
+- `node tools/loop-engineer/cli.mjs status` — L6 RUNNING, gate PARTIAL
 
 ## Next Action
 
-Slice 3: packaged provider/model settings + secure credential entry (`CGHC-011` / `CGHC-019` re-verify). Do not start DeepSeek live testing, OpenCode live session, or L7 until those UI flows are packaged-verified.
+Slice 3: packaged provider/model settings + secure credential entry (`CGHC-011` / `CGHC-019`). Do not start DeepSeek live testing, OpenCode live session, or L7.
