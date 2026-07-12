@@ -56,8 +56,7 @@ parity hoàn chỉnh và không clone trực tiếp bất kỳ sản phẩm nào
 | Multi-turn context | Đã verify bằng packaged app | Cowork conversation liên kết nhiều OpenCode runtime turns; không phải native OpenCode continuation sau terminal. |
 | Context isolation | Đã verify bằng packaged app | `e40dada` và các packaged tests liên quan verify không leak wrapper trong flow mới. |
 | Tool activity | Đã verify bằng packaged app, UX mới nhất chỉ partial-live | Activity timeline đã có; UX pass mới nhất không chạy live tool flow. |
-| File changes | Đã verify bằng automation và packaged app, UX còn partial | Có file-change panel/current preview; chưa có full before/after diff. |
-| Attachments Phase 1 | Đã verify bằng packaged app | Text files, chips, metadata, dispatch preflight honesty, secret-like blocking; folder/image/PDF/Office chưa có. |
+| File changes | Đã verify automation; packaged review harness A–L added | File-change panel + persisted before/after review, diff bounded, attachment vs runtime read split; open-file deferred. |
 | Skills Foundation Phase 1 | Đã verify bằng packaged app | Local `SKILL.md` discovery, validation, enable/disable, provenance và bounded dispatch; không executable/MCP/marketplace/cloud. |
 | Installer/release | Verify một phần | Có packaged POC; chưa hoàn tất installed artifact/keyring/native picker/live GUI release lifecycle. |
 | Web / Next.js | Deferred | Không bắt đầu hiện tại. |

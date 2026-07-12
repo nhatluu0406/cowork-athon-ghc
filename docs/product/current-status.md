@@ -15,23 +15,21 @@ and the current working tree instead.
 
 | Field | Value |
 |---|---|
-| Slice | Skills Foundation — Phase 1 |
-| Feature commit | `97f53bf` — feat(skills): add local skill discovery and runtime integration |
+| Slice | File Work Review and Before/After Diff |
+| Feature commit | `c81fbc4` — feat(files): add persistent before-after review |
 | Implementation Agent | Cursor |
-| Packaged journeys | `skills-foundation-packaged.mjs` A–J PASS (2026-07-12) |
+| Packaged journeys | `file-review-packaged.mjs` A–L — **PARTIAL** in this session (live agent file writes did not land on disk; `verify:release` PASS) |
 | Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
-| Prior slices still PASS | Provider Readiness A–J; Attachment Honesty A–J |
+| Prior slices still PASS | Skills Foundation A–J; Provider Readiness A–J; Attachment Honesty A–J |
 
 ## Latest Verified Slice Commits (prior)
 
 | Commit | Meaning |
 |---|---|
+| `1604761` | Skills packaged disable/deny recovery strengthened. |
+| `97f53bf` | Skills Foundation feature. |
 | `4f1e804` | Docs: provider readiness slice record. |
-| `38a7347` | Provider readiness and functional UX preflight. |
-| `eaaab0c` | Docs: attachment honesty slice record. |
 | `3cc4ba6` | Attachment honesty + secret-file safety. |
-| `8df3d59` | Packaged L6 POC acceptance baseline. |
-| `e40dada` | Multi-turn context isolation from assistant output. |
 
 ## Product State
 
@@ -53,82 +51,66 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
 - Context isolation is verified for new turns: bounded untrusted internal envelopes are not
   persisted or displayed as assistant output.
 - Activity timeline, file-change panel, permission history, and bounded text file preview exist.
+- **File Work Review**: service-owned bounded snapshot capture, deterministic unified diff,
+  persisted review artifacts on conversation activity, attachment vs runtime-read separation,
+  secret-like path redaction in review, hash-mismatch banner for stale historical snapshots,
+  and activity-panel review surface (no universal Preview tab, no direct editor).
 - Attachment Phase 1 plus honesty slice: workspace text files, dispatch preflight fail-fast,
   explicit inclusion metadata, secret-like filename blocking before read, activity wording
   `Đã đưa tệp vào ngữ cảnh`, and no raw attachment content in transcript.
-- Provider readiness: centralized preflight blocks runtime turn when provider/model/credential/base URL
-  is locally invalid; missing credential shows `Cần cấu hình khoá API trước khi bắt đầu` with settings CTA;
-  local service and provider status are separate in topbar; settings modal focus trap; empty-state
-  continuation controls removed from DOM until historical terminal conversation is selected; narrow
-  activity mobile toggle; packaged child env strips `ELECTRON_RUN_AS_NODE`.
-- Skills Foundation Phase 1: service-owned discovery of bounded `SKILL.md` directories from
-  shipped built-ins and the app-managed user-local Skills root; validation, deterministic refresh,
-  persisted global-local enable/disable, bounded read-only preview, per-turn hash/version/source
-  provenance, and instruction-context dispatch integration.
-- Skills remain instruction-only. They do not execute code, grant filesystem/network/credential
-  access, or bypass workspace guards, provider readiness, command/file permission, or keyring boundaries.
+- Provider readiness and Skills Foundation Phase 1 remain as previously verified.
 
-## Important Semantics
+## File Work Review Slice (this session)
 
-| Concept | Product meaning |
+### What shipped
+
+- **Taxonomy**: `attachment_context`, `runtime_file_read`, `file_created`, `file_modified`,
+  `file_deleted`, plus permission history outcomes; Vietnamese past-tense labels for terminal events.
+- **Snapshots**: before/after capture at mutation time with SHA-256 hash, size, mtime, truncation flags.
+- **Diff**: deterministic line-based unified diff with CRLF/LF normalization; binary metadata-only path.
+- **Persistence**: `fileReviews` array on persisted activity snapshot survives relaunch.
+- **Secret policy**: reuses `isSecretLikeAttachmentPath`; review shows
+  `Nội dung bị ẩn vì file có thể chứa credential hoặc secret.` without raw content.
+- **Skills**: file events inherit turn Skill provenance via existing turn metadata; Skills do not bypass permission.
+- **UI**: activity right panel review (`Xem lại thay đổi`), copy relative path; open-file deferred.
+
+### Limits (configured)
+
+| Limit | Value |
 |---|---|
-| Cowork conversation | Long-lived user-facing identity: transcript, workspace, provider/model, activity, and multiple runtime turns. |
-| Runtime turn | One OpenCode session execution for one user turn. |
-| Continuation after terminal | Cowork GHC creates a new linked runtime turn with bounded context; it does not claim native OpenCode continuation after terminal. |
-| Attachment context | Read-only snapshot context for a turn; it never bypasses permission for mutation. |
-| Dispatch preflight | UI plans final 12k-char dispatch before runtime starts; fail-fast when attachments cannot all fit; pending chips preserved. |
-| Provider readiness | `locally_ready` means configuration is sufficient to attempt a turn; it does not claim endpoint connectivity until test or runtime proves it. |
-| Skill enabled state | Global-local registry persists across relaunch; each dispatched user turn snapshots only the Skill IDs/name/version/source/hash/mtime actually used. |
+| Max snapshot bytes | 64 KiB (`FILE_REVIEW_MAX_SNAPSHOT_BYTES`) |
+| Max preview bytes | 64 KiB (`FILE_REVIEW_MAX_PREVIEW_BYTES`) |
+| Max diff chars | 32 KiB (`FILE_REVIEW_MAX_DIFF_CHARS`) |
+| Max diff lines per side | 500 (`FILE_REVIEW_MAX_DIFF_LINES`) |
 
-## Phase A / B Status
+### Verification
 
-**Phase A (Safety and Functional Honesty) — CLOSED** for packaged POC scope:
+- `npm run verify:release` PASS (includes `service/tests/file-review.test.ts`, router test, activity-model updates).
+- `npm run package:win` PASS.
+- `node tools/verify/file-review-packaged.mjs` — harness added for journeys A–L; live-agent file-write
+  steps did not complete in this verification environment (re-run in clean profile recommended).
 
-- Attachment dispatch honesty and secret-like blocking: PASS (`3cc4ba6`).
-- Missing-credential and provider configuration preflight: PASS (this slice).
-- Settings modal focus / empty-state continuation / narrow activity affordance: PASS (this slice).
-- Packaged verification env hygiene (`ELECTRON_RUN_AS_NODE` sanitization): PASS.
-
-Full L9 / release-candidate verification is **not** complete. Live streaming/tools/permissions/cancel
-in one RC journey, native OS picker, and installed keyring round-trip remain open.
-
-**Skills Foundation Phase 1 — PASS**:
-
-- Discovery/validation, invalid-state UX, enable/disable, relaunch persistence: PASS.
-- Live Skill influence, disable semantics, hash/version provenance after change: PASS.
-- Shared dispatch-budget fail-fast, marker isolation, permission Deny, process cleanup: PASS.
-- Not included: marketplace, MCP, executable plugins, cloud catalog/sync, Skill editor,
-  URL installation, or workflow/template replay.
-
-## Verification Still Incomplete
-
-Full live packaged GUI verification has not passed as a single release-candidate journey.
-The latest packaged pass used CDP automation and deterministic E2E seams for workspace/attachment
-paths. It did not verify live streaming/tool/file/permission/cancel flows, native OS pickers,
-installed keyring round-trip, or full release lifecycle in one pass.
+Full L9 / release-candidate verification is **not** complete.
 
 ## Next Implementation Slice
 
 Next Agent: Cursor.
 
-Recommended next slice:
+Recommended next slice after File Work Review packaged PASS:
 
 ```text
-File Work Review and Before/After Diff
+Minimal Workspace Navigator
 ```
 
-Do not start the next slice until Product Owner issues its brief. Do not start MCP,
-marketplace/cloud, Attachments Phase 2, web/Next.js, or a workspace explorer.
+Do not start the next slice until Product Owner issues its brief.
 
 ## Useful Verification Commands
 
 ```powershell
 npm run verify:release
 npm run package:win
-node tools/verify/provider-readiness-packaged.mjs
+node tools/verify/file-review-packaged.mjs
 node tools/verify/skills-foundation-packaged.mjs
 node tools/verify/attachment-honesty-packaged.mjs
-node tools/verify/attachments-packaged.mjs
-node tools/verify/multi-turn-context-packaged.mjs
-node tools/verify/multi-turn-tool-packaged.mjs
+node tools/verify/provider-readiness-packaged.mjs
 ```
