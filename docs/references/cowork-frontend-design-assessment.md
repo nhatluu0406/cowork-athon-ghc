@@ -8,7 +8,7 @@ Canonical source of truth remains the Cowork GHC Git HEAD and product docs.
 
 The PDF proposes a light, airy redesign for a Cowork desktop shell. It presents three main Cowork shell directions (`1a Airy`, `1b Rail`, `1c Zen`) and additional capability screens for Cowork, Code, Structure/RAG, Microsoft 365, and Settings.
 
-The strongest direction for Cowork GHC is `1a Airy`, but only as a staged shell direction after the current packaged blocker is closed. It gives the main conversation enough room while preserving space for plan, activity, files, and File Work Review. `1b Rail` is useful as a future navigation pattern when multiple real product surfaces exist. `1c Zen` is useful as a focus mode or empty-state inspiration, but it hides too much operational status to be the primary shell for a packaged agent product.
+The strongest direction for Cowork GHC is `1a Airy`, now adopted as the integration-ready shell foundation: conversation sidebar, main chat workspace, and right information panel. It gives the main conversation enough room while preserving space for plan, activity, files, and File Work Review. `1b Rail` is useful as a future navigation pattern when multiple real product surfaces exist. `1c Zen` is useful as a focus mode or empty-state inspiration, but it hides too much operational status to be the primary shell for a packaged agent product.
 
 The PDF is visual design reference, not product truth. Code, Structure/RAG, Microsoft 365, and concurrency controls are future surfaces that require backend/product capability. They must not appear as real tabs until the corresponding systems are implemented and accepted.
 
@@ -54,7 +54,7 @@ Conversation history: compatible with left sidebar history.
 
 Risk: if made too airy, critical status may become visually soft. Cowork GHC needs clear PASS/PARTIAL/BLOCKED states and packaged verification honesty.
 
-Conclusion: recommended primary direction after the current packaged File Work Review blocker is closed.
+Conclusion: recommended primary direction and current shell foundation. This does not change File Work Review acceptance; the slice remains `PARTIAL PASS`.
 
 ### 1b Rail
 
@@ -111,7 +111,7 @@ Use `1a Airy` as the main design direction, with these constraints:
 
 | Area | Current Cowork GHC | PDF direction | Assessment |
 |---|---|---|---|
-| Main shell | Functional packaged POC with right-panel File Work Review area | More polished conversation + side information layout | Adopt after packaged blocker, not before diagnosis. |
+| Main shell | Integration-ready `1a Airy` foundation with right-panel File Work Review area | More polished conversation + side information layout | Adopted as shell foundation; acceptance honesty remains unchanged. |
 | Conversation history | Exists as product direction/source capability | Left sidebar history | Compatible. |
 | Provider/model | Provider readiness exists | Visible selector | Safe to adopt if backed by real settings/keyring status. |
 | Skills | Foundation pass | Skills entry in composer/settings | Safe to improve discoverability. |
@@ -216,9 +216,13 @@ Do not redesign around unverified capabilities. Keep File Work Review as `PARTIA
 
 ### UI-1 - Shell/layout alignment
 
+Status: implemented as the current shell foundation.
+
 Adopt the 1a Airy layout direction in a restrained way: sidebar, conversation, status, and right-side information structure.
 
 ### UI-2 - Activity / Plan / Files information architecture
+
+Status: implemented as sections in the right information panel.
 
 Unify activity, plan, files, and File Work Review as real event-backed surfaces.
 
@@ -232,7 +236,7 @@ Add editing only after dirty state, conflict detection, permission semantics, an
 
 ### UI-5 - External-system tabs when matching backends are ready
 
-Enable Structure/RAG, Microsoft 365, dispatch/concurrency, or gateway health surfaces only when D1-D4 are accepted.
+Define Structure/RAG, Microsoft 365, dispatch/concurrency, code, and gateway surfaces in a registry as hidden/coming-later slots only. Enable them as real product surfaces only when D1-D4 are accepted.
 
 ### UI-6 - Final icons, motion, typography and theme polish
 
@@ -249,7 +253,7 @@ Polish after core capability truth is stable. Do not let visual polish hide part
 
 ## 14. Product Owner decisions required
 
-- Confirm `1a Airy` as the primary shell direction after the packaged blocker is closed.
+- Keep `1a Airy` as the primary shell direction and avoid expanding beyond integration slots until backend capabilities merge.
 - Decide whether `1b Rail` becomes future navigation once D1-D4 surfaces exist.
 - Decide whether `1c Zen` is a focus mode or discarded.
 - Confirm minimal workspace scope: tree, preview, open/reveal, recent/changed files.

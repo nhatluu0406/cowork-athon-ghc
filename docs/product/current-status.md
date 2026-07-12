@@ -15,12 +15,12 @@ and the current working tree instead.
 
 | Field | Value |
 |---|---|
-| Slice | File Work Review and Before/After Diff |
-| Feature commit | `c81fbc4` — feat(files): add persistent before-after review |
-| Hardening commits | `fix(files): harden packaged file review capture`; `test(verify): stabilize packaged file review stages` |
+| Slice | Integration-Ready UI Shell Foundation |
+| Feature commit | `0746112` — feat(ui): establish integration-ready Cowork shell |
+| Hardening commits | `fix(files): harden packaged file review capture`; `test(verify): stabilize packaged file review stages`; `fix(files): canonicalize workspace paths in service`; `test(verify): add deterministic file review gateway` |
 | Implementation Agent | Cursor |
 | Packaged File Review | **PARTIAL PASS** — live Journey A–B PASS; Journey C blocked; D–L not completed in latest run |
-| Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
+| Regression | Latest UI shell foundation: targeted UI tests PASS; `npm run typecheck` PASS; `npm run build:renderer` PASS; `npm run verify:release` PASS. |
 | Prior slices still PASS | Skills Foundation A–J; Provider Readiness A–J; Attachment Honesty A–J |
 
 ## Latest Verified Slice Commits (prior)
@@ -57,10 +57,10 @@ D1-D4 have been mapped into the canonical product plan as external parallel trac
 - D4: Advanced LLM gateway: key pool, rotation, load balance, failover, cost routing.
 
 Cowork GHC does not currently implement D1-D4. The frontend PDF has been assessed as
-design reference only; no UI implementation was started. Recommended future shell direction
-is `1a Airy`, staged after the packaged File Work Review blocker is closed. Code, Structure/RAG,
-Microsoft 365, and concurrency surfaces remain future/dependency-gated surfaces, not current
-product capability.
+design reference only; the shell direction is now `1a Airy`: conversation sidebar,
+main chat workspace, and right information panel. Code, Dispatch, Gateway, Knowledge,
+Knowledge Graph, and Microsoft surfaces are registry-defined integration slots only;
+they remain hidden by default and are not current product capability.
 
 ## Verified Baseline
 
@@ -154,6 +154,35 @@ delete/deny/redaction/persistence File Review semantics.
 
 Full L9 / release-candidate verification is **not** complete.
 
+## Integration-Ready UI Shell Foundation
+
+### What shipped
+
+- `1a Airy` is the active shell direction: left conversation/workspace sidebar,
+  central chat workspace, and right information panel.
+- Central design tokens now cover semantic background/surface/border/text/accent,
+  status colors, spacing, typography, radius, shadow, and transition.
+- A small inline SVG icon system covers Cowork, Dispatch, Gateway, Knowledge,
+  Knowledge Graph, Microsoft, Code, conversation, workspace, Skills, attachment,
+  file mutation, permission, settings, and activity affordances.
+- A top-level surface registry defines `cowork`, `dispatch`, `gateway`, `knowledge`,
+  `knowledge-graph`, `microsoft`, and `code`; only `cowork` is `available` by default.
+- D1-D4 UI contracts exist as passive integration slot interfaces only. No backend
+  adapter, fake production data, or mock provider was added for those surfaces.
+- Right information panel is organized around real data-backed sections: Kế hoạch,
+  Hoạt động, Tệp, and Xem lại thay đổi. Empty states remain honest when there is no
+  runtime data.
+
+### Status constraints
+
+```text
+File Work Review: PARTIAL PASS
+D1-D4: not merged / not implemented
+Minimal Workspace Navigator: not started
+```
+
+Full packaged/live regression is deferred until the external integration milestone.
+
 ## Next Implementation Slice
 
 Next Agent: Cursor.
@@ -168,8 +197,9 @@ Packaged journeys C–L need a verification redesign split (live-agent vs determ
 Next implementation action:
 
 ```text
-Design and implement deterministic packaged File Review journeys for delete/deny/persistence/redaction;
-keep live-agent journeys for create/modify and permission approve/deny smoke only.
+Product Owner must choose the next integration milestone. Current options are
+Multi-Provider Profiles and Custom Endpoint, or Minimal Workspace Navigator after the
+File Work Review blocker is closed.
 ```
 
 Minimal Workspace Navigator has not started. Do not start it until File Work Review

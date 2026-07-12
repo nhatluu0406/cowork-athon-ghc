@@ -84,8 +84,9 @@ bounded untrusted context; sản phẩm không claim native OpenCode continuatio
 
 ## 5. UX baseline hiện tại
 
-- Application shell: packaged Electron desktop shell có **local service readiness** và
-  **provider/model status** tách biệt (không gom `Đã kết nối` chung).
+- Application shell: `1a Airy` direction — conversation sidebar, main chat workspace,
+  and right information panel — while preserving **local service readiness** and
+  **provider/model status** as separate real states.
 - Conversation sidebar: persisted conversations, search, switch, rename/delete qua
   context menu.
 - Workspace selection: chọn active workspace, hiển thị current/recent workspace.
@@ -93,13 +94,16 @@ bounded untrusted context; sản phẩm không claim native OpenCode continuatio
 - Composer: nhập prompt, send/cancel states, attachment button gated by workspace.
 - Attachments: Phase 1 text-file chips, remove, oversized/unsupported error chips,
   metadata persistence.
-- Activity panel: tool/activity timeline, permission history, file-change summary.
+- Activity panel: real data-backed Kế hoạch, Hoạt động, Tệp, and Xem lại thay đổi
+  sections; File Work Review remains in this right information panel.
 - Permission presentation: Allow/Deny modal đã có theo packaged evidence trước đó.
 - File preview/review: bounded text preview plus persisted before/after File Work Review diff for agent file work; open file, reveal in Explorer, direct editor, workspace tree, and universal Preview tab are not current capabilities.
 - Historical continuation: saved conversation có thể reopen và continue qua linked runtime
   turn mới khi cần.
 
-UI hiện ở mức **functional POC quality**, chưa phải release-candidate polish.
+UI hiện là **integration-ready shell foundation** for D1-D4 merge work, not
+release-candidate polish. D1-D4 surfaces are registry slots only and are hidden by
+default in production.
 
 ## 6. Product gaps đã biết
 
@@ -314,10 +318,11 @@ Cowork GHC **không** cam kết xây một Office editor hoàn chỉnh trong s�
 Reference assessment:
 [Cowork Frontend Design Assessment](../references/cowork-frontend-design-assessment.md)
 
-Recommended shell direction: `1a Airy`, adopted only as staged shell/layout alignment
-after the current packaged File Work Review blocker is closed. `1b Rail` remains future
-navigation inspiration when multiple real product surfaces exist. `1c Zen` is only suitable
-as focus-mode or empty-state inspiration.
+Recommended shell direction: `1a Airy`, now adopted as the staged shell/layout
+foundation before D1-D4 merge work: conversation sidebar, main chat workspace, and a
+right information panel. This does **not** change File Work Review acceptance, which
+remains PARTIAL PASS. `1b Rail` remains future navigation inspiration when multiple real
+product surfaces exist. `1c Zen` is only suitable as focus-mode or empty-state inspiration.
 
 Important constraints:
 
@@ -325,8 +330,20 @@ Important constraints:
 - Do not copy FPT branding, mock identities, or mock model names.
 - Do not show Code, Structure/RAG, Microsoft 365, or concurrency controls as real product
   capability before matching backend systems exist.
+- Use the surface registry for top-level product surfaces; do not hardcode navigation
+  in scattered components.
 - Capability is more important than a fixed tab name; a workspace panel or right-side view
   may be better than a universal `Preview` tab.
+
+Current UI foundation:
+
+| Area | Status |
+|---|---|
+| Cowork shell | Available, implemented with left conversation sidebar, central chat, and right information panel. |
+| Surface registry | Defines `cowork`, `dispatch`, `gateway`, `knowledge`, `knowledge-graph`, `microsoft`, `code`. |
+| D1-D4 slots | UI contracts only; no backend adapters, no fake production data, hidden by default. |
+| File Work Review | Existing surface preserved; still PARTIAL PASS until packaged C-L acceptance passes. |
+| Minimal Workspace Navigator | Not started. |
 
 ## 12. Hệ thống song song do team khác phát triển
 
@@ -341,9 +358,11 @@ capability until integration acceptance passes.
 | D3 | Knowledge system: RAG, vector, graph | External team expected; specific owner not recorded in active docs. | Not implemented as accepted backend. | Ingestion/index boundary, workspace opt-in, source provenance, stale-index handling, replaceable vector/graph backend, and local/remote data policy. | Structure/RAG tab, graph explorer, source-backed answers. | Indexer, storage policy, provenance schema, stale-index invalidation, retrieval API, packaged verification. | No silent indexing of private workspaces, source provenance on answers, local/remote data disclosure, redaction policy. | Packaged flow proves opt-in ingestion, retrieval with citations, stale index behavior, deletion/cleanup, and backend replaceability. | Direct workspace context and attachments only. | Structure/RAG tab only enabled when D3 is accepted. |
 | D4 | Advanced LLM gateway: key pool, rotation, load balance, failover, cost routing | External team expected; specific owner not recorded in active docs. | Not implemented. Current provider abstraction remains baseline. | Gateway adapter while preserving simple direct-provider fallback, key pool/rotation, load balance/failover, cost/routing metadata, health and error semantics, and secret isolation. | Gateway health, routing/cost settings, provider diagnostics. | Gateway API contract, health semantics, key isolation, routing metadata, cost reporting, fallback behavior. | Keep keys out of renderer/transcripts/logs, avoid leaking routing decisions, define failover transparency. | Packaged flow proves direct provider fallback, gateway routing, failure semantics, health reporting, and no credential leakage. | Current direct provider abstraction. | Gateway settings appear only when D4 is accepted. |
 
-UI tabs shown in the frontend PDF are therefore future surfaces. Code/workspace can be
-internal Cowork GHC work after the current blocker; Structure/RAG, Microsoft 365, dispatch
-concurrency, and advanced gateway controls depend on D1-D4.
+UI tabs shown in the frontend PDF are therefore future surfaces. The current shell
+foundation defines registry entries and passive integration contracts for them, but only
+`cowork` is available by default. Code/workspace can be internal Cowork GHC work after
+the File Work Review blocker; Structure/RAG, Microsoft 365, dispatch concurrency, and
+advanced gateway controls depend on D1-D4 acceptance.
 
 ## 13. Operating model phát triển
 
