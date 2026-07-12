@@ -44,6 +44,7 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Runtime turn history persisted | PASS | `service/tests/conversation-multi-turn.test.ts` |
 | Last-active conversation on relaunch | PASS | `GET /v1/conversations/last-active` + UI auto-select |
 | Workspace text file attachments (Phase 1) | PASS | `attachments-packaged.mjs` journeys A–J; `service/tests/workspace-attachment-read.test.ts` |
+| Attachment dispatch honesty + secret-file safety | PASS | `attachment-honesty-packaged.mjs` journeys A–J; `dispatch-plan.test.ts`, `attachment-secret-policy.test.ts` |
 
 ## Regression không-live
 
@@ -62,6 +63,7 @@ npm run package:win
 node tools/verify/minimal-packaged-smoke.mjs
 node tools/verify/multi-turn-context-packaged.mjs
 node tools/verify/attachments-packaged.mjs
+node tools/verify/attachment-honesty-packaged.mjs
 node tools/verify/multi-turn-tool-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 ```

@@ -32,9 +32,11 @@ updated_at: "2026-07-12"
 - Full L9 / release-candidate verification PASS is incomplete. Partial packaged evidence exists, but the latest interactive UX pass did not complete live streaming/tool/file/permission/cancel/provider-recovery/native-picker journeys in one release-candidate run.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
 
-## Attachments (Phase 1)
+## Attachments (Phase 1 + honesty)
 
 - **Workspace text file attachments: verified** — `.txt`, `.md`, `.json`, source text phổ biến; max 32KB/tệp, 64KB tổng/turn; dispatch budget 12k ký tự chung với prior-turn context.
+- **Dispatch preflight: verified** — `planDispatchPrompt` fail-fast khi attachment không fit budget cuối; pending chips giữ nguyên; metadata `inclusionStatus` trên message; activity dùng `Đã đưa tệp vào ngữ cảnh` (không claim `đã đọc` trước dispatch).
+- **Secret-like files: blocked by default** — `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`, `id_ed25519`, `credentials.json`, `service-account*.json`, `.npmrc`, `.pypirc`; kiểm tra trước khi đọc nội dung; không override trong slice này.
 - **Folder attachments: not started**
 - **Image/PDF/document parsing: not started**
 - **Drag-and-drop: not started**

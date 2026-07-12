@@ -16,6 +16,10 @@ import {
   ATTACHMENT_MAX_TOTAL_BYTES,
   ATTACHMENT_TEXT_EXTENSIONS,
 } from "./attachment-limits.js";
+import {
+  isSecretLikeAttachmentPath,
+  SECRET_ATTACHMENT_MESSAGE,
+} from "./attachment-secret-policy.js";
 
 export type AttachmentRejectReason =
   | "outside_workspace"
@@ -26,7 +30,8 @@ export type AttachmentRejectReason =
   | "binary_content"
   | "file_too_large"
   | "total_budget_exceeded"
-  | "invalid_path";
+  | "invalid_path"
+  | "secret_file";
 
 export interface AttachmentMetadata {
   readonly relativePath: string;
@@ -120,6 +125,10 @@ export async function readWorkspaceAttachment(
       "unsupported_type",
       `Loại tệp không được hỗ trợ trong Phase 1 (${ext || "(không có phần mở rộng)"}).`,
     );
+  }
+
+  if (isSecretLikeAttachmentPath(relativePath)) {
+    return failure("secret_file", SECRET_ATTACHMENT_MESSAGE);
   }
 
   let realPath: string;

@@ -138,6 +138,24 @@ test("rejects symlink escape when target is outside workspace", async (t) => {
   }
 });
 
+test("rejects secret-like .env before reading content", async () => {
+  const root = await mkdtemp(join(tmpdir(), "cghc-att-"));
+  try {
+    await writeFile(join(root, ".env"), "FAKE_SECRET=not-real", "utf8");
+    const result = await readWorkspaceAttachment({
+      workspaceRoot: root,
+      absolutePath: join(root, ".env"),
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "secret_file");
+      assert.match(result.message, /credential|secret/i);
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("persists attachment metadata shape", async () => {
   const root = await mkdtemp(join(tmpdir(), "cghc-att-"));
   try {

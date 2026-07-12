@@ -67,7 +67,9 @@ Giới hạn POC: **một runtime execution active** tại một thời điểm.
 ## Boundary attachment read (Phase 1)
 
 - Renderer gọi shell `pickWorkspaceFile(workspaceRoot)` → service `POST /v1/workspace/attachment-read` validate absolute path trong grant + `assertRealPathInside`.
-- Snapshot tại thời điểm gửi: relative path, size, mtime, content hash, truncated flag — **không** copy vào app data.
+- **Secret-like policy** (`attachment-secret-policy.ts`): kiểm tra filename/path trước `stat`/`readFile`; file bị block không đọc raw content, không dispatch, không persist content.
+- Snapshot tại thời điểm gửi: relative path, size, mtime, content hash, truncated flag, `inclusionStatus` / `inclusionReason` — **không** copy content vào app data.
+- **Dispatch preflight** (`dispatch-plan.ts`): tính budget cuối 12k ký tự từ prior context + attachment envelopes + user request; fail-fast nếu attachment selected không fit; không tạo runtime turn khi preflight fail.
 - Pending chips trong composer; metadata gắn `ConversationMessage.attachments`; content chỉ trên wire trong envelope untrusted.
 
 ## Không lặp lại tài liệu cũ
