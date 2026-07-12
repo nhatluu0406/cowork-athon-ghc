@@ -20,7 +20,7 @@ dependency của Cowork GHC.
 - **Bản sao cũ (đã xoá):** `.loop-engineer/source/openwork` (~123 MB, có nested `.git` riêng)
 
 Tài liệu phân tích thu được từ giai đoạn tham khảo vẫn được giữ ở
-`docs/openwork-requirements-and-basic-design.md` (research reference, tiếng Anh, không dịch, không phải
+`docs/references/openwork-requirements-and-basic-design.md` (research reference, tiếng Anh, không dịch, không phải
 build dependency).
 
 ## Đã tham khảo những pattern sản phẩm nào
