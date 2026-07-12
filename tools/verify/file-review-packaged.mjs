@@ -42,10 +42,34 @@ const TIMEOUTS = {
   diskFileMs: 120_000,
   reviewMs: 90_000,
 };
-const MODE =
-  process.argv.includes("--mode")
-    ? process.argv[process.argv.indexOf("--mode") + 1]
-    : process.env["CGHC_FILE_REVIEW_MODE"] ?? "all";
+const VALID_FILE_REVIEW_MODES = new Set(["all", "live", "deterministic"]);
+
+function resolveFileReviewMode() {
+  const flagIdx = process.argv.indexOf("--mode");
+  if (flagIdx !== -1) {
+    const value = process.argv[flagIdx + 1];
+    if (value === undefined || !VALID_FILE_REVIEW_MODES.has(value)) {
+      console.error(
+        `Invalid --mode "${value ?? ""}". Use one of: live | deterministic | all`,
+      );
+      process.exit(1);
+    }
+    return value;
+  }
+  const envMode = process.env["CGHC_FILE_REVIEW_MODE"];
+  if (envMode !== undefined) {
+    if (!VALID_FILE_REVIEW_MODES.has(envMode)) {
+      console.error(
+        `Invalid CGHC_FILE_REVIEW_MODE "${envMode}". Use one of: live | deterministic | all`,
+      );
+      process.exit(1);
+    }
+    return envMode;
+  }
+  return "all";
+}
+
+const MODE = resolveFileReviewMode();
 
 class StageTimeoutError extends Error {
   constructor(stage, timeoutMs, details = "") {

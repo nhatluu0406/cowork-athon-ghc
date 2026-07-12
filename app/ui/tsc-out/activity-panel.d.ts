@@ -16,6 +16,7 @@ export interface ActivityPanelDom {
     readonly toggle: HTMLButtonElement;
     readonly tabs: readonly HTMLButtonElement[];
 }
+export declare function setRightPanelCollapsed(rightPanel: HTMLElement, toggle: HTMLButtonElement, collapsed: boolean): void;
 export declare function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom;
 export declare function activateActivityPanelTab(dom: ActivityPanelDom, key: "plan" | "activity" | "files" | "review"): void;
 export declare function renderActivityPanel(dom: ActivityPanelDom, snapshot: ActivitySnapshot | null, emptyCopy?: string): void;

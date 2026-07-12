@@ -5,7 +5,7 @@
  */
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
-import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, showFileReview, showWorkspaceFilePreview, snapshotToPersisted, } from "./activity-panel.js";
+import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, setRightPanelCollapsed, showFilePreview, showFileReview, showWorkspaceFilePreview, snapshotToPersisted, } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
@@ -1072,7 +1072,15 @@ function createShell(root) {
     settingsButton.type = "button";
     settingsButton.setAttribute("aria-label", "Mở cài đặt");
     settingsButton.append(icon("settings"), el("span", "icon-label", "Cài đặt"));
-    topbar.append(el("div", "topbar__spacer"), serviceStatus, providerStatus, settingsButton);
+    const layoutControls = el("div", "topbar__layout-controls no-drag");
+    const rightPanelTopbarToggle = el("button", "topbar__layout-toggle right-panel-topbar-toggle");
+    rightPanelTopbarToggle.type = "button";
+    rightPanelTopbarToggle.title = "Thu gọn bảng thông tin";
+    rightPanelTopbarToggle.setAttribute("aria-label", "Thu gọn bảng thông tin");
+    rightPanelTopbarToggle.setAttribute("aria-expanded", "true");
+    appendIconLabel(rightPanelTopbarToggle, "panel", "Thông tin");
+    layoutControls.append(rightPanelTopbarToggle);
+    topbar.append(el("div", "topbar__spacer"), serviceStatus, providerStatus, layoutControls, settingsButton);
     const workspace = el("main", "workspace");
     const productRail = el("aside", "product-rail");
     productRail.setAttribute("aria-label", "Product surfaces");
@@ -1096,7 +1104,15 @@ function createShell(root) {
         surfaceButtons.set(surface.id, item);
     }
     productRail.append(railNav);
+    const sidebarRailToggle = el("button", "product-rail__sidebar-toggle");
+    sidebarRailToggle.type = "button";
+    sidebarRailToggle.title = "Mở sidebar Cowork";
+    sidebarRailToggle.setAttribute("aria-label", "Mở sidebar Cowork");
+    sidebarRailToggle.setAttribute("aria-expanded", "false");
+    sidebarRailToggle.append(icon("conversation", "Mở sidebar Cowork"));
+    productRail.append(sidebarRailToggle);
     const sidebar = el("aside", "sidebar");
+    sidebar.setAttribute("aria-label", "Sidebar Cowork");
     const sidebarBrand = el("div", "sidebar-brand");
     const sidebarBrandMark = el("div", "sidebar-brand__mark");
     sidebarBrandMark.append(icon("cowork", "Cowork GHC"));
@@ -1106,6 +1122,7 @@ function createShell(root) {
     const sidebarToggle = el("button", "sidebar-collapse", "Thu gọn");
     sidebarToggle.type = "button";
     sidebarToggle.setAttribute("aria-expanded", "true");
+    sidebarToggle.setAttribute("aria-label", "Thu gọn sidebar Cowork");
     sidebarBrand.append(sidebarBrandMark, sidebarBrandText, sidebarToggle);
     const coworkTab = el("button", "sidebar-tab sidebar-tab--active");
     const skillsTab = el("button", "sidebar-tab");
@@ -1197,6 +1214,7 @@ function createShell(root) {
     const integrationSurface = el("section", "integration-surface");
     integrationSurface.hidden = true;
     const rightPanel = el("aside", "right-panel");
+    rightPanel.setAttribute("aria-label", "Bảng thông tin");
     const rpHeader = el("div", "rp-header");
     const rpTitle = el("span", "rp-header__title");
     appendIconLabel(rpTitle, "panel", "Thông tin");
@@ -1320,10 +1338,36 @@ function createShell(root) {
         setIconLabel(activityMobileToggle, "panel", open ? "Ẩn thông tin" : "Thông tin");
         domPartial.activityPanel.toggle.setAttribute("aria-label", open ? "Thu gọn bảng hoạt động" : "Mở rộng bảng hoạt động");
     });
-    sidebarToggle.addEventListener("click", () => {
-        const collapsed = workspace.classList.toggle("sidebar-collapsed");
+    const applySidebarCollapsed = (collapsed) => {
+        workspace.classList.toggle("sidebar-collapsed", collapsed);
+        sidebar.setAttribute("aria-hidden", collapsed ? "true" : "false");
         sidebarToggle.textContent = collapsed ? "Mở" : "Thu gọn";
         sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        sidebarToggle.setAttribute("aria-label", collapsed ? "Mở sidebar Cowork" : "Thu gọn sidebar Cowork");
+        sidebarRailToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        const railLabel = collapsed ? "Mở sidebar Cowork" : "Thu gọn sidebar Cowork";
+        sidebarRailToggle.title = railLabel;
+        sidebarRailToggle.setAttribute("aria-label", railLabel);
+    };
+    const applyRightPanelCollapsed = (collapsed) => {
+        setRightPanelCollapsed(rightPanel, domPartial.activityPanel.toggle, collapsed);
+        rightPanelTopbarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+        const label = collapsed ? "Mở bảng thông tin" : "Thu gọn bảng thông tin";
+        rightPanelTopbarToggle.title = label;
+        rightPanelTopbarToggle.setAttribute("aria-label", label);
+        setIconLabel(rightPanelTopbarToggle, "panel", collapsed ? "Mở thông tin" : "Thông tin");
+    };
+    sidebarToggle.addEventListener("click", () => {
+        applySidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
+    });
+    sidebarRailToggle.addEventListener("click", () => {
+        applySidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
+    });
+    rightPanelTopbarToggle.addEventListener("click", () => {
+        applyRightPanelCollapsed(!rightPanel.classList.contains("right-panel--collapsed"));
+    });
+    domPartial.activityPanel.toggle.addEventListener("click", () => {
+        applyRightPanelCollapsed(!rightPanel.classList.contains("right-panel--collapsed"));
     });
     const showSkills = (show) => {
         coworkSidebarPanel.hidden = show;

@@ -9,6 +9,13 @@ function el(tag, className, text) {
         node.textContent = text;
     return node;
 }
+export function setRightPanelCollapsed(rightPanel, toggle, collapsed) {
+    rightPanel.classList.toggle("right-panel--collapsed", collapsed);
+    rightPanel.setAttribute("aria-hidden", collapsed ? "true" : "false");
+    toggle.textContent = collapsed ? "Mở rộng" : "Thu gọn";
+    toggle.setAttribute("aria-label", collapsed ? "Mở rộng bảng hoạt động" : "Thu gọn bảng hoạt động");
+    toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+}
 function opLabel(op) {
     switch (op) {
         case "create":
@@ -130,10 +137,6 @@ export function createActivityPanel(rightPanel) {
         button.addEventListener("click", () => activateTab(button.dataset["section"] ?? "activity"));
     }
     activateTab("activity");
-    toggle.addEventListener("click", () => {
-        const collapsed = rightPanel.classList.toggle("right-panel--collapsed");
-        toggle.textContent = collapsed ? "Mở rộng" : "Thu gọn";
-    });
     return {
         root: rightPanel,
         plan,

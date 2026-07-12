@@ -11,6 +11,21 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
 
+## Pre-merge stabilization (2026-07-13)
+
+| Item | Status |
+|---|---|
+| Comprehensive project audit | **Complete** — [audit report](../quality/cowork-ghc-comprehensive-project-audit.md) |
+| Commercial UI Product Owner acceptance | **FAIL** — collapsed layout and polish gaps identified before stabilization |
+| Pre-merge stabilization | **Applied** — dead verifiers removed, File Review CLI consolidated, shell layout collapse fixes |
+| File Work Review | **PARTIAL PASS** — live Journey A–B PASS; Journey C blocked; D–L not completed |
+| D1–D4 external integration | **Not merged** — surfaces remain `awaiting_integration` slots only |
+| Next milestone | **External integration intake** (D1–D4 merge) |
+| Architecture refactor (`app-shell.ts`, snapshot/watchdog to service) | **Deferred** until external integration code is merged |
+| Full regression at integration milestone | Planned after D1–D4 code lands |
+
+Baseline tag (local, not pushed): `pre-external-integration-2026-07-14`
+
 ## Latest Verified Slice
 
 | Field | Value |
@@ -217,8 +232,10 @@ visible awaiting-integration surfaces without the Cowork shell claiming backend 
 ```powershell
 npm run verify:release
 npm run package:win
-node tools/verify/file-review-packaged.mjs
+node tools/verify/file-review-packaged.mjs --mode live
+node tools/verify/file-review-packaged.mjs --mode deterministic
 node tools/verify/skills-foundation-packaged.mjs
 node tools/verify/attachment-honesty-packaged.mjs
 node tools/verify/provider-readiness-packaged.mjs
+node tools/verify/pre-merge-baseline-screenshots.mjs
 ```
