@@ -27,6 +27,10 @@ Build: `dist-app/win-unpacked/Cowork GHC.exe`
 node --import tsx --test app/ui/tests/llm-settings-panel.test.ts service/tests/provider-test-connection-route.test.ts service/tests/http-dialer-lookup.test.ts service/tests/credential-router.test.ts service/tests/credential-keyring.test.ts
 ```
 
+## Finding (2026-07-12 bootstrap regression)
+
+Slice 3 PASS was valid for isolated verification profiles only. Default `%APPDATA%/cowork-ghc` with persisted onboarding settings hit a **boot regression**: live OpenCode was attempted before settings-only, failed, and left bootstrap empty. Fixed in commit after `8f7abff` — see `.loop-engineer/evidence/bootstrap-packaged-settings-only-boot.md`.
+
 ## Packaged verify command
 
 ```text

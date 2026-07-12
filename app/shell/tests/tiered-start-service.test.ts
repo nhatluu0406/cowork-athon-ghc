@@ -56,3 +56,14 @@ test("propagates any OTHER live error without falling back", async () => {
   await assert.rejects(() => start(), /supervisor spawn failed/);
   assert.equal(settingsCalled, false, "a real live failure must not be masked as onboarding");
 });
+
+test("falls back to settings-only on RuntimeSpawnError when enabled", async () => {
+  const { RuntimeSpawnError } = await import("@cowork-ghc/service");
+  const start = createTieredStartService(
+    () => Promise.reject(new RuntimeSpawnError("OpenCode binary not found (ENOENT)", "ENOENT")),
+    () => Promise.resolve(settingsHandle),
+    { fallbackOnLiveSpawnFailure: true },
+  );
+  const started = await start();
+  assert.equal(started, settingsHandle);
+});

@@ -102,20 +102,23 @@ function createShellController(settingsFilePath: string, packaged: ReturnType<ty
     }),
   ]);
 
+  const settingsOnlyOptions = {
+    settingsFilePath,
+    allowedOrigins: [APP_ORIGIN] as const,
+    allowEnvCredentialImport: envCredentialImportEnabled(),
+  };
+  const settingsOnlyStart = createSettingsOnlyStartService(settingsOnlyOptions);
+  const liveTieredStart = createTieredStartService(
+    createLiveStartService(createLiveOptionsResolver(liveSource)),
+    settingsOnlyStart,
+    { fallbackOnLiveSpawnFailure: true },
+  );
+
   return new ServiceController({
     log: writeLifecycleLog,
     allowEnvCredentialImport: envCredentialImportEnabled(),
-    startService: createTieredStartService(
-      tracedStartService("live", createLiveStartService(createLiveOptionsResolver(liveSource))),
-      tracedStartService(
-        "settings_only",
-        createSettingsOnlyStartService({
-          settingsFilePath,
-          allowedOrigins: [APP_ORIGIN],
-          allowEnvCredentialImport: envCredentialImportEnabled(),
-        }),
-      ),
-    ),
+    startService: tracedStartService("settings_only", settingsOnlyStart),
+    startLiveService: tracedStartService("live", liveTieredStart),
   });
 }
 
@@ -220,7 +223,7 @@ void runShellLifecycle({
       getBootstrap: () => shellController!.getBootstrap(),
       restartService: async () => {
         await shellController!.stop();
-        await shellController!.start();
+        await shellController!.startLive();
       },
     });
     createMainWindow();
