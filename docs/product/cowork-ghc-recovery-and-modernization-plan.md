@@ -3,8 +3,9 @@
 ## 1. Freeze Baseline
 
 Để đảm bảo tính ổn định trong suốt quá trình thực hiện kế hoạch phục hồi, toàn bộ mã nguồn của dự án sẽ được đóng băng (freeze) ngoại trừ các thay đổi được chỉ định rõ ràng trong kế hoạch này.
-*   **Git Commit Gốc:** `bc3518f — fix(shell): show packaged window on Windows and harden lifecycle scripts`.
-*   **Quy tắc đóng băng:** Không thêm bất kỳ tính năng (feature) mới nào, không tích hợp các nhánh D1–D4, không thay đổi các quy tắc cấp quyền (permission rules) hoặc chính sách tệp nhạy cảm (secret policies) cho đến khi các bước dọn dẹp và tái cấu trúc nền tảng hoàn thành.
+*   **Git Commit Gốc (cập nhật 2026-07-13):** `2ac9099 — docs(audit): assess current Cowork GHC project health` (sau pre-merge stabilization: tag `pre-external-integration-2026-07-14`).
+*   **Baseline lịch sử:** `bc3518f` vẫn là mốc packaged-window/lifecycle hardening; không còn là freeze baseline hiện tại.
+*   **Quy tắc đóng băng:** Không thêm bất kỳ tính năng (feature) mới nào, không tích hợp các nhánh D1–D4, không thay đổi các quy tắc cấp quyền (permission rules) hoặc chính sách tệp nhạy cảm (secret policies) cho đến khi external integration intake hoàn tất. **Architecture refactor** (tách `app-shell.ts`, chuyển snapshot/watchdog sang service) **được hoãn** đến sau khi code D1–D4 được hợp nhất.
 
 ---
 
@@ -22,6 +23,8 @@ Thực hiện dọn dẹp các tệp mã nguồn và script verifier dư thừa 
 ---
 
 ## 3. Architecture Refactor Sequence
+
+> **Trạng thái 2026-07-13:** Giai đoạn này **hoãn** cho đến sau external integration merge (D1–D4). Pre-merge stabilization chỉ dọn verifier, sửa collapsed layout, và chuẩn hóa docs — không tách `app-shell.ts` hay di chuyển snapshot/watchdog trong task đó.
 
 Mục tiêu chính là di chuyển logic nghiệp vụ ra khỏi giao diện UI và phân tách "God Object" `app-shell.ts`:
 
