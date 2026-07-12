@@ -326,15 +326,15 @@
     <h1>Knowledge Graph Doanh nghiệp từ Microsoft 365 — Hệ thống đang ở đâu?</h1>
     <p class="sub">Bản tóm tắt phi kỹ thuật: hệ thống làm được gì, chưa làm được gì, và mức độ sẵn sàng thực tế để ra quyết định (tiếp tục đầu tư / điều chỉnh phạm vi / lùi mốc thời gian).</p>
     <div class="meta-row">
-      <span><b>Cập nhật:</b> dựa trên audit code trực tiếp gần nhất</span>
+      <span><b>Cập nhật:</b> 2026-07-12 — sau 4 vòng audit code trực tiếp trong ngày (backend, llm-svc, frontend đều tự build/test lại để kiểm chứng)</span>
       <span><b>Phạm vi:</b> POC 1 phòng ban, ~50 người dùng</span>
     </div>
   </header>
 
   <div class="verdict">
-    <div class="icon">!</div>
+    <div class="icon">✓</div>
     <div class="txt">
-      <b>Kết luận ngắn gọn:</b> Phần khó nhất về mặt kỹ thuật (đồ thị tri thức, AI trích xuất, thuật toán tìm kiếm) đã chạy thật và đúng. Nhưng hệ thống <b>chưa thể trả lời câu hỏi có ích cho người dùng cuối</b> vì 2 mắt xích dữ liệu đầu vào còn thiếu — đây là khoảng cách ngắn nhất để lấp, không phải một khiếm khuyết kiến trúc.
+      <b>Kết luận ngắn gọn:</b> Tiến bộ rõ rệt so với lần đánh giá trước — phần khó nhất (đồ thị tri thức, AI trích xuất, thuật toán tìm kiếm) đã chạy thật, <b>4 định dạng tài liệu (Word/Excel/PowerPoint/PDF) nay đọc được nội dung thật</b>, và <b>giao diện người dùng (7 màn hình) đã dựng xong, build sạch, và đã commit vào git</b>. Mắt xích còn thiếu duy nhất để có câu trả lời hữu ích: kho "tìm kiếm theo nghĩa" vẫn rỗng vì cơ chế nạp dữ liệu vào đó (embedding) đã được sửa đúng nhưng <b>chưa được nối vào bất kỳ quy trình chạy tự động hay thủ công nào</b> — đây là khoảng cách ngắn nhất và duy nhất còn lại để hệ thống dùng thật được.
     </div>
   </div>
 
@@ -350,19 +350,19 @@
         <div class="verdict-txt good">Vững</div>
       </div>
       <div class="score-card">
-        <div class="label">Dữ liệu đầu vào (tài liệu)</div>
-        <div class="dots"><span class="on risk"></span><span></span><span></span><span></span><span></span></div>
-        <div class="verdict-txt risk">Yếu</div>
+        <div class="label">Đọc nội dung tài liệu</div>
+        <div class="dots"><span class="on good"></span><span class="on good"></span><span class="on good"></span><span class="on good"></span><span></span></div>
+        <div class="verdict-txt good">Đã đọc được thật</div>
       </div>
       <div class="score-card">
-        <div class="label">Chất lượng câu trả lời AI</div>
+        <div class="label">Tìm kiếm theo nghĩa (embedding)</div>
         <div class="dots"><span class="on warn"></span><span class="on warn"></span><span></span><span></span><span></span></div>
-        <div class="verdict-txt warn">Chưa kiểm chứng được</div>
+        <div class="verdict-txt warn">Code đúng, chưa nối chạy</div>
       </div>
       <div class="score-card">
         <div class="label">Giao diện người dùng</div>
-        <div class="dots"><span class="on warn"></span><span class="on warn"></span><span class="on warn"></span><span></span><span></span></div>
-        <div class="verdict-txt warn">Có, chưa demo được</div>
+        <div class="dots"><span class="on good"></span><span class="on good"></span><span class="on good"></span><span class="on good"></span><span></span></div>
+        <div class="verdict-txt good">Đã dựng, build sạch</div>
       </div>
     </div>
   </section>
@@ -406,8 +406,15 @@
         <div class="pc-item">
           <div class="mark">✓</div>
           <div class="body">
-            <b>Giao diện người dùng đã viết đủ 7 màn hình</b>
-            <p>Tìm kiếm hỏi-đáp, duyệt thực thể, trực quan hóa đồ thị, đánh giá phản hồi, cấu hình kết nối, đăng nhập, tổng quan — đúng theo phạm vi đã thống nhất.</p>
+            <b>Giao diện người dùng đã dựng xong, build được, và đã commit</b>
+            <p>Đủ 7 màn hình (tìm kiếm hỏi-đáp, duyệt thực thể, trực quan hóa đồ thị, đánh giá phản hồi, cấu hình kết nối, đăng nhập, tổng quan) — đã tự chạy thử lệnh build và xác nhận ra sản phẩm thật, không chỉ có code nằm im.</p>
+          </div>
+        </div>
+        <div class="pc-item">
+          <div class="mark">✓</div>
+          <div class="body">
+            <b>4 định dạng tài liệu phổ biến nhất nay đọc được nội dung thật</b>
+            <p>Word, Excel, PowerPoint, PDF — đã tự kiểm tra trực tiếp mã nguồn, xác nhận không còn là phần "giả để có" như lần audit trước.</p>
           </div>
         </div>
       </div>
@@ -416,36 +423,29 @@
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Chưa trả lời được câu hỏi thật</b>
-            <p>Kho dữ liệu để "tìm kiếm theo nghĩa" hiện đang rỗng — hệ thống chưa được chạy để nạp dữ liệu vào đó, nên phần quan trọng nhất của Q&amp;A hiện chưa cho kết quả.</p>
+            <b>Chưa trả lời được câu hỏi thật — vì cơ chế nạp dữ liệu chưa được "cắm điện"</b>
+            <p>Đoạn code tính embedding (để tìm kiếm theo nghĩa) đã được sửa đúng, nhưng chưa có nơi nào trong hệ thống thực sự gọi tới nó — không có lịch chạy tự động, không có bước gọi khi tài liệu mới vào. Kho dữ liệu vẫn rỗng cho tới khi việc này được nối lại, dù bản thân code không còn lỗi.</p>
           </div>
         </div>
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Đa số định dạng tài liệu chưa đọc được nội dung</b>
-            <p>Word, Excel, PowerPoint, PDF — 4 trong 5 định dạng phổ biến nhất trong doanh nghiệp — hiện chưa trích xuất được nội dung thật, chỉ file text thuần hoạt động.</p>
+            <b>Không có phương án AI sinh câu trả lời chạy nội bộ (offline) — nhưng đã có một nửa</b>
+            <p>Phần suy luận AI cho "tìm hiểu nghĩa tài liệu" (embedding) đã chạy được nội bộ thật (đã tự kiểm chứng bằng cách nạp mô hình thật và chạy suy luận thành công). Phần còn thiếu là mô hình sinh văn bản chạy nội bộ — hiện vẫn phụ thuộc dịch vụ AI đám mây cho việc này, không phải toàn bộ hệ thống.</p>
           </div>
         </div>
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Không có phương án AI chạy nội bộ (offline)</b>
-            <p>Thiết kế ban đầu cho phép chạy mô hình AI ngay trên máy chủ nội bộ để giảm phụ thuộc dịch vụ ngoài — phần này chưa được xây, hệ thống hiện phụ thuộc hoàn toàn vào dịch vụ AI đám mây.</p>
+            <b>Một mẩu nợ kỹ thuật nhỏ vừa lọt vào git ở trạng thái lỗi</b>
+            <p>Một file kiểm thử hiệu năng bị lỗi cú pháp (không build được) đã vô tình bị gộp vào cùng lượt commit với phần giao diện — dưới 1 ngày công để sửa, nhưng nên dọn trước khi tính là "sạch hoàn toàn".</p>
           </div>
         </div>
         <div class="pc-item">
           <div class="mark">✕</div>
           <div class="body">
-            <b>Giao diện chưa dựng được để xem trực tiếp</b>
-            <p>Code 7 màn hình đã có, nhưng thiếu bước khởi tạo dự án ban đầu — nên hiện chưa thể bấm chạy và xem demo thực tế cho stakeholder.</p>
-          </div>
-        </div>
-        <div class="pc-item">
-          <div class="mark">✕</div>
-          <div class="body">
-            <b>Rủi ro quy trình báo cáo</b>
-            <p>Đã xảy ra 2 lần trong cùng một ngày: đội thực hiện báo "hoàn thành" nhưng kiểm tra trực tiếp cho thấy chưa đúng. Cần một bước xác minh độc lập bắt buộc trước khi chấp nhận bất kỳ báo cáo "xong" nào tiếp theo.</p>
+            <b>Rủi ro quy trình báo cáo — đã cải thiện nhưng chưa nên bỏ qua bước kiểm tra</b>
+            <p>Từng xảy ra 2 lần báo "hoàn thành" sai trong dự án này. Tin tốt: 2 lượt báo cáo "xong" gần nhất (backend/llm-svc production-ready, và frontend hoàn thành) đã được kiểm tra độc lập và đúng như báo cáo — cho thấy quy trình đang đi đúng hướng. Vẫn nên giữ thói quen xác minh độc lập cho các mốc lớn tiếp theo.</p>
           </div>
         </div>
       </div>
@@ -459,8 +459,8 @@
     </div>
     <div class="gauge-wrap">
       <div class="gauge-track">
-        <span class="gauge-marker" style="left: 34%;"></span>
-        <span class="gauge-marker-label" style="left: 34%;">Hiện tại</span>
+        <span class="gauge-marker" style="left: 62%;"></span>
+        <span class="gauge-marker-label" style="left: 62%;">Hiện tại</span>
         <div class="zone z1">Chưa dùng được</div>
         <div class="zone z2">Hạ tầng đã kết nối</div>
         <div class="zone z3">Dùng thử nội bộ</div>
@@ -473,7 +473,7 @@
         <span>Ổn định, đủ tin cậy</span>
       </div>
       <div class="gauge-note">
-        Hệ thống đã vượt qua mốc "không chạy được" và đang ở vùng <b>"hạ tầng đã kết nối"</b> — server khởi động, định tuyến đúng, không sập. Nhưng vì hai khoảng trống dữ liệu (embedding rỗng + parser tài liệu chưa đọc được nội dung), một người dùng thật đặt câu hỏi hôm nay sẽ <b>không nhận được câu trả lời hữu ích</b>. Đây không phải lỗi thiết kế — là công việc dữ liệu còn dang dở, có thể đo được và ước lượng thời gian rõ ràng (xem bên dưới).
+        Hệ thống đã tiến sang vùng <b>"dùng thử nội bộ"</b> — tài liệu đọc được nội dung thật, giao diện đã dựng và build sạch, backend/llm-svc đã tự kiểm chứng độc lập là chạy đúng. Vẫn còn một khoảng trống cuối cùng: kho "tìm kiếm theo nghĩa" chưa được nạp dữ liệu vì cơ chế embedding chưa nối vào quy trình chạy thật — nên một người dùng đặt câu hỏi hôm nay vẫn <b>chưa nhận được câu trả lời đầy đủ</b>. Đây là công việc "nối dây" còn dang dở, không phải lỗi thiết kế, và là khoảng cách ngắn nhất còn lại (xem bên dưới).
       </div>
     </div>
   </section>
@@ -487,41 +487,41 @@
       <div class="priority-item">
         <div class="rank">1</div>
         <div class="content">
-          <div class="row1"><h3>Nạp dữ liệu vào kho tìm kiếm theo nghĩa</h3><span class="eff">3–5 ngày</span></div>
-          <p>Chi phí thấp nhất, nhưng mở khóa gần như toàn bộ giá trị của tính năng hỏi-đáp. Nên làm ngay và làm trước tiên — đây là "nút thắt cổ chai" duy nhất giữ toàn bộ hệ thống ở mức "chưa dùng được".</p>
+          <div class="row1"><h3>Nối cơ chế embedding vào quy trình chạy thật</h3><span class="eff">2–4 ngày</span></div>
+          <p>Chi phí thấp nhất, nhưng mở khóa gần như toàn bộ giá trị còn lại của tính năng hỏi-đáp. Đoạn code đã đúng — việc còn lại là gọi nó (lịch chạy định kỳ hoặc gọi khi có tài liệu mới) rồi chạy backfill một lần cho dữ liệu hiện có. Đây là "nút thắt cổ chai" duy nhất còn lại.</p>
         </div>
       </div>
       <div class="priority-item">
         <div class="rank">2</div>
         <div class="content">
-          <div class="row1"><h3>Hoàn thiện đọc nội dung Word/Excel/PowerPoint/PDF</h3><span class="eff">2–3 tuần</span></div>
-          <p>Bắt buộc phải có nếu muốn dùng dữ liệu thật của công ty — hiện tại các định dạng tài liệu phổ biến nhất chưa được đọc, nên dữ liệu thử nghiệm sẽ không đại diện cho thực tế.</p>
+          <div class="row1"><h3>Xác nhận Frontend hoạt động thật với Backend (end-to-end)</h3><span class="eff">2–3 ngày</span></div>
+          <p>Giao diện đã build sạch và đã commit, nhưng chưa có xác nhận chạy thử thật với backend đang sống (đăng nhập → hỏi-đáp → thấy trích dẫn). Nên demo thử nội bộ trước khi trình diễn cho stakeholder.</p>
         </div>
       </div>
       <div class="priority-item">
         <div class="rank">3</div>
         <div class="content">
-          <div class="row1"><h3>Dựng bộ khung Frontend để xem demo trực tiếp</h3><span class="eff">vài ngày (phần UI đã viết sẵn)</span></div>
-          <p>Chi phí còn lại nhỏ vì 7 màn hình đã được viết — chỉ thiếu bước khởi tạo dự án. Nên làm sớm để có thể trình diễn cho stakeholder song song với các mục 1–2.</p>
+          <div class="row1"><h3>Dọn nợ kỹ thuật nhỏ vừa lọt vào git</h3><span class="eff">&lt; 1 ngày</span></div>
+          <p>Một file kiểm thử hiệu năng bị lỗi build đã vô tình bị commit cùng đợt với phần giao diện. Sửa nhanh để giữ trạng thái "build sạch" là đúng nghĩa, không có ngoại lệ.</p>
         </div>
       </div>
       <div class="priority-item">
         <div class="rank">4</div>
         <div class="content">
-          <div class="row1"><h3>Thiết lập bước xác minh độc lập bắt buộc</h3><span class="eff">quy trình, không tốn thời gian dev</span></div>
-          <p>Sau 2 lần báo cáo sai "hoàn thành", mọi báo cáo trạng thái tiếp theo nên được một người/luồng kiểm tra độc lập xác nhận bằng cách chạy thử thật, trước khi được xem là căn cứ ra quyết định.</p>
+          <div class="row1"><h3>Tiếp tục xác minh độc lập cho các mốc lớn tiếp theo</h3><span class="eff">quy trình, không tốn thời gian dev</span></div>
+          <p>2 lượt báo "hoàn thành" gần nhất (backend/llm-svc, và frontend) đã được kiểm tra độc lập và đúng như báo cáo — quy trình đang cải thiện. Vẫn nên giữ thói quen này cho các cột mốc còn lại, đặc biệt là mục 1 ở trên.</p>
         </div>
       </div>
       <div class="priority-item">
         <div class="rank">5</div>
         <div class="content">
-          <div class="row1"><h3>AI chạy nội bộ (offline model)</h3><span class="eff">3–4 tuần — có thể lùi lại</span></div>
-          <p>Chỉ cần thiết nếu yêu cầu bảo mật/chi phí bắt buộc không phụ thuộc dịch vụ AI đám mây. Có thể tạm hoãn để tập trung nguồn lực cho mục 1–3 nếu chấp nhận dùng AI đám mây trong giai đoạn thử nghiệm.</p>
+          <div class="row1"><h3>AI sinh văn bản chạy nội bộ (GGUF/Safetensors)</h3><span class="eff">1–2 tuần — có thể lùi lại</span></div>
+          <p>Phần embedding chạy nội bộ đã xong; phần còn lại (mô hình sinh câu trả lời chạy tại chỗ) chỉ cần thiết nếu yêu cầu bảo mật/chi phí bắt buộc không phụ thuộc dịch vụ AI đám mây. Có thể tạm hoãn để tập trung nguồn lực cho mục 1–3.</p>
         </div>
       </div>
     </div>
     <div class="callout">
-      <b>Lưu ý khi ra quyết định:</b> ước tính thời gian ở trên do đội kỹ thuật tự đưa ra và có tiền sử báo cáo lạc quan hai lần liên tiếp trong dự án này. Nên đối chiếu với một mốc kiểm tra thực tế giữa chừng (ví dụ sau mục 1) trước khi cam kết toàn bộ lịch trình phía dưới với các bên liên quan.
+      <b>Lưu ý khi ra quyết định:</b> ước tính thời gian ở trên do đội kỹ thuật tự đưa ra. Tin tốt là 2 lượt báo cáo "xong" gần nhất đã qua kiểm tra độc lập và đúng — nhưng vẫn nên đối chiếu với một mốc kiểm tra thực tế giữa chừng (ví dụ sau mục 1) trước khi cam kết toàn bộ lịch trình phía dưới với các bên liên quan.
     </div>
   </section>
 
@@ -533,19 +533,19 @@
     <div class="timeline-compare">
       <div class="tl-card recommended">
         <div class="tl-label">Demo dùng thật (mục 1–3 ở trên)</div>
-        <div class="tl-value">~5–7 tuần</div>
-        <div class="tl-hint">Đủ để người dùng nội bộ hỏi-đáp trên dữ liệu thật và xem giao diện</div>
+        <div class="tl-value">~1 tuần</div>
+        <div class="tl-hint">Đủ để người dùng nội bộ hỏi-đáp trên dữ liệu thật và xem giao diện — rút ngắn nhiều so với ước tính trước vì tài liệu/giao diện/backend đã xong</div>
       </div>
       <div class="tl-card">
         <div class="tl-label">Hoàn tất toàn bộ phạm vi ban đầu</div>
-        <div class="tl-value">~13–18 tuần</div>
-        <div class="tl-hint">Bao gồm cả AI chạy nội bộ, hoàn thiện quyền hạn nâng cao, và kiểm thử đầy đủ</div>
+        <div class="tl-value">~1–2 tuần</div>
+        <div class="tl-hint">Chủ yếu còn lại là AI sinh văn bản chạy nội bộ (tùy chọn) và dọn dẹp/kiểm thử mở rộng — không còn hạng mục kiến trúc lớn nào dang dở</div>
       </div>
     </div>
   </section>
 
   <div class="foot">
-    <span>Nguồn: đối chiếu trực tiếp với mã nguồn — không dựa trên đánh dấu ✅ của task-list</span>
+    <span>Nguồn: đối chiếu trực tiếp với mã nguồn (build/test tự chạy lại 4 lần trong ngày) — không dựa trên đánh dấu ✅ của task-list</span>
     <span>Tài liệu dành cho quyết định quản lý dự án, không thay thế báo cáo kỹ thuật chi tiết</span>
   </div>
 
