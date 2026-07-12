@@ -87,15 +87,6 @@ export function toRelativePath(absoluteOrRelative: string, workspaceRoot: string
       .replace(/^[/\\]+/u, "")
       .replace(/\\/g, "/");
   }
-  // Windows may use 8.3 short names while the active workspace root uses the long form.
-  const folder = normRoot.split("/").filter(Boolean).at(-1);
-  if (folder !== undefined) {
-    const marker = `/${folder}/`;
-    const markerIndex = normPath.indexOf(marker);
-    if (markerIndex >= 0) {
-      return originalNorm.slice(markerIndex + marker.length).replace(/^\/+/u, "");
-    }
-  }
   if (!/^[a-zA-Z]:/u.test(absoluteOrRelative) && !absoluteOrRelative.startsWith("/") && !absoluteOrRelative.startsWith("\\")) {
     return originalNorm;
   }
