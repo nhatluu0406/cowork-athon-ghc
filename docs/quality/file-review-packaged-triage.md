@@ -7,7 +7,8 @@ updated_at: "2026-07-12"
 # File Work Review packaged triage
 
 This is analysis and verification preparation only. It does not change product code,
-verification harness code, acceptance status, or UI scope.
+acceptance status, or UI scope. The packaged verifier now has additional observability
+only; it still does not change product behavior.
 
 Current required status:
 
@@ -30,10 +31,10 @@ create-blue.txt -> content CREATE-BLUE-314 -> disk file exists -> create activit
 
 Active docs record that implementation, unit/release regression, and Windows package build
 passed, but packaged live A-L did not complete. The retained docs say Journey A failed because
-the live agent file-write steps did not land on disk. No persisted `file-review` startup trace
-or detailed runtime/session diagnostic file was found for the failed run, because the current
-File Review harness does not enable `COWORK_GHC_STARTUP_TRACE` and does not dump conversation
-diagnostics on failure.
+the live agent file-write steps did not land on disk. The original failed run did not retain a
+`file-review` startup trace or detailed runtime/session diagnostic file. The verifier has since
+been hardened so the next failure preserves stage, permission, disk, renderer, conversation, and
+startup-trace evidence.
 
 ## 2. Exact Journey A flow
 
@@ -56,9 +57,12 @@ diagnostics on failure.
 - File Review harness uses isolated temp profile and temp workspace.
 - File Review harness requires `DEEPSEEK_API_KEY` from environment or `.env`.
 - File Review harness configures credential through the UI and runs a live connection test.
-- File Review harness does not set `COWORK_GHC_STARTUP_TRACE`.
-- File Review harness does not preserve the temp profile/workspace on failure.
-- File Review harness does not log runtime session ID, pending permission snapshot, permission decision response, activity snapshot, or conversation diagnostics on Journey A failure.
+- File Review harness now sets `COWORK_GHC_STARTUP_TRACE` for packaged launches.
+- File Review harness now preserves temp profile/workspace/log artifacts on failure.
+- File Review Journey A now uses named stages A01-A12 and times out with the active stage name.
+- File Review Journey A now asserts a real permission dialog before Allow, captures permission ID/operation/path/scope, captures the `/v1/permission/decision` fetch response when available, and confirms the modal leaves pending state.
+- File Review failure diagnostics now include redacted renderer, disk, conversation, permission, activity, file review count, startup trace tail, and sanitized environment metadata.
+- The verifier still requires a live credential to prove the root cause of the packaged Journey A blocker.
 - File Review artifact creation is UI-driven after a `file_mutation` EV: before snapshot is captured when permission is pending; after snapshot is captured when a `file_mutation` event is seen.
 - No-network focused tests passed for file-review service/router, activity model, permission controller, and permission bridge.
 
@@ -96,6 +100,9 @@ Treat these as different failure classes:
 | Insufficient evidence | Current state when a failure is plausible but no retained logs prove the exact step. |
 
 Current classification: **Insufficient evidence**, with harness observability as the highest-confidence issue to fix before a clean rerun.
+
+Observability hardening status: **implemented in verifier only**. The next live rerun should now
+produce enough evidence to reclassify the failure if Journey A still fails.
 
 ## 6. Comparison with passing packaged flows
 
@@ -181,9 +188,38 @@ Recommended command shape, with no API key in the command:
 node tools/verify/file-review-packaged.mjs
 ```
 
+The verifier also supports a no-live diagnostics simulation:
+
+```powershell
+$env:CGHC_FILE_REVIEW_SIMULATE_FAILURE='1'
+node tools/verify/file-review-packaged.mjs
+Remove-Item Env:\CGHC_FILE_REVIEW_SIMULATE_FAILURE
+```
+
+Simulation proves artifact generation and stage labeling only. It does not run the packaged app
+and does not validate Journey A.
+
+## 9.1 Verifier artifact locations and cleanup
+
+On failure, the verifier preserves evidence and prints the artifact root. The default shape is:
+
+```text
+%TEMP%\cghc-freview-artifacts-*\file-review-verification-result.json
+%TEMP%\cghc-freview-artifacts-*\file-review-verification-summary.md
+%TEMP%\cghc-freview-artifacts-*\startup.trace
+%TEMP%\cghc-freview-profile-*
+%TEMP%\cghc-freview-ws-*
+```
+
+On success, the verifier removes the isolated profile and workspace after writing the structured
+result artifact. On failure, do not delete evidence until Cursor has inspected the JSON summary,
+startup trace, profile conversation store, and fixture workspace. Manual cleanup after evidence
+capture is safe only for paths printed by the verifier under `%TEMP%\cghc-freview-*`.
+
 ## 10. Required logs/evidence
 
-Cursor should capture these in the next live rerun:
+Cursor should capture these in the next live rerun. Most of these now land in
+`file-review-verification-result.json` automatically:
 
 - `COWORK_GHC_STARTUP_TRACE` file for the File Review run.
 - Process list before launch and after cleanup.
@@ -234,10 +270,8 @@ Do not apply these in this triage task. These are candidate fixes for Cursor aft
 
 ### Case 1 - harness issue
 
-Patch `tools/verify/file-review-packaged.mjs` only. Add redacted startup trace, Journey A
-permission/session/activity diagnostics, failure-preserve mode for temp profile/workspace,
-and explicit assertions that permission appeared and the decision resolved before waiting for
-disk file. Then rerun:
+Patch `tools/verify/file-review-packaged.mjs` only if the new diagnostics prove the verifier is
+still waiting on the wrong selector, path, event, or stage boundary. Then rerun:
 
 ```powershell
 npm run verify:release
@@ -271,3 +305,12 @@ clean processes -> clean profile -> clean fixture workspace -> packaged build fr
 
 If the live credential/model/base URL cannot be confirmed, report the missing prerequisite
 and leave File Work Review as `PARTIAL PASS`.
+
+Exact Cursor rerun command after this hardening:
+
+```powershell
+node tools/verify/file-review-packaged.mjs
+```
+
+Prerequisite: `DEEPSEEK_API_KEY` must be available through the environment or local `.env`, but
+must not be pasted into the command line or docs.
