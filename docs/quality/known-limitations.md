@@ -18,7 +18,8 @@ updated_at: "2026-07-12"
 
 - **Một OpenCode runtime session = một lượt** — sau terminal, Cowork GHC tạo runtime turn mới liên kết cùng conversation; không re-prompt session đã terminal (OpenCode trả 409).
 - **Reuse** cùng OpenCode session chỉ khi `canPrompt === true` và session chưa terminal.
-- **Context continuity** dùng khối transcript bounded (~12k ký tự), deterministic — không phải native OpenCode `/continue`; có thể cắt bớt lượt cũ khi vượt budget.
+- **Context continuity** dùng envelope nội bộ bounded (~12k ký tự), đánh dấu untrusted — không phải native OpenCode `/continue`; có thể cắt bớt lượt cũ khi vượt budget.
+- Transcript cũ có thể chứa wrapper leak từ slice trước; `stripTransportArtifacts` dọn khi hiển thị/persist mới và loại khỏi context tương lai — **không** rewrite hàng loạt history cũ.
 - **Một runtime execution active** — không chạy song song nhiều OpenCode session cho cùng conversation.
 - Sau relaunch app, conversation gần nhất được chọn lại; transcript hiển thị ngay; không tự khởi động OpenCode cho đến khi user gửi tin.
 - Trạng thái `completed_without_final_message` khi tool hoàn tất nhưng runtime không trả text cuối; UI dùng fallback tiếng Việt.

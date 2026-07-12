@@ -103,6 +103,16 @@ export function createOpencodeSessionStore(options: OpencodeSessionStoreOptions)
       });
       const frames: unknown[] = [];
       for (const message of asArray(messages)) {
+        const rec = asRecord(message);
+        const info = asRecord(rec.info);
+        const infoId = readString(info, "id");
+        const infoRole = readString(info, "role");
+        if (infoId !== undefined && (infoRole === "user" || infoRole === "assistant")) {
+          frames.push({
+            type: "message.updated",
+            properties: { sessionID: id, info: { id: infoId, role: infoRole, sessionID: id } },
+          });
+        }
         for (const part of partsOf(message)) {
           frames.push({ type: "message.part.updated", properties: { sessionID: id, part } });
         }
