@@ -12,6 +12,16 @@ if errorlevel 1 goto :nonode
 
 if not exist "%EXE%" goto :nobuild
 
+call :show_window
+if "%ERRORLEVEL%"=="0" (
+  echo [Cowork GHC] start: already running - window restored
+  pause
+  exit /b 0
+)
+
+rem Clear stale packaged helper/main processes that have no restorable window.
+taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+
 echo [Cowork GHC] Starting packaged app...
 echo Project root: %ROOT%
 echo Executable: %EXE%
@@ -20,6 +30,8 @@ node "%ROOT%\tools\app\cli.mjs" start --root "%ROOT%"
 set "RC=%ERRORLEVEL%"
 echo.
 if "%RC%"=="0" (
+  call :show_window
+  if errorlevel 1 echo [Cowork GHC] WARN: app started, but no visible window was detected yet.
   echo [Cowork GHC] start: READY
 ) else if "%RC%"=="3" (
   echo [Cowork GHC] start: NOT INITIALIZED - run init.bat first.
@@ -43,3 +55,7 @@ echo [Cowork GHC] ERROR: Node.js not found on PATH.
 echo Install Node.js LTS from https://nodejs.org, then run init.bat and build.bat.
 pause
 exit /b 9
+
+:show_window
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$code = 'using System; using System.Runtime.InteropServices; public class W { [StructLayout(LayoutKind.Sequential)] public struct R { public int Left; public int Top; public int Right; public int Bottom; } [DllImport(\"user32.dll\")] public static extern bool GetWindowRect(IntPtr hWnd, out R r); [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow); [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr hWnd); [DllImport(\"user32.dll\")] public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int Wd, int Ht, bool Repaint); }'; Add-Type $code -ErrorAction SilentlyContinue; $p = $null; for ($i = 0; $i -lt 40; $i++) { $p = Get-Process -Name 'Cowork GHC' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Sort-Object StartTime -Descending | Select-Object -First 1; if ($p) { break }; Start-Sleep -Milliseconds 250 }; if (-not $p) { exit 1 }; $h = $p.MainWindowHandle; $r = New-Object W+R; [W]::ShowWindow($h, 9) | Out-Null; [W]::GetWindowRect($h, [ref]$r) | Out-Null; if ($r.Right -lt 100 -or $r.Bottom -lt 100 -or $r.Left -gt 3000 -or $r.Top -gt 2000) { [W]::MoveWindow($h, 80, 80, 1280, 800, $true) | Out-Null }; [W]::SetForegroundWindow($h) | Out-Null; exit 0" >nul 2>nul
+exit /b %ERRORLEVEL%

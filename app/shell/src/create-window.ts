@@ -48,7 +48,17 @@ export function createMainWindow(loadUrl: string = APP_INDEX_URL): BrowserWindow
   });
 
   hardenWebContents(window.webContents);
-  window.once("ready-to-show", () => window.show());
+
+  // Windows titleBarOverlay + show:false can skip ready-to-show (electron/electron#42409).
+  let shown = false;
+  const showWhenReady = () => {
+    if (shown) return;
+    shown = true;
+    window.show();
+  };
+  window.once("ready-to-show", showWhenReady);
+  window.webContents.once("did-finish-load", showWhenReady);
+
   void window.loadURL(loadUrl);
   return window;
 }

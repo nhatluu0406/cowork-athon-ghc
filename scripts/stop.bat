@@ -12,6 +12,7 @@ echo Project root: %ROOT%
 echo.
 node "%ROOT%\tools\app\cli.mjs" stop --root "%ROOT%"
 set "RC=%ERRORLEVEL%"
+taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
 echo.
 if "%RC%"=="0" (
   echo [Cowork GHC] stop: done
