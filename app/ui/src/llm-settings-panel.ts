@@ -43,21 +43,69 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function userFacingProviderError(message: string): string {
+function userFacingProviderError(error?: { kind?: string; message?: string; recovery?: string } | string): string {
+  const message = typeof error === "string" ? error : (error?.message ?? "");
+  const kind = typeof error === "string" ? "" : (error?.kind ?? "");
   const lower = message.toLowerCase();
-  if (lower.includes("authentication was rejected") || lower.includes("auth")) {
-    return "Xác thực bị từ chối. Hãy kiểm tra lại khoá API.";
+
+  if (kind === "auth_invalid" || lower.includes("authentication was rejected")) {
+    return "Xác thực bị từ chối. Kiểm tra lại khoá API rồi thử lại.";
   }
-  if (lower.includes("rate-limit")) return "Nhà cung cấp đang giới hạn tần suất. Thử lại sau.";
-  if (lower.includes("network error") || lower.includes("could not reach")) {
-    return "Không kết nối được tới nhà cung cấp. Kiểm tra mạng hoặc base URL.";
+  if (kind === "model_invalid" || lower.includes("model was not accepted")) {
+    return "Mô hình không được nhà cung cấp chấp nhận. Chọn mô hình hợp lệ rồi thử lại.";
   }
-  if (lower.includes("time bound") || lower.includes("timeout")) {
-    return "Nhà cung cấp không phản hồi kịp thời. Thử lại.";
+  if (lower.includes("ssrf policy") || lower.includes("base_url refused")) {
+    return "Base URL bị từ chối bởi chính sách bảo mật. Dùng endpoint HTTPS công khai hợp lệ.";
   }
-  if (lower.includes("unavailable")) return "Nhà cung cấp tạm thời không khả dụng. Thử lại sau.";
-  if (lower.includes("unrecognized reason")) return "Yêu cầu thất bại. Kiểm tra cấu hình và thử lại.";
+  if (kind === "rate_limited" || lower.includes("rate-limit")) {
+    return "Nhà cung cấp đang giới hạn tần suất. Thử lại sau.";
+  }
+  if (kind === "timeout" || lower.includes("time bound") || lower.includes("timeout")) {
+    return "Nhà cung cấp không phản hồi kịp thời. Kiểm tra base URL và mạng rồi thử lại.";
+  }
+  if (
+    kind === "unavailable" ||
+    lower.includes("network error") ||
+    lower.includes("could not reach") ||
+    lower.includes("econnrefused") ||
+    lower.includes("enotfound")
+  ) {
+    return "Không kết nối được tới base URL. Kiểm tra URL và mạng rồi thử lại.";
+  }
+  if (lower.includes("unavailable")) {
+    return "Nhà cung cấp tạm thời không khả dụng. Thử lại sau.";
+  }
+  if (lower.includes("unrecognized reason")) {
+    return "Yêu cầu thất bại. Kiểm tra cấu hình và thử lại.";
+  }
+  if (message.length > 0) return message;
+  return "Kiểm tra kết nối thất bại.";
+}
+
+function userFacingBaseUrlError(message: string): string {
+  const lower = message.toLowerCase();
+  if (lower.includes("ssrf")) return userFacingProviderError(message);
+  if (lower.includes("https")) return "Base URL phải dùng HTTPS.";
   return message;
+}
+
+function setControlsBusy(
+  busy: boolean,
+  controls: {
+    saveCredBtn: HTMLButtonElement;
+    deleteCredBtn: HTMLButtonElement;
+    testBtn: HTMLButtonElement;
+    providerSelect: HTMLSelectElement;
+    modelSelect: HTMLSelectElement;
+    baseUrlInput: HTMLInputElement;
+  },
+): void {
+  controls.testBtn.disabled = busy;
+  controls.saveCredBtn.disabled = busy;
+  controls.deleteCredBtn.disabled = busy;
+  controls.providerSelect.disabled = busy;
+  controls.modelSelect.disabled = busy;
+  controls.baseUrlInput.disabled = busy;
 }
 
 function providerRow(settings: SettingsView, providerId: string) {
@@ -244,7 +292,7 @@ export function mountLlmSettingsPanel(container: HTMLElement, deps: LlmSettingsP
         render(await deps.client.setProviderBaseUrl(selectedPreset.providerId, baseUrlInput.value.trim()));
         setStatus("Đã lưu base URL.");
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Base URL không hợp lệ.", "err");
+        setStatus(userFacingBaseUrlError(error instanceof Error ? error.message : "Base URL không hợp lệ."), "err");
       }
     })();
   });
@@ -283,18 +331,33 @@ export function mountLlmSettingsPanel(container: HTMLElement, deps: LlmSettingsP
   testBtn.addEventListener("click", () => {
     void (async () => {
       setStatus("Đang kiểm tra kết nối…");
-      testBtn.disabled = true;
+      setControlsBusy(true, {
+        saveCredBtn,
+        deleteCredBtn,
+        testBtn,
+        providerSelect,
+        modelSelect,
+        baseUrlInput,
+      });
       try {
         const result: TestResult = await deps.client.testProviderConnection(selectedPreset.providerId);
         if (result.ok) {
           setStatus("Kết nối thành công.", "ok");
         } else {
-          setStatus(userFacingProviderError(result.error?.message ?? "Kiểm tra kết nối thất bại."), "err");
+          setStatus(userFacingProviderError(result.error), "err");
         }
       } catch (error) {
         setStatus(userFacingProviderError(error instanceof Error ? error.message : "Kiểm tra kết nối thất bại."), "err");
       } finally {
-        testBtn.disabled = false;
+        setControlsBusy(false, {
+          saveCredBtn,
+          deleteCredBtn,
+          testBtn,
+          providerSelect,
+          modelSelect,
+          baseUrlInput,
+        });
+        renderCredentialStatus(await deps.client.getSettings());
       }
     })();
   });

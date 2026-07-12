@@ -93,18 +93,25 @@ export async function createCoworkService(
   const baseSettingsStore = await openSettingsStore({ fs: settingsFs });
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
+  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
 
   // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
-  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  const httpBundle =
+    options.connector === undefined
+      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver)
+      : undefined;
   const providerPort =
     options.connector !== undefined
       ? createProviderPort({ ssrf, connector: options.connector })
-      : createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver).providerPort;
+      : httpBundle!.providerPort;
 
   const modelConfig = createModelConfigService({
     port: providerPort,
     audit: createInMemoryModelAuditSink(),
   });
+  if (httpBundle !== undefined) {
+    httpBundle.bindActiveModelResolver(() => modelConfig.activeModelFor() ?? undefined);
+  }
   await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
 
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,

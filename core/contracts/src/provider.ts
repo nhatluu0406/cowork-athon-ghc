@@ -66,6 +66,7 @@ export interface TestResult {
 /** Canonical provider error taxonomy, enforced at the boundary (PR7). */
 export type ProviderErrorKind =
   | "auth_invalid"
+  | "model_invalid"
   | "rate_limited"
   | "timeout"
   | "unavailable"

@@ -25,13 +25,13 @@
  * {@link ProviderConnector.cancel} therefore stays a no-op here (no stream is opened).
  */
 
-import type { CredentialRef, ProviderId, TestResult } from "@cowork-ghc/contracts";
+import type { CredentialRef, ModelRef, ProviderId, TestResult } from "@cowork-ghc/contracts";
 import type { ProviderEnvSpec, ProviderKeyInjection } from "@cowork-ghc/runtime";
 import type { ConnectTarget, SsrfPolicy } from "./ssrf-policy.js";
 import type { ProviderConnector, StreamHandle } from "./provider-port.js";
 import { providerEnvSpec, isCustomEndpoint } from "./descriptors.js";
-import { mapProviderError } from "./error-map.js";
-import { authHeadersFor, probeUrlFor } from "./probe-profiles.js";
+import { mapProviderError, type ProviderErrorContext } from "./error-map.js";
+import { authHeadersFor, chatCompletionUrl, minimalChatCompletionBody, probeUrlFor } from "./probe-profiles.js";
 import { createHttpsDialer, type HttpDialer, type HttpProbeResponse } from "./http-dialer.js";
 
 /** The minimal credential capability the connector needs (decoupled from the full service). */
@@ -54,6 +54,8 @@ export interface HttpConnectorOptions {
   readonly maxRedirects?: number;
   /** Env spec resolver (labels the scrubber registration). Defaults to descriptor lookup. */
   readonly envSpecFor?: (id: ProviderId) => ProviderEnvSpec;
+  /** Active default model for OpenAI-compatible model validation (optional second probe). */
+  readonly activeModelFor?: () => ModelRef | undefined;
 }
 
 /** F2: the socket connected to an IP the SSRF policy never validated. Message is non-secret. */
@@ -97,11 +99,17 @@ export function createHttpConnector(options: HttpConnectorOptions): ProviderConn
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const envSpecFor = options.envSpecFor ?? defaultEnvSpec;
+  const activeModelFor = options.activeModelFor;
 
   /** Map a completed (non-thrown) response to a TestResult; redirects handled by caller. */
-  function classifyStatus(status: number): TestResult {
+  function classifyStatus(status: number, probeContext?: ProviderErrorContext): TestResult {
     if (status >= 200 && status < 300) return { ok: true };
-    return { ok: false, error: mapProviderError({ status }) };
+    return { ok: false, error: mapProviderError({ status }, probeContext) };
+  }
+
+  interface DialOptions {
+    readonly method?: "GET" | "POST";
+    readonly body?: string;
   }
 
   /** Dial one hop, enforce F2, then either follow (F3-revalidated) or classify the status. */
@@ -110,27 +118,36 @@ export function createHttpConnector(options: HttpConnectorOptions): ProviderConn
     headers: Readonly<Record<string, string>>,
     target: ConnectTarget,
     hops: number,
+    probeContext?: ProviderErrorContext,
+    dialOptions?: DialOptions,
   ): Promise<TestResult> {
     const pin = target.resolved[0];
     if (pin === undefined) throw new Error("No validated address to dial.");
 
     let response: HttpProbeResponse;
     try {
-      response = await dialer({ url, ip: pin.address, family: pin.family, headers, timeoutMs });
+      response = await dialer({
+        url,
+        ip: pin.address,
+        family: pin.family,
+        headers,
+        timeoutMs,
+        ...(dialOptions?.method !== undefined ? { method: dialOptions.method } : {}),
+        ...(dialOptions?.body !== undefined ? { body: dialOptions.body } : {}),
+      });
     } catch (cause) {
-      // Timeout / transport failure → mapped PR7 error (never carries a secret).
-      return { ok: false, error: mapProviderError(cause) };
+      return { ok: false, error: mapProviderError(cause, probeContext) };
     }
 
-    // F2: the socket MUST have used the exact validated IP we pinned. The hostname alone is
-    // never trusted — a re-resolution to any other IP (esp. private/metadata) is refused.
     const validated = target.resolved.some((a) => a.address === response.dialedIp);
     if (response.dialedIp !== pin.address || !validated) {
       throw new SocketPinViolationError(pin.address, response.dialedIp);
     }
 
-    if (isRedirect(response.status)) return followRedirect(url, headers, response, hops);
-    return classifyStatus(response.status);
+    if (isRedirect(response.status)) {
+      return followRedirect(url, headers, response, hops, probeContext, dialOptions);
+    }
+    return classifyStatus(response.status, probeContext);
   }
 
   /** F3: re-run the SSRF guard on the redirect target BEFORE following; bounded hops. */
@@ -139,36 +156,56 @@ export function createHttpConnector(options: HttpConnectorOptions): ProviderConn
     headers: Readonly<Record<string, string>>,
     response: HttpProbeResponse,
     hops: number,
+    probeContext?: ProviderErrorContext,
+    dialOptions?: DialOptions,
   ): Promise<TestResult> {
-    if (hops >= maxRedirects) return { ok: false, error: mapProviderError({ status: 508 }) };
+    if (hops >= maxRedirects) return { ok: false, error: mapProviderError({ status: 508 }, probeContext) };
     const location = response.headers["location"];
     if (location === undefined || location.length === 0) {
-      return { ok: false, error: mapProviderError({ status: 502 }) };
+      return { ok: false, error: mapProviderError({ status: 502 }, probeContext) };
     }
     const next = new URL(location, from);
-    // Re-validate the redirect host+IP through the SSRF guard (throws on private/metadata).
     const nextTarget = await ssrf.assertAllowed(next.href);
-    // Secret discipline: never resend the credential to a different host.
     if (next.host !== from.host) throw new CrossHostRedirectError(from.host, next.host);
-    return dialGuarded(next, headers, nextTarget, hops + 1);
+    return dialGuarded(next, headers, nextTarget, hops + 1, probeContext, dialOptions);
   }
 
   return {
     async probe(id: ProviderId, target: ConnectTarget | null): Promise<TestResult> {
-      // The probe endpoint URL (no secret). Built-ins are SSRF-validated here; the custom
-      // endpoint's target was already validated by the port's guardedConnect.
       const url = new URL(probeUrlFor(id, target));
       const connectTarget = target ?? (await ssrf.assertAllowed(url.href));
 
       const ref = credentialRefFor(id);
-      // No credential configured → a clean auth failure (recovery: enter a credential).
       if (ref === undefined) return { ok: false, error: mapProviderError({ status: 401 }) };
 
-      // SOLE point the key value leaves the store; it is registered with the scrubber here.
       const injection = await credentials.resolveInjection(ref, envSpecFor(id));
       const headers = authHeadersFor(id, injection.value);
 
-      return dialGuarded(url, headers, connectTarget, 0);
+      const authResult = await dialGuarded(url, headers, connectTarget, 0, { probe: "auth" });
+      if (!authResult.ok) return authResult;
+
+      if (isCustomEndpoint(id)) {
+        const model = activeModelFor?.();
+        if (model !== undefined && model.modelID.trim().length > 0) {
+          const chatUrl = new URL(chatCompletionUrl(connectTarget));
+          const postHeaders = {
+            ...headers,
+            "content-type": "application/json",
+            accept: "application/json",
+          };
+          const modelResult = await dialGuarded(
+            chatUrl,
+            postHeaders,
+            connectTarget,
+            0,
+            { probe: "model" },
+            { method: "POST", body: minimalChatCompletionBody(model.modelID) },
+          );
+          if (!modelResult.ok) return modelResult;
+        }
+      }
+
+      return { ok: true };
     },
 
     // Streaming/cancel is a SEPARATE carry-forward (CGHC-012). The probe opens no stream.

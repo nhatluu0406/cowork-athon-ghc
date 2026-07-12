@@ -57,12 +57,23 @@ const NETWORK: Taxon = {
   message: "The request could not reach the provider (network error).",
   recovery: "Check your network connection and retry.",
 };
+const MODEL: Taxon = {
+  kind: "model_invalid",
+  retryable: false,
+  message: "The configured model was not accepted by the provider.",
+  recovery: "Choose a valid model name and test again.",
+};
 const UNKNOWN: Taxon = {
   kind: "unknown",
   retryable: false,
   message: "The request failed for an unrecognized reason.",
   recovery: "Review the mapped message and cancel.",
 };
+
+/** Optional probe context so HTTP status maps to the right taxon (auth vs model). */
+export interface ProviderErrorContext {
+  readonly probe?: "auth" | "model";
+}
 
 /** Node socket/DNS failures that mean "could not reach the provider" → `unavailable`. */
 const NETWORK_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
@@ -121,8 +132,8 @@ function isFetchFailed(raw: unknown): boolean {
 }
 
 /** Map any raw runtime/provider failure to the canonical taxonomy (PR7). */
-export function mapProviderError(raw: unknown): ProviderError {
-  const taxon = selectTaxon(raw);
+export function mapProviderError(raw: unknown, context?: ProviderErrorContext): ProviderError {
+  const taxon = selectTaxon(raw, context);
   return {
     kind: taxon.kind,
     message: taxon.message,
@@ -131,8 +142,12 @@ export function mapProviderError(raw: unknown): ProviderError {
   };
 }
 
-function selectTaxon(raw: unknown): Taxon {
+function selectTaxon(raw: unknown, context?: ProviderErrorContext): Taxon {
   const status = statusOf(raw);
+  if (context?.probe === "model") {
+    if (status === 401 || status === 403) return AUTH;
+    if (status === 404 || status === 400) return MODEL;
+  }
   if (status === 401 || status === 403) return AUTH;
   if (status === 429) return RATE;
   if (status === 408) return TIMEOUT;

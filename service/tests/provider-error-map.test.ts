@@ -18,9 +18,17 @@ import {
 } from "../src/provider/index.js";
 
 // ── Mapping table (raw condition → kind) ──────────────────────────────────────────────────
-const CASES: ReadonlyArray<{ label: string; raw: unknown; kind: ProviderErrorKind; retryable: boolean }> = [
+const CASES: ReadonlyArray<{
+  label: string;
+  raw: unknown;
+  kind: ProviderErrorKind;
+  retryable: boolean;
+  context?: { probe?: "auth" | "model" };
+}> = [
   { label: "401", raw: { status: 401 }, kind: "auth_invalid", retryable: false },
   { label: "403", raw: { status: 403 }, kind: "auth_invalid", retryable: false },
+  { label: "model probe 404", raw: { status: 404 }, kind: "model_invalid", retryable: false, context: { probe: "model" as const } },
+  { label: "model probe 400", raw: { status: 400 }, kind: "model_invalid", retryable: false, context: { probe: "model" as const } },
   { label: "429", raw: { status: 429 }, kind: "rate_limited", retryable: true },
   { label: "408", raw: { status: 408 }, kind: "timeout", retryable: true },
   { label: "AbortError", raw: Object.assign(new Error("aborted"), { name: "AbortError" }), kind: "timeout", retryable: true },
@@ -44,7 +52,7 @@ const CASES: ReadonlyArray<{ label: string; raw: unknown; kind: ProviderErrorKin
 
 for (const c of CASES) {
   test(`[error-map] ${c.label} → ${c.kind}`, () => {
-    const err = mapProviderError(c.raw);
+    const err = mapProviderError(c.raw, c.context);
     assert.equal(err.kind, c.kind);
     assert.equal(err.retryable, c.retryable);
     assert.ok(err.message.length > 0, "message present");
@@ -100,7 +108,7 @@ test("[retry] retryable=false is honoured even if a caller forces a retryable KI
 test("[retry] a NON-retryable kind refuses even when a caller forces retryable:true (isolates the kind guard)", () => {
   // This isolates the NON_RETRYABLE_KINDS guard from the retryable-flag guard: the flag is
   // forced true, so ONLY the kind check can produce retry=false. Deleting that guard fails here.
-  for (const kind of ["auth_invalid", "unknown"] as const) {
+  for (const kind of ["auth_invalid", "model_invalid", "unknown"] as const) {
     const forced: ProviderError = { kind, message: "x", retryable: true, recovery: "y" };
     assert.equal(retryDecision(forced, 1).retry, false, `${kind} must never retry even if retryable:true`);
   }

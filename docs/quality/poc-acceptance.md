@@ -6,38 +6,51 @@ updated_at: "2026-07-12"
 
 # Packaged POC acceptance
 
-Tài liệu này tóm tắt acceptance đã quan sát cho L6 packaged POC. Nguồn chứng cứ chi tiết vẫn nằm trong
-`.loop-engineer/evidence/`.
+Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi tiết lịch sử nằm trong `.loop-engineer/evidence/` (maintenance-only).
 
 ## Bằng chứng packaged đã quan sát
 
 | Hạng mục | Trạng thái | Ghi chú |
 |---|---|---|
-| Service lifecycle | PASS | Packaged app khởi động local service và quản lý shutdown trong smoke hiện tại. |
-| Workspace | PASS | Chọn, kích hoạt, persist, relaunch restore và workspace switching đã được verify trong packaged Slice 2. |
-| Provider/model | PASS | Cấu hình provider/model qua packaged GUI đã qua Slice 3. |
-| Windows keyring | PASS | Credential dùng Windows keyring; relaunch không phụ thuộc `.env`. |
-| OpenCode startup | PASS | Packaged app khởi động OpenCode runtime ở Slice 4. |
-| DeepSeek inference | PASS | Bounded live inference đã chạy qua endpoint OpenAI-compatible. |
-| Streaming | PASS | Prompt live trả streaming output trong packaged flow. |
-| Permission approve | PASS | Modal permission thật, approve tạo file fixture. |
-| Permission deny | PASS | Deny không tạo file fixture. |
-| Cancellation | PASS | Cancellation/interruption được verify trong packaged acceptance. |
-| Safe file action | PASS | Một safe file action trong fixture workspace đã thành công. |
-| Interruption cleanup | PASS | Relaunch sau interruption không để orphan process hoặc stale running state. |
-| Clean-profile onboarding | PASS | Clean profile onboarding đã qua packaged verification. |
+| Service lifecycle | PASS | |
+| Workspace | PASS | |
+| Provider/model | PASS | |
+| Windows keyring | PASS | |
+| OpenCode + inference | PASS | Bounded live |
+| Streaming | PASS | |
+| Permission approve/deny | PASS | |
+| Cancellation / interruption | PASS | |
+| Clean-profile onboarding | PASS | |
+| Invalid API key recovery | PASS | `tools/verify/provider-recovery-packaged.mjs` |
+| Invalid model recovery | PASS | Probe chat completion + `model_invalid` |
+| Invalid base URL recovery | PASS | TEST-NET host, lỗi mạng tiếng Việt |
+| Recovery without restart | PASS | Settings modal vẫn dùng được sau lỗi |
+| `start.bat` / `stop.bat` | PASS | `tools/verify/lifecycle-scripts.mjs` |
+| `clean.bat` | PASS | Xác nhận tương tác + `--yes`; allowlist qua unit test |
 
-## Bằng chứng focused-test-only hoặc còn thiếu
+## Regression không-live
 
-- Invalid API key recovery: chưa verify riêng.
-- Invalid model recovery: chưa verify riêng.
-- Invalid base URL recovery: chưa verify riêng.
-- Session resume/template re-run: chưa verify đầy đủ trong packaged flow.
-- `start.bat` và `clean.bat`: cần Explorer-style evidence đầy đủ hơn.
-- L9 release regression script: chưa gom thành một luồng nhẹ ổn định.
+```powershell
+npm run verify:release
+```
+
+Bao gồm: `typecheck`, provider contract tests, permission bridge, app lifecycle CLI, lifecycle script structure, OpenCode binary presence, shell bundle, `loop-engineer verify` (optional).
+
+Không gọi DeepSeek, không cần API key, không tạo process lâu dài.
+
+## Packaged smoke tối thiểu (sau thay đổi release-critical)
+
+```powershell
+npm run package:win
+node tools/verify/minimal-packaged-smoke.mjs
+```
+
+## Còn thiếu / chưa đủ productized
+
+- Session resume / template re-run packaged smoke.
+- L9 release verification đầy đủ (ngoài regression nhẹ hiện tại).
 
 ## Ghi chú bảo mật
 
 - Không đưa API key vào docs, logs, screenshot hoặc Git.
-- `.env` chỉ là bootstrap cục bộ khi được phép; packaged flow cuối cùng dùng Windows keyring.
-- Live API call phải bounded và không nằm trong default test suite.
+- Live call bounded; không nằm trong `npm run verify:release`.

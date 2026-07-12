@@ -31,6 +31,10 @@ export interface HttpProbeRequest {
   readonly headers: Readonly<Record<string, string>>;
   /** Hard upper bound on the request; on expiry the dial fails with a timeout error. */
   readonly timeoutMs: number;
+  /** HTTP method. Defaults to GET. */
+  readonly method?: "GET" | "POST";
+  /** Optional request body (POST probes). */
+  readonly body?: string;
 }
 
 /** A probe response. Carries the status, headers, and the IP the socket ACTUALLY used. */
@@ -87,14 +91,19 @@ export function createHttpsDialer(): HttpDialer {
         }
         cb(null, req.ip, req.family);
       };
+      const method = req.method ?? "GET";
       const request = lib.request(
         {
-          method: "GET",
+          method,
           protocol: req.url.protocol,
           hostname: req.url.hostname,
           port: req.url.port || (isHttps ? 443 : 80),
           path: `${req.url.pathname}${req.url.search}`,
-          headers: { ...req.headers, host: req.url.host },
+          headers: {
+            ...req.headers,
+            host: req.url.host,
+            ...(req.body !== undefined ? { "content-length": String(Buffer.byteLength(req.body)) } : {}),
+          },
           servername: isHttps ? req.url.hostname : undefined, // SNI = original hostname
           lookup,
           timeout: req.timeoutMs,
@@ -107,6 +116,7 @@ export function createHttpsDialer(): HttpDialer {
       );
       request.on("timeout", () => request.destroy(new ProbeTimeoutError(req.timeoutMs)));
       request.on("error", reject);
+      if (req.body !== undefined) request.write(req.body);
       request.end();
     });
 }
