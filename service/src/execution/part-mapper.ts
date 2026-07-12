@@ -74,6 +74,8 @@ function mapStepPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
 function mapToolPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
   const status = toolStatus(part.state?.status);
   const toolName = part.tool ?? "tool";
+  const path = toolInputPath(part.state);
+  const summary = path ?? part.state?.title;
   const events: EvEvent[] = [
     {
       ...alloc(),
@@ -81,12 +83,11 @@ function mapToolPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
       callId: part.callID ?? part.id ?? `${part.messageID ?? "msg"}:tool`,
       toolName,
       status,
-      ...(part.state?.title ? { summary: part.state.title } : {}),
+      ...(summary ? { summary } : {}),
     },
   ];
 
   const op = FILE_TOOL_OPS[toolName];
-  const path = toolInputPath(part.state);
   // Only surface a file mutation once the real tool COMPLETED against a concrete path.
   if (op && path && status === "completed") {
     events.push({ ...alloc(), kind: "file_mutation", operation: op, path });
