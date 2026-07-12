@@ -20,11 +20,25 @@ and the current working tree instead.
 | Pre-merge stabilization | **Applied** — dead verifiers removed, File Review CLI consolidated, shell layout collapse fixes |
 | File Work Review | **PARTIAL PASS** — live Journey A–B PASS; Journey C blocked; D–L not completed |
 | D1–D4 external integration | **Not merged** — surfaces remain `awaiting_integration` slots only |
-| Next milestone | **External integration intake** (D1–D4 merge) |
-| Architecture refactor (`app-shell.ts`, snapshot/watchdog to service) | **Deferred** until external integration code is merged |
+| Next milestone | **External integration intake** (D1–D4 merge) — [readiness doc](../integration/external-systems-integration-readiness.md) |
+| Architecture refactor (`app-shell.ts`, snapshot/watchdog to service) | **Deferred** until after combined external integration merge |
 | Full regression at integration milestone | Planned after D1–D4 code lands |
 
+Baseline commit: `eaeb3eb` — chore(project): stabilize pre-integration baseline
+
 Baseline tag (local, not pushed): `pre-external-integration-2026-07-14`
+
+Canonical intake doc: [External Systems Integration Readiness](../integration/external-systems-integration-readiness.md)
+
+## External integration intake (next milestone)
+
+| Item | Status |
+|---|---|
+| Baseline commit / tag | **Ready** — `eaeb3eb` / `pre-external-integration-2026-07-14` |
+| Next milestone | **External integration intake** (D1–D4) |
+| Architecture refactor | **Deferred** until after **combined** external integration merge |
+| File Work Review | **PARTIAL PASS** (unchanged) |
+| Commercial UI acceptance | **FAIL** (unchanged) |
 
 ## Latest Verified Slice
 
@@ -223,8 +237,8 @@ Packaged journeys C–L need a verification redesign split (live-agent vs determ
 Next implementation action:
 
 ```text
-Product Owner must choose the next integration milestone. D1-D4 may now merge into
-visible awaiting-integration surfaces without the Cowork shell claiming backend capability.
+Receive D1–D4 intake reports per docs/integration/external-systems-integration-readiness.md.
+Do not merge until matrix row is filled and track acceptance gates pass.
 ```
 
 ## Useful Verification Commands
