@@ -4,68 +4,101 @@ status: "active"
 updated_at: "2026-07-12"
 ---
 
-# Trạng thái hiện tại của Cowork GHC
+# Current Status
 
-## Mốc Git
+Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 
-- `HEAD` hiện tại: `0fc1fa6` — `feat(attachments): add workspace text file context`.
-- Mốc trước: `e40dada` — `fix(session): isolate multi-turn context from assistant output`.
-- Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
+Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
+and the current working tree instead.
 
-## Trạng thái POC
+## Latest Verified Slice Commits
 
-Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Workspace text file attachments (Phase 1)** cho phép đính kèm tệp văn bản trong active workspace làm context một lượt — bounded, workspace guard, metadata persist, không lưu raw content trong transcript.
-
-Slice **Multi-turn context isolation** vẫn giữ nguyên (EV mapper + envelope untrusted).
-
-Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, `docs/architecture/`. `.loop-engineer/` chỉ `MAINTENANCE_ONLY`.
-
-## Semantics Cowork conversation vs runtime turn
-
-| Khái niệm | Ý nghĩa |
+| Commit | Meaning |
 |---|---|
-| **Cowork conversation** | Identity dài hạn: transcript, title, workspace, provider/model, activity, nhiều runtime turn |
-| **Runtime turn** | Một OpenCode session xử lý một lượt prompt; sau terminal tạo session mới **liên kết** cùng conversation |
-| **Reuse OpenCode session** | Chỉ khi `canPrompt === true` và session chưa terminal |
-| **Context sang turn mới** | Envelope nội bộ bounded (~12k ký tự), đánh dấu untrusted; **không** persist/display; chỉ gửi qua `POST /session/{id}/message` |
+| `8df3d59` | Packaged L6 POC acceptance baseline. |
+| `e40dada` | Multi-turn context isolation from assistant output. |
+| `0fc1fa6` | Workspace text file attachments Phase 1. |
+| `2ae1426` | Attachment documentation/state follow-up. |
+| `efccb60` | Product UX gap audit added. |
+| `6d89074` | Packaged GUI/UX gap verification documented. |
 
-Không claim native OpenCode multi-turn continuation khi Cowork GHC tạo linked session mới.
+Last verification date: 2026-07-12.
 
-## Nguồn phản hồi cuối (trung thực)
+## Product State
 
-| Nguồn | Khi nào |
+Cowork GHC is a packaged Windows desktop POC (`poc-v0.1`). It is local-first,
+workspace-centered, uses OpenCode as the current agent runtime, and supports a
+replaceable LLM endpoint. DeepSeek is the current provider used for testing; it is not
+a permanent product dependency.
+
+Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/`,
+`docs/architecture/`, and `AGENTS.md`. `.loop-engineer/` is maintenance-only provenance.
+
+## Verified Baseline
+
+- Local service lifecycle, workspace selection, provider/model settings, Windows keyring,
+  OpenCode runtime, streaming, permissions, cancellation, provider recovery, and process
+  cleanup have packaged POC evidence.
+- Conversation persistence, multi-conversation sidebar, search, switch, rename/delete,
+  relaunch restore, and linked multi-turn Cowork conversations have packaged/automated evidence.
+- Context isolation is verified for new turns: bounded untrusted internal envelopes are not
+  persisted or displayed as assistant output.
+- Activity timeline, file-change panel, permission history, and bounded text file preview exist.
+- Attachment Phase 1 is packaged verified for workspace text files: picker/chip behavior,
+  metadata persistence, workspace guard, binary/extension/size rejection, untrusted transport
+  envelope, and no raw attachment content in transcript.
+
+## Important Semantics
+
+| Concept | Product meaning |
 |---|---|
-| Stream EV `token` / `message.part.delta` | Phản hồi stream trong lúc chạy |
-| `message.part.updated` (text committed) | OpenCode chỉ gửi snapshot text sau tool |
-| `GET /v1/session/{id}` sau terminal | Text chưa có trên stream khi `session.idle` |
-| Fallback UI | `Tác vụ đã hoàn tất nhưng runtime không trả về phản hồi cuối.` — không gán là output model |
+| Cowork conversation | Long-lived user-facing identity: transcript, workspace, provider/model, activity, and multiple runtime turns. |
+| Runtime turn | One OpenCode session execution for one user turn. |
+| Continuation after terminal | Cowork GHC creates a new linked runtime turn with bounded context; it does not claim native OpenCode continuation after terminal. |
+| Attachment context | Read-only snapshot context for a turn; it never bypasses permission for mutation. |
 
-## Semantics resume (trung thực)
+## Current Blockers Before Skills
 
-| Hành vi | Hỗ trợ |
-|---|---|
-| **Mở lại** — transcript + activity sau relaunch | Có; tự chọn conversation active gần nhất |
-| **Multi-turn** — gửi nhiều lượt trong cùng conversation | Có (tự tạo runtime turn mới khi cần) |
-| **Tiếp tục** — cùng OpenCode session ID khi chưa terminal | Có khi `canPrompt` |
-| **Tạo phiên tiếp nối** — recovery sau `interrupted` | Có; không bắt buộc cho multi-turn thường |
-| **Tiếp tục cuộc trò chuyện** — mở composer sau relaunch khi lịch sử terminal | Có; CTA `Tiếp tục cuộc trò chuyện này` |
+1. Attachment budget honesty: UI must show which accepted attachments are included,
+   omitted, or truncated in the 12,000-character dispatch budget.
+2. Secret-like file blocking: `.env`, `.pem`, `.key`, credential-like filenames/patterns
+   should be blocked by default for MVP.
+3. Missing-credential preflight: the packaged UI should fail fast with actionable recovery
+   instead of entering unclear running/not-connected state.
 
-## Năng lực đã qua packaged verification
+Small UX/accessibility fixes that should travel with the blocker work:
+- settings modal focus placement;
+- empty-state continuation controls should not be DOM/screen-reader reachable before a
+  historical terminal conversation is selected;
+- narrow/high-DPI activity visibility needs a clear affordance if activity is hidden.
 
-- Vòng đời local service, workspace, provider/model, keyring, OpenCode, streaming.
-- Permission, cancellation, provider recovery, lifecycle scripts.
-- Conversation persistence + multi-conversation UI.
-- Activity timeline + file-change panel + permission history + file preview API.
-- Conversation finalization — tool turn kết thúc đúng.
-- **Multi-turn tool regression** — create/modify/read + deny/recovery (`multi-turn-tool-packaged.mjs`).
-- **Context isolation** — không leak wrapper/prompt vào assistant output (`multi-turn-context-packaged.mjs`, ≤4 live).
-- **Workspace text file attachments (Phase 1)** — picker + chip + snapshot read + transport envelope (`attachments-packaged.mjs`, journeys A–J).
+## Verification Still Incomplete
 
-## Slice khuyến nghị tiếp theo
+Full live packaged GUI verification has not passed as a single release-candidate journey.
+The latest packaged UX pass used CDP screenshots/DOM inspection and deterministic E2E seams
+for workspace/attachment paths. It did not verify live streaming/tool/file/permission/cancel
+flows, native OS pickers, installed keyring round-trip, or full release lifecycle in one pass.
 
-**Attachments Phase 2** (folder / image / PDF / drag-and-drop) hoặc **Skills** — chưa bắt đầu.
+## Next Implementation Slice
 
-## Lệnh kiểm tra nhẹ
+Next Agent: Cursor.
+
+Recommended next slice:
+
+```text
+Attachment Honesty and Secret-File Safety
+```
+
+Scope:
+- included/omitted/truncated attachment presentation;
+- 32 KiB/file, 64 KiB/turn, and 12k dispatch budget as separate gates;
+- block secret-like attachments by default;
+- missing-credential preflight if small enough to land with the same functional-honesty pass.
+
+Do not start Skills, Attachments Phase 2, web/Next.js, or a workspace explorer until this
+slice is resolved or Product Owner changes priority.
+
+## Useful Verification Commands
 
 ```powershell
 npm run verify:release
