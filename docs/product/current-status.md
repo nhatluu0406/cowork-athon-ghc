@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # Current Status
@@ -17,8 +17,9 @@ and the current working tree instead.
 |---|---|
 | Slice | File Work Review and Before/After Diff |
 | Feature commit | `c81fbc4` — feat(files): add persistent before-after review |
+| Hardening commits | `fix(files): harden packaged file review capture`; `test(verify): stabilize packaged file review stages` |
 | Implementation Agent | Cursor |
-| Packaged journeys | `file-review-packaged.mjs` A–L — **NOT PASS YET / PARTIAL** in this session (live agent file writes did not land on disk; `verify:release` PASS) |
+| Packaged File Review | **PARTIAL PASS** — live Journey A–B PASS; Journey C blocked; D–L not completed in latest run |
 | Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
 | Prior slices still PASS | Skills Foundation A–J; Provider Readiness A–J; Attachment Honesty A–J |
 
@@ -80,7 +81,7 @@ product capability.
   `Đã đưa tệp vào ngữ cảnh`, and no raw attachment content in transcript.
 - Provider readiness and Skills Foundation Phase 1 remain as previously verified.
 
-## File Work Review Slice (this session)
+## File Work Review Slice
 
 ### What shipped
 
@@ -94,6 +95,48 @@ product capability.
 - **Skills**: file events inherit turn Skill provenance via existing turn metadata; Skills do not bypass permission.
 - **UI**: activity right panel review (`Xem lại thay đổi`), copy relative path; open-file deferred.
 
+### Packaged live verification (latest rerun)
+
+```text
+File Work Review: PARTIAL PASS
+Live Journey A: PASS
+Live Journey B: PASS
+Journey C: blocked by nondeterministic model/tool selection
+Journeys D–L: not completed in the latest run
+```
+
+Evidence artifact (best full run): `%TEMP%\cghc-freview-artifacts-ubFNmc`
+
+| Stage / journey | Result | Notes |
+|---|---|---|
+| A01–A12 create | PASS | Permission, disk file, review artifact, terminal |
+| B modify | PASS | `modify-me.txt` diff persisted (`review-11`) |
+| C delete | NOT PASS | Model sometimes skips delete tool or uses bash/edit instead |
+| D–L | NOT RUN | Stopped after C failure |
+
+### Product bugs closed in hardening pass
+
+| ID | Issue | Fix |
+|---|---|---|
+| RC2 | Windows 8.3 short path (`NHATLU~1`) did not map to long workspace root → review snapshot failed | `toRelativePath()` folder-segment match |
+| RC4 | Stream watchdog (90s) treated permission wait as stall | Pause watchdog while permission `pending` |
+| RC5 | Before snapshot missing when permission has no `targetPath` | Capture on `tool_call` start via early `filePath` in summary |
+
+### Harness fixes (verifier only)
+
+| ID | Issue | Fix |
+|---|---|---|
+| RC1 | A07 required filename in permission dialog when OpenCode emits empty path | Accept file write/edit permission kinds |
+| RC3 | `waitTerminalAfterPermission` approved without visible dialog | Staged `waitPermissionRequest` + `approveObservedPermission` |
+| — | Review click targeted wrong file row | `clickFileChange(relativePath)` |
+
+### Open verification decision
+
+```text
+Live LLM behavior must not be the sole mechanism used to verify deterministic
+delete/deny/redaction/persistence File Review semantics.
+```
+
 ### Limits (configured)
 
 | Limit | Value |
@@ -105,12 +148,9 @@ product capability.
 
 ### Verification
 
-- `npm run verify:release` PASS (includes `service/tests/file-review.test.ts`, router test, activity-model updates).
+- `npm run verify:release` PASS (includes file-review unit/router tests, activity-model 8.3 path test).
 - `npm run package:win` PASS.
-- `node tools/verify/file-review-packaged.mjs` — harness added for journeys A–L; live-agent file-write
-  steps did not complete in this verification environment. The live packaged verification did
-  not complete successfully. The failure may be related to runtime/environment instability,
-  but the root cause is not yet proven.
+- `node tools/verify/file-review-packaged.mjs` — A–B PASS in latest clean rerun; C–L incomplete.
 
 Full L9 / release-candidate verification is **not** complete.
 
@@ -121,17 +161,19 @@ Next Agent: Cursor.
 Current blocker:
 
 ```text
-Packaged File Work Review A–L verification is incomplete.
+File Work Review: PARTIAL PASS
+Packaged journeys C–L need a verification redesign split (live-agent vs deterministic product-path).
 ```
 
 Next implementation action:
 
 ```text
-Diagnose and re-run packaged File Work Review A–L
+Design and implement deterministic packaged File Review journeys for delete/deny/persistence/redaction;
+keep live-agent journeys for create/modify and permission approve/deny smoke only.
 ```
 
-Minimal Workspace Navigator has not started. Do not start it until packaged File Work
-Review A–L passes and the Product Owner issues that brief.
+Minimal Workspace Navigator has not started. Do not start it until File Work Review
+reaches PASS with evidence for all required journeys.
 
 ## Useful Verification Commands
 
