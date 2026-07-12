@@ -56,8 +56,30 @@ test("buildActivitySnapshot maps tool and file events with Vietnamese labels", (
   assert.match(snapshot.items.some((i) => i.label.includes("tệp")) ? "yes" : "", /yes/);
   assert.equal(snapshot.fileChanges.length, 1);
   assert.equal(snapshot.fileChanges[0]?.relativePath, "notes.txt");
+  assert.equal(snapshot.fileReviews.length, 0);
   assert.equal(snapshot.terminalState, "completed");
   assert.equal(snapshot.items.at(-1)?.label, "Đã hoàn thành");
+});
+
+test("completed read tool uses past tense and runtime read path", () => {
+  const snapshot = buildActivitySnapshot(
+    [
+      ev({
+        kind: "tool_call",
+        seq: 1,
+        callId: "c1",
+        toolName: "read",
+        status: "completed",
+        summary: `${WS}/readme.md`,
+      }),
+    ],
+    WS,
+    [],
+    false,
+  );
+  assert.equal(snapshot.items[0]?.label, "Đã đọc tệp");
+  assert.deepEqual(snapshot.runtimeReadPaths, ["readme.md"]);
+  assert.deepEqual(snapshot.attachmentContextPaths, []);
 });
 
 test("token events are excluded from activity timeline", () => {

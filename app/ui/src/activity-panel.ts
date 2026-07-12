@@ -1,8 +1,9 @@
 /**
- * Activity panel — right-side timeline, file changes, permission history, preview.
+ * Activity panel — right-side timeline, file changes, permission history, file review.
  */
 
 import type { FileMutationOp } from "@cowork-ghc/contracts";
+import type { FileReviewArtifact } from "@cowork-ghc/service/file-review";
 import type { ServiceClient } from "./service-client.js";
 import {
   type ActivityItem,
@@ -95,8 +96,11 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
 
   const preview = el("section", "file-preview");
   preview.hidden = true;
-  preview.append(el("div", "file-preview__label", "Xem trước"));
+  preview.append(el("div", "file-preview__label", "Xem lại thay đổi"));
+  preview.append(el("div", "file-preview__meta"));
   preview.append(el("pre", "file-preview__body"));
+  const actions = el("div", "file-preview__actions");
+  preview.append(actions);
   rightPanel.append(preview);
 
   const insertBefore = outputSection ?? null;
@@ -140,38 +144,128 @@ export function renderActivityPanel(
     dom.outputFiles.append(el("p", "panel-empty", "Chưa có thay đổi tệp đã xác minh."));
   } else {
     for (const change of snapshot.fileChanges) {
-      dom.outputFiles.append(renderFileChangeRow(change));
+      dom.outputFiles.append(renderFileChangeRow(change, snapshot.fileReviews));
     }
   }
 
   dom.inputFiles.replaceChildren();
-  if (snapshot === null || snapshot.readPaths.length === 0) {
-    dom.inputFiles.append(el("p", "panel-empty", "Tệp đã được đọc trong phiên: chưa có."));
+  const attachmentPaths = snapshot?.attachmentContextPaths ?? [];
+  const runtimePaths = snapshot?.runtimeReadPaths ?? [];
+  if (attachmentPaths.length === 0 && runtimePaths.length === 0) {
+    dom.inputFiles.append(el("p", "panel-empty", "Chưa có tệp đọc hoặc đính kèm trong phiên."));
   } else {
-    dom.inputFiles.append(el("p", "panel-empty", "Tệp đã được đọc trong phiên:"));
-    for (const path of snapshot.readPaths) {
-      const row = el("div", "file-row");
-      row.append(el("span", "file-row__name", path));
-      dom.inputFiles.append(row);
+    if (attachmentPaths.length > 0) {
+      dom.inputFiles.append(el("p", "panel-empty", "Tệp đã đưa vào ngữ cảnh:"));
+      for (const path of attachmentPaths) {
+        const row = el("div", "file-row");
+        row.append(el("span", "file-row__badge", "Đính kèm"));
+        row.append(el("span", "file-row__name", path));
+        dom.inputFiles.append(row);
+      }
+    }
+    if (runtimePaths.length > 0) {
+      dom.inputFiles.append(el("p", "panel-empty", "Tệp runtime đã đọc:"));
+      for (const path of runtimePaths) {
+        const row = el("div", "file-row");
+        row.append(el("span", "file-row__badge", "Đọc"));
+        row.append(el("span", "file-row__name", path));
+        dom.inputFiles.append(row);
+      }
     }
   }
 }
 
-function renderFileChangeRow(change: FileChangeItem): HTMLElement {
+function renderFileChangeRow(
+  change: FileChangeItem,
+  reviews: readonly FileReviewArtifact[],
+): HTMLElement {
   const row = el("button", "file-row file-row--clickable");
   row.type = "button";
   row.dataset["relativePath"] = change.relativePath;
   row.dataset["operation"] = change.operation;
+  if (change.reviewId !== undefined) row.dataset["reviewId"] = change.reviewId;
   row.append(el("span", "file-row__badge", opLabel(change.operation)));
   row.append(el("span", "file-row__name", change.relativePath));
+  const review = reviews.find((r) => r.id === change.reviewId);
+  if (review?.contentRedacted === true) {
+    row.append(el("span", "file-row__note", "Ẩn"));
+  }
   return row;
 }
 
+function formatReviewBody(review: FileReviewArtifact): string {
+  if (review.contentRedacted) {
+    return "Nội dung bị ẩn vì file có thể chứa credential hoặc secret.";
+  }
+  if (review.isBinary) {
+    return "File nhị phân đã thay đổi\nKhông hỗ trợ diff nội dung";
+  }
+  const parts: string[] = [];
+  if (!review.beforeExists && review.operation === "create") {
+    parts.push("Trước: (không tồn tại)");
+  } else if (review.beforePreview !== undefined) {
+    parts.push(`Trước:\n${review.beforePreview}`);
+  } else if (!review.beforeExists) {
+    parts.push("Trước: (không tồn tại)");
+  }
+  if (!review.afterExists && review.operation === "delete") {
+    parts.push("Sau: (không tồn tại)");
+  } else if (review.afterPreview !== undefined) {
+    parts.push(`Sau:\n${review.afterPreview}`);
+  } else if (!review.afterExists) {
+    parts.push("Sau: (không tồn tại)");
+  }
+  if (review.unifiedDiff !== undefined && review.unifiedDiff.length > 0) {
+    parts.push(`Diff:\n${review.unifiedDiff}`);
+  }
+  if (review.truncated || review.diffTruncated || review.previewTruncated) {
+    parts.push("\n[Một phần nội dung đã bị giới hạn — không phải toàn bộ file]");
+  }
+  if (review.currentFileHashMismatch === true) {
+    parts.push("\nSnapshot lúc Agent thực hiện\nFile hiện tại đã thay đổi sau đó");
+  }
+  return parts.join("\n\n");
+}
+
+export function showFileReview(dom: ActivityPanelDom, review: FileReviewArtifact): void {
+  const meta = dom.preview.querySelector(".file-preview__meta") as HTMLElement;
+  const body = dom.preview.querySelector(".file-preview__body") as HTMLElement;
+  const actions = dom.preview.querySelector(".file-preview__actions") as HTMLElement;
+  dom.preview.hidden = false;
+  meta.replaceChildren();
+  meta.append(el("p", "", `Tệp: ${review.relativePath}`));
+  meta.append(el("p", "", `Thao tác: ${review.operation ?? review.eventKind}`));
+  meta.append(el("p", "", `Thời điểm: ${review.at}`));
+  if (review.permissionDecision !== undefined) {
+    const label =
+      review.permissionDecision === "denied"
+        ? "Đã từ chối"
+        : review.permissionDecision === "allowed_always"
+          ? "Đã cho phép luôn"
+          : "Đã cho phép một lần";
+    meta.append(el("p", "", `Quyền: ${label}`));
+  }
+  body.textContent = formatReviewBody(review);
+  actions.replaceChildren();
+  const copyBtn = el("button", "file-preview__copy", "Sao chép đường dẫn") as HTMLButtonElement;
+  copyBtn.type = "button";
+  copyBtn.addEventListener("click", () => {
+    void navigator.clipboard.writeText(review.relativePath);
+  });
+  actions.append(copyBtn);
+}
+
+/** @deprecated Use showFileReview when a persisted artifact exists. */
 export async function showFilePreview(
   dom: ActivityPanelDom,
   client: ServiceClient,
   change: FileChangeItem,
+  review?: FileReviewArtifact,
 ): Promise<void> {
+  if (review !== undefined) {
+    showFileReview(dom, review);
+    return;
+  }
   const body = dom.preview.querySelector(".file-preview__body") as HTMLElement;
   dom.preview.hidden = false;
   if (change.operation === "delete") {
@@ -231,8 +325,11 @@ export function snapshotToPersisted(snapshot: ActivitySnapshot): Record<string, 
   return {
     items: snapshot.items.map((i) => ({ ...i, historical: undefined })),
     fileChanges: snapshot.fileChanges,
+    fileReviews: snapshot.fileReviews,
     permissionHistory: snapshot.permissionHistory,
-    readPaths: snapshot.readPaths,
+    runtimeReadPaths: snapshot.runtimeReadPaths,
+    attachmentContextPaths: snapshot.attachmentContextPaths,
+    readPaths: snapshot.runtimeReadPaths,
     terminalState: snapshot.terminalState,
   };
 }
@@ -243,10 +340,20 @@ export function persistedToSnapshot(raw: Record<string, unknown> | undefined): A
   const fileChanges = Array.isArray(raw["fileChanges"])
     ? (raw["fileChanges"] as FileChangeItem[]).map((f) => ({ ...f, verified: true as const }))
     : [];
+  const fileReviews = Array.isArray(raw["fileReviews"])
+    ? (raw["fileReviews"] as FileReviewArtifact[])
+    : [];
   const permissionHistory = Array.isArray(raw["permissionHistory"])
     ? (raw["permissionHistory"] as PermissionHistoryEntry[])
     : [];
-  const readPaths = Array.isArray(raw["readPaths"]) ? (raw["readPaths"] as string[]) : [];
+  const runtimeReadPaths = Array.isArray(raw["runtimeReadPaths"])
+    ? (raw["runtimeReadPaths"] as string[])
+    : Array.isArray(raw["readPaths"])
+      ? (raw["readPaths"] as string[])
+      : [];
+  const attachmentContextPaths = Array.isArray(raw["attachmentContextPaths"])
+    ? (raw["attachmentContextPaths"] as string[])
+    : [];
   const terminalState =
     typeof raw["terminalState"] === "string"
       ? (raw["terminalState"] as ActivitySnapshot["terminalState"])
@@ -254,8 +361,11 @@ export function persistedToSnapshot(raw: Record<string, unknown> | undefined): A
   return {
     items: items.map((i) => ({ ...i, historical: true })),
     fileChanges,
+    fileReviews,
     permissionHistory,
-    readPaths,
+    runtimeReadPaths,
+    attachmentContextPaths,
+    readPaths: runtimeReadPaths,
     terminalState,
   };
 }

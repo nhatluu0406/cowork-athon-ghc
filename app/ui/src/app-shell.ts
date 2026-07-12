@@ -4,6 +4,7 @@
  * Presentation + view-model only. Talks to the shell bridge and loopback service client.
  */
 
+import type { FileReviewArtifact, FileSnapshotCapture } from "@cowork-ghc/service/file-review";
 import { initialSessionView, sanitizeErrorMessage, type SessionView } from "@cowork-ghc/service/execution";
 import type { EvEvent, RendererBootstrap } from "@cowork-ghc/contracts";
 import {
@@ -21,6 +22,7 @@ import {
   persistedToSnapshot,
   renderActivityPanel,
   showFilePreview,
+  showFileReview,
   snapshotToPersisted,
   type ActivityPanelDom,
 } from "./activity-panel.js";
@@ -101,6 +103,11 @@ interface AppState {
   permissionHistory: PermissionHistoryEntry[];
   activitySnapshot: ActivitySnapshot | null;
   activityLive: boolean;
+  fileReviews: FileReviewArtifact[];
+  pendingBeforeSnapshots: Map<
+    string,
+    { readonly relativePath: string; readonly before: FileSnapshotCapture; readonly operation?: string }
+  >;
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
@@ -430,6 +437,111 @@ function renderSessionList(
   }
 }
 
+function mapPermissionToOperation(kind: string): "create" | "edit" | "delete" | "move" | undefined {
+  switch (kind) {
+    case "file_create":
+      return "create";
+    case "file_edit":
+      return "edit";
+    case "file_delete":
+      return "delete";
+    case "file_move":
+      return "move";
+    default:
+      return undefined;
+  }
+}
+
+async function capturePermissionBeforeSnapshot(
+  state: AppState,
+  request: import("./service-client.js").PendingPermissionView,
+): Promise<void> {
+  if (state.client === null) return;
+  const kind = request.action.kind;
+  if (
+    kind !== "file_create" &&
+    kind !== "file_edit" &&
+    kind !== "file_delete" &&
+    kind !== "file_move"
+  ) {
+    return;
+  }
+  const targetPath = request.action.targetPath;
+  if (targetPath === undefined) return;
+  const relativePath = toRelativePath(targetPath, state.activeWorkspace);
+  try {
+    const before = await state.client.captureFileReviewSnapshot(relativePath);
+    const op = mapPermissionToOperation(kind);
+    state.pendingBeforeSnapshots.set(request.requestId, {
+      relativePath,
+      before,
+      ...(op !== undefined ? { operation: op } : {}),
+    });
+  } catch {
+    // best effort
+  }
+}
+
+async function finalizeFileMutationReview(
+  state: AppState,
+  event: Extract<EvEvent, { kind: "file_mutation" }>,
+  sessionId: string,
+  dom: AppDom,
+): Promise<void> {
+  if (state.client === null) return;
+  const relativePath = toRelativePath(event.path, state.activeWorkspace);
+  let pendingEntry:
+    | { relativePath: string; before: FileSnapshotCapture; operation?: string }
+    | undefined;
+  for (const [requestId, entry] of state.pendingBeforeSnapshots) {
+    if (entry.relativePath === relativePath) {
+      pendingEntry = entry;
+      state.pendingBeforeSnapshots.delete(requestId);
+      break;
+    }
+  }
+  const permissionEntry = [...state.permissionHistory]
+    .reverse()
+    .find((p) => p.targetSummary === relativePath || p.targetSummary.endsWith(relativePath));
+  const permissionDecision =
+    permissionEntry?.decision === "allowed_once" ||
+    permissionEntry?.decision === "allowed_always" ||
+    permissionEntry?.decision === "denied" ||
+    permissionEntry?.decision === "timeout"
+      ? permissionEntry.decision
+      : undefined;
+  if (permissionDecision === "denied") return;
+
+  try {
+    let after: FileSnapshotCapture | undefined;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      after = await state.client.captureFileReviewSnapshot(relativePath);
+      if (after.exists && (after.kind !== "text" || after.content !== undefined || after.contentRedacted)) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    if (after === undefined) return;
+    const review = await state.client.buildFileReview({
+      id: `review-${event.seq}`,
+      relativePath,
+      at: event.at,
+      seq: event.seq,
+      source: "runtime_tool",
+      operation: event.operation,
+      runtimeTurnId: sessionId,
+      ...(permissionDecision !== undefined ? { permissionDecision } : {}),
+      ...(pendingEntry?.before !== undefined ? { before: pendingEntry.before } : {}),
+      after,
+    });
+    state.fileReviews = [...state.fileReviews, review];
+    refreshActivityUi(state, dom);
+    void persistActivity(state);
+  } catch {
+    // best effort
+  }
+}
+
 function permissionActionLabel(kind: string): string {
   switch (kind) {
     case "file_create":
@@ -448,23 +560,33 @@ function permissionActionLabel(kind: string): string {
 }
 
 function rebuildActivitySnapshot(state: AppState): ActivitySnapshot {
-  if (state.evEvents.length > 0) {
-    return buildActivitySnapshot(
-      state.evEvents,
-      state.activeWorkspace,
-      state.permissionHistory,
-      !state.activityLive,
-    );
-  }
-  if (state.lastView.sessionId.length > 0 && state.activityLive) {
-    return snapshotFromSessionView(
-      state.lastView,
-      state.activeWorkspace,
-      state.permissionHistory,
-      false,
-    );
-  }
-  return buildActivitySnapshot([], state.activeWorkspace, state.permissionHistory, !state.activityLive);
+  const base =
+    state.evEvents.length > 0
+      ? buildActivitySnapshot(
+          state.evEvents,
+          state.activeWorkspace,
+          state.permissionHistory,
+          !state.activityLive,
+          state.fileReviews,
+        )
+      : state.lastView.sessionId.length > 0 && state.activityLive
+        ? snapshotFromSessionView(
+            state.lastView,
+            state.activeWorkspace,
+            state.permissionHistory,
+            false,
+            state.fileReviews,
+          )
+        : buildActivitySnapshot(
+            [],
+            state.activeWorkspace,
+            state.permissionHistory,
+            !state.activityLive,
+            state.fileReviews,
+          );
+  const attachmentPaths =
+    state.activitySnapshot?.attachmentContextPaths ?? base.attachmentContextPaths;
+  return { ...base, attachmentContextPaths: attachmentPaths };
 }
 
 function refreshActivityUi(state: AppState, dom: AppDom): void {
@@ -488,12 +610,15 @@ function loadActivityFromRecord(state: AppState, record: ConversationRecord | nu
   state.evEvents = [];
   state.permissionHistory = [];
   state.activityLive = false;
+  state.fileReviews = [];
+  state.pendingBeforeSnapshots = new Map();
   const persisted = persistedToSnapshot(
     record?.activity as Record<string, unknown> | undefined,
   );
   if (persisted !== null) {
     state.activitySnapshot = persisted;
     state.permissionHistory = [...persisted.permissionHistory];
+    state.fileReviews = [...persisted.fileReviews];
     return;
   }
   state.activitySnapshot = null;
@@ -504,6 +629,8 @@ function resetLiveActivity(state: AppState): void {
   state.permissionHistory = [];
   state.activityLive = true;
   state.activitySnapshot = null;
+  state.fileReviews = [];
+  state.pendingBeforeSnapshots = new Map();
 }
 
 function renderState(dom: AppDom, state: AppState, handlers: {
@@ -756,6 +883,9 @@ function bindEvStream(
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
       refreshActivityUi(state, dom);
+      if (event.kind === "file_mutation") {
+        void finalizeFileMutationReview(state, event, sessionId, dom);
+      }
     },
     onView: (view) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
@@ -991,7 +1121,10 @@ function recordAttachmentActivity(
   const base = state.activitySnapshot ?? {
     items: [],
     fileChanges: [],
+    fileReviews: state.fileReviews,
     permissionHistory: state.permissionHistory,
+    runtimeReadPaths: [],
+    attachmentContextPaths: [],
     readPaths: [],
     terminalState: null,
   };
@@ -1009,6 +1142,8 @@ function recordAttachmentActivity(
       at,
       seq,
       relativePath: att.relativePath,
+      fileEventKind: "attachment_context",
+      source: "user_attachment",
       detail: `${att.sizeBytes} byte`,
     });
     seq += 1;
@@ -1025,8 +1160,10 @@ function recordAttachmentActivity(
     });
     seq += 1;
   }
-  const readPaths = [...new Set([...base.readPaths, ...included.map((m) => m.relativePath)])];
-  state.activitySnapshot = { ...base, items, readPaths };
+  const attachmentContextPaths = [
+    ...new Set([...base.attachmentContextPaths, ...included.map((m) => m.relativePath)]),
+  ];
+  state.activitySnapshot = { ...base, items, attachmentContextPaths };
   state.activityLive = true;
 }
 
@@ -1452,6 +1589,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     permissionHistory: [],
     activitySnapshot: null,
     activityLive: false,
+    fileReviews: [],
+    pendingBeforeSnapshots: new Map(),
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
@@ -1561,6 +1700,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             container: dom.root,
             onPending: (request) => {
+              void capturePermissionBeforeSnapshot(state, request);
               const target =
                 request.action.targetPath !== undefined
                   ? toRelativePath(request.action.targetPath, state.activeWorkspace)
@@ -1617,6 +1757,18 @@ export function mountCoworkApp(root: HTMLElement): void {
               (c) => c.relativePath === relativePath && c.operation === operation,
             );
             if (change === undefined) return;
+            const reviewId = row.dataset["reviewId"];
+            const review =
+              reviewId !== undefined
+                ? state.activitySnapshot?.fileReviews.find((r) => r.id === reviewId) ??
+                  state.fileReviews.find((r) => r.id === reviewId)
+                : state.fileReviews.find(
+                    (r) => r.relativePath === relativePath && r.operation === operation,
+                  );
+            if (review !== undefined) {
+              showFileReview(dom.activityPanel, review);
+              return;
+            }
             void showFilePreview(dom.activityPanel, state.client, change);
           });
         }
