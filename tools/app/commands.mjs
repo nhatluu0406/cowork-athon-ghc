@@ -66,7 +66,7 @@ function resolveLaunch(root, deps) {
   const packaged = deps.packagedExe ?? join(root, 'dist-app', 'win-unpacked', 'Cowork GHC.exe');
   const exists = deps.exists ?? existsSync;
   if (exists(packaged)) return { exe: packaged, args: [], packaged: true };
-  const mainJs = join(root, 'app', 'shell', 'dist', 'main.js');
+  const mainJs = join(root, 'app', 'shell', 'dist', 'main.cjs');
   if (!exists(mainJs)) return null; // not built yet
   const electron = deps.electronPath ?? createRequire(import.meta.url)('electron');
   return { exe: electron, args: [mainJs], packaged: false };
@@ -87,11 +87,17 @@ export function cmdStart(root, deps = {}) {
 
   const launch = resolveLaunch(root, deps);
   if (launch === null) {
-    log(root, 'start', 'ERROR: app is not built (app/shell/dist/main.js missing) — run init.bat first');
+    log(root, 'start', 'ERROR: app is not built (app/shell/dist/main.cjs missing) — run init.bat first');
     return EXIT.NOT_INITIALIZED;
   }
   const doSpawn = deps.spawn ?? ((exe, args) =>
-    spawn(exe, args, { cwd: root, detached: true, stdio: 'ignore', windowsHide: false }));
+    spawn(exe, args, {
+      cwd: root,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: false,
+      env: withoutElectronRunAsNode(process.env),
+    }));
   const recordPid = deps.recordPid ?? defaultRecordPid;
 
   let child;
@@ -106,6 +112,13 @@ export function cmdStart(root, deps = {}) {
 
   log(root, 'start', `start: READY (${launch.packaged ? 'packaged' : 'dev'} app pid=${pid}); the app owns the live service + OpenCode child`);
   return EXIT.OK;
+}
+
+export function withoutElectronRunAsNode(env) {
+  const next = { ...env };
+  delete next.ELECTRON_RUN_AS_NODE;
+  delete next.electron_run_as_node;
+  return next;
 }
 
 // ---- stop: identity-gated graceful-then-force over the tracked app ----

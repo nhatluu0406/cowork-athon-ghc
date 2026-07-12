@@ -4,8 +4,9 @@
 # app/shell/electron-builder.yml`. All `files` / `directories.output` globs below are therefore
 # RELATIVE TO THE REPO ROOT, not to this file. `electronVersion` is read from the root
 # package.json `devDependencies.electron`. The packaged app entry is the root package.json
-# `main` field (`app/shell/dist/main.cjs`) — a `.cjs` esbuild bundle (CommonJS) so it loads
-# correctly even though the shell package is `"type": "module"`.
+# `main` field (`app\shell\dist\main.cjs`) — a `.cjs` esbuild bundle (CommonJS). The
+# backslash form is intentional on Windows: electron-builder's asar stores Windows-style paths,
+# and the Windows asar reader resolves `app\shell\dist\main.cjs`.
 #
 # `extraMetadata.main` is deliberately NOT used: injecting it makes electron-builder rewrite the
 # source root package.json in place (stripping `scripts`, adding `main`) and the async restore is

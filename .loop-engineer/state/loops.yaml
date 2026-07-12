@@ -184,12 +184,13 @@ loops:
     status: RUNNING
     depends_on:
       - L5
-    note: "FROZEN 2026-07-12 for Git baseline + Codex handoff. Component-level work (runtime pin, loopback boundary, credential store, workspace/permission enforcement, EV/session/streaming contracts, redaction, clean.bat, packaged launch-crash fix) is DONE with unit evidence. The PACKAGED user journey is UNVERIFIED end-to-end: local service does not yet auto-start/connect from the packaged app, folder picker + provider/model/credential settings are not verified usable in the package, there is no complete secure DeepSeek token-input flow, and no live OpenCode session has been driven from the packaged app. GUI/UX quality vs Claude Cowork / OpenWork is UNVERIFIED. Reopened to STALE for re-verification: CGHC-008, CGHC-011, CGHC-019. Loop stays RUNNING; gate is PARTIAL until all tasks are DONE and CGHC-028 release-verify PASSes. Do NOT start L7."
+    note: "Codex Slice 1 baseline 2026-07-12: component-level work remains DONE with unit evidence. Rebuilt packaged win-unpacked app now boots when ELECTRON_RUN_AS_NODE is scrubbed, loads main.cjs, starts a token-guarded settings-only loopback service, and leaves no owned process/listener after PID cleanup. The PACKAGED full user journey is still UNVERIFIED end-to-end: folder picker + provider/model/credential settings are not verified usable in the package, secure DeepSeek token-input flow is not verified, and no live OpenCode session has been driven from the packaged GUI. GUI/UX quality vs Claude Cowork / OpenWork remains UNVERIFIED. Reopened to STALE for re-verification: CGHC-008, CGHC-011, CGHC-019. Loop stays RUNNING; gate is PARTIAL until all tasks are DONE and CGHC-028 release-verify PASSes. Do NOT start L7."
     gate:
       result: PARTIAL
       evidence:
         - .loop-engineer/evidence/CGHC-028-release-verification.md
         - .loop-engineer/evidence/CGHC-028-packaged-launch-fix.md
+        - .loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md
         - .loop-engineer/HANDOFF.md
   - id: L7
     name: Integration

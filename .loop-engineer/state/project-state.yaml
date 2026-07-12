@@ -6,7 +6,7 @@ handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
   frozen_at: "2026-07-12T00:00:00Z"
-  note: "Implementation FROZEN for Git baseline + Codex handoff. Packaged user journey (service auto-connect, folder picker, LLM settings, secure DeepSeek token input, live OpenCode session) is UNVERIFIED. GUI/UX quality vs Claude Cowork / OpenWork is UNVERIFIED. L6 stays RUNNING with gate PARTIAL. Do NOT start L7. Default operating mode is LEAN."
+  note: "Codex Slice 1 baseline 2026-07-12: packaged app now boots from rebuilt win-unpacked when ELECTRON_RUN_AS_NODE is not inherited, starts a token-guarded settings-only loopback service, and cleans up owned processes. Full packaged user journey (folder picker, LLM settings, secure DeepSeek token input, live OpenCode session) remains UNVERIFIED. GUI/UX quality vs Claude Cowork / OpenWork remains UNVERIFIED. L6 stays RUNNING with gate PARTIAL. Do NOT start L7. Default operating mode is LEAN."
 git:
   is_repo: false
   note: "Project root is not a git repository yet. `git init` + first commit is a product-owner action (this pass only prepares a safe baseline). No history to protect."

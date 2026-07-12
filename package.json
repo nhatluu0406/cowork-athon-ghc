@@ -4,7 +4,7 @@
   "private": true,
   "description": "Cowork GHC — desktop AI cowork product for Windows 11 local PC",
   "type": "module",
-  "main": "app/shell/dist/main.cjs",
+  "main": "app\\shell\\dist\\main.cjs",
   "engines": {
     "node": ">=22"
   },
@@ -27,6 +27,14 @@
   },
   "dependencies": {
     "@napi-rs/keyring": "1.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0"
   },
   "optionalDependencies": {
     "@napi-rs/keyring-win32-x64-msvc": "1.3.0"
