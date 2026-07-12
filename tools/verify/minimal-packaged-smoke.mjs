@@ -6,6 +6,7 @@ import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 
 const REPO = process.cwd();
 const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
@@ -91,17 +92,16 @@ async function main() {
 
   const proc = spawn(EXE, [`--user-data-dir=${profile}`], {
     cwd: REPO,
-    env: {
-      ...process.env,
+    env: packagedChildEnv({
       COWORK_GHC_E2E_WORKSPACE_ROOT: fixture,
       COWORK_GHC_REMOTE_DEBUG_PORT: String(CDP_PORT),
-    },
+    }),
     stdio: "ignore",
     windowsHide: true,
   });
 
   await sleep(10000);
-  await waitFor(/Đã kết nối local service/i);
+  await waitFor(LOCAL_SERVICE_READY);
   await cdpEvaluate(`document.querySelector('.workspace-choose')?.click()`);
   await sleep(2000);
   await cdpEvaluate(`document.querySelector('.topbar__gateway')?.click()`);

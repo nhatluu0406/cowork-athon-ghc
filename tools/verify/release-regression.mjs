@@ -36,7 +36,7 @@ try {
 
   run(
     "conversation-management",
-    "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts service/tests/conversation-multi-turn.test.ts service/tests/message-role-ev-mapper.test.ts service/tests/workspace-attachment-read.test.ts service/tests/attachment-secret-policy.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/transcript-context.test.ts app/ui/tests/assistant-output.test.ts app/ui/tests/runtime-turn-planner.test.ts app/ui/tests/attachment-context.test.ts app/ui/tests/attachment-pending.test.ts app/ui/tests/dispatch-plan.test.ts app/ui/tests/attachment-secret-policy.test.ts",
+    "node --import tsx --test service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/conversation-relaunch.test.ts service/tests/conversation-multi-turn.test.ts service/tests/message-role-ev-mapper.test.ts service/tests/workspace-attachment-read.test.ts service/tests/attachment-secret-policy.test.ts service/tests/provider-readiness.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/transcript-context.test.ts app/ui/tests/assistant-output.test.ts app/ui/tests/runtime-turn-planner.test.ts app/ui/tests/attachment-context.test.ts app/ui/tests/attachment-pending.test.ts app/ui/tests/dispatch-plan.test.ts app/ui/tests/attachment-secret-policy.test.ts app/ui/tests/provider-readiness.test.ts app/ui/tests/modal-focus.test.ts",
   );
 
   run(
@@ -45,6 +45,8 @@ try {
   );
 
   run("app-lifecycle-cli", "node --import tsx --test tools/app/tests/app-cli.test.ts");
+
+  run("packaged-launch-env", "node --test tools/verify/packaged-launch-env.test.mjs");
 
   check("opencode-binary", existsSync(OPENCODE), `missing ${OPENCODE} — run npm install`);
   check(

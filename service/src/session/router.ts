@@ -33,6 +33,11 @@ import type { CreateSessionInput } from "./seams.js";
 import type { SessionService } from "./session-service.js";
 import { OpencodeHttpError } from "../runtime/opencode-http-error.js";
 
+export interface SessionRouterOptions {
+  /** Validate provider/model/credential prerequisites before creating a runtime session. */
+  readonly assertCreatePrerequisites?: (input: CreateSessionInput) => void;
+}
+
 export const SESSION_PATH = "/v1/session";
 export const SESSION_ITEM_PATH = "/v1/session/{id}";
 export const SESSION_CONTINUE_PATH = "/v1/session/{id}/continue";
@@ -123,6 +128,7 @@ function requireSessionId(params: Readonly<Record<string, string>>): SessionId {
 export function createSessionRouter(
   sessionService: SessionService,
   sendPrompt: SendPrompt,
+  options?: SessionRouterOptions,
 ): BoundaryRouter {
   const notFound = (sessionId: SessionId): RouteResult => ({
     status: 404,
@@ -136,7 +142,9 @@ export function createSessionRouter(
         method: "POST",
         path: SESSION_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
-          const meta = await sessionService.create(parseCreateBody(ctx.body));
+          const input = parseCreateBody(ctx.body);
+          options?.assertCreatePrerequisites?.(input);
+          const meta = await sessionService.create(input);
           return { status: 201, data: { session: meta } };
         },
       },

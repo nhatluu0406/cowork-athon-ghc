@@ -9,6 +9,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -123,9 +124,7 @@ async function setComposer(text) {
 }
 
 function launch(extraEnv, profileDir) {
-  const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
-  return spawn(EXE, [`--user-data-dir=${profileDir}`], { env, stdio: "ignore", windowsHide: true });
+  return spawn(EXE, [`--user-data-dir=${profileDir}`], { env: packagedChildEnv(extraEnv), stdio: "ignore", windowsHide: true });
 }
 
 async function stopAll(proc) {

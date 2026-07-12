@@ -25,6 +25,7 @@ import {
   openSettingsStore,
   type SettingsModelPort,
 } from "../diagnostics/index.js";
+import { assessProviderReadiness } from "../diagnostics/provider-readiness.js";
 import {
   createModelConfigService,
   createInMemoryModelAuditSink,
@@ -47,7 +48,7 @@ import {
 } from "../permission/index.js";
 import { ToolPermissionProxy } from "../files/index.js";
 import { createExtensionRegistry } from "../extensions/index.js";
-import { createSessionService, createSessionRouter } from "../session/index.js";
+import { createSessionService, createSessionRouter, SessionRequestError } from "../session/index.js";
 import { createConversationStore, createConversationRouter } from "../conversation/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
@@ -194,7 +195,14 @@ export async function createCoworkService(
     createSessionStreamRouter(streamHub),
     // The session boundary: create/list/send-prompt/cancel. Tier 1 mounts it with the honest
     // not-attached SendPrompt so it compiles + errors truthfully without a child; live fills it.
-    createSessionRouter(sessionService, options.sendPrompt ?? notAttachedSendPrompt()),
+    createSessionRouter(sessionService, options.sendPrompt ?? notAttachedSendPrompt(), {
+      assertCreatePrerequisites: (input) => {
+        const result = assessProviderReadiness(settingsStore, input.model);
+        if (!result.ok) {
+          throw new SessionRequestError(result.message);
+        }
+      },
+    }),
     createConversationRouter(conversationStore),
   ];
 

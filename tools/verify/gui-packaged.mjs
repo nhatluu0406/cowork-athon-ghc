@@ -6,6 +6,7 @@
  */
 
 import { spawn, execSync } from "node:child_process";
+import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,9 +137,9 @@ async function waitForTerminalWithPermission(pattern, timeoutMs = 180_000) {
 
 function launch(extraEnv = {}) {
   const env = { ...process.env, ...extraEnv };
-  delete env["ELECTRON_RUN_AS_NODE"];
+  
   delete env["DEEPSEEK_API_KEY"];
-  return spawn(EXE, [], { env, stdio: "ignore", windowsHide: true });
+  return spawn(EXE, [], { env: packagedChildEnv(extraEnv), stdio: "ignore", windowsHide: true });
 }
 
 async function stop(proc) {
