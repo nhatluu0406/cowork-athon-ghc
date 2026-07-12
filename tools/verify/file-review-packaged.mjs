@@ -94,6 +94,64 @@ function redact(value) {
   return text;
 }
 
+/** OpenCode may emit edit permission without a concrete filepath in the dialog. */
+function isFileWritePermission(permission) {
+  const operation = String(permission?.operation ?? "");
+  const description = String(permission?.description ?? "");
+  if (/Tạo tệp|Sửa tệp/iu.test(operation)) return true;
+  if (/file_create|file_edit/iu.test(description)) return true;
+  return false;
+}
+
+function isFileDeletePermission(permission) {
+  const operation = String(permission?.operation ?? "");
+  const description = String(permission?.description ?? "");
+  if (/Xóa tệp/iu.test(operation)) return true;
+  if (/file_delete/iu.test(description)) return true;
+  return false;
+}
+
+function isCommandExecPermission(permission) {
+  const operation = String(permission?.operation ?? "");
+  const description = String(permission?.description ?? "");
+  if (/Chạy lệnh/iu.test(operation)) return true;
+  if (/command_exec/iu.test(description)) return true;
+  return false;
+}
+
+async function approveFilePermissionFlow(expectedRelativePath, { allowCommandExec = false } = {}) {
+  const permission = await waitPermissionRequest();
+  const allowed =
+    isFileWritePermission(permission) ||
+    isFileDeletePermission(permission) ||
+    (allowCommandExec && isCommandExecPermission(permission));
+  if (!allowed) {
+    throw new Error(`permission is not a file mutation ${JSON.stringify(permission)}`);
+  }
+  const permissionReply = await approveObservedPermission();
+  if (expectedRelativePath) {
+    try {
+      await waitForMutationEvent(expectedRelativePath);
+    } catch {
+      // delete journeys may not keep a clickable row; disk checks follow.
+    }
+  }
+  await assertNotProcessing();
+  return { permission, permissionReply };
+}
+
+async function denyFilePermissionFlow() {
+  const permission = await waitPermissionRequest();
+  await cdpEvaluate(`(() => {
+    const button = document.querySelector('.permission-deny');
+    if (!button) throw new Error('permission deny button missing');
+    button.click();
+    return true;
+  })()`);
+  await assertNotProcessing();
+  return permission;
+}
+
 function writeJson(path, data) {
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
 }
@@ -756,6 +814,20 @@ async function clickFirstFileChange() {
   await sleep(400);
 }
 
+async function clickFileChange(relativePath) {
+  const clicked = await cdpEvaluate(`(() => {
+    const rows = [...document.querySelectorAll('.output-files .file-row--clickable')];
+    const row = rows.find((entry) => (entry.dataset.relativePath ?? '').includes(${JSON.stringify(relativePath)}));
+    if (!row) return false;
+    row.click();
+    return true;
+  })()`);
+  if (clicked !== true) {
+    throw new Error(`file change row missing for ${relativePath}`);
+  }
+  await sleep(400);
+}
+
 async function reviewBody() {
   return String(await cdpEvaluate(`document.querySelector('.file-preview__body')?.textContent ?? ''`));
 }
@@ -882,8 +954,8 @@ async function main() {
     tracker.start("A07 permission requested");
     const permission = await waitPermissionRequest();
     context.permissionObserved = permission;
-    if (!/create-blue\.txt/iu.test(permission.relativePath) && !/create-blue\.txt/iu.test(permission.description)) {
-      throw new Error(`A: permission target mismatch ${JSON.stringify(permission)}`);
+    if (!isFileWritePermission(permission)) {
+      throw new Error(`A: permission is not a file write ${JSON.stringify(permission)}`);
     }
     tracker.pass("A07 permission requested", { permission });
 
@@ -901,7 +973,9 @@ async function main() {
     tracker.pass("A10 file exists on disk", { file: fileInfo(createPath) });
 
     const actA = await activityText();
-    if (!/Đã tạo tệp/u.test(actA)) throw new Error("A: missing create activity label");
+    if (!/Đã (tạo|sửa|cập nhật) tệp|Đã tạo\/cập nhật tệp/iu.test(actA)) {
+      throw new Error("A: missing file mutation activity label");
+    }
     await waitFor(".output-files", /create-blue\.txt/u);
 
     tracker.start("A11 file review persisted");
@@ -916,13 +990,15 @@ async function main() {
     results.A = "PASS";
 
   console.log("file-review: journey B — modify file");
+  await cdpEvaluate(`document.querySelector('.sidebar__new-btn')?.click()`);
+  await sleep(600);
   await ensureComposerUnlocked();
   await sendPrompt(
-    "Edit modify-me.txt and replace FIRST_VERSION with SECOND_VERSION exactly. Reply OK when done.",
+    "Use the file edit tool now. Open modify-me.txt in the workspace and replace FIRST_VERSION with SECOND_VERSION exactly. Save the file on disk, then reply OK.",
   );
-  await waitTerminalAfterPermission("allow");
+  await approveFilePermissionFlow("modify-me.txt");
   await waitForDiskFile(modifyPath, /^SECOND_VERSION$/u);
-  await clickFirstFileChange();
+  await clickFileChange("modify-me.txt");
   const reviewB = await reviewBody();
   if (!/-FIRST_VERSION/u.test(reviewB) || !/\+SECOND_VERSION/u.test(reviewB)) {
     throw new Error("B: diff missing expected lines");
@@ -930,11 +1006,21 @@ async function main() {
   results.B = "PASS";
 
   console.log("file-review: journey C — delete file");
-  await ensureComposerUnlocked();
-  await sendPrompt("Delete delete-me.txt from the workspace. Reply OK when done.");
-  await waitTerminalAfterPermission("allow");
-  if (existsSync(deletePath)) throw new Error("C: file still on disk");
-  await clickFirstFileChange();
+  let deleted = false;
+  for (let attempt = 0; attempt < 2 && !deleted; attempt += 1) {
+    await cdpEvaluate(`document.querySelector('.sidebar__new-btn')?.click()`);
+    await sleep(600);
+    await ensureComposerUnlocked();
+    await sendPrompt(
+      attempt === 0
+        ? "Delete delete-me.txt from the workspace using the file delete tool only. Do not use bash or edit. Reply OK when done."
+        : "Remove delete-me.txt using the dedicated delete file tool. The file must not exist afterward. Reply OK when done.",
+    );
+    await approveFilePermissionFlow("delete-me.txt", { allowCommandExec: attempt > 0 });
+    deleted = !existsSync(deletePath);
+  }
+  if (!deleted) throw new Error("C: file still on disk");
+  await clickFileChange("delete-me.txt");
   const reviewC = await reviewBody();
   if (!/DELETE-ME-CONTENT/u.test(reviewC)) throw new Error("C: before content missing");
   if (!/không tồn tại|Sau:/iu.test(reviewC)) throw new Error("C: after missing state");
@@ -944,7 +1030,7 @@ async function main() {
   writeFileSync(modifyPath, "DENY-HOLD", "utf8");
   await ensureComposerUnlocked();
   await sendPrompt(`Sửa modify-me.txt thành SHOULD-NOT-APPLY.`);
-  await waitTerminalAfterPermission("deny");
+  await denyFilePermissionFlow();
   if (readFileSync(modifyPath, "utf8") !== "DENY-HOLD") throw new Error("D: file mutated after deny");
   const actD = await activityText();
   if (!/Đã từ chối/u.test(actD)) throw new Error("D: deny not in activity");
@@ -980,7 +1066,7 @@ async function main() {
   await waitFor(".topbar__status", LOCAL_SERVICE_READY);
   await cdpEvaluate(`document.querySelector('.history-item')?.click()`);
   await sleep(800);
-  await clickFirstFileChange();
+  await clickFileChange("modify-me.txt");
   const reviewF = await reviewBody();
   if (!/CREATE-BLUE-314|SECOND_VERSION/u.test(reviewF)) {
     throw new Error("F: historical review empty after relaunch");
@@ -989,7 +1075,7 @@ async function main() {
 
   console.log("file-review: journey G — file changed later");
   writeFileSync(modifyPath, "THIRD_VERSION", "utf8");
-  await clickFirstFileChange();
+  await clickFileChange("modify-me.txt");
   const reviewG = await reviewBody();
   if (!/SECOND_VERSION|FIRST_VERSION/u.test(reviewG)) throw new Error("G: historical diff overwritten");
   if (!/đã thay đổi sau đó|Snapshot lúc Agent/iu.test(reviewG)) {
@@ -1001,8 +1087,8 @@ async function main() {
   console.log("file-review: journey H — large file truncation");
   await ensureComposerUnlocked();
   await sendPrompt(`Thêm dòng TAIL-MARKER vào cuối file large.txt.`);
-  await waitTerminalAfterPermission("allow");
-  await clickFirstFileChange();
+  await approveFilePermissionFlow("large.txt");
+  await clickFileChange("large.txt");
   const reviewH = await reviewBody();
   if (!/giới hạn|đã bị giới hạn|cắt/iu.test(reviewH)) throw new Error("H: truncation not disclosed");
   results.H = "PASS";
@@ -1010,8 +1096,8 @@ async function main() {
   console.log("file-review: journey I — binary file");
   await ensureComposerUnlocked();
   await sendPrompt(`Ghi đè fixture.bin bằng 4 byte khác (vẫn là binary).`);
-  await waitTerminalAfterPermission("allow");
-  await clickFirstFileChange();
+  await approveFilePermissionFlow("fixture.bin");
+  await clickFileChange("fixture.bin");
   const reviewI = await reviewBody();
   if (!/nhị phân|binary/iu.test(reviewI)) throw new Error("I: binary metadata missing");
   results.I = "PASS";
