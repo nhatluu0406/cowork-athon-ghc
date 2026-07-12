@@ -1,0 +1,30 @@
+checkpoint: L6-electron-scaffold
+created_at: "2026-07-11T10:15:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: FOUNDATION_PASS
+resumable: true
+kind: sub-foundation
+note: "Electron app scaffold sub-foundation (not a numbered CGHC task). Unblocks the UI family (CGHC-008/015/017/022/025). Independently security-reviewed (reviewer != implementer); 0 unresolved Critical/High; nothing scaffold-blocking; the baseline fails closed on every known gap."
+delivered:
+  - "app/shell (Electron main + preload): hardened BrowserWindow (sandbox:true, contextIsolation:true, nodeIntegration:false, nodeIntegrationInWorker/InSubFrames:false, webSecurity:true, allowRunningInsecureContent:false, experimentalFeatures:false — the only BrowserWindow/webPreferences in the tree)"
+  - "Strict CSP (no unsafe-inline/unsafe-eval; connect-src loopback-only; object-src/base-uri/frame-ancestors/form-action locked) installed via onHeadersReceived + index.html meta defense-in-depth"
+  - "Navigation lockdown (will-navigate/will-redirect/setWindowOpenHandler/will-attach-webview denied) applied to the window AND every web-contents-created"
+  - "Narrow typed preload bridge (getBootstrap + pickWorkspaceFolder via a closed channel allow-list); ipcRenderer never exposed; no generic invoke passthrough"
+  - "core/contracts/shell-bridge.ts (browser-safe bridge contract); app/ui renderer as a service client (own fetch client mirroring the boundary envelope); import-direction clean (ui -> contracts only)"
+  - "Vite renderer build; electron-builder.yml Windows/NSIS skeleton with asarUnpack for @napi-rs/keyring; ADR 0009 (renderer bundler + packaging) + README index row"
+verification:
+  service_core_tests_passing: 185
+  tsc: "clean"
+  renderer_build: "vite build OK"
+  controller_verify: "PASS"
+review: "security-reviewer PASS_WITH_FINDINGS (0 Crit/High); no scaffold-blocking issue"
+carried_forward:
+  - "CGHC-025: prove CSP is a real response header on file:// (or serve via loopback/app protocol); lift the boundary envelope (SuccessEnvelope/ErrorEnvelope/HealthData/BoundaryErrorCode + protocol tag) into @cowork-ghc/contracts so service + app/ui share one source (renderer copy has drifted); add renderer security-baseline tests (CSP invariants, navigation denials, bridge surface has no ipcRenderer)"
+  - "CGHC-028: bundle the sandboxed preload into a single file (fails closed today); exclude renderer sourcemaps from the package; keep asarUnpack for the keyring native module"
+  - "UI tasks (CGHC-008/015/017/022) must NOT further diverge the mirrored boundary client; converge on the shared contract when CGHC-025 lifts it"
+resume_hint: >
+  Electron scaffold accepted as a sub-foundation (0 Crit/High; MEDIUM/LOW carried to CGHC-025/028).
+  15/28 numbered tasks DONE. Next on the critical path to the credential gate: the secure DeepSeek
+  credential-ingestion CLI (in flight) + the CGHC-024 offline harness, then present the one safe
+  token-entry command and stop. Live tests (CGHC-024/028) authorized behind OpenCode with DeepSeek.

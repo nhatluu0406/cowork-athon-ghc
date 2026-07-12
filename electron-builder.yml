@@ -1,0 +1,36 @@
+# electron-builder — SKELETON only (CGHC scaffold). The full packaged installer + smoke
+# test is CGHC-028; this file records the target shape and is intentionally NOT run here.
+#
+# Layout: Electron main = app\shell\dist\main.cjs; renderer = app/ui/dist (Vite build).
+appId: com.coworkghc.desktop
+productName: Cowork GHC
+
+# Point the packager at the shell's compiled main entry (root package.json has no "main").
+extraMetadata:
+  main: app\shell\dist\main.cjs
+
+directories:
+  output: release
+  buildResources: build
+
+# Ship only compiled shell + built renderer + the runtime deps they need.
+files:
+  - app/shell/dist/**/*
+  - app/ui/dist/**/*
+  - package.json
+
+# CGHC-009 carry-forward: the @napi-rs/keyring native .node binding cannot live inside the
+# asar archive — it must be unpacked so the OS loader can dlopen it at runtime.
+asar: true
+asarUnpack:
+  - "**/node_modules/@napi-rs/keyring/**"
+
+win:
+  target:
+    - nsis
+
+# Per-user install, no admin (ADR 0004).
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false

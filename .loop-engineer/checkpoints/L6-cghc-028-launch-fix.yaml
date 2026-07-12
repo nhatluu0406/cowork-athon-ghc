@@ -1,0 +1,42 @@
+checkpoint: L6-cghc-028-launch-fix
+created_at: "2026-07-12T03:15:00Z"
+run_id: RUN-0007
+loop_status: RUNNING
+gate: "MANUAL_INTERACTIVE_VERIFICATION (unchanged) — bullets 3-5 still need the packaged GUI + fresh live auth"
+resumable: true
+tasks_done_total: 27
+cghc_028_status: "IN_PROGRESS / release-candidate — launch-blocking bug FOUND+FIXED+reviewed; interactive GUI legs still manual"
+trigger: "User report: dist-app/win-unpacked/Cowork GHC.exe errors on run."
+root_cause: >
+  The packaged app never booted. Electron main is an esbuild CommonJS bundle, but app/shell/package.json
+  declares "type": "module", so Electron loaded dist/main.js as ESM and its top-level require threw
+  ReferenceError: require is not defined in ES module scope (main.js:1). The app showed a modal Error
+  dialog and no window. The earlier "boot smoke STAYED_ALIVE" was a FALSE POSITIVE: a Windows GUI-subsystem
+  binary detaches from the console (empty stderr always) and the process stayed alive only because the
+  modal error dialog held it open. STAYED_ALIVE != window rendered.
+fix:
+  - "main-bundle.mjs / preload-bundle.mjs emit .cjs (dist/main.cjs, dist/preload.cjs) — CommonJS is unambiguous regardless of type:module."
+  - "create-window.ts PRELOAD_PATH -> preload.cjs; app/shell/package.json main + start:electron -> ./dist/main.cjs; root package.json main -> app/shell/dist/main.cjs."
+  - "electron-builder.yml: REMOVED extraMetadata.main (it rewrote the source root package.json in place, stripping scripts; the async --dir restore was unreliable). Entry now comes from root main -> no source mutation (verified: scripts survive packaging)."
+  - "csp.ts + app/ui/index.html: dropped the invalid http://[::1]:*/ws://[::1]:* connect-src source (Chromium rejects it -> per-launch console error; service binds IPv4 127.0.0.1 only)."
+  - "Medium-1 (review): added files glob !app/shell/dist/**/*.js so the asar ships ONLY the .cjs bundles from the shell (the exact broken ESM main.js no longer ships next to the entry); renderer app/ui/dist .js retained."
+review: "Independent code-reviewer (!= implementer): PASS, 0 Critical/High. Medium-1 (unbundled ESM tree still shipped) FIXED via asar exclusion. Low-3 (csp.test still whitelisted [::1]) FIXED — now asserts [::1] absent. Low-4 (stale main.js comment) FIXED. Low-2 (meta vs header ws:// divergence) is PRE-EXISTING + harmless today (renderer uses SSE-over-fetch) -> carry-forward."
+verification:
+  window_render: "CDP attach: app://cowork/index.html, readyState=complete, title 'Cowork GHC', window.coworkShell bridge present (preload.cjs loaded), real UI body (honest not-connected surface)."
+  no_error_dialog: "top-level window enum: only Chrome_WidgetWin_1 'Cowork GHC'; ERROR_DIALOG_PRESENT=0, APP_WINDOW_PRESENT=1."
+  no_console_errors: "CDP Log/console/exception empty ([::1] CSP warning gone)."
+  suite: "npm test 616 pass / 0 fail; tsc -b clean."
+  artifact: "dist-app setup.exe ~115M + portable ~114.7M rebuilt; asar entry app/shell/dist/main.cjs; keyring .node unpacked; opencode.exe 157.6M resource; source root package.json UNMUTATED (scripts intact)."
+carry_forward:
+  - "Low-2: <meta> CSP (app/ui/index.html) lacks ws:// while the header (csp.ts) allows ws://127.0.0.1:*/localhost:*. Browser enforces the intersection -> meta would block a future loopback WebSocket. Harmless now (SSE-over-fetch only). Keep meta/header in sync when a WS client is added, or drop unused ws:// from the header. PRE-EXISTING, not introduced by this fix."
+  - "(unchanged) S4 resume terminal-status fidelity (MEDIUM); PR7 401->reconfigure_credential mapper (LOW); multi-turn-per-session streaming (honest 409 now)."
+remaining_for_cghc_028_pass:
+  - "MANUAL interactive desktop pass on real Windows: install/uninstall setup.exe, packaged GUI click-through (folder picker, provider/model, streaming render, permission Allow AND Deny + on-disk check, stop, reopen+resume, template re-run), PR7 in packaged UI, keyring round-trip from installed location."
+  - "One packaged interactive smoke chaining critical-path + provider-error + template + resume."
+  - "A 4th bounded LIVE request needs FRESH product-owner authorization (budget 3/3 spent)."
+resume_hint: >
+  27/28 DONE. CGHC-028 remains a release-candidate (PARTIAL) but is now STRONGER: the launch-blocking
+  ESM/CJS packaging bug the user hit is fixed + independently reviewed (0 Crit/High), and the packaged app
+  is now PROVEN to render a real window (CDP-verified), not just 'stay alive'. Installer rebuilt; source
+  manifest no longer mutated by packaging. The only remaining CGHC-028 work is the manual interactive GUI
+  pass + fresh live auth. Web DEFERRED (ADR 0007). No credential gate remains.

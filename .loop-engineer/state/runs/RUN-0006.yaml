@@ -1,0 +1,59 @@
+run_id: RUN-0006
+loop: L5
+mode: run
+execution: subagents
+budget: normal
+parallel_peak: 2
+status: COMPLETED
+started_at: "2026-07-11T03:00:00Z"
+completed_at: "2026-07-11T03:30:00Z"
+gate:
+  result: PASS
+  evidence:
+    - docs/product/cowork-ghc-master-plan.md
+    - .loop-engineer/state/tasks.yaml
+    - .loop-engineer/evidence/L5/review-test.md
+    - .loop-engineer/evidence/L5/review-security.md
+    - .loop-engineer/evidence/L5/review-dispositions.md
+agents:
+  - role: product-architect
+    task: L5-A1
+    outcome: DONE
+    note: "Authored master plan (15 slices) + 28-task graph in tasks.yaml; all 41 MUST covered; reviewer != owner. Then applied reviewer-mandated fixes (3 HIGH + MEDs)."
+  - role: test-engineer
+    task: L5-REV-TEST
+    outcome: CHANGES_REQUIRED
+    note: "Test-strategy review vs testing.md. 0 Crit, 3 High (CGHC-028 E2E dep closure; CGHC-016 fail-closed/approval tests; CGHC-025 hardening test), 6 Med, 2 Low. All 3 High resolved before freeze."
+  - role: security-reviewer
+    task: L5-REV-SEC
+    outcome: PASS_WITH_FINDINGS
+    note: "Security/boundary coverage review. 0 Crit/High, 4 Med, 3 Low. Core security tasks present with security-reviewer + reviewer != owner. MEDs folded in (SSRF enumeration, runtime-tool confinement, security lens on CGHC-011/015/020, P5 audit)."
+plan_summary:
+  vertical_slices: 15
+  executable_tasks: 28
+  backlog_deferred: [CGHC-WEB-001]
+  ready_tasks: [CGHC-001, CGHC-002, CGHC-003]
+  must_requirements_covered: "41/41"
+  reviewer_ne_owner: true
+findings:
+  critical: 0
+  high: 0
+  high_raw: 3
+  medium: 10
+  low: 5
+  note: "3 test HIGH resolved in-loop; security 0 High. Remaining Med/Low folded into task acceptance/tests. 0 unresolved Critical/High at gate."
+carried_forward:
+  - "L4 carried items are now explicit tasks: keyless env-name spike (CGHC-001), Windows orphan reaper (CGHC-005), EV contract + resync (VS-05 tasks), captured-real-frame fixtures (CGHC-024), SSRF policy (CGHC-010), value-based redaction (CGHC-021), renderer hardening (CGHC-025), env-injection credential store (CGHC-009)."
+  - "CGHC-ARCH-001 -> CGHC-003 (web-seam core/contracts); CGHC-DOC-001 -> CGHC-027 (doc normalization)."
+summary: >
+  L5 Master Plan. product-architect turned the frozen L4 architecture + L1 scope into 15 vertical
+  slices and a 28-task graph (owner + independent reviewer per task, reviewer != owner, all 41 MUST
+  requirements traced), plus a perf budget, release plan, risk register and Windows script tasks. Two
+  independent reviewers (test-engineer, security-reviewer, both != author) critiqued coverage and
+  security; the three test HIGH findings were resolved before freeze and the security MEDs folded into
+  task acceptance/tests. Web stays DEFERRED (ADR 0007). Definition of Done met: independent review,
+  evidence, 0 unresolved Critical/High. L6 executes per task/slice.
+next_valid_commands:
+  - "/loop-engineer status"
+  - "/loop-engineer task CGHC-001   (or CGHC-002 / CGHC-003 — the READY critical-path roots)"
+  - "/loop-engineer run L6   (Implementation — executes per task/slice; not auto-run)"
