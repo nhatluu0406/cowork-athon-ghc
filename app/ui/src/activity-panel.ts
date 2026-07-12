@@ -14,6 +14,7 @@ import {
 
 export interface ActivityPanelDom {
   readonly root: HTMLElement;
+  readonly plan: HTMLElement;
   readonly timeline: HTMLElement;
   readonly permissionHistory: HTMLElement;
   readonly outputFiles: HTMLElement;
@@ -78,11 +79,31 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
   header?.append(toggle);
 
   const planCard = rightPanel.querySelector(".plan-card");
+  planCard?.classList.add("info-section", "info-section--plan");
+  const plan = planCard?.querySelector(".plan-card__steps") as HTMLElement;
+  planCard?.setAttribute("aria-label", "Kế hoạch");
+
+  const panelTabs = el("div", "rp-tabs");
+  const tabData = [
+    ["Kế hoạch", "plan"],
+    ["Hoạt động", "activity"],
+    ["Tệp", "files"],
+    ["Xem lại", "review"],
+  ] as const;
+  for (const [label, key] of tabData) {
+    const button = el("button", "rp-tab", label);
+    button.type = "button";
+    button.dataset["section"] = key;
+    if (key === "activity") button.classList.add("rp-tab--active");
+    panelTabs.append(button);
+  }
+  header?.after(panelTabs);
+
   const timelineSection = el("section", "activity-section");
   timelineSection.append(el("div", "activity-section__label", "Hoạt động"));
   const timeline = el("div", "activity-timeline");
   timelineSection.append(timeline);
-  planCard?.replaceWith(timelineSection);
+  planCard?.after(timelineSection);
 
   const permSection = el("section", "activity-section");
   permSection.append(el("div", "activity-section__label", "Lịch sử quyền"));
@@ -90,8 +111,10 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
   permSection.append(permissionHistory);
 
   const outputSection = rightPanel.querySelector(".file-section");
+  outputSection?.classList.add("info-section", "info-section--files");
   const outputFiles = outputSection?.querySelector(".output-files") as HTMLElement;
   const inputSections = rightPanel.querySelectorAll(".file-section");
+  inputSections[1]?.classList.add("info-section", "info-section--files");
   const inputFiles = inputSections[1]?.querySelector(".input-files") as HTMLElement;
 
   const preview = el("section", "file-preview");
@@ -111,7 +134,7 @@ export function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom {
     toggle.textContent = collapsed ? "Mở rộng" : "Thu gọn";
   });
 
-  return { root: rightPanel, timeline, permissionHistory, outputFiles, inputFiles, preview, toggle };
+  return { root: rightPanel, plan, timeline, permissionHistory, outputFiles, inputFiles, preview, toggle };
 }
 
 export function renderActivityPanel(
@@ -119,6 +142,14 @@ export function renderActivityPanel(
   snapshot: ActivitySnapshot | null,
   emptyCopy = "Chưa có hoạt động.",
 ): void {
+  dom.plan.replaceChildren();
+  const planItems = snapshot?.items.filter((item) => item.kind === "plan") ?? [];
+  if (planItems.length === 0) {
+    dom.plan.append(el("p", "panel-empty", "Chưa có kế hoạch từ runtime."));
+  } else {
+    for (const item of planItems) dom.plan.append(renderTimelineItem(item));
+  }
+
   dom.timeline.replaceChildren();
   if (snapshot === null || snapshot.items.length === 0) {
     dom.timeline.append(el("p", "panel-empty", emptyCopy));
