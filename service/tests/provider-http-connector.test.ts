@@ -269,3 +269,28 @@ test("transport failure (e.g. connection refused) maps to a non-secret PR7 error
   assert.ok(result.error, "an error is mapped");
   assert.ok(!JSON.stringify(result).includes(h.secret));
 });
+
+test("custom endpoint: auth probe then model probe — invalid model maps to model_invalid", async () => {
+  const secret = "sk-custom-DO-NOT-LEAK-model-probe";
+  const credentials = createCredentialService({ store: createMemoryStore() });
+  const ref = await credentials.store({ providerId: CUSTOM_OPENAI_COMPAT_ID, secret });
+  const ssrf = createSsrfPolicy({ resolver: staticResolver(PUBLIC_IP) });
+  const dialer = fakeDialer((req) => {
+    if (req.method === "POST") return { status: 400, headers: {}, dialedIp: req.ip };
+    return { status: 200, headers: {}, dialedIp: req.ip };
+  });
+  const connector = createHttpConnector({
+    ssrf,
+    credentials,
+    credentialRefFor: () => ref,
+    dialer,
+    activeModelFor: () => ({ providerID: CUSTOM_OPENAI_COMPAT_ID, modelID: "cghc-invalid-model" }),
+    envSpecFor: () => providerEnvSpec(CUSTOM_OPENAI_COMPAT_ID, "DEEPSEEK_API_KEY"),
+  });
+  const port = createProviderPort({ ssrf, connector });
+  await port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://api.example.test/v1" });
+  const result = await port.testConnection(CUSTOM_OPENAI_COMPAT_ID);
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.kind, "model_invalid");
+  assert.equal(dialer.calls.length, 2, "models list then chat completion");
+});

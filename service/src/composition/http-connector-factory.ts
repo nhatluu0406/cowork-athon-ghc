@@ -6,7 +6,7 @@
  * when live; until then `probe` is fully functional for onboarding.
  */
 
-import type { ProviderId } from "@cowork-ghc/contracts";
+import type { ModelRef, ProviderId } from "@cowork-ghc/contracts";
 import type { CredentialService } from "../credential/index.js";
 import type { SettingsStore } from "../diagnostics/index.js";
 import {
@@ -25,6 +25,7 @@ export interface HttpConnectorBundle {
   readonly ssrf: SsrfPolicy;
   readonly providerPort: ProviderPort;
   readonly connector: ProviderConnector;
+  readonly bindActiveModelResolver: (resolver: () => ModelRef | undefined) => void;
 }
 
 /** Wire the SSRF policy, provider port, and HTTP probe connector (lazy credential lookup). */
@@ -34,11 +35,13 @@ export function createHttpConnectorBundle(
   dnsResolver: DnsResolver,
 ): HttpConnectorBundle {
   const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  let activeModelFor: () => ModelRef | undefined = () => undefined;
   let port!: ProviderPort;
   const connector = createHttpConnector({
     ssrf,
     credentials: credentialService,
     credentialRefFor: (id) => port.credentialRefFor(id),
+    activeModelFor: () => activeModelFor(),
     envSpecFor: (id: ProviderId) => {
       if (isCustomEndpoint(id)) {
         const envVar = settingsStore.providerSettings(id)?.envVar;
@@ -48,5 +51,12 @@ export function createHttpConnectorBundle(
     },
   });
   port = createProviderPort({ ssrf, connector });
-  return { ssrf, providerPort: port, connector };
+  return {
+    ssrf,
+    providerPort: port,
+    connector,
+    bindActiveModelResolver: (resolver) => {
+      activeModelFor = resolver;
+    },
+  };
 }
