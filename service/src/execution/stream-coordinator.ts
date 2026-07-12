@@ -42,6 +42,8 @@ export interface StreamCoordinatorOptions {
   readonly windowMs?: number;
   /** Hard cap on tokens buffered before a forced flush (bounds burst latency). */
   readonly maxBatchTokens?: number;
+  /** Grace delay before emitting terminal so late token deltas can flush first. */
+  readonly terminalGraceMs?: number;
 }
 
 export interface StreamCoordinator {
@@ -55,6 +57,7 @@ export interface StreamCoordinator {
 
 const DEFAULT_WINDOW_MS = 40;
 const DEFAULT_MAX_BATCH_TOKENS = 48;
+const DEFAULT_TERMINAL_GRACE_MS = 120;
 
 interface PendingTokens {
   sessionId: EvEvent["sessionId"];
@@ -67,9 +70,12 @@ interface PendingTokens {
 export function createStreamCoordinator(options: StreamCoordinatorOptions): StreamCoordinator {
   const windowMs = options.windowMs ?? DEFAULT_WINDOW_MS;
   const maxBatchTokens = options.maxBatchTokens ?? DEFAULT_MAX_BATCH_TOKENS;
+  const terminalGraceMs = options.terminalGraceMs ?? DEFAULT_TERMINAL_GRACE_MS;
 
   let pending: PendingTokens | null = null;
   let cancelTimer: CancelTimer | null = null;
+  let cancelTerminalGrace: CancelTimer | null = null;
+  let pendingTerminal: EvEvent | null = null;
   let terminated = false;
 
   function clearTimer(): void {
@@ -77,6 +83,23 @@ export function createStreamCoordinator(options: StreamCoordinatorOptions): Stre
       cancelTimer();
       cancelTimer = null;
     }
+  }
+
+  function clearTerminalGrace(): void {
+    if (cancelTerminalGrace) {
+      cancelTerminalGrace();
+      cancelTerminalGrace = null;
+    }
+  }
+
+  function emitTerminalNow(): void {
+    clearTerminalGrace();
+    if (pendingTerminal === null) return;
+    const terminal = pendingTerminal;
+    pendingTerminal = null;
+    options.emit(terminal);
+    terminated = true;
+    clearTimer();
   }
 
   /** Emit the accumulated tokens as ONE token event (or nothing if none pending). */
@@ -135,15 +158,21 @@ export function createStreamCoordinator(options: StreamCoordinatorOptions): Stre
       // A state-changing event: preserve ordering by flushing buffered tokens first, then
       // emit it with no coalescing delay (low latency for state that changes the UI).
       flushPending();
-      options.emit(event);
       if (event.kind === "terminal") {
-        terminated = true;
-        clearTimer();
+        pendingTerminal = event;
+        clearTerminalGrace();
+        cancelTerminalGrace = options.scheduler.setTimer(terminalGraceMs, () => {
+          cancelTerminalGrace = null;
+          emitTerminalNow();
+        });
+        return;
       }
+      options.emit(event);
     },
 
     flush() {
       flushPending();
+      emitTerminalNow();
     },
 
     isTerminated: () => terminated,

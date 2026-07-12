@@ -115,7 +115,15 @@ function foldOne(view: SessionView, event: EvEvent): SessionView {
   // inherits this, so a late/out-of-order mutating frame can never show the UI a mutation that
   // "happened" after the run finished. Status truthfulness (S6/EV7) is thus enforced here too,
   // not only in the registry freeze gate.
-  if (view.terminal !== null && event.kind !== "terminal") return view;
+  //
+  // Exception: allow late S2 token deltas when the assistant text is still empty — OpenCode
+  // may emit `session.idle` before the final committed text part on tool-using turns.
+  if (view.terminal !== null && event.kind !== "terminal") {
+    if (event.kind === "token" && view.text.trim().length === 0) {
+      return { ...view, text: view.text + event.delta };
+    }
+    return view;
+  }
   switch (event.kind) {
     case "plan":
       return { ...view, status: liveStatus(view), todos: event.todos };

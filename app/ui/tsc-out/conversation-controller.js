@@ -255,8 +255,10 @@ function runtimePhaseToStatus(phase) {
         case "cancelling":
             return "running";
         case "completed":
+        case "completed_without_final_message":
             return "completed";
         case "cancelled":
+        case "denied":
             return "cancelled";
         case "failed":
             return "errored";

@@ -72,13 +72,15 @@ test("a state-changing event flushes pending tokens FIRST, then emits promptly (
   assert.equal(scheduler.pending(), 0, "the token window timer was cancelled on the prompt flush");
 });
 
-test("a terminal flushes pending tokens then ends the stream; post-terminal noise is dropped", () => {
+test("a terminal flushes pending tokens then ends the stream after a short grace window", () => {
   const scheduler = createManualScheduler();
   const rec = createRecorder();
-  const coord = createStreamCoordinator({ emit: rec.emit, scheduler, windowMs: 40 });
+  const coord = createStreamCoordinator({ emit: rec.emit, scheduler, windowMs: 40, terminalGraceMs: 30 });
 
   coord.push(tokenEv(1, "done "));
   coord.push(terminalEv(2, "completed"));
+  assert.deepEqual(rec.kinds(), ["token"], "terminal is deferred briefly for late tokens");
+  scheduler.advance(30);
   assert.deepEqual(rec.kinds(), ["token", "terminal"]);
   assert.ok(coord.isTerminated());
 

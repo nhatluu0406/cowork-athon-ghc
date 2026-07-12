@@ -6,7 +6,7 @@
  */
 import type { SessionView } from "@cowork-ghc/service/execution";
 import type { ConversationRecord, ConversationStatus, ConversationSummary, ServiceClient } from "./service-client.js";
-export type RuntimePhase = "idle" | "starting" | "ready" | "running" | "cancelling" | "completed" | "failed" | "cancelled";
+export type RuntimePhase = "idle" | "starting" | "ready" | "running" | "cancelling" | "completed" | "completed_without_final_message" | "denied" | "failed" | "cancelled";
 export interface ConversationManagerState {
     summaries: readonly ConversationSummary[];
     activeConversationId: string | null;

@@ -211,6 +211,7 @@ export interface ServiceClient {
     appendConversationMessage(id: string, role: "user" | "assistant", text: string): Promise<ConversationRecord>;
     /** Reconnect to an OpenCode session after service restart (when still available). */
     continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
+    getRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
     previewWorkspaceFile(relativePath: string): Promise<{
         readonly relativePath: string;
         readonly kind: "text" | "binary" | "missing";
