@@ -21,7 +21,7 @@ Verified or documented-current:
 - Multi-turn Cowork conversation through linked runtime turns; not native OpenCode continuation after terminal.
 - Activity timeline, file-change panel, permission history, bounded text file preview.
 - Attachment Phase 1: workspace text-file picker, pending chips, metadata persistence, untrusted transport envelope, no raw content in transcript.
-- Known gaps: Skills not available in GUI, template replay missing, full before/after diff missing, folder/image/PDF/drag-drop attachments missing, full L9 release verification not complete.
+- Known gaps: Skills Phase 1 shipped; template replay missing; **before/after diff implemented** in File Work Review slice (bounded, activity panel); folder/image/PDF/drag-drop attachments missing; full L9 release verification not complete.
 
 ## 3. Attachment Phase 1 Audit Findings
 
@@ -109,7 +109,11 @@ Recommendation: Product Owner decision. Prefer block by default or require a str
 
 - Skills tab is visible but disabled.
 - No folder/image/PDF/Office/drag-drop attachment support.
-- No full before/after diff for modified files.
+### File change review (addressed in File Work Review slice)
+
+- Persisted before/after snapshots and bounded unified diff in activity right panel.
+- Attachment context vs runtime read separated in input-files section.
+- Secret-like paths redacted in review; open-file via shell deferred (copy path only).
 - No template/workflow replay.
 - No packaged interactive smoke covering the full renderer path.
 

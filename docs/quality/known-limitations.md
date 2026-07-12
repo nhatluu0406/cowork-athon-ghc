@@ -10,7 +10,11 @@ updated_at: "2026-07-12"
 
 - Timeline dựa trên EV kinds quan sát được (`tool_call`, `file_mutation`, `step`, `progress`, `terminal`, `error`) — không hiển thị token model như tool.
 - File-change panel chỉ liệt kê thay đổi từ `file_mutation` (tool write/edit hoàn thành), không quét toàn workspace.
-- Preview tệp: văn bản bounded (64KB), từ chối binary/traversal/symlink escape; **không** có unified diff before/after cho file sửa trong slice này.
+- Preview tệp: văn bản bounded (64KB), từ chối binary/traversal/symlink escape.
+- **File review (slice mới)**: before/after snapshot + unified diff bounded (64KB snapshot, 32KB diff, 500 dòng);
+  persist trên activity conversation; secret-like path redact; hash mismatch banner khi file disk đã đổi sau turn.
+  Không có open-file shell bridge (chỉ copy path); không universal Preview tab; không direct editor.
+- Attachment context (`Đã đưa tệp vào ngữ cảnh`) tách khỏi runtime read (`Đã đọc tệp`) trong activity panel.
 - Activity lịch sử không replay animation live khi mở lại conversation.
 - OpenCode `permission.asked` / `permission.replied` không map sang timeline — quyền qua API Cowork + modal.
 
@@ -53,7 +57,7 @@ updated_at: "2026-07-12"
   workspace auto-scan, dependency resolution hoặc full Skill editor.
 - Skill content dùng chung dispatch budget 12k; nếu enabled Skill không fit thì turn fail-fast,
   không silently omit.
-- `Tệp đã đọc` trong activity gồm cả attachment context (Phase 1) và tool read/list thật.
+- `Tệp đã đọc` trong activity **không** còn gộp attachment context — attachment hiển thị riêng `Đã đưa tệp vào ngữ cảnh`; runtime tool read hiển thị `Đã đọc tệp`.
 - Web support vẫn `DEFERRED`.
 
 ## UX
