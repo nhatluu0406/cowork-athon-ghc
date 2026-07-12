@@ -10,11 +10,12 @@ Canonical: `.loop-engineer/state/tasks.yaml`
 | 2 Workspace | PASS |
 | 3 Provider/credential | PASS |
 | 4 OpenCode live session | PASS |
+| HuyTT12 GUI integration | PASS |
 
 ## Active
 
-- `CGHC-028` release verification — IN_PROGRESS (L6 gate PARTIAL)
+- `CGHC-028` release verification - IN_PROGRESS (L6 gate PARTIAL)
 
 ## Next
 
-Slice 5 — packaged permission + cancel + stop/resume/clean. Do not start L7.
+Packaged permission request (when real runtime emits it), stop/resume/clean, provider-error E2E, template/session resume. Do not start L7.
