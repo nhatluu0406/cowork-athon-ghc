@@ -366,6 +366,8 @@ export interface ServiceClient {
     readonly truncated: boolean;
     readonly sizeBytes: number;
   }>;
+  captureFileReviewSnapshot(relativePath: string): Promise<import("@cowork-ghc/service/file-review").FileSnapshotCapture>;
+  buildFileReview(input: Record<string, unknown>): Promise<import("@cowork-ghc/service/file-review").FileReviewArtifact>;
   /**
    * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
    * never fabricates activity — the list is empty when nothing is awaiting a decision.
@@ -653,6 +655,22 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
           };
         }>(`/v1/workspace/file-preview?path=${encodeURIComponent(relativePath)}`)
       ).preview,
+
+    captureFileReviewSnapshot: async (relativePath) =>
+      (
+        await call<{ snapshot: import("@cowork-ghc/service/file-review").FileSnapshotCapture }>(
+          "/v1/file-review/snapshot",
+          { method: "POST", body: JSON.stringify({ relativePath }) },
+        )
+      ).snapshot,
+
+    buildFileReview: async (input) =>
+      (
+        await call<{ review: import("@cowork-ghc/service/file-review").FileReviewArtifact }>(
+          "/v1/file-review/build",
+          { method: "POST", body: JSON.stringify(input) },
+        )
+      ).review,
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,

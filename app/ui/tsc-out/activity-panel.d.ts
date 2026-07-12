@@ -1,6 +1,7 @@
 /**
- * Activity panel — right-side timeline, file changes, permission history, preview.
+ * Activity panel — right-side timeline, file changes, permission history, file review.
  */
+import type { FileReviewArtifact } from "@cowork-ghc/service/file-review";
 import type { ServiceClient } from "./service-client.js";
 import { type ActivitySnapshot, type FileChangeItem, type PermissionHistoryEntry } from "./activity-model.js";
 export interface ActivityPanelDom {
@@ -14,7 +15,9 @@ export interface ActivityPanelDom {
 }
 export declare function createActivityPanel(rightPanel: HTMLElement): ActivityPanelDom;
 export declare function renderActivityPanel(dom: ActivityPanelDom, snapshot: ActivitySnapshot | null, emptyCopy?: string): void;
-export declare function showFilePreview(dom: ActivityPanelDom, client: ServiceClient, change: FileChangeItem): Promise<void>;
+export declare function showFileReview(dom: ActivityPanelDom, review: FileReviewArtifact): void;
+/** @deprecated Use showFileReview when a persisted artifact exists. */
+export declare function showFilePreview(dom: ActivityPanelDom, client: ServiceClient, change: FileChangeItem, review?: FileReviewArtifact): Promise<void>;
 export declare function permissionEntryFromDecision(input: {
     requestId: string;
     actionLabel: string;

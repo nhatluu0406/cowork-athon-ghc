@@ -51,6 +51,7 @@ import { createExtensionRegistry } from "../extensions/index.js";
 import { createSessionService, createSessionRouter, SessionRequestError } from "../session/index.js";
 import { createConversationStore, createConversationRouter } from "../conversation/index.js";
 import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
+import { createFileReviewRouter } from "../file-review/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -215,6 +216,12 @@ export async function createCoworkService(
     }),
     createConversationRouter(conversationStore),
     createSkillRouter(skillCatalog),
+    createFileReviewRouter({
+      activeWorkspaceRoot: () => {
+        const ws = settingsStore.activeWorkspace();
+        return ws?.rootPath;
+      },
+    }),
   ];
 
   const deps: CoworkServiceDeps = {

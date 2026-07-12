@@ -90,6 +90,9 @@ export interface PersistedActivitySnapshot {
     readonly outcomeLabel: string;
   }[];
   readonly readPaths: readonly string[];
+  readonly runtimeReadPaths?: readonly string[];
+  readonly attachmentContextPaths?: readonly string[];
+  readonly fileReviews?: readonly Record<string, unknown>[];
   readonly terminalState: string | null;
 }
 

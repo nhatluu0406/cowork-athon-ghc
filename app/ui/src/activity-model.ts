@@ -7,6 +7,7 @@
 
 import type { EvEvent, FileMutationOp, StepStatus, TerminalState } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
+import type { FileEventKind, FileEventSource, FileReviewArtifact } from "@cowork-ghc/service/file-review";
 
 export type ActivityVisualStatus =
   | "pending"
@@ -29,6 +30,8 @@ export interface ActivityItem {
   readonly summary?: string;
   readonly relativePath?: string;
   readonly operation?: FileMutationOp;
+  readonly fileEventKind?: FileEventKind;
+  readonly source?: FileEventSource;
   readonly detail?: string;
   readonly historical?: boolean;
 }
@@ -51,12 +54,19 @@ export interface FileChangeItem {
   readonly seq: number;
   readonly callId?: string;
   readonly verified: true;
+  readonly reviewId?: string;
 }
 
 export interface ActivitySnapshot {
   readonly items: readonly ActivityItem[];
   readonly fileChanges: readonly FileChangeItem[];
+  readonly fileReviews: readonly FileReviewArtifact[];
   readonly permissionHistory: readonly PermissionHistoryEntry[];
+  /** Workspace paths the runtime/tool read during the turn (not user attachments). */
+  readonly runtimeReadPaths: readonly string[];
+  /** Workspace paths included as attachment context (not runtime reads). */
+  readonly attachmentContextPaths: readonly string[];
+  /** @deprecated Use runtimeReadPaths — kept for backward compat on load. */
   readonly readPaths: readonly string[];
   readonly terminalState: TerminalState | null;
 }
@@ -132,25 +142,26 @@ function terminalLabel(state: TerminalState): string {
   }
 }
 
-function toolActionLabel(toolName: string): string {
+function toolActionLabel(toolName: string, status: StepStatus): string {
+  const done = status === "completed";
   switch (toolName) {
     case "write":
-      return "Đang tạo/cập nhật tệp";
+      return done ? "Đã tạo/cập nhật tệp" : "Đang tạo/cập nhật tệp";
     case "edit":
     case "patch":
     case "multiedit":
-      return "Đang cập nhật tệp";
+      return done ? "Đã cập nhật tệp" : "Đang cập nhật tệp";
     case "read":
-      return "Đang đọc tệp";
+      return done ? "Đã đọc tệp" : "Đang đọc tệp";
     case "list":
     case "glob":
     case "grep":
-      return "Đang liệt kê/đọc tệp";
+      return done ? "Đã liệt kê/đọc tệp" : "Đang liệt kê/đọc tệp";
     case "bash":
     case "shell":
-      return "Đang chạy lệnh";
+      return done ? "Đã chạy lệnh" : "Đang chạy lệnh";
     default:
-      return `Đang dùng công cụ: ${toolName}`;
+      return done ? `Đã dùng công cụ: ${toolName}` : `Đang dùng công cụ: ${toolName}`;
   }
 }
 
@@ -164,6 +175,19 @@ function fileOpLabel(op: FileMutationOp): string {
       return "Đã xóa tệp";
     case "move":
       return "Đã di chuyển tệp";
+  }
+}
+
+function fileEventKindForOp(op: FileMutationOp): FileEventKind {
+  switch (op) {
+    case "create":
+      return "file_created";
+    case "edit":
+      return "file_modified";
+    case "delete":
+      return "file_deleted";
+    case "move":
+      return "file_modified";
   }
 }
 
@@ -192,10 +216,11 @@ export function buildActivitySnapshot(
   workspaceRoot: string | null,
   permissionHistory: readonly PermissionHistoryEntry[],
   historical = false,
+  fileReviews: readonly FileReviewArtifact[] = [],
 ): ActivitySnapshot {
   const items: ActivityItem[] = [];
   const fileChanges: FileChangeItem[] = [];
-  const readPaths = new Set<string>();
+  const runtimeReadPaths = new Set<string>();
   const toolIndex = new Map<string, number>();
   let terminalState: TerminalState | null = null;
 
@@ -234,7 +259,7 @@ export function buildActivitySnapshot(
         const item: ActivityItem = {
           id: `tool-${event.callId}`,
           kind: "tool",
-          label: toolActionLabel(event.toolName),
+          label: toolActionLabel(event.toolName, event.status),
           status: mapStepStatus(event.status),
           at: event.at,
           seq: event.seq,
@@ -244,6 +269,9 @@ export function buildActivitySnapshot(
             ? { summary: isShell ? redactCommandText(event.summary) : rel ?? event.summary }
             : {}),
           ...(rel !== undefined ? { relativePath: rel } : {}),
+          ...(isReadTool(event.toolName) && event.status === "completed"
+            ? { fileEventKind: "runtime_file_read" as const, source: "runtime_tool" as const }
+            : {}),
           historical,
         };
         const idx = toolIndex.get(event.callId);
@@ -252,11 +280,16 @@ export function buildActivitySnapshot(
           toolIndex.set(event.callId, items.length);
           items.push(item);
         }
-        if (isReadTool(event.toolName) && rel !== undefined) readPaths.add(rel);
+        if (isReadTool(event.toolName) && rel !== undefined && event.status === "completed") {
+          runtimeReadPaths.add(rel);
+        }
         break;
       }
       case "file_mutation": {
         const rel = toRelativePath(event.path, workspaceRoot);
+        const review = fileReviews.find(
+          (r) => r.relativePath === rel && r.operation === event.operation,
+        );
         items.push({
           id: `file-${event.seq}`,
           kind: "file",
@@ -266,6 +299,8 @@ export function buildActivitySnapshot(
           seq: event.seq,
           relativePath: rel,
           operation: event.operation,
+          fileEventKind: fileEventKindForOp(event.operation),
+          source: "runtime_tool",
           historical,
         });
         fileChanges.push({
@@ -275,6 +310,7 @@ export function buildActivitySnapshot(
           at: event.at,
           seq: event.seq,
           verified: true,
+          ...(review !== undefined ? { reviewId: review.id } : {}),
         });
         break;
       }
@@ -322,8 +358,11 @@ export function buildActivitySnapshot(
   return {
     items,
     fileChanges,
+    fileReviews,
     permissionHistory,
-    readPaths: [...readPaths],
+    runtimeReadPaths: [...runtimeReadPaths],
+    attachmentContextPaths: [],
+    readPaths: [...runtimeReadPaths],
     terminalState,
   };
 }
@@ -334,6 +373,7 @@ export function snapshotFromSessionView(
   workspaceRoot: string | null,
   permissionHistory: readonly PermissionHistoryEntry[] = [],
   historical = false,
+  fileReviews: readonly FileReviewArtifact[] = [],
 ): ActivitySnapshot {
   const synthetic: EvEvent[] = [];
   let seq = 1;
@@ -398,7 +438,7 @@ export function snapshotFromSessionView(
     });
   }
 
-  return buildActivitySnapshot(synthetic, workspaceRoot, permissionHistory, historical);
+  return buildActivitySnapshot(synthetic, workspaceRoot, permissionHistory, historical, fileReviews);
 }
 
 export function markRunningAsCancelled(snapshot: ActivitySnapshot): ActivitySnapshot {
