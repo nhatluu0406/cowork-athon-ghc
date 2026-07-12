@@ -49,6 +49,12 @@ export interface PersistedSettingsSourceOptions {
   readonly runtimeRoot?: string;
   /** Browser origins the live loopback service must allow (the renderer's `app://cowork`). */
   readonly allowedOrigins?: readonly string[];
+  readonly skillsStateFilePath?: string;
+  readonly skillRoots?: readonly {
+    readonly path: string;
+    readonly source: "built_in" | "user_local";
+    readonly createIfMissing?: boolean;
+  }[];
   /** Open the ONE credential store (default: the OS keyring). Injectable for tests. */
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
   /** Open the persistent settings reader (default: the real Node settings store). Injectable. */
@@ -110,6 +116,10 @@ export function createPersistedSettingsSource(
           ? { conversationsDir: join(options.runtimeRoot, ".runtime", "conversations") }
           : {}),
         ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
+        ...(options.skillsStateFilePath !== undefined
+          ? { skillsStateFilePath: options.skillsStateFilePath }
+          : {}),
+        ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
       },
       ...(options.binPath !== undefined ? { binPath: options.binPath } : {}),
       ...(options.appRoot !== undefined ? { appRoot: options.appRoot } : {}),

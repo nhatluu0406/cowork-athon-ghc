@@ -17,6 +17,7 @@ import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { mountSkillsPanel } from "./skills-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
@@ -111,7 +112,7 @@ function restoreComposerDraft(state, dom, conversationId) {
     const draft = conversationId === null ? "" : (state.composerDrafts.get(conversationId) ?? "");
     setComposerText(dom.composerInput, draft);
 }
-function appendMessage(dom, role, text = "", historical = false, attachments) {
+function appendMessage(dom, role, text = "", historical = false, attachments, skills) {
     dom.emptyState.hidden = true;
     const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
     if (role === "assistant")
@@ -124,6 +125,15 @@ function appendMessage(dom, role, text = "", historical = false, attachments) {
     textBox.append(p);
     if (attachments !== undefined && attachments.length > 0) {
         textBox.append(renderAttachmentMetaList(attachments));
+    }
+    if (skills !== undefined && skills.length > 0) {
+        const skillWrap = el("div", "msg__skills");
+        for (const skill of skills) {
+            const chip = el("span", "skill-use-chip", `Skill: ${skill.name} · v${skill.version}`);
+            chip.title = `${skill.source} · ${skill.contentHash}`;
+            skillWrap.append(chip);
+        }
+        textBox.append(skillWrap);
     }
     body.append(textBox);
     row.append(body);
@@ -196,7 +206,7 @@ function renderTranscriptFromRecord(dom, record) {
         return;
     dom.emptyState.hidden = true;
     for (const message of record.messages) {
-        appendMessage(dom, message.role, message.text, true, message.attachments);
+        appendMessage(dom, message.role, message.text, true, message.attachments, message.skills);
     }
 }
 function renderSessionList(dom, state, onSelect, onRename, onDelete) {
@@ -766,27 +776,30 @@ async function sendPrompt(state, dom, readiness, handlers) {
         window.alert(errors.join("\n"));
         return;
     }
+    if (state.client === null)
+        return;
+    const enabledSkills = await state.client.enabledSkillSnapshots();
+    const priorMessages = state.conv.state.activeRecord?.messages ?? [];
+    const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, enabledSkills);
+    if (!dispatchPlan.ok) {
+        window.alert(dispatchPlan.message);
+        return;
+    }
     if (state.conv.state.activeConversationId === null) {
         await newConversation(state, dom, handlers);
     }
     if (state.client === null || state.conv.state.activeConversationId === null)
         return;
-    const priorMessages = state.conv.state.activeRecord?.messages ?? [];
-    const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt);
-    if (!dispatchPlan.ok) {
-        window.alert(dispatchPlan.message);
-        return;
-    }
     const { runtimeSessionId } = await ensureRuntimeSession(state, dom, readiness, handlers);
     resetLiveActivity(state);
     const includedMetadata = dispatchPlan.includedMetadata;
-    appendMessage(dom, "user", prompt, false, includedMetadata.length > 0 ? includedMetadata : undefined);
+    appendMessage(dom, "user", prompt, false, includedMetadata.length > 0 ? includedMetadata : undefined, dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined);
     state.activeAssistant = appendMessage(dom, "assistant", "");
     const pendingCleared = state.pendingAttachments;
     setComposerText(dom.composerInput, "");
     state.pendingAttachments = [];
     state.composerDrafts.delete(state.conv.state.activeConversationId);
-    await state.conv.recordUserMessage(prompt, includedMetadata.length > 0 ? includedMetadata : undefined);
+    await state.conv.recordUserMessage(prompt, includedMetadata.length > 0 ? includedMetadata : undefined, dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined);
     await state.conv.markLastActive();
     state.conv.state.runtimePhase = "running";
     state.continuationUnlocked = true;
@@ -799,7 +812,7 @@ async function sendPrompt(state, dom, readiness, handlers) {
         if (result.reason === "session_completed") {
             await state.conv.startContinuation();
             const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-            const retryPlan = planDispatchPrompt(retry.contextMessages, snapshots, prompt);
+            const retryPlan = planDispatchPrompt(retry.contextMessages, snapshots, prompt, undefined, enabledSkills);
             if (!retryPlan.ok) {
                 await state.conv.setRuntimePhase("failed");
                 appendMessage(dom, "assistant", retryPlan.message);
@@ -859,9 +872,10 @@ function createShell(root) {
     const nav = el("nav", "sidebar-tabs");
     const coworkTab = el("button", "sidebar-tab sidebar-tab--active", "Cowork");
     coworkTab.type = "button";
-    const skillsTab = el("button", "sidebar-tab sidebar-tab--disabled", "Skills");
+    coworkTab.setAttribute("aria-selected", "true");
+    const skillsTab = el("button", "sidebar-tab", "Skills");
     skillsTab.type = "button";
-    skillsTab.disabled = true;
+    skillsTab.setAttribute("aria-selected", "false");
     nav.append(coworkTab, skillsTab);
     const newConversationButton = el("button", "sidebar__new-btn", "Cuộc trò chuyện mới");
     newConversationButton.type = "button";
@@ -872,7 +886,11 @@ function createShell(root) {
     sessionSearch.placeholder = "Tìm cuộc trò chuyện…";
     sessionSearch.setAttribute("aria-label", "Tìm cuộc trò chuyện");
     const sessionList = el("div", "sidebar__history");
-    sidebar.append(nav, newConversationButton, workspaceLabel, workspaceBox, sessionSearch, el("h2", "sidebar__heading", "Phiên"), sessionList);
+    const coworkSidebarPanel = el("div", "sidebar__cowork-panel");
+    coworkSidebarPanel.append(newConversationButton, workspaceLabel, workspaceBox, sessionSearch, el("h2", "sidebar__heading", "Phiên"), sessionList);
+    const skillsPanel = el("section", "skills-panel");
+    skillsPanel.hidden = true;
+    sidebar.append(nav, coworkSidebarPanel, skillsPanel);
     const chat = el("section", "chat-area");
     const header = el("div", "chat-header");
     const headerInfo = el("div", "chat-header__info");
@@ -880,9 +898,8 @@ function createShell(root) {
     const chatSub = el("div", "chat-header__sub", "Cowork GHC sử dụng workspace và provider đã cấu hình.");
     headerInfo.append(chatTitle, chatSub);
     const headerActions = el("div", "chat-header__actions");
-    const skillsButton = el("button", "label-btn label-btn--disabled", "Skills: Chưa khả dụng");
+    const skillsButton = el("button", "label-btn skills-open", "Skills: 0 bật");
     skillsButton.type = "button";
-    skillsButton.disabled = true;
     const activityMobileToggle = el("button", "label-btn activity-mobile-toggle", "Hoạt động");
     activityMobileToggle.type = "button";
     activityMobileToggle.setAttribute("aria-label", "Mở bảng hoạt động");
@@ -1029,6 +1046,11 @@ function createShell(root) {
         sidebar,
         rightPanel,
         activityMobileToggle,
+        coworkTab,
+        skillsTab,
+        coworkSidebarPanel,
+        skillsPanel,
+        skillsButton,
     };
     const openSettings = () => {
         settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
@@ -1050,6 +1072,17 @@ function createShell(root) {
         activityMobileToggle.textContent = open ? "Ẩn hoạt động" : "Hoạt động";
         domPartial.activityPanel.toggle.setAttribute("aria-label", open ? "Thu gọn bảng hoạt động" : "Mở rộng bảng hoạt động");
     });
+    const showSkills = (show) => {
+        coworkSidebarPanel.hidden = show;
+        skillsPanel.hidden = !show;
+        coworkTab.classList.toggle("sidebar-tab--active", !show);
+        skillsTab.classList.toggle("sidebar-tab--active", show);
+        coworkTab.setAttribute("aria-selected", show ? "false" : "true");
+        skillsTab.setAttribute("aria-selected", show ? "true" : "false");
+    };
+    coworkTab.addEventListener("click", () => showSkills(false));
+    skillsTab.addEventListener("click", () => showSkills(true));
+    skillsButton.addEventListener("click", () => showSkills(true));
     return domPartial;
 }
 export function mountCoworkApp(root) {
@@ -1169,6 +1202,11 @@ export function mountCoworkApp(root) {
                         },
                     });
                     mountSettingsView(dom.settingsBody, { client: dynamicClient });
+                    mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
+                        const enabled = skills.filter((skill) => skill.status === "enabled").length;
+                        dom.skillsButton.textContent = `Skills: ${enabled} bật`;
+                        dom.skillsButton.setAttribute("aria-label", `Mở Skills, ${enabled} đang bật`);
+                    });
                     const permissions = createPermissionController({
                         client: dynamicClient,
                         container: dom.root,

@@ -256,6 +256,9 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
           ...(message.attachments !== undefined && message.attachments.length > 0
             ? { attachments: message.attachments }
             : {}),
+          ...(message.skills !== undefined && message.skills.length > 0
+            ? { skills: message.skills }
+            : {}),
         };
         const messages = [...record.messages, entry];
         const title =

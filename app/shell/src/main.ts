@@ -78,13 +78,35 @@ function resolveRuntimePaths() {
   });
   const settingsFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
   const conversationsDir = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "conversations");
+  const skillsStateFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills-enabled.json");
+  const userSkillsRoot =
+    process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() ||
+    join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills");
+  const builtInSkillsRoot = app.isPackaged
+    ? join(process.resourcesPath, "skills")
+    : join(DEV_APP_ROOT, "skills", "builtin");
   lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
-  return { packaged, settingsFilePath, conversationsDir };
+  return {
+    packaged,
+    settingsFilePath,
+    conversationsDir,
+    skillsStateFilePath,
+    skillRoots: [
+      { path: builtInSkillsRoot, source: "built_in" as const },
+      { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
+    ],
+  };
 }
 
 function createShellController(
   settingsFilePath: string,
   conversationsDir: string,
+  skillsStateFilePath: string,
+  skillRoots: readonly {
+    readonly path: string;
+    readonly source: "built_in" | "user_local";
+    readonly createIfMissing?: boolean;
+  }[],
   packaged: ReturnType<typeof resolvePackagedPaths>,
 ) {
   const liveSource = createFirstConfiguredSource([
@@ -94,6 +116,8 @@ function createShellController(
       binPath: packaged.binPath,
       appRoot: DEV_APP_ROOT,
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
+      skillsStateFilePath,
+      skillRoots,
     }),
     createEnvLaunchSource({
       appRoot: DEV_APP_ROOT,
@@ -101,12 +125,16 @@ function createShellController(
       allowedOrigins: [APP_ORIGIN],
       settingsFilePath,
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
+      skillsStateFilePath,
+      skillRoots,
     }),
   ]);
 
   const settingsOnlyOptions = {
     settingsFilePath,
     conversationsDir,
+    skillsStateFilePath,
+    skillRoots,
     allowedOrigins: [APP_ORIGIN] as const,
     allowEnvCredentialImport: envCredentialImportEnabled(),
   };
@@ -207,8 +235,20 @@ void runShellLifecycle({
     if (envCredentialImportEnabled()) {
       loadProjectEnvFile(DEV_APP_ROOT);
     }
-    const { packaged, settingsFilePath, conversationsDir } = resolveRuntimePaths();
-    shellController = createShellController(settingsFilePath, conversationsDir, packaged);
+    const {
+      packaged,
+      settingsFilePath,
+      conversationsDir,
+      skillsStateFilePath,
+      skillRoots,
+    } = resolveRuntimePaths();
+    shellController = createShellController(
+      settingsFilePath,
+      conversationsDir,
+      skillsStateFilePath,
+      skillRoots,
+      packaged,
+    );
   },
   onReady: () => {
     if (shellController === null) {
