@@ -184,7 +184,7 @@ loops:
     status: RUNNING
     depends_on:
       - L5
-    note: "Codex checkpoint 2026-07-12 (Slice 2 workspace): component-level work remains DONE with unit evidence; packaged desktop POC still NOT complete end-to-end. Slice 1 service reachability + Slice 2 workspace picker/persistence/restore verified on dist-app/win-unpacked/Cowork GHC.exe (tools/verify/slice2-workspace-packaged.mjs PASS). CGHC-008 DONE. Still unverified in package: provider/model/credential settings UI, DeepSeek test connection, live OpenCode session, streaming, permission/file journey. No live DeepSeek request. Loop stays RUNNING; gate is PARTIAL until CGHC-028 release-verify PASSes. Do NOT start L7."
+    note: "Reconciled 2026-07-12 (HEAD ff32d808). L6 RUNNING, gate PARTIAL. Slice 1 PASS at 3856a84 (packaged service readiness + authenticated health verification). Slice 2 PASS at ff32d808 (workspace picker, activation, persistence, relaunch restore, workspace switch; tools/verify/slice2-workspace-packaged.mjs). CGHC-008 DONE. Service reachability RESOLVED. Still unverified in package: provider/model/credential settings UI, DeepSeek test connection, live OpenCode session, streaming, permission/file journey. No DeepSeek live request. Do NOT start L7."
     gate:
       result: PARTIAL
       evidence:
