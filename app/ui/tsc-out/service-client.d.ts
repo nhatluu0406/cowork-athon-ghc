@@ -294,6 +294,8 @@ export interface ServiceClient {
         readonly truncated: boolean;
         readonly sizeBytes: number;
     }>;
+    captureFileReviewSnapshot(relativePath: string): Promise<import("@cowork-ghc/service/file-review").FileSnapshotCapture>;
+    buildFileReview(input: Record<string, unknown>): Promise<import("@cowork-ghc/service/file-review").FileReviewArtifact>;
     /**
      * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
      * never fabricates activity — the list is empty when nothing is awaiting a decision.

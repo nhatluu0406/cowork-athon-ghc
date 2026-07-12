@@ -197,6 +197,8 @@ export function createServiceClient(baseUrl, clientToken) {
             };
         },
         previewWorkspaceFile: async (relativePath) => (await call(`/v1/workspace/file-preview?path=${encodeURIComponent(relativePath)}`)).preview,
+        captureFileReviewSnapshot: async (relativePath) => (await call("/v1/file-review/snapshot", { method: "POST", body: JSON.stringify({ relativePath }) })).snapshot,
+        buildFileReview: async (input) => (await call("/v1/file-review/build", { method: "POST", body: JSON.stringify(input) })).review,
         listPendingPermissions: permission.listPendingPermissions,
         decidePermission: permission.decidePermission,
     };

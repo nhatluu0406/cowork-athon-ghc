@@ -69,25 +69,26 @@ function terminalLabel(state) {
             return "Có lỗi xảy ra";
     }
 }
-function toolActionLabel(toolName) {
+function toolActionLabel(toolName, status) {
+    const done = status === "completed";
     switch (toolName) {
         case "write":
-            return "Đang tạo/cập nhật tệp";
+            return done ? "Đã tạo/cập nhật tệp" : "Đang tạo/cập nhật tệp";
         case "edit":
         case "patch":
         case "multiedit":
-            return "Đang cập nhật tệp";
+            return done ? "Đã cập nhật tệp" : "Đang cập nhật tệp";
         case "read":
-            return "Đang đọc tệp";
+            return done ? "Đã đọc tệp" : "Đang đọc tệp";
         case "list":
         case "glob":
         case "grep":
-            return "Đang liệt kê/đọc tệp";
+            return done ? "Đã liệt kê/đọc tệp" : "Đang liệt kê/đọc tệp";
         case "bash":
         case "shell":
-            return "Đang chạy lệnh";
+            return done ? "Đã chạy lệnh" : "Đang chạy lệnh";
         default:
-            return `Đang dùng công cụ: ${toolName}`;
+            return done ? `Đã dùng công cụ: ${toolName}` : `Đang dùng công cụ: ${toolName}`;
     }
 }
 function fileOpLabel(op) {
@@ -100,6 +101,18 @@ function fileOpLabel(op) {
             return "Đã xóa tệp";
         case "move":
             return "Đã di chuyển tệp";
+    }
+}
+function fileEventKindForOp(op) {
+    switch (op) {
+        case "create":
+            return "file_created";
+        case "edit":
+            return "file_modified";
+        case "delete":
+            return "file_deleted";
+        case "move":
+            return "file_modified";
     }
 }
 function isReadTool(toolName) {
@@ -120,10 +133,10 @@ export function mergeEvEvents(existing, incoming) {
     }
     return [...bySeq.values()].sort((a, b) => a.seq - b.seq);
 }
-export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, historical = false) {
+export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, historical = false, fileReviews = []) {
     const items = [];
     const fileChanges = [];
-    const readPaths = new Set();
+    const runtimeReadPaths = new Set();
     const toolIndex = new Map();
     let terminalState = null;
     for (const event of events) {
@@ -162,7 +175,7 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
                 const item = {
                     id: `tool-${event.callId}`,
                     kind: "tool",
-                    label: toolActionLabel(event.toolName),
+                    label: toolActionLabel(event.toolName, event.status),
                     status: mapStepStatus(event.status),
                     at: event.at,
                     seq: event.seq,
@@ -172,6 +185,9 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
                         ? { summary: isShell ? redactCommandText(event.summary) : rel ?? event.summary }
                         : {}),
                     ...(rel !== undefined ? { relativePath: rel } : {}),
+                    ...(isReadTool(event.toolName) && event.status === "completed"
+                        ? { fileEventKind: "runtime_file_read", source: "runtime_tool" }
+                        : {}),
                     historical,
                 };
                 const idx = toolIndex.get(event.callId);
@@ -181,12 +197,14 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
                     toolIndex.set(event.callId, items.length);
                     items.push(item);
                 }
-                if (isReadTool(event.toolName) && rel !== undefined)
-                    readPaths.add(rel);
+                if (isReadTool(event.toolName) && rel !== undefined && event.status === "completed") {
+                    runtimeReadPaths.add(rel);
+                }
                 break;
             }
             case "file_mutation": {
                 const rel = toRelativePath(event.path, workspaceRoot);
+                const review = fileReviews.find((r) => r.relativePath === rel && r.operation === event.operation);
                 items.push({
                     id: `file-${event.seq}`,
                     kind: "file",
@@ -196,6 +214,8 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
                     seq: event.seq,
                     relativePath: rel,
                     operation: event.operation,
+                    fileEventKind: fileEventKindForOp(event.operation),
+                    source: "runtime_tool",
                     historical,
                 });
                 fileChanges.push({
@@ -205,6 +225,7 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
                     at: event.at,
                     seq: event.seq,
                     verified: true,
+                    ...(review !== undefined ? { reviewId: review.id } : {}),
                 });
                 break;
             }
@@ -251,13 +272,16 @@ export function buildActivitySnapshot(events, workspaceRoot, permissionHistory, 
     return {
         items,
         fileChanges,
+        fileReviews,
         permissionHistory,
-        readPaths: [...readPaths],
+        runtimeReadPaths: [...runtimeReadPaths],
+        attachmentContextPaths: [],
+        readPaths: [...runtimeReadPaths],
         terminalState,
     };
 }
 /** Rebuild a minimal snapshot from a persisted {@link SessionView} (backward compat). */
-export function snapshotFromSessionView(view, workspaceRoot, permissionHistory = [], historical = false) {
+export function snapshotFromSessionView(view, workspaceRoot, permissionHistory = [], historical = false, fileReviews = []) {
     const synthetic = [];
     let seq = 1;
     const bump = () => {
@@ -319,7 +343,7 @@ export function snapshotFromSessionView(view, workspaceRoot, permissionHistory =
             state: view.terminal,
         });
     }
-    return buildActivitySnapshot(synthetic, workspaceRoot, permissionHistory, historical);
+    return buildActivitySnapshot(synthetic, workspaceRoot, permissionHistory, historical, fileReviews);
 }
 export function markRunningAsCancelled(snapshot) {
     const items = snapshot.items.map((item) => item.status === "running" || item.status === "pending"

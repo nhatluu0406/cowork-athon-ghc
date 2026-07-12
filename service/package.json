@@ -11,7 +11,8 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./execution": "./src/execution/index.ts"
+    "./execution": "./src/execution/index.ts",
+    "./file-review": "./src/file-review/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -b",

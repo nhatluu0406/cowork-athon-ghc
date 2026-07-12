@@ -41,6 +41,10 @@ const FILE_TOOL_OPS: Readonly<Record<string, FileMutationOp>> = {
   edit: "edit",
   patch: "edit",
   multiedit: "edit",
+  delete: "delete",
+  remove: "delete",
+  rm: "delete",
+  unlink: "delete",
 };
 
 function toolInputPath(state: RawPart["state"]): string | undefined {
