@@ -19,14 +19,14 @@ multi-user, marketplace, full workspace explorer, and universal Preview tab are 
 The next implementation Agent is Cursor. The next recommended slice is:
 
 ```text
-Provider Readiness and Functional UX Preflight
+Skills Foundation
 ```
 
 ## Active Phases
 
 | Phase | Summary | Entry | Exit acceptance |
 |---|---|---|---|
-| A - Safety and Functional Honesty | Missing credential preflight, small accessibility fixes; attachment honesty + secret blocking done. | Packaged POC baseline and docs are clean. | Packaged app fails fast on missing credentials; attachment inclusion/omission is explicit; secret-like files blocked. |
+| A - Safety and Functional Honesty | Attachment honesty, secret blocking, provider readiness preflight, small a11y fixes. | Packaged POC baseline and docs are clean. | **CLOSED** — packaged evidence from attachment-honesty + provider-readiness journeys. |
 | B - Skills Foundation | Local Skills model, discovery, enable/disable, runtime integration, provenance. | Phase A packaged evidence exists. | A local Skill can be used and disabled in packaged app without marketplace/cloud. |
 | C - File Work Review | Contextual preview, create/modify/delete presentation, before/after diff, read-source distinction, audit visibility. | Agent file work is stable enough to review. | User can understand what changed and why before/after file work. |
 | D - Context Expansion | Folder/PDF/image/Office/drag-drop only when product need is explicit. | Attachment honesty is complete and PO selects a context type. | Each new type has bounded validation and packaged verification. |
@@ -36,7 +36,7 @@ Provider Readiness and Functional UX Preflight
 
 ## Do Not Start Yet
 
-- Skills before Phase A blockers are closed.
+- Skills before Phase A blockers are closed — Phase A is closed; Skills is next when PO approves.
 - Attachments Phase 2 before attachment honesty exists.
 - Full workspace explorer without evidence of need.
 - Universal Preview tab for MVP.
