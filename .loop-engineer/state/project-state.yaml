@@ -1,12 +1,12 @@
 version: 1
 product: Cowork GHC
-updated_at: "2026-07-12T23:59:00Z"
+updated_at: "2026-07-12T13:45:00Z"
 current_phase: L6_IN_PROGRESS
 handoff:
   status: PREP_FOR_CODEX
   doc: .loop-engineer/HANDOFF.md
   frozen_at: "2026-07-12T00:00:00Z"
-  note: "Codex checkpoint 2026-07-12 (service reachability): L6 remains RUNNING with gate PARTIAL. Packaged service reachability blocker RESOLVED: settings-only loopback service now verifies authenticated GET /v1/health before reporting service_started; packaged probe to reported baseUrl returns 401 without token (expected token-guarded boundary) and listener is owned by the packaged main PID until clean stop. Focused shell tests (wait-for-health, service-controller, lifecycle, tiered-start) pass; package:win rebuild and packaged verification pass with zero Cowork/OpenCode orphans after root PID stop. Uncommitted renderer workspace-selection wiring (settings.activeWorkspace persistence) remains partial and is NOT packaged-GUI verified. Native folder picker, provider/model settings, secure keyring credential UI, DeepSeek test connection, and live OpenCode session remain UNVERIFIED in the package. No live DeepSeek request was made. Do NOT start L7. Default operating mode is LEAN."
+  note: "Codex checkpoint 2026-07-12 (Slice 2 workspace): L6 remains RUNNING with gate PARTIAL. Packaged Slice 1 (service reachability) and Slice 2 (workspace picker, activation, persistence, relaunch restore, workspace change) verified on dist-app/win-unpacked/Cowork GHC.exe. Root fixes: defer userData/settings path to post-whenReady prepare hook; verify script uses cowork-ghc userData dir. Focused tests 20/20 PASS; slice2-workspace-packaged.mjs PASS. CGHC-008 marked DONE. Provider/model settings, secure credential UI, DeepSeek test connection, and live OpenCode session remain UNVERIFIED in package. No live DeepSeek request. Do NOT start L7. Default operating mode is LEAN."
 git:
   is_repo: false
   note: "Project root is not a git repository yet. `git init` + first commit is a product-owner action (this pass only prepares a safe baseline). No history to protect."

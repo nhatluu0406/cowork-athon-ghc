@@ -32,6 +32,8 @@ export interface ShellLifecycleDeps {
   readonly controller: Pick<ServiceController, "start" | "stop">;
   /** Electron-specific ready work: protocol, CSP, IPC handlers, window creation. */
   readonly onReady: () => void;
+  /** Optional hook after `whenReady` and before service start (e.g. resolve userData paths). */
+  readonly prepare?: () => void | Promise<void>;
   /** Optional fixed-marker trace used for packaged startup diagnostics. */
   readonly trace?: (marker: string) => void;
 }
@@ -61,6 +63,7 @@ export async function runShellLifecycle(deps: ShellLifecycleDeps): Promise<void>
   deps.trace?.("before_when_ready");
   await deps.app.whenReady();
   deps.trace?.("after_when_ready");
+  await deps.prepare?.();
   void deps.controller.start();
   deps.trace?.("controller_start_dispatched");
   deps.onReady();

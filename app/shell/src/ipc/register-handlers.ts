@@ -54,6 +54,13 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   ipcMain.handle(
     IpcChannel.PickWorkspaceFolder,
     async (event: IpcMainInvokeEvent): Promise<PickedWorkspaceFolder> => {
+      // Packaged verification seam only: when set, return the fixture path without opening the
+      // native dialog. Normal launches leave this unset.
+      const fixtureRoot = process.env["COWORK_GHC_E2E_WORKSPACE_ROOT"]?.trim();
+      if (fixtureRoot !== undefined && fixtureRoot !== "") {
+        return { canceled: false, rootPath: fixtureRoot };
+      }
+
       const owner = BrowserWindow.fromWebContents(event.sender);
       const result = owner
         ? await dialog.showOpenDialog(owner, { properties: ["openDirectory"] })

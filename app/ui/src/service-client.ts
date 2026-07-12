@@ -92,6 +92,7 @@ export interface SettingsView {
   readonly general: GeneralSettingsView;
   readonly providers: readonly ProviderSettingsView[];
   readonly defaultModel: ModelRef | null;
+  readonly activeWorkspace: { readonly rootPath: string } | null;
 }
 
 /** Result of clearing a per-session model override (LOW-1). */
@@ -144,6 +145,8 @@ export interface ServiceClient {
   setProviderBaseUrl(providerId: string, baseUrl: string): Promise<SettingsView>;
   /** Set (or clear with `null`) the persisted default-model preference (SSOT = service). */
   setDefaultModel(model: ModelRef | null): Promise<SettingsView>;
+  /** Persist the server-validated active workspace root used by live launch. */
+  setActiveWorkspace(rootPath: string): Promise<SettingsView>;
   /** Clear a per-session model override so the session reverts to the default (LOW-1). */
   clearSessionModel(sessionId: string): Promise<ClearSessionModelResult>;
   /**
@@ -229,6 +232,13 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         await call<{ settings: SettingsView }>("/v1/settings/model/default", {
           method: "PUT",
           body: JSON.stringify({ model }),
+        })
+      ).settings,
+    setActiveWorkspace: async (rootPath) =>
+      (
+        await call<{ settings: SettingsView }>("/v1/settings/active-workspace", {
+          method: "PUT",
+          body: JSON.stringify({ rootPath }),
         })
       ).settings,
     clearSessionModel: (sessionId) =>

@@ -187,8 +187,7 @@ tasks:
     notes: "DONE 2026-07-11 (RUN-0007 wave 2A). 10/10 tests, tsc clean. Security review CHANGES_REQUIRED -> resolved: HIGH grant.ts space-vs-NUL bug fixed (centralized hasNullByte; space+Unicode roots accepted, NUL rejected; real junction escape blocked). CARRY-FORWARD to CGHC-016/018: route every tool target through assertRealPathInside; open via returned canonical path (close TOCTOU); wire audit sink; child cwd = grant.rootPath but never trust child cwd. LOW NTFS ADS-colon handed to CGHC-016. Covers W4/F4."
 
   - id: CGHC-008
-    status: STALE
-    reopened: "2026-07-12: unit acceptance + evidence remain VALID (server-side validation + native picker bridge, 25 tests). REOPENED because the folder-picker journey is UNVERIFIED in the packaged app: the renderer only mounts feature views once the local service is connected, and packaged service auto-connect is not yet proven. Codex partial checkpoint: uncommitted renderer work now persists settings.activeWorkspace via PUT /v1/settings/active-workspace after a successful workspace grant, before marking the workspace active in the UI; focused tests passed, but native folder-picker click-through in the packaged app was NOT verified. Re-verify end-to-end in the packaged app; do not discard the existing evidence."
+    status: DONE
     priority: HIGH
     owner: frontend-desktop-engineer
     reviewer: code-reviewer
@@ -197,7 +196,8 @@ tasks:
     vertical_slice: "VS-03"
     evidence:
       - ".loop-engineer/evidence/CGHC-008-workspace-picker.md"
-    completion_note: "DONE 2026-07-11 (RUN-0007). Native folder picker reused the existing hardened shell-bridge (pickWorkspaceFolder -> dialog.showOpenDialog openDirectory) — NO shell change. Server-side validateWorkspaceSelection layers grantWorkspace (lexical: .. / absolute / UNC / drive / null-byte) + an injected disk probe (exists/is-directory/writable); every reject returns NO grant and never enters recent. Token-guarded POST /v1/workspace/grant + GET /v1/workspace/recent on the loopback boundary. Recent MRU is single-source, dedup case-folded on win32, keeps unavailable entries (probed fresh). Renderer stays hardened (bridge-only, no ipcRenderer/nodeIntegration/fs-from-UI, activates only on granted:true). 25 workspace tests, full suite 354 pass, tsc clean. Independent code review (code-reviewer != implementer) PASS 0 Crit/High. Review fixes applied: MEDIUM (malformed body was 500 -> added a general BadRequestError in server/http-util mapped by the dispatcher to 400; WorkspaceRequestError now extends it; end-to-end 400 test) + LOW (isWritable Windows-ACL best-effort comment; added malformed-body 400 test and a real-file nodeExistenceProbe test). NOTE: added BadRequestError is a reusable boundary error every handler can raise for a 400."
+      - ".loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md"
+    completion_note: "DONE 2026-07-11 (RUN-0007) unit + bridge acceptance; RE-VERIFIED 2026-07-12 packaged Slice 2. Native picker via preload IPC; grant + setActiveWorkspace through authenticated loopback service; persistence under %APPDATA%/cowork-ghc/.runtime/settings.json after deferring userData path resolution to post-whenReady prepare hook. Packaged verify: pick fixture A → persist → relaunch restore → change to fixture B → clean stop. Focused tests 20/20 PASS (workspace-picker, service-client, preload-bridge, lifecycle)."
     dependencies:
       - "CGHC-002"
       - "CGHC-007"
@@ -216,7 +216,7 @@ tasks:
     evidence: []
     risks:
       - "Unicode/space path mishandled on Windows"
-    notes: "W1/W3 MUST plus W2 SHOULD. Picker is native shell capability only."
+    notes: "W1/W3 MUST plus W2 SHOULD. Packaged Slice 2 verified 2026-07-12 (see CGHC-008-slice2-packaged-workspace.md)."
 
   - id: CGHC-009
     status: DONE
@@ -794,12 +794,13 @@ tasks:
       - ".loop-engineer/evidence/CGHC-028-release-verification.md"
       - ".loop-engineer/evidence/CGHC-028-packaged-launch-fix.md"
       - ".loop-engineer/evidence/CGHC-028-slice1-packaged-service-lifecycle.md"
+      - ".loop-engineer/evidence/CGHC-008-slice2-packaged-workspace.md"
       - ".loop-engineer/checkpoints/L6-cghc-028-launch-fix.yaml"
       - "tools/verify/wave-c-report.json"
       - "tools/verify/leg4-report.json"
     risks:
       - "Using a dev server as false release evidence"
-    notes: "HANDOFF ANCHOR (updated 2026-07-12): release-verify gate keeps L6 at gate=PARTIAL. Packaged service reachability blocker RESOLVED: settings-only service binds loopback, authenticated /v1/health is polled before service_started, and packaged probe returns 401 without token on the reported baseUrl. Verified: wait-for-health + shell lifecycle tests pass, package:win rebuild succeeds, packaged win-unpacked launch + health probe + clean PID stop (zero Cowork/OpenCode orphans). Still IN_PROGRESS because full packaged POC journey is NOT met: native folder picker, provider/model settings, secure keyring credential entry, DeepSeek test connection, live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey remain UNVERIFIED in the package. Uncommitted renderer workspace-selection wiring is partial. No live DeepSeek request. DO NOT mark DONE until acceptance bullets 3-5 pass through the PACKAGED GUI. DO NOT start L7."
+    notes: "HANDOFF ANCHOR (updated 2026-07-12): release-verify gate keeps L6 at gate=PARTIAL. Packaged Slice 1 (service reachability) and Slice 2 (workspace picker + persistence + restore) verified on dist-app/win-unpacked/Cowork GHC.exe. Still IN_PROGRESS: provider/model settings UI, secure keyring credential entry, DeepSeek test connection, live OpenCode session, streaming, permission/file-on-disk, and full stop/resume/clean journey remain UNVERIFIED in the package. No live DeepSeek request. DO NOT mark DONE until acceptance bullets 3-5 pass through the PACKAGED GUI. DO NOT start L7."
 
 # backlog: deferred epics / proposals recorded by the product owner. NOT schema-valid executable
 # tasks (no owner/reviewer; product-only priority labels). The controller validates only `tasks`,
