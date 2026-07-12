@@ -19,7 +19,9 @@ import {
   type CredentialRef,
   type HealthData,
   type ModelRef,
+  type ProviderDescriptor,
   type ResponseEnvelope,
+  type TestResult,
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
 import {
@@ -85,6 +87,7 @@ export interface ProviderSettingsView {
   readonly hasCredential: boolean;
   readonly credentialAccount?: string;
   readonly baseUrl?: string;
+  readonly envVar?: string;
 }
 
 /** The non-secret settings projection the service returns to the renderer (CGHC-022 SD1). */
@@ -132,6 +135,21 @@ export interface ServiceClient {
   recentWorkspaces(): Promise<readonly RecentWorkspaceView[]>;
   /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
   getSettings(): Promise<SettingsView>;
+  /** List provider descriptors exposed by the service (provider-neutral). */
+  listProviders(): Promise<readonly ProviderDescriptor[]>;
+  /**
+   * Store a credential in the OS keyring and bind its handle to the provider in settings.
+   * The secret is sent once over the authenticated loopback boundary and never returned.
+   */
+  storeProviderCredential(providerId: string, secret: string): Promise<SettingsView>;
+  /** Remove the keyring entry and clear the provider credential binding. */
+  removeProviderCredential(providerId: string): Promise<SettingsView>;
+  /** Development / verification only: import a credential from a named process env var. */
+  importProviderCredentialFromEnv(providerId: string, envVar: string): Promise<SettingsView>;
+  /** Set the child env-var NAME for a custom OpenAI-compatible provider (non-secret). */
+  setProviderEnvVar(providerId: string, envVar: string): Promise<SettingsView>;
+  /** Bounded provider connectivity test (resolves credential from keyring). */
+  testProviderConnection(providerId: string): Promise<TestResult>;
   /** Patch general settings; returns the updated settings view. */
   updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
   /**
@@ -199,6 +217,60 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       (await call<{ recent: readonly RecentWorkspaceView[] }>("/v1/workspace/recent")).recent,
 
     getSettings: async () => (await call<{ settings: SettingsView }>("/v1/settings")).settings,
+    listProviders: async () =>
+      (await call<{ providers: readonly ProviderDescriptor[] }>("/v1/providers")).providers,
+    storeProviderCredential: async (providerId, secret) => {
+      const { ref } = await call<{ ref: CredentialRef }>("/v1/credentials", {
+        method: "POST",
+        body: JSON.stringify({ providerId, secret }),
+      });
+      return (
+        await call<{ settings: SettingsView }>("/v1/settings/providers/credential", {
+          method: "PUT",
+          body: JSON.stringify({ providerId, ref }),
+        })
+      ).settings;
+    },
+    importProviderCredentialFromEnv: async (providerId, envVar) => {
+      const { ref } = await call<{ ref: CredentialRef }>("/v1/credentials/import-env", {
+        method: "POST",
+        body: JSON.stringify({ providerId, envVar }),
+      });
+      return (
+        await call<{ settings: SettingsView }>("/v1/settings/providers/credential", {
+          method: "PUT",
+          body: JSON.stringify({ providerId, ref }),
+        })
+      ).settings;
+    },
+    removeProviderCredential: async (providerId) => {
+      const settings = (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+      const row = settings.providers.find((p) => p.providerId === providerId);
+      if (row?.hasCredential && row.credentialAccount !== undefined) {
+        await call<{ removed: boolean }>("/v1/credentials", {
+          method: "DELETE",
+          body: JSON.stringify({ ref: { store: "os", account: row.credentialAccount } }),
+        });
+      }
+      return (
+        await call<{ settings: SettingsView }>("/v1/settings/providers/credential", {
+          method: "DELETE",
+          body: JSON.stringify({ providerId }),
+        })
+      ).settings;
+    },
+    setProviderEnvVar: async (providerId, envVar) =>
+      (
+        await call<{ settings: SettingsView }>("/v1/settings/providers/env-var", {
+          method: "PUT",
+          body: JSON.stringify({ providerId, envVar }),
+        })
+      ).settings,
+    testProviderConnection: async (providerId) =>
+      (await call<{ result: TestResult }>("/v1/providers/test-connection", {
+        method: "POST",
+        body: JSON.stringify({ providerId }),
+      })).result,
     updateGeneral: async (patch) =>
       (
         await call<{ settings: SettingsView }>("/v1/settings/general", {

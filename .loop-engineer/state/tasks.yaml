@@ -275,8 +275,8 @@ tasks:
     notes: "DONE 2026-07-11 (RUN-0007 wave 3A). Owner subagent API-stalled twice; resumed to completion. 41 provider tests, full service suite 124 pass, tsc clean. ProviderPort provider-neutral (5 targets incl. custom OpenAI-compat), CredentialRef handle-only, token-guarded router. SSRF at service: https required; RFC-1918/link-local/loopback/metadata blocked; DNS-rebinding re-resolve at connect (connect callback never runs on refuse); release-mode escape guardrail dead-code-eliminated + hard-assert-off + can't relax prod (proven). Security review PASS_WITH_FINDINGS (0 Crit/High in deliverable); F1 IPv6-embedded-IPv4 fail-open FIXED (fail-safe classify: ::ffff:/NAT64 64:ff9b::/compat/::x + low-32 backstop). CARRY-FORWARD gates -> CGHC-011/012: F2 (HIGH) IP-pin socket to ConnectTarget.resolved; F3 re-validate every redirect hop. Google env-name live-verify still open (CGHC-001 M1)."
 
   - id: CGHC-011
-    status: STALE
-    reopened: "2026-07-12: the service-side SSRF-hardened connector + test-connection remain VALID (138 tests, F2 socket-IP-pin + F3 redirect re-validation). REOPENED because the user-facing secure credential-input flow was DEFERRED to the UI wave and is NOT usable in the packaged app: there is no complete, safe path for the product owner to enter the DeepSeek token from the GUI. Re-verify the add-credential UI + live test-connection end-to-end; keep the connector evidence."
+    status: DONE
+    packaged_verified: "2026-07-12: Slice 3 PASS on dist-app/win-unpacked/Cowork GHC.exe — LLM settings panel, Windows keyring credential store/import-env (dev gate), bounded DeepSeek test connection, relaunch restore without .env. Fixes: real HTTP connector in settings-only compose, Node 24 lookup all:true dialer, IPC forwards allowEnvCredentialImport."
     priority: HIGH
     owner: runtime-llm-engineer
     reviewer: security-reviewer
@@ -301,6 +301,7 @@ tasks:
       - "F3 redirect-revalidation test: a 3xx to a private/metadata host is refused"
     evidence:
       - ".loop-engineer/evidence/L6/CGHC-011-impl.md"
+      - ".loop-engineer/evidence/CGHC-011-slice3-packaged-provider-credential.md"
     risks:
       - "Key echoed back into the UI"
       - "F2 TOCTOU: socket re-resolves to a private/metadata IP after policy validated a public one"
@@ -506,8 +507,8 @@ tasks:
     notes: "DONE 2026-07-11 (RUN-0007). FileService is the ONLY fs-touching surface: every read/create/edit/delete/move goes through WorkspaceGuard.assertRealPathInside (lexical + symlink-aware realpath re-confine) BEFORE any disk op, and every mutation runs strictly inside gate.proceed (deny/pending/unknown/expired performs nothing on disk; asserted with real on-disk bytes). ToolPermissionProxy maps tool->action kind (fail-closed on unknown tools), refuses+denies an escape before touching disk, validates BOTH move endpoints. Live RuntimeReplyPort adapter (createLiveRuntimeReplyPort) POSTs the reply with a redacting error path (generic Bearer/URL mask + exact-secret backstop) and rethrows only a fixed secret-free RuntimeReplyError (LOW-2 obligation met). Audit (P5) via the permission + workspace sinks carries no secret. 19 files tests, full suite 325 pass / 0 skip / 0 fail, tsc clean. Independent security review (security-reviewer != implementer) PASS 0 Crit/High. LOW-3 (symlink-escape test could silently no-op) FIXED -> honest t.skip. HARDENING CARRY-FORWARD: LOW-1 create-TOCTOU (writeFile can follow a symlink planted at a not-yet-existing leaf; open with wx/O_EXCL or O_NOFOLLOW/fstat-after-open; Windows-aware); LOW-2 an overwriting create runs under only STANDARD approval while move is elevated (consider elevating overwrite or distinguishing create-new vs overwrite); LOW-4 add explicit tests for overwrite-unapproved-intact and source-only move escape. Live OpenCode permission round-trip deferred to CGHC-028. Security-sensitive: filesystem + audit. F1/F3/F6 MUST + P5 + F2 SHOULD. CARRY-FORWARD from CGHC-024 review Low-1: file_mutation (EV4) is currently emitted ONLY from a completed write/edit/patch/multiedit tool part (part-mapper FILE_TOOL_OPS); a file changed via bash (echo > f, mv, rm) or any non-whitelisted tool produces no EV4, and file.edited/file.watcher.updated are intentionally ignored by the mapper (no fallback). Decide here whether workspace-rooted filesystem mutations must be surfaced/audited via a watcher-derived signal or an expanded tool set, so on-disk changes are never invisible in the timeline/audit. CARRY-FORWARD from CGHC-016 review LOW-2: this task builds the LIVE OpenCode reply adapter for the PermissionGate RuntimeReplyPort (requestId -> POST /session/{id}/permissions/{permissionID} or /permission/{requestID}/reply); it MUST supply a redacting onReplyError reporter and guarantee its transport errors carry no credential/URL/header material (security.md: redact before any log write). Consume gate.proceed(requestId, perform) so the disk mutation runs only behind a recorded Allow (once-scope handled by the gate)."
 
   - id: CGHC-019
-    status: STALE
-    reopened: "2026-07-12: the ModelConfigService backend (switch-without-restart, precedence, audit) remains VALID (13 tests). REOPENED because the provider/model settings journey is UNVERIFIED in the packaged app: the settings UI to choose provider/model and confirm the active model is not proven usable from the packaged GUI. Re-verify the settings journey end-to-end; keep the backend evidence."
+    status: DONE
+    packaged_verified: "2026-07-12: Slice 3 PASS — packaged LLM settings UI (provider preset, model persistence, base URL), default model deepseek-chat, restore after relaunch. Bounded connectivity test only; no OpenCode session."
     priority: HIGH
     owner: runtime-llm-engineer
     reviewer: code-reviewer
@@ -516,6 +517,7 @@ tasks:
     vertical_slice: "VS-08"
     evidence:
       - ".loop-engineer/evidence/CGHC-019-model-config-switch.md"
+      - ".loop-engineer/evidence/CGHC-011-slice3-packaged-provider-credential.md"
     completion_note: "DONE 2026-07-11 (RUN-0007). ModelConfigService is a thin coordinator over the ProviderPort selection store (ONE source of truth, no second map): resolveWithScope gives PR4 precedence (session override > default); activeModel is the PR5 UI-confirm read (resolved scope + non-secret labels); selection read at request time => switch-without-restart on the same instance; checkHealth/checkActiveHealth surface PR6 reachability via the injected connector and never gate a switch; configureModel audits old->new (P5) with no secret (scope/sessionId?/two ModelRefs/timestamp only) and skips a no-op reselection. 13 model tests, full suite 339 pass, tsc clean. Independent code review (code-reviewer != implementer) PASS 0 Crit/High. Review fixes applied: LOW-2 (default-scope event no longer carries a stray sessionId), LOW-3 (precedence deduped into resolveWithScope), LOW-4 (rejecting-health-probe leaves selection intact test). LOW-1 (no clear-override capability) carried forward to CGHC-022 (model/settings UI)."
     dependencies:
       - "CGHC-010"
@@ -531,7 +533,6 @@ tasks:
     tests:
       - "model selection unit test"
       - "switch-without-restart test"
-    evidence: []
     risks:
       - "Requiring restart to switch model"
     notes: "PR4/PR5 MUST + PR6 SHOULD."

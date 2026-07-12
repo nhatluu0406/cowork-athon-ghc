@@ -17,6 +17,7 @@
 export interface ShellBootstrap {
   readonly serviceBaseUrl: string;
   readonly clientToken: string;
+  readonly allowEnvCredentialImport?: boolean;
 }
 
 /** The honest "not connected" handshake (empty base URL + token) — never a fake ready. */

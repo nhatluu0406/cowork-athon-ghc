@@ -40,6 +40,8 @@ export interface ServiceControllerOptions {
   readonly startService: StartService;
   /** Secret-free lifecycle log. The controller NEVER passes the token here. */
   readonly log?: (line: string) => void;
+  /** Forwarded to the renderer bootstrap (dev / verification import seam). */
+  readonly allowEnvCredentialImport?: boolean;
 }
 
 function messageOf(err: unknown): string {
@@ -49,6 +51,7 @@ function messageOf(err: unknown): string {
 export class ServiceController {
   private readonly startFn: StartService;
   private readonly log: (line: string) => void;
+  private readonly allowEnvCredentialImport: boolean;
   private status: ServiceStatus = "idle";
   private started: StartedService | null = null;
   private startPromise: Promise<void> | null = null;
@@ -58,6 +61,7 @@ export class ServiceController {
   constructor(options: ServiceControllerOptions) {
     this.startFn = options.startService;
     this.log = options.log ?? ((): void => {});
+    this.allowEnvCredentialImport = options.allowEnvCredentialImport === true;
   }
 
   /** Current lifecycle phase (for the shell's own honest diagnostics). */
@@ -105,10 +109,16 @@ export class ServiceController {
 
   /** The handshake for the renderer: real when running, else the honest empty handshake. */
   getBootstrap(): ShellBootstrap {
+    const extra =
+      this.allowEnvCredentialImport ? { allowEnvCredentialImport: true as const } : {};
     if (this.status === "running" && this.started !== null) {
-      return { serviceBaseUrl: this.started.baseUrl, clientToken: this.started.token };
+      return {
+        serviceBaseUrl: this.started.baseUrl,
+        clientToken: this.started.token,
+        ...extra,
+      };
     }
-    return EMPTY_BOOTSTRAP;
+    return { ...EMPTY_BOOTSTRAP, ...extra };
   }
 
   /** Stop the running service (socket + child) at most once. Idempotent; bounded. */

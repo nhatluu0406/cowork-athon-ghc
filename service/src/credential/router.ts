@@ -62,16 +62,42 @@ function parseRefBody(body: unknown): CredentialRef {
   return { store, account };
 }
 
+interface ImportEnvBody {
+  readonly providerId: string;
+  readonly envVar: string;
+}
+
+function parseImportEnvBody(body: unknown): ImportEnvBody {
+  if (typeof body !== "object" || body === null) {
+    throw new CredentialRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  const { providerId, envVar } = record;
+  if (typeof providerId !== "string" || providerId.trim().length === 0) {
+    throw new CredentialRequestError("providerId is required.");
+  }
+  if (typeof envVar !== "string" || envVar.trim().length === 0) {
+    throw new CredentialRequestError("envVar is required.");
+  }
+  return { providerId, envVar };
+}
+
+export interface CredentialRouterOptions {
+  /** When true, exposes POST /v1/credentials/import-env (development / verification only). */
+  readonly allowEnvImport?: boolean;
+}
+
 /**
  * Build the credential router. Downstream orchestration mounts it via `service.mount`
  * (or `startService({ routers })`). No route opts out of the token guard.
  */
-export function createCredentialRouter(service: CredentialService): BoundaryRouter {
-  return {
-    name: "credential",
-    routes: [
+export function createCredentialRouter(
+  service: CredentialService,
+  options: CredentialRouterOptions = {},
+): BoundaryRouter {
+  const routes: import("../boundary/contract.js").AnyRouteDefinition[] = [
       {
-        method: "POST",
+        method: "POST" as const,
         path: CREDENTIALS_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult<{ ref: CredentialRef }>> => {
           const input = parseStoreBody(ctx.body);
@@ -81,7 +107,7 @@ export function createCredentialRouter(service: CredentialService): BoundaryRout
         },
       },
       {
-        method: "DELETE",
+        method: "DELETE" as const,
         path: CREDENTIALS_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult<{ removed: boolean }>> => {
           const ref = parseRefBody(ctx.body);
@@ -89,6 +115,26 @@ export function createCredentialRouter(service: CredentialService): BoundaryRout
           return { status: 200, data: { removed } };
         },
       },
-    ],
+    ];
+
+  if (options.allowEnvImport === true) {
+    routes.push({
+      method: "POST" as const,
+      path: `${CREDENTIALS_PATH}/import-env`,
+      handler: async (ctx: RouteContext): Promise<RouteResult<{ ref: CredentialRef }>> => {
+        const input = parseImportEnvBody(ctx.body);
+        const secret = process.env[input.envVar];
+        if (typeof secret !== "string" || secret.trim().length === 0) {
+          throw new CredentialRequestError(`Environment variable ${input.envVar} is not set.`);
+        }
+        const ref = await service.store({ providerId: input.providerId, secret });
+        return { status: 201, data: { ref } };
+      },
+    });
+  }
+
+  return {
+    name: "credential",
+    routes,
   };
 }
