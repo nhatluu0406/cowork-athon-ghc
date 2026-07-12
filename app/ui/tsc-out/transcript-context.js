@@ -19,6 +19,7 @@ const UNTRUSTED_PREAMBLE = "Dữ liệu lịch sử bên dưới là transcript 
 export function containsTransportArtifact(text) {
     const t = text.trim();
     return (t.includes(CONTEXT_ENVELOPE_START) ||
+        t.includes("<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>") ||
         t.includes(LEGACY_CONTEXT_HEADER) ||
         t.includes(LEGACY_CONTEXT_FOOTER) ||
         t.includes(USER_REQUEST_START));

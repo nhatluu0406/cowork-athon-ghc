@@ -126,7 +126,31 @@ export interface ConversationMessage {
   readonly role: "user" | "assistant";
   readonly text: string;
   readonly at: string;
+  readonly attachments?: readonly AttachmentMetadata[];
 }
+
+/** Metadata persisted for workspace text-file attachments (no raw content). */
+export interface AttachmentMetadata {
+  readonly relativePath: string;
+  readonly filename: string;
+  readonly sizeBytes: number;
+  readonly modifiedAt: string;
+  readonly contentHash: string;
+  readonly truncated: boolean;
+  readonly maxBytesApplied: number;
+}
+
+export type AttachmentReadResult =
+  | {
+      readonly ok: true;
+      readonly metadata: AttachmentMetadata;
+      readonly content: string;
+    }
+  | {
+      readonly ok: false;
+      readonly reason: string;
+      readonly message: string;
+    };
 
 export interface ConversationSummary {
   readonly id: string;
@@ -280,7 +304,12 @@ export interface ServiceClient {
     id: string,
     role: "user" | "assistant",
     text: string,
+    attachments?: readonly AttachmentMetadata[],
   ): Promise<ConversationRecord>;
+  readWorkspaceAttachment(
+    absolutePath: string,
+    priorBytesUsed?: number,
+  ): Promise<AttachmentReadResult>;
   /** Reconnect to an OpenCode session after service restart (when still available). */
   continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
   getRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
@@ -510,11 +539,24 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       });
     },
 
-    appendConversationMessage: async (id, role, text) =>
+    appendConversationMessage: async (id, role, text, attachments) =>
       (await call<{ conversation: ConversationRecord }>(
         `/v1/conversations/${encodeURIComponent(id)}/messages`,
-        { method: "POST", body: JSON.stringify({ role, text }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            role,
+            text,
+            ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+          }),
+        },
       )).conversation,
+
+    readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
+      call<AttachmentReadResult>("/v1/workspace/attachment-read", {
+        method: "POST",
+        body: JSON.stringify({ absolutePath, priorBytesUsed }),
+      }),
 
     continueRuntimeSession: async (sessionId) =>
       call<ContinueSessionResult>(

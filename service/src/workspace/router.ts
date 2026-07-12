@@ -22,10 +22,12 @@ import {
 import { nodeExistenceProbe } from "./probe.js";
 import type { RecentExistenceProbe, RecentWorkspaces, RecentWorkspaceView } from "./recent.js";
 import { readWorkspaceFilePreview } from "./file-preview.js";
+import { readWorkspaceAttachment } from "./attachment-read.js";
 
 export const WORKSPACE_GRANT_PATH = "/v1/workspace/grant";
 export const WORKSPACE_RECENT_PATH = "/v1/workspace/recent";
 export const WORKSPACE_FILE_PREVIEW_PATH = "/v1/workspace/file-preview";
+export const WORKSPACE_ATTACHMENT_READ_PATH = "/v1/workspace/attachment-read";
 
 /**
  * Malformed grant request. Extends {@link BadRequestError} so the boundary dispatcher maps it
@@ -98,6 +100,34 @@ export function createWorkspaceRouter(options: WorkspaceRouterOptions): Boundary
         handler: async (): Promise<RouteResult<{ recent: readonly RecentWorkspaceView[] }>> => {
           const list = await recent.listWithAvailability(existsProbe);
           return { status: 200, data: { recent: list } };
+        },
+      },
+      {
+        method: "POST",
+        path: WORKSPACE_ATTACHMENT_READ_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          if (typeof ctx.body !== "object" || ctx.body === null) {
+            throw new WorkspaceRequestError("Request body must be a JSON object.");
+          }
+          const rec = ctx.body as Record<string, unknown>;
+          const absolutePath = rec["absolutePath"];
+          const priorBytesUsed = rec["priorBytesUsed"];
+          if (typeof absolutePath !== "string" || absolutePath.length === 0) {
+            throw new WorkspaceRequestError("absolutePath is required.");
+          }
+          const root = options.activeWorkspaceRoot?.();
+          if (root === undefined) {
+            return { status: 404, data: { error: "no_active_workspace" } };
+          }
+          const result = await readWorkspaceAttachment({
+            workspaceRoot: root,
+            absolutePath,
+            priorBytesUsed:
+              typeof priorBytesUsed === "number" && priorBytesUsed >= 0
+                ? priorBytesUsed
+                : 0,
+          });
+          return { status: 200, data: result };
         },
       },
       {

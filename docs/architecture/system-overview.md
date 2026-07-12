@@ -58,11 +58,17 @@ Cowork conversation A
 
 - UI và `conversation` store giữ transcript sạch (chỉ user/assistant đã sanitize), activity, workspace binding.
 - Trước mỗi user message, `planRuntimeTurn` quyết định reuse (`canPrompt`) hoặc tạo session mới.
-- **Context handoff (untrusted):** OpenCode v1.17.11 chỉ nhận `POST /session/{id}/message` với `parts: [{type:"text"}]` — không có native multi-message seed. Cowork GHC gửi envelope nội bộ bounded (`<<<CGHC_UNTRUSTED_PRIOR_TURNS>>>` + `<<<CGHC_CURRENT_USER_REQUEST>>>`) chỉ trên wire; **không** persist trong transcript user.
+- **Context handoff (untrusted):** OpenCode v1.17.11 chỉ nhận `POST /session/{id}/message` với `parts: [{type:"text"}]` — không có native multi-message seed. Cowork GHC gửi envelope nội bộ bounded (`<<<CGHC_UNTRUSTED_PRIOR_TURNS>>>` + `<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>` + `<<<CGHC_CURRENT_USER_REQUEST>>>`) chỉ trên wire; **không** persist trong transcript user.
 - **Assistant extraction:** EV mapper theo dõi `message.updated` role; chỉ `message.part.*` text của **assistant** được map sang `SessionView.text`. User prompt (kể cả envelope) không bao giờ hiển thị như assistant output.
 - Event stream lọc theo `runtimeSessionId` hiện hành để tránh late events từ turn cũ.
 
 Giới hạn POC: **một runtime execution active** tại một thời điểm.
+
+## Boundary attachment read (Phase 1)
+
+- Renderer gọi shell `pickWorkspaceFile(workspaceRoot)` → service `POST /v1/workspace/attachment-read` validate absolute path trong grant + `assertRealPathInside`.
+- Snapshot tại thời điểm gửi: relative path, size, mtime, content hash, truncated flag — **không** copy vào app data.
+- Pending chips trong composer; metadata gắn `ConversationMessage.attachments`; content chỉ trên wire trong envelope untrusted.
 
 ## Không lặp lại tài liệu cũ
 

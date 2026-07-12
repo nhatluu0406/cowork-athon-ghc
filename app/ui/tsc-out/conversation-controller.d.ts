@@ -5,7 +5,7 @@
  * The UI calls this module; it talks to the loopback conversation + session routes only.
  */
 import type { SessionView } from "@cowork-ghc/service/execution";
-import type { ConversationRecord, ConversationStatus, ConversationSummary, RuntimeTurnRecord, ServiceClient } from "./service-client.js";
+import type { AttachmentMetadata, ConversationRecord, ConversationStatus, ConversationSummary, RuntimeTurnRecord, ServiceClient } from "./service-client.js";
 export type RuntimePhase = "idle" | "starting" | "ready" | "running" | "cancelling" | "completed" | "completed_without_final_message" | "denied" | "failed" | "cancelled";
 export interface ConversationManagerState {
     summaries: readonly ConversationSummary[];
@@ -31,7 +31,7 @@ export interface ConversationManager {
     linkRuntimeSession(runtimeSessionId: string, startedAt?: string): Promise<void>;
     completeRuntimeTurn(runtimeSessionId: string, status: RuntimeTurnRecord["status"]): Promise<void>;
     markLastActive(): Promise<void>;
-    recordUserMessage(text: string): Promise<void>;
+    recordUserMessage(text: string, attachments?: readonly AttachmentMetadata[]): Promise<void>;
     recordAssistantMessage(text: string): Promise<void>;
     setRuntimePhase(phase: RuntimePhase): Promise<void>;
     markInterrupted(): Promise<void>;

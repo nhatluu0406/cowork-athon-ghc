@@ -7,6 +7,7 @@
 
 import type { SessionView } from "@cowork-ghc/service/execution";
 import type {
+  AttachmentMetadata,
   ConversationRecord,
   ConversationStatus,
   ConversationSummary,
@@ -51,7 +52,7 @@ export interface ConversationManager {
   linkRuntimeSession(runtimeSessionId: string, startedAt?: string): Promise<void>;
   completeRuntimeTurn(runtimeSessionId: string, status: RuntimeTurnRecord["status"]): Promise<void>;
   markLastActive(): Promise<void>;
-  recordUserMessage(text: string): Promise<void>;
+  recordUserMessage(text: string, attachments?: readonly AttachmentMetadata[]): Promise<void>;
   recordAssistantMessage(text: string): Promise<void>;
   setRuntimePhase(phase: RuntimePhase): Promise<void>;
   markInterrupted(): Promise<void>;
@@ -281,12 +282,13 @@ export function createConversationManager(
       await (await client()).patchConversation(state.activeConversationId, { lastActive: true });
     },
 
-    async recordUserMessage(text) {
+    async recordUserMessage(text, attachments) {
       if (state.activeConversationId === null) return;
       const record = await (await client()).appendConversationMessage(
         state.activeConversationId,
         "user",
         text,
+        attachments,
       );
       await syncRecord(record);
       await (await client()).patchConversation(state.activeConversationId, { status: "running" });

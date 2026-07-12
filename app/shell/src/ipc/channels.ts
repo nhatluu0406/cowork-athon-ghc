@@ -13,6 +13,8 @@ export const IpcChannel = {
   GetBootstrap: "cowork:get-bootstrap",
   /** Renderer requests the native folder picker (W1). */
   PickWorkspaceFolder: "cowork:pick-workspace-folder",
+  /** Renderer requests the native file picker for workspace attachments. */
+  PickWorkspaceFile: "cowork:pick-workspace-file",
   /** Renderer asks the shell to restart the service into the LIVE runtime (user-gated Connect). */
   ConnectLive: "cowork:connect-live",
 } as const;

@@ -197,11 +197,16 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
           const rec = ctx.body as Record<string, unknown>;
           const role = rec["role"];
           const text = rec["text"];
+          const attachments = rec["attachments"];
           if (role !== "user" && role !== "assistant") {
             throw new ConversationRequestError("role must be user or assistant.");
           }
           if (typeof text !== "string") throw new ConversationRequestError("text is required.");
-          const conversation = await store.appendMessage(requireId(ctx.params), { role, text });
+          const conversation = await store.appendMessage(requireId(ctx.params), {
+            role,
+            text,
+            ...(Array.isArray(attachments) ? { attachments } : {}),
+          });
           return { status: 200, data: { conversation } };
         },
       },

@@ -30,6 +30,13 @@ export interface RendererBootstrap {
   readonly allowEnvCredentialImport?: boolean;
 }
 
+/** Result of the native file picker for workspace attachments. */
+export interface PickedWorkspaceFile {
+  readonly canceled: boolean;
+  /** Absolute path the user selected; omitted when `canceled` is true. */
+  readonly filePath?: string;
+}
+
 /** Result of the native folder picker (W1). `rootPath` is present only when not canceled. */
 export interface PickedWorkspaceFolder {
   readonly canceled: boolean;
@@ -57,6 +64,8 @@ export interface CoworkShellBridge {
   readonly getBootstrap: () => Promise<RendererBootstrap>;
   /** Open the OS folder picker (native capability owned by the shell, W1). */
   readonly pickWorkspaceFolder: () => Promise<PickedWorkspaceFolder>;
+  /** Open the OS file picker for workspace text attachments (scoped to active workspace). */
+  readonly pickWorkspaceFile: (workspaceRoot: string) => Promise<PickedWorkspaceFile>;
   /**
    * Restart the loopback service so it re-resolves its launch config from the now-persisted
    * onboarding settings — i.e. transition from the settings-only onboarding service to the LIVE
