@@ -46,7 +46,13 @@ updated_at: "2026-07-12"
 
 ## Tính năng chưa có
 
-- Skills chưa available trong GUI người dùng cuối.
+- Skills Phase 1 chỉ là local instruction context (`SKILL.md`): built-in + app-managed
+  user-local, direct-child discovery tối đa 64 Skill/root, 32 KiB/file, UTF-8 text,
+  persisted global-local enable state và per-turn provenance.
+- Không có executable Skill/plugin, MCP, marketplace, cloud catalog/sync, URL install,
+  workspace auto-scan, dependency resolution hoặc full Skill editor.
+- Skill content dùng chung dispatch budget 12k; nếu enabled Skill không fit thì turn fail-fast,
+  không silently omit.
 - `Tệp đã đọc` trong activity gồm cả attachment context (Phase 1) và tool read/list thật.
 - Web support vẫn `DEFERRED`.
 

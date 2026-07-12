@@ -15,17 +15,19 @@ and the current working tree instead.
 
 | Field | Value |
 |---|---|
-| Slice | Provider Readiness and Functional UX Preflight |
-| Feature commit | `38a7347` — fix(ui): enforce provider readiness before runtime start |
+| Slice | Skills Foundation — Phase 1 |
+| Feature commit | `97f53bf` — feat(skills): add local skill discovery and runtime integration |
 | Implementation Agent | Cursor |
-| Packaged journeys | `provider-readiness-packaged.mjs` A–J PASS (2026-07-12) |
+| Packaged journeys | `skills-foundation-packaged.mjs` A–J PASS (2026-07-12) |
 | Regression | `npm run verify:release` PASS; `npm run package:win` PASS |
-| Prior slice still PASS | Attachment Honesty (`3cc4ba6`); `attachment-honesty-packaged.mjs` A–J |
+| Prior slices still PASS | Provider Readiness A–J; Attachment Honesty A–J |
 
 ## Latest Verified Slice Commits (prior)
 
 | Commit | Meaning |
 |---|---|
+| `4f1e804` | Docs: provider readiness slice record. |
+| `38a7347` | Provider readiness and functional UX preflight. |
 | `eaaab0c` | Docs: attachment honesty slice record. |
 | `3cc4ba6` | Attachment honesty + secret-file safety. |
 | `8df3d59` | Packaged L6 POC acceptance baseline. |
@@ -59,6 +61,12 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
   local service and provider status are separate in topbar; settings modal focus trap; empty-state
   continuation controls removed from DOM until historical terminal conversation is selected; narrow
   activity mobile toggle; packaged child env strips `ELECTRON_RUN_AS_NODE`.
+- Skills Foundation Phase 1: service-owned discovery of bounded `SKILL.md` directories from
+  shipped built-ins and the app-managed user-local Skills root; validation, deterministic refresh,
+  persisted global-local enable/disable, bounded read-only preview, per-turn hash/version/source
+  provenance, and instruction-context dispatch integration.
+- Skills remain instruction-only. They do not execute code, grant filesystem/network/credential
+  access, or bypass workspace guards, provider readiness, command/file permission, or keyring boundaries.
 
 ## Important Semantics
 
@@ -70,8 +78,9 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
 | Attachment context | Read-only snapshot context for a turn; it never bypasses permission for mutation. |
 | Dispatch preflight | UI plans final 12k-char dispatch before runtime starts; fail-fast when attachments cannot all fit; pending chips preserved. |
 | Provider readiness | `locally_ready` means configuration is sufficient to attempt a turn; it does not claim endpoint connectivity until test or runtime proves it. |
+| Skill enabled state | Global-local registry persists across relaunch; each dispatched user turn snapshots only the Skill IDs/name/version/source/hash/mtime actually used. |
 
-## Phase A Status
+## Phase A / B Status
 
 **Phase A (Safety and Functional Honesty) — CLOSED** for packaged POC scope:
 
@@ -82,6 +91,14 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
 
 Full L9 / release-candidate verification is **not** complete. Live streaming/tools/permissions/cancel
 in one RC journey, native OS picker, and installed keyring round-trip remain open.
+
+**Skills Foundation Phase 1 — PASS**:
+
+- Discovery/validation, invalid-state UX, enable/disable, relaunch persistence: PASS.
+- Live Skill influence, disable semantics, hash/version provenance after change: PASS.
+- Shared dispatch-budget fail-fast, marker isolation, permission Deny, process cleanup: PASS.
+- Not included: marketplace, MCP, executable plugins, cloud catalog/sync, Skill editor,
+  URL installation, or workflow/template replay.
 
 ## Verification Still Incomplete
 
@@ -97,12 +114,11 @@ Next Agent: Cursor.
 Recommended next slice:
 
 ```text
-Skills Foundation
+File Work Review and Before/After Diff
 ```
 
-Do **not** start Skills until Product Owner explicitly reprioritizes or the next slice brief is issued.
-
-Do not start Attachments Phase 2, web/Next.js, or a workspace explorer until the next slice is resolved.
+Do not start the next slice until Product Owner issues its brief. Do not start MCP,
+marketplace/cloud, Attachments Phase 2, web/Next.js, or a workspace explorer.
 
 ## Useful Verification Commands
 
@@ -110,6 +126,7 @@ Do not start Attachments Phase 2, web/Next.js, or a workspace explorer until the
 npm run verify:release
 npm run package:win
 node tools/verify/provider-readiness-packaged.mjs
+node tools/verify/skills-foundation-packaged.mjs
 node tools/verify/attachment-honesty-packaged.mjs
 node tools/verify/attachments-packaged.mjs
 node tools/verify/multi-turn-context-packaged.mjs
