@@ -23,6 +23,35 @@ test("create conversation and derive title from first user message", async () =>
   await rm(dir, { recursive: true, force: true });
 });
 
+test("appendMessage persists attachment metadata without file content", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cghc-conv-"));
+  const store = createConversationStore({ rootDir: dir, now: FIXED_NOW });
+  const created = await store.create({ workspacePath: "C:/ws/demo" });
+  const updated = await store.appendMessage(created.id, {
+    role: "user",
+    text: "what is the secret?",
+    attachments: [
+      {
+        relativePath: "secret.txt",
+        filename: "secret.txt",
+        sizeBytes: 10,
+        modifiedAt: "2026-07-12T08:00:00.000Z",
+        contentHash: "abc",
+        truncated: false,
+        maxBytesApplied: 32768,
+      },
+    ],
+  });
+  assert.equal(updated.messages.length, 1);
+  const msg = updated.messages[0];
+  assert.equal(msg?.attachments?.length, 1);
+  assert.equal(msg?.attachments?.[0]?.filename, "secret.txt");
+  assert.equal(msg?.text, "what is the secret?");
+  const raw = await readFile(join(dir, `${created.id}.json`), "utf8");
+  assert.ok(!raw.includes("VIOLET-428"));
+  await rm(dir, { recursive: true, force: true });
+});
+
 test("list orders by updatedAt and search matches title and user text", async () => {
   const dir = await mkdtemp(join(tmpdir(), "cghc-conv-"));
   const store = createConversationStore({ rootDir: dir, now: FIXED_NOW });

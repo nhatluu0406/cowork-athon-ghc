@@ -7,9 +7,10 @@
  * service (ADR 0003), not here — these handlers only expose native OS capabilities.
  */
 
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from "electron";
 import type {
   ConnectLiveResult,
+  PickedWorkspaceFile,
   PickedWorkspaceFolder,
   RendererBootstrap,
 } from "@cowork-ghc/contracts";
@@ -74,6 +75,33 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
         return { canceled: true };
       }
       return { canceled: false, rootPath: first };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannel.PickWorkspaceFile,
+    async (event: IpcMainInvokeEvent, workspaceRoot: string): Promise<PickedWorkspaceFile> => {
+      const fixturePath = process.env["COWORK_GHC_E2E_ATTACHMENT_PATH"]?.trim();
+      if (fixturePath !== undefined && fixturePath !== "") {
+        return { canceled: false, filePath: fixturePath };
+      }
+
+      const defaultPath =
+        typeof workspaceRoot === "string" && workspaceRoot.length > 0 ? workspaceRoot : undefined;
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const dialogOptions: OpenDialogOptions = {
+        properties: ["openFile"],
+        ...(defaultPath !== undefined ? { defaultPath } : {}),
+      };
+      const result = owner
+        ? await dialog.showOpenDialog(owner, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
+
+      const [first] = result.filePaths;
+      if (result.canceled || first === undefined) {
+        return { canceled: true };
+      }
+      return { canceled: false, filePath: first };
     },
   );
 }

@@ -16,11 +16,24 @@ export type ConversationStatus =
   | "errored"
   | "interrupted";
 
+/** Metadata persisted for workspace text-file attachments (no raw content). */
+export interface AttachmentMetadata {
+  readonly relativePath: string;
+  readonly filename: string;
+  readonly sizeBytes: number;
+  readonly modifiedAt: string;
+  readonly contentHash: string;
+  readonly truncated: boolean;
+  readonly maxBytesApplied: number;
+}
+
 export interface ConversationMessage {
   readonly id: string;
   readonly role: "user" | "assistant";
   readonly text: string;
   readonly at: string;
+  /** Workspace attachment metadata only — file content is never stored in transcript. */
+  readonly attachments?: readonly AttachmentMetadata[];
 }
 
 /** One OpenCode runtime session linked to a Cowork conversation (a single turn). */
@@ -116,4 +129,5 @@ export interface ConversationPatch {
 export interface AppendMessageInput {
   readonly role: "user" | "assistant";
   readonly text: string;
+  readonly attachments?: readonly AttachmentMetadata[];
 }

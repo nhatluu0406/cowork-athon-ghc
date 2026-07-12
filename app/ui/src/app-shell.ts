@@ -28,6 +28,7 @@ import { getShellBridge } from "./bridge.js";
 import {
   createConversationManager,
   formatConversationMeta,
+  needsContinuation,
   type ConversationManager,
   type RuntimePhase,
 } from "./conversation-controller.js";
@@ -45,8 +46,14 @@ import {
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
-import { augmentPromptWithContext } from "./transcript-context.js";
+import { augmentDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import {
+  createPendingAttachmentId,
+  totalValidBytes,
+  type PendingAttachment,
+} from "./attachment-pending.js";
+import type { AttachmentMetadata } from "./service-client.js";
 import {
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
@@ -82,6 +89,8 @@ interface AppState {
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
+  pendingAttachments: PendingAttachment[];
+  continuationUnlocked: boolean;
 }
 
 interface AppDom {
@@ -102,6 +111,8 @@ interface AppDom {
   composer: HTMLElement;
   composerInput: HTMLElement;
   composerHint: HTMLElement;
+  attachButton: HTMLButtonElement;
+  attachmentChips: HTMLElement;
   sendButton: HTMLButtonElement;
   cancelButton: HTMLButtonElement;
   newConversationButton: HTMLButtonElement;
@@ -220,7 +231,13 @@ function restoreComposerDraft(state: AppState, dom: AppDom, conversationId: stri
   setComposerText(dom.composerInput, draft);
 }
 
-function appendMessage(dom: AppDom, role: "user" | "assistant", text = "", historical = false): HTMLElement {
+function appendMessage(
+  dom: AppDom,
+  role: "user" | "assistant",
+  text = "",
+  historical = false,
+  attachments?: readonly AttachmentMetadata[],
+): HTMLElement {
   dom.emptyState.hidden = true;
   const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
   if (role === "assistant") row.append(el("div", "msg__avatar", "AI"));
@@ -230,11 +247,65 @@ function appendMessage(dom: AppDom, role: "user" | "assistant", text = "", histo
   const p = document.createElement("p");
   p.textContent = text;
   textBox.append(p);
+  if (attachments !== undefined && attachments.length > 0) {
+    textBox.append(renderAttachmentMetaList(attachments));
+  }
   body.append(textBox);
   row.append(body);
   dom.transcriptInner.insertBefore(row, dom.thinking);
   dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
   return row;
+}
+
+function renderAttachmentMetaList(attachments: readonly AttachmentMetadata[]): HTMLElement {
+  const wrap = el("div", "msg__attachments");
+  for (const att of attachments) {
+    const chip = el("span", "attachment-chip attachment-chip--historical");
+    chip.title = att.relativePath;
+    const trunc = att.truncated ? " (đã cắt)" : "";
+    chip.textContent = `📎 ${att.filename}${trunc}`;
+    wrap.append(chip);
+  }
+  return wrap;
+}
+
+function renderPendingAttachmentChips(
+  dom: AppDom,
+  pending: readonly PendingAttachment[],
+  onRemove: (id: string) => void,
+): void {
+  dom.attachmentChips.replaceChildren();
+  if (pending.length === 0) {
+    dom.attachmentChips.hidden = true;
+    return;
+  }
+  dom.attachmentChips.hidden = false;
+  for (const item of pending) {
+    const chip = el("span", `attachment-chip${item.status === "error" ? " attachment-chip--error" : ""}`);
+    chip.title = item.relativePath;
+    const trunc =
+      item.metadata?.truncated === true ? " (đã cắt)" : "";
+    chip.append(
+      el("span", "attachment-chip__label", item.status === "error" ? `⚠ ${item.filename}` : `📎 ${item.filename}${trunc}`),
+    );
+    const remove = el("button", "attachment-chip__remove", "×") as HTMLButtonElement;
+    remove.type = "button";
+    remove.setAttribute("aria-label", `Gỡ ${item.filename}`);
+    remove.addEventListener("click", () => onRemove(item.id));
+    chip.append(remove);
+    if (item.status === "error" && item.errorMessage !== undefined) {
+      chip.title = item.errorMessage;
+    }
+    dom.attachmentChips.append(chip);
+  }
+}
+
+function isComposerLocked(state: AppState): boolean {
+  const record = state.conv.state.activeRecord;
+  const phase = state.conv.state.runtimePhase;
+  if (phase === "running" || phase === "starting" || phase === "cancelling") return false;
+  if (!needsContinuation(record)) return false;
+  return !state.continuationUnlocked;
 }
 
 function clearTranscript(dom: AppDom): void {
@@ -249,7 +320,13 @@ function renderTranscriptFromRecord(dom: AppDom, record: ConversationRecord | nu
   if (record === null || record.messages.length === 0) return;
   dom.emptyState.hidden = true;
   for (const message of record.messages) {
-    appendMessage(dom, message.role, message.text, true);
+    appendMessage(
+      dom,
+      message.role,
+      message.text,
+      true,
+      message.attachments,
+    );
   }
 }
 
@@ -398,14 +475,23 @@ function renderState(dom: AppDom, state: AppState, handlers: {
       ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
       : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
 
-  const showContinuation =
-    record?.status === "interrupted" && phase !== "running" && phase !== "starting";
+  const showContinuation = isComposerLocked(state);
   dom.continuationBanner.hidden = !showContinuation;
   dom.continuationButton.hidden = !showContinuation;
 
+  const locked = isComposerLocked(state);
   dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
+  dom.composer.classList.toggle("is-locked", locked);
+  dom.composerInput.contentEditable = locked ? "false" : "true";
+  dom.attachButton.disabled =
+    locked ||
+    phase === "starting" ||
+    phase === "running" ||
+    phase === "cancelling" ||
+    state.activeWorkspace === null;
   dom.thinking.hidden = phase !== "running" && phase !== "starting" && phase !== "cancelling";
   dom.sendButton.disabled =
+    locked ||
     phase === "starting" ||
     phase === "running" ||
     phase === "cancelling" ||
@@ -417,6 +503,10 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "starting" || phase === "running" || state.activeWorkspace === null;
 
   renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
+  renderPendingAttachmentChips(dom, state.pendingAttachments, (id) => {
+    state.pendingAttachments = state.pendingAttachments.filter((a) => a.id !== id);
+    renderState(dom, state, handlers);
+  });
   refreshActivityUi(state, dom);
 }
 
@@ -570,6 +660,7 @@ async function finalizeConversationTurn(
   await state.conv.completeRuntimeTurn(sessionId, turnStatus);
   await persistActivity(state);
   state.finalizingTurn = false;
+  state.continuationUnlocked = true;
   renderState(dom, state, handlers);
 }
 
@@ -699,11 +790,13 @@ async function switchConversation(
     if (!ok) return;
   }
   saveComposerDraft(state, dom);
+  state.pendingAttachments = [];
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
   state.lastView = initialSessionView("");
   await state.conv.select(id);
+  state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
   loadActivityFromRecord(state, state.conv.state.activeRecord);
   renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
   restoreComposerDraft(state, dom, id);
@@ -745,6 +838,125 @@ async function newConversation(
   dom.composerInput.focus();
 }
 
+async function readAttachmentSnapshots(
+  state: AppState,
+  pending: readonly PendingAttachment[],
+): Promise<{ snapshots: AttachmentSnapshot[]; metadata: AttachmentMetadata[]; errors: string[] }> {
+  if (state.client === null || state.activeWorkspace === null) {
+    return { snapshots: [], metadata: [], errors: ["Service chưa sẵn sàng."] };
+  }
+  const valid = pending.filter((p) => p.status === "valid");
+  const snapshots: AttachmentSnapshot[] = [];
+  const metadata: AttachmentMetadata[] = [];
+  const errors: string[] = [];
+  let priorBytes = 0;
+
+  for (const item of valid) {
+    const winPath =
+      state.activeWorkspace.endsWith("\\") || state.activeWorkspace.endsWith("/")
+        ? `${state.activeWorkspace}${item.relativePath.replace(/\//g, "\\")}`
+        : `${state.activeWorkspace}\\${item.relativePath.replace(/\//g, "\\")}`;
+    const result = await state.client.readWorkspaceAttachment(winPath, priorBytes);
+    if (!result.ok) {
+      errors.push(`${item.filename}: ${result.message}`);
+      continue;
+    }
+    snapshots.push({ metadata: result.metadata, content: result.content });
+    metadata.push(result.metadata);
+    priorBytes += result.content.length;
+  }
+  return { snapshots, metadata, errors };
+}
+
+async function pickAttachment(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  if (state.activeWorkspace === null) {
+    window.alert("Chọn workspace trước khi đính kèm tệp.");
+    return;
+  }
+  if (state.client === null) return;
+  const picked = await getShellBridge().pickWorkspaceFile(state.activeWorkspace);
+  if (picked.canceled || picked.filePath === undefined) return;
+
+  const priorBytes = totalValidBytes(state.pendingAttachments);
+  const result = await state.client.readWorkspaceAttachment(picked.filePath, priorBytes);
+  if (!result.ok) {
+    state.pendingAttachments = [
+      ...state.pendingAttachments,
+      {
+        id: createPendingAttachmentId(),
+        relativePath: picked.filePath,
+        filename: picked.filePath.split(/[\\/]/).pop() ?? picked.filePath,
+        status: "error",
+        errorMessage: result.message,
+      },
+    ];
+    renderState(dom, state, handlers);
+    return;
+  }
+
+  state.pendingAttachments = [
+    ...state.pendingAttachments,
+    {
+      id: createPendingAttachmentId(),
+      relativePath: result.metadata.relativePath,
+      filename: result.metadata.filename,
+      status: "valid",
+      metadata: result.metadata,
+    },
+  ];
+  renderState(dom, state, handlers);
+}
+
+function recordAttachmentActivity(
+  state: AppState,
+  metadata: readonly AttachmentMetadata[],
+  errors: readonly string[],
+): void {
+  const base = state.activitySnapshot ?? {
+    items: [],
+    fileChanges: [],
+    permissionHistory: state.permissionHistory,
+    readPaths: [],
+    terminalState: null,
+  };
+  const items = [...base.items];
+  let seq = items.length > 0 ? Math.max(...items.map((i) => i.seq)) + 1 : 1;
+  const at = new Date().toISOString();
+  for (const att of metadata) {
+    items.push({
+      id: `att-${seq}`,
+      kind: "file",
+      label: att.truncated
+        ? `Đã đọc ngữ cảnh tệp (đã cắt): ${att.filename}`
+        : `Đã đọc ngữ cảnh tệp: ${att.filename}`,
+      status: "success",
+      at,
+      seq,
+      relativePath: att.relativePath,
+      detail: `${att.sizeBytes} byte`,
+    });
+    seq += 1;
+  }
+  for (const err of errors) {
+    items.push({
+      id: `att-err-${seq}`,
+      kind: "error",
+      label: `Lỗi đính kèm: ${err}`,
+      status: "failed",
+      at,
+      seq,
+    });
+    seq += 1;
+  }
+  const readPaths = [...new Set([...base.readPaths, ...metadata.map((m) => m.relativePath)])];
+  state.activitySnapshot = { ...base, items, readPaths };
+  state.activityLive = true;
+}
+
 async function sendPrompt(
   state: AppState,
   dom: AppDom,
@@ -753,6 +965,15 @@ async function sendPrompt(
 ): Promise<void> {
   const prompt = textFromComposer(dom.composerInput);
   if (prompt.length === 0) return;
+
+  if (isComposerLocked(state)) return;
+
+  const pendingSnapshot = [...state.pendingAttachments];
+  const { snapshots, metadata, errors } = await readAttachmentSnapshots(state, pendingSnapshot);
+  if (errors.length > 0 && snapshots.length === 0 && pendingSnapshot.some((p) => p.status === "valid")) {
+    window.alert(errors.join("\n"));
+    return;
+  }
 
   if (state.conv.state.activeConversationId === null) {
     await newConversation(state, dom, handlers);
@@ -768,28 +989,34 @@ async function sendPrompt(
   );
 
   resetLiveActivity(state);
-  appendMessage(dom, "user", prompt);
+  recordAttachmentActivity(state, metadata, errors);
+  const userRow = appendMessage(dom, "user", prompt, false, metadata.length > 0 ? metadata : undefined);
+  void userRow;
   state.activeAssistant = appendMessage(dom, "assistant", "");
+  const pendingCleared = state.pendingAttachments;
   setComposerText(dom.composerInput, "");
+  state.pendingAttachments = [];
   state.composerDrafts.delete(state.conv.state.activeConversationId);
-  await state.conv.recordUserMessage(prompt);
+  await state.conv.recordUserMessage(
+    prompt,
+    metadata.length > 0 ? metadata : undefined,
+  );
   await state.conv.markLastActive();
   state.conv.state.runtimePhase = "running";
+  state.continuationUnlocked = true;
   renderState(dom, state, handlers);
 
-  const dispatchText =
-    contextMessages.length > 0 ? augmentPromptWithContext(contextMessages, prompt) : prompt;
+  const dispatch = augmentDispatchPrompt(contextMessages, snapshots, prompt);
+  const dispatchText = dispatch.text;
 
   const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
   if (!result.accepted) {
+    state.pendingAttachments = pendingCleared;
     if (result.reason === "session_completed") {
       await state.conv.startContinuation();
       const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-      const retryText =
-        retry.contextMessages.length > 0
-          ? augmentPromptWithContext(retry.contextMessages, prompt)
-          : prompt;
-      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryText);
+      const retryDispatch = augmentDispatchPrompt(retry.contextMessages, snapshots, prompt);
+      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryDispatch.text);
       if (!second.accepted) {
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
@@ -803,7 +1030,9 @@ async function sendPrompt(
       );
     }
     renderState(dom, state, handlers);
+    return;
   }
+  refreshActivityUi(state, dom);
 }
 
 async function cancelRun(
@@ -887,7 +1116,7 @@ function createShell(root: HTMLElement): AppDom {
   const continuationBanner = el("div", "continuation-banner");
   continuationBanner.hidden = true;
   continuationBanner.append(el("span", "continuation-banner__text", "Đây là lịch sử đã lưu — không phải phiên runtime đang chạy."));
-  const continuationButton = el("button", "label-btn", "Tạo phiên tiếp nối") as HTMLButtonElement;
+  const continuationButton = el("button", "label-btn", "Tiếp tục cuộc trò chuyện này") as HTMLButtonElement;
   continuationButton.type = "button";
   continuationBanner.append(continuationButton);
 
@@ -913,23 +1142,27 @@ function createShell(root: HTMLElement): AppDom {
   composerInput.setAttribute("aria-label", "Nhập yêu cầu");
   composerInput.setAttribute("data-placeholder", "Nhập yêu cầu cho Cowork GHC...");
   const composerBar = el("div", "composer__bar");
-  const disabledAttach = el("button", "icon-btn", "+");
-  disabledAttach.type = "button";
-  disabledAttach.disabled = true;
+  const attachButton = el("button", "icon-btn attach-btn", "+") as HTMLButtonElement;
+  attachButton.type = "button";
+  attachButton.title = "Đính kèm tệp văn bản trong workspace";
+  attachButton.setAttribute("aria-label", "Đính kèm");
+  const attachLabel = el("span", "model-picker attach-label", "Đính kèm");
   const cancelButton = el("button", "stop-btn", "Dừng");
   cancelButton.type = "button";
   cancelButton.hidden = true;
   const sendButton = el("button", "send-btn", "Gửi");
   sendButton.type = "button";
+  const attachmentChips = el("div", "composer__attachments");
+  attachmentChips.hidden = true;
   composerBar.append(
-    disabledAttach,
-    el("span", "model-picker", "Đính kèm: Chưa khả dụng"),
+    attachButton,
+    attachLabel,
     el("div", "composer__spacer"),
     cancelButton,
     sendButton,
   );
   const composerHint = el("div", "composer__hint", "Enter để gửi, Shift+Enter xuống dòng");
-  composerBox.append(composerInput, composerBar);
+  composerBox.append(composerInput, attachmentChips, composerBar);
   composer.append(composerBox, composerHint);
   chat.append(header, continuationBanner, transcript, composer);
 
@@ -1000,6 +1233,8 @@ function createShell(root: HTMLElement): AppDom {
     composer,
     composerInput,
     composerHint,
+    attachButton,
+    attachmentChips,
     sendButton,
     cancelButton,
     newConversationButton,
@@ -1034,6 +1269,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
+    pendingAttachments: [],
+    continuationUnlocked: true,
   };
 
   const handlers = {
@@ -1088,6 +1325,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             const pick = lastId ?? state.conv.state.summaries[0]?.id ?? null;
             if (pick !== null) {
               await state.conv.select(pick);
+              state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
               loadActivityFromRecord(state, state.conv.state.activeRecord);
               renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
               restoreComposerDraft(state, dom, pick);
@@ -1193,10 +1431,18 @@ export function mountCoworkApp(root: HTMLElement): void {
   dom.continuationButton.addEventListener("click", () => {
     void (async () => {
       await state.conv.startContinuation();
+      state.continuationUnlocked = true;
       dom.continuationBanner.hidden = true;
       dom.composerInput.focus();
       renderState(dom, state, handlers);
     })();
+  });
+
+  dom.attachButton.addEventListener("click", () => {
+    void pickAttachment(state, dom, handlers).catch((error) => {
+      window.alert(safeError(error));
+      renderState(dom, state, handlers);
+    });
   });
 
   dom.sessionSearch.addEventListener("input", () => {

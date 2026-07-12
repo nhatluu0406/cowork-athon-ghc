@@ -50,10 +50,13 @@ Mục tiêu: làm rõ agent đã làm gì trong workspace.
 
 Mục tiêu: cho người dùng đưa ngữ cảnh vào phiên mà vẫn giữ workspace boundary.
 
-- Chọn file/folder trong workspace.
-- Hiển thị attachment đã thêm.
-- Giới hạn kích thước và loại input.
-- Không đọc dữ liệu ngoài workspace nếu chưa được cấp quyền.
+- ~~Chọn **tệp văn bản** trong workspace (Phase 1).~~ **DONE** (2026-07-12) — `attachments-packaged.mjs`
+- ~~Hiển thị attachment chip trước khi gửi; metadata sau gửi/relaunch.~~ **DONE**
+- ~~Giới hạn kích thước/loại; từ chối ngoài workspace/binary/oversized.~~ **DONE**
+- ~~Transport envelope untrusted; không persist raw content.~~ **DONE**
+- Chọn folder / recursive context — **chưa**.
+- Image / PDF / Office parsing — **chưa**.
+- Drag-and-drop — **chưa**.
 
 ## 5. Skills
 

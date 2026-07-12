@@ -7,6 +7,7 @@ import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   AppendMessageInput,
+  ConversationMessage,
   ConversationPatch,
   ConversationRecord,
   ConversationSummary,
@@ -247,10 +248,16 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       if (text.length === 0) throw new Error("Message text is required.");
       return mutate(id, (record) => {
         const at = clock();
-        const messages = [
-          ...record.messages,
-          { id: randomUUID(), role: message.role, text, at },
-        ];
+        const entry: ConversationMessage = {
+          id: randomUUID(),
+          role: message.role,
+          text,
+          at,
+          ...(message.attachments !== undefined && message.attachments.length > 0
+            ? { attachments: message.attachments }
+            : {}),
+        };
+        const messages = [...record.messages, entry];
         const title =
           record.messages.length === 0 && message.role === "user"
             ? titleFromFirstMessage(text)

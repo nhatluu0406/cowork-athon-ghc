@@ -8,15 +8,15 @@ updated_at: "2026-07-12"
 
 ## Mốc Git
 
-- `HEAD` hiện tại: pending commit `fix(session): isolate multi-turn context from assistant output`.
-- Mốc trước: `ef03a3f` — `test(session): verify multi-turn tool recovery`.
+- `HEAD` hiện tại: pending commit `feat(attachments): add workspace text file context`.
+- Mốc trước: `e40dada` — `fix(session): isolate multi-turn context from assistant output`.
 - Mốc packaged POC: `8df3d59` — `test(release): complete packaged L6 acceptance`.
 
 ## Trạng thái POC
 
-Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Multi-turn context isolation** vừa sửa lỗi release-critical: nội dung handoff nội bộ không còn hiển thị trong bubble assistant; EV mapper chỉ lấy text từ message `assistant`.
+Cowork GHC đạt packaged desktop POC `poc-v0.1` cho Windows. Slice **Workspace text file attachments (Phase 1)** cho phép đính kèm tệp văn bản trong active workspace làm context một lượt — bounded, workspace guard, metadata persist, không lưu raw content trong transcript.
 
-Slice **Multi-turn tool regression** (trước đó) và **Multi-turn conversation reliability** vẫn giữ nguyên.
+Slice **Multi-turn context isolation** vẫn giữ nguyên (EV mapper + envelope untrusted).
 
 Trạng thái làm việc hằng ngày: Git + `docs/product/`, `docs/quality/`, `docs/architecture/`. `.loop-engineer/` chỉ `MAINTENANCE_ONLY`.
 
@@ -48,6 +48,7 @@ Không claim native OpenCode multi-turn continuation khi Cowork GHC tạo linked
 | **Multi-turn** — gửi nhiều lượt trong cùng conversation | Có (tự tạo runtime turn mới khi cần) |
 | **Tiếp tục** — cùng OpenCode session ID khi chưa terminal | Có khi `canPrompt` |
 | **Tạo phiên tiếp nối** — recovery sau `interrupted` | Có; không bắt buộc cho multi-turn thường |
+| **Tiếp tục cuộc trò chuyện** — mở composer sau relaunch khi lịch sử terminal | Có; CTA `Tiếp tục cuộc trò chuyện này` |
 
 ## Năng lực đã qua packaged verification
 
@@ -58,16 +59,18 @@ Không claim native OpenCode multi-turn continuation khi Cowork GHC tạo linked
 - Conversation finalization — tool turn kết thúc đúng.
 - **Multi-turn tool regression** — create/modify/read + deny/recovery (`multi-turn-tool-packaged.mjs`).
 - **Context isolation** — không leak wrapper/prompt vào assistant output (`multi-turn-context-packaged.mjs`, ≤4 live).
+- **Workspace text file attachments (Phase 1)** — picker + chip + snapshot read + transport envelope (`attachments-packaged.mjs`, journeys A–J).
 
 ## Slice khuyến nghị tiếp theo
 
-**Attachments and context input** (roadmap §4).
+**Attachments Phase 2** (folder / image / PDF / drag-and-drop) hoặc **Skills** — chưa bắt đầu.
 
 ## Lệnh kiểm tra nhẹ
 
 ```powershell
 npm run verify:release
 node tools/verify/multi-turn-context-packaged.mjs
+node tools/verify/attachments-packaged.mjs
 node tools/verify/multi-turn-tool-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 node tools/verify/session-management-packaged.mjs
