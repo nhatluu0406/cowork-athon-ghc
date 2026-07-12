@@ -30,6 +30,7 @@ import { resolveInjections } from "../credential/index.js";
 import {
   createSsrfPolicy,
   type DnsResolver,
+  readE2eMockLlmBaseUrl,
 } from "../provider/index.js";
 import {
   OpencodeSupervisor,
@@ -207,7 +208,11 @@ async function resolveProvider(
 
   // SSRF-validate the base URL at the execution boundary (reuse the outbound provider policy). A
   // private/loopback/http target is refused with a typed SsrfBlockedError before any spawn.
-  const policy = createSsrfPolicy({ resolver: dnsResolver ?? defaultDnsResolver() });
+  const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  const policy = createSsrfPolicy({
+    resolver: dnsResolver ?? defaultDnsResolver(),
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
   await policy.assertAllowed(baseUrl);
 
   let spec: ProviderEnvSpec;

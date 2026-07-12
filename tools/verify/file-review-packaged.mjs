@@ -19,6 +19,8 @@ import {
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
+import { createMockLlmGateway } from "./mock-llm-gateway.mjs";
+import { pathToFileURL } from "node:url";
 
 const REPO = process.cwd();
 const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
@@ -40,7 +42,10 @@ const TIMEOUTS = {
   diskFileMs: 120_000,
   reviewMs: 90_000,
 };
-const results = {};
+const MODE =
+  process.argv.includes("--mode")
+    ? process.argv[process.argv.indexOf("--mode") + 1]
+    : process.env["CGHC_FILE_REVIEW_MODE"] ?? "all";
 
 class StageTimeoutError extends Error {
   constructor(stage, timeoutMs, details = "") {
@@ -119,12 +124,12 @@ function isCommandExecPermission(permission) {
   return false;
 }
 
-async function approveFilePermissionFlow(expectedRelativePath, { allowCommandExec = false } = {}) {
+async function approveFilePermissionFlow(expectedRelativePath, { rejectCommandExec = false } = {}) {
   const permission = await waitPermissionRequest();
-  const allowed =
-    isFileWritePermission(permission) ||
-    isFileDeletePermission(permission) ||
-    (allowCommandExec && isCommandExecPermission(permission));
+  if (rejectCommandExec && isCommandExecPermission(permission)) {
+    throw new Error("Unexpected tool path for deterministic delete journey.");
+  }
+  const allowed = isFileWritePermission(permission) || isFileDeletePermission(permission);
   if (!allowed) {
     throw new Error(`permission is not a file mutation ${JSON.stringify(permission)}`);
   }
@@ -154,6 +159,44 @@ async function denyFilePermissionFlow() {
 
 function writeJson(path, data) {
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+}
+
+function patchSettingsMockBaseUrl(profileDir, mockBaseUrl) {
+  const runtimeDir = join(profileDir, ".runtime");
+  const settingsPath = join(runtimeDir, "settings.json");
+  mkdirSync(runtimeDir, { recursive: true });
+  let settings = {
+    version: 2,
+    general: { theme: "system", verboseLogging: false, telemetryEnabled: false },
+    providers: [],
+    modelPreference: {},
+  };
+  if (existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    } catch {
+      // recover below
+    }
+  }
+  const providers = Array.isArray(settings.providers) ? [...settings.providers] : [];
+  const providerId = "custom-openai-compat";
+  const index = providers.findIndex((entry) => entry?.providerId === providerId);
+  const existing = index >= 0 ? providers[index] : {};
+  const next = {
+    ...existing,
+    providerId,
+    baseUrl: mockBaseUrl,
+    envVar: existing.envVar ?? "DEEPSEEK_API_KEY",
+  };
+  if (index >= 0) providers[index] = next;
+  else providers.push(next);
+  settings.providers = providers;
+  settings.modelPreference = settings.modelPreference ?? {};
+  settings.modelPreference.default = settings.modelPreference.default ?? {
+    providerID: providerId,
+    modelID: "deepseek-chat",
+  };
+  writeJson(settingsPath, settings);
 }
 
 function fileHash(path) {
@@ -854,8 +897,34 @@ async function main() {
     return;
   }
   if (!existsSync(EXE)) throw new Error(`missing ${EXE} — run npm run package:win`);
-  loadProjectEnvForVerify();
-  if (!process.env["DEEPSEEK_API_KEY"]?.trim()) throw new Error("DEEPSEEK_API_KEY required");
+
+  const mode = MODE;
+  const deterministic = mode === "deterministic";
+  const liveOnly = mode === "live";
+  let mockGateway = null;
+  let mockBaseUrl = null;
+
+  if (deterministic) {
+    mockGateway = createMockLlmGateway({
+      scripts: [
+        { kind: "tool_call", toolNames: ["delete"], toolArguments: { filePath: "delete-me.txt" } },
+        { kind: "tool_call", toolNames: ["edit"], toolArguments: { filePath: "modify-me.txt" } },
+        { kind: "tool_call", toolNames: ["edit"], toolArguments: { filePath: "large.txt" } },
+        { kind: "tool_call", toolNames: ["write"], toolArguments: { filePath: "fixture.bin" } },
+        { kind: "tool_call", toolNames: ["read"], toolArguments: { filePath: "runtime-b.txt" } },
+      ],
+    });
+    mockBaseUrl = await mockGateway.start();
+    const host = new URL(mockBaseUrl).hostname;
+    if (host !== "127.0.0.1") throw new Error(`deterministic mode requires loopback mock base URL; got ${host}`);
+    process.env["COWORK_GHC_E2E_MOCK_LLM_BASE_URL"] = mockBaseUrl;
+    if (!process.env["DEEPSEEK_API_KEY"]?.trim()) {
+      process.env["DEEPSEEK_API_KEY"] = "mock-deterministic-test-token";
+    }
+  } else {
+    loadProjectEnvForVerify();
+    if (!process.env["DEEPSEEK_API_KEY"]?.trim()) throw new Error("DEEPSEEK_API_KEY required");
+  }
 
   const workspace = mkdtempSync(join(tmpdir(), "cghc-freview-ws-"));
   const profile = mkdtempSync(join(tmpdir(), "cghc-freview-profile-"));
@@ -893,6 +962,8 @@ async function main() {
   writeFileSync(secretPath, `KEY=${SECRET_FIXTURE}`, "utf8");
 
   let proc = null;
+  const runLive = mode === "all" || mode === "live";
+  const runDeterministic = mode === "all" || mode === "deterministic";
 
   try {
     tracker.start("A01 launch", EXE);
@@ -908,7 +979,9 @@ async function main() {
         COWORK_GHC_STARTUP_TRACE: tracePath,
       }),
     });
-    proc = launch(profile, workspace, tracePath);
+    proc = launch(profile, workspace, tracePath, {
+      ...(deterministic && mockBaseUrl ? { COWORK_GHC_E2E_MOCK_LLM_BASE_URL: mockBaseUrl } : {}),
+    });
     await waitForTrace(tracePath, /settings_only_started:|service_started:/, TIMEOUTS.startupTraceMs, "A01 launch");
     await waitSelectorStage(".app-shell", TIMEOUTS.appShellMs, "A01 launch");
     tracker.pass("A01 launch");
@@ -934,12 +1007,23 @@ async function main() {
       document.querySelector('.llm-save-credential')?.click();
     })()`);
     await waitForStage(".llm-credential-status", /Đã cấu hình|đã có khoá/iu, TIMEOUTS.credentialMs, "A04 provider ready");
+    if (deterministic && mockBaseUrl) {
+      await cdpEvaluate(`(() => {
+        const input = document.querySelector('.llm-base-url');
+        if (!input) throw new Error('base url input missing');
+        input.value = ${JSON.stringify(mockBaseUrl)};
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      })()`);
+      await sleep(500);
+    }
     await cdpEvaluate(`document.querySelector('.llm-test-connection')?.click()`);
     const providerStatus = await waitForStage(".llm-settings-status", /thành công/iu, TIMEOUTS.providerReadyMs, "A04 provider ready");
     await cdpEvaluate(`document.querySelector('.modal .icon-btn')?.click()`);
     await sleep(500);
     tracker.pass("A04 provider ready", { providerStatus: redact(providerStatus) });
 
+    if (runLive) {
     console.log("file-review: journey A — create file");
     tracker.start("A05 conversation created");
     await ensureComposerUnlocked();
@@ -988,7 +1072,9 @@ async function main() {
     const assistantText = String(await cdpEvaluate(`[...document.querySelectorAll('.msg--assistant .msg__text')].at(-1)?.textContent ?? ''`));
     tracker.pass("A12 terminal assistant response", { assistantTextLength: assistantText.length });
     results.A = "PASS";
+    }
 
+  if (runLive) {
   console.log("file-review: journey B — modify file");
   await cdpEvaluate(`document.querySelector('.sidebar__new-btn')?.click()`);
   await sleep(600);
@@ -1004,22 +1090,18 @@ async function main() {
     throw new Error("B: diff missing expected lines");
   }
   results.B = "PASS";
-
-  console.log("file-review: journey C — delete file");
-  let deleted = false;
-  for (let attempt = 0; attempt < 2 && !deleted; attempt += 1) {
-    await cdpEvaluate(`document.querySelector('.sidebar__new-btn')?.click()`);
-    await sleep(600);
-    await ensureComposerUnlocked();
-    await sendPrompt(
-      attempt === 0
-        ? "Delete delete-me.txt from the workspace using the file delete tool only. Do not use bash or edit. Reply OK when done."
-        : "Remove delete-me.txt using the dedicated delete file tool. The file must not exist afterward. Reply OK when done.",
-    );
-    await approveFilePermissionFlow("delete-me.txt", { allowCommandExec: attempt > 0 });
-    deleted = !existsSync(deletePath);
   }
-  if (!deleted) throw new Error("C: file still on disk");
+
+  if (runDeterministic) {
+  console.log("file-review: journey C — delete file");
+  await cdpEvaluate(`document.querySelector('.sidebar__new-btn')?.click()`);
+  await sleep(600);
+  await ensureComposerUnlocked();
+  await sendPrompt(
+    "Delete delete-me.txt from the workspace using the file delete tool only. Do not use bash or edit. Reply OK when done.",
+  );
+  await approveFilePermissionFlow("delete-me.txt", { rejectCommandExec: true });
+  if (existsSync(deletePath)) throw new Error("C: file still on disk");
   await clickFileChange("delete-me.txt");
   const reviewC = await reviewBody();
   if (!/DELETE-ME-CONTENT/u.test(reviewC)) throw new Error("C: before content missing");
@@ -1118,9 +1200,11 @@ async function main() {
   const actK = await activityText();
   if (!/Đã tạo tệp|Đã sửa tệp/u.test(actK)) throw new Error("K: prior file activity missing after skill turns");
   results.K = "PASS";
+  }
 
   console.log("file-review: journey L — cleanup");
   await stopAll(proc);
+  if (mockGateway) await mockGateway.stop();
   assertNoProcesses();
   results.L = "PASS";
 
@@ -1137,7 +1221,9 @@ async function main() {
   } catch (error) {
     tracker.fail(tracker.currentStage, error);
     await stopAll(proc);
+    await mockGateway?.stop();
     context.cleanupResult = { mode: "failure-preserved", profile, workspace, artifactRoot };
+  if (mockGateway) context.mockGatewayLog = mockGateway.log;
     const diagnostics = await writeDiagnostics(context, error);
     console.error("file-review-packaged: FAIL", {
       failedStage: diagnostics.failedStage,
@@ -1155,3 +1241,5 @@ main().catch((err) => {
   console.error("file-review-packaged: FAIL", err);
   process.exit(1);
 });
+
+export { main };
