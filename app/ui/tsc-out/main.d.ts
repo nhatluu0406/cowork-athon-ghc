@@ -5,5 +5,7 @@
  * shell bridge + local service. The renderer still owns no filesystem, credential, provider, or
  * runtime business logic.
  */
-export {};
+import "@fontsource/be-vietnam-pro/400.css";
+import "@fontsource/be-vietnam-pro/500.css";
+import "@fontsource/be-vietnam-pro/600.css";
 //# sourceMappingURL=main.d.ts.map

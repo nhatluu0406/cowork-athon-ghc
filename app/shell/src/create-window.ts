@@ -34,6 +34,16 @@ export function createMainWindow(loadUrl: string = APP_INDEX_URL): BrowserWindow
     width: 1280,
     height: 800,
     show: false,
+    title: "Cowork GHC",
+    titleBarStyle: process.platform === "win32" ? "hidden" : "default",
+    titleBarOverlay:
+      process.platform === "win32"
+        ? {
+            color: "#FFFFFF",
+            symbolColor: "#1F2933",
+            height: 56,
+          }
+        : false,
     webPreferences: buildMainWindowWebPreferences(PRELOAD_PATH),
   });
 

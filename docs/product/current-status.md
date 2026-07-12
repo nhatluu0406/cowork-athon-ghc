@@ -57,10 +57,11 @@ D1-D4 have been mapped into the canonical product plan as external parallel trac
 - D4: Advanced LLM gateway: key pool, rotation, load balance, failover, cost routing.
 
 Cowork GHC does not currently implement D1-D4. The frontend PDF has been assessed as
-design reference only; the shell direction is now `1a Airy`: conversation sidebar,
-main chat workspace, and right information panel. Code, Dispatch, Gateway, Knowledge,
-Knowledge Graph, and Microsoft surfaces are registry-defined integration slots only;
-they remain hidden by default and are not current product capability.
+design reference only; the active shell direction is now hybrid `1a Airy + 1b rail`:
+56px product rail, contextual Cowork sidebar, main chat workspace, and right information
+panel. Dispatch, Gateway, Knowledge, Knowledge Graph, and Microsoft 365 are visible
+registry-defined integration slots in `awaiting_integration` state only; Code is planned.
+They do not show mock provider, task, graph, Microsoft, cost, or RAG data.
 
 ## Verified Baseline
 
@@ -154,34 +155,44 @@ delete/deny/redaction/persistence File Review semantics.
 
 Full L9 / release-candidate verification is **not** complete.
 
-## Integration-Ready UI Shell Foundation
+## Commercial UI Foundation and Workspace Shell
 
 ### What shipped
 
-- `1a Airy` is the active shell direction: left conversation/workspace sidebar,
-  central chat workspace, and right information panel.
+- Hybrid `1a Airy + 1b rail` is the active shell direction: 56px product rail,
+  contextual Cowork sidebar, central chat workspace, and right information panel.
+- Typography is standardized on bundled local `Be Vietnam Pro` with Segoe/Noto fallback;
+  no runtime CDN font load is required.
 - Central design tokens now cover semantic background/surface/border/text/accent,
   status colors, spacing, typography, radius, shadow, and transition.
-- A small inline SVG icon system covers Cowork, Dispatch, Gateway, Knowledge,
-  Knowledge Graph, Microsoft, Code, conversation, workspace, Skills, attachment,
-  file mutation, permission, settings, and activity affordances.
+- The inline SVG icon system covers Cowork, Dispatch, Gateway, Knowledge,
+  Knowledge Graph, Microsoft 365, Code, Workspace, Folder, File, Attachment,
+  Settings, Permission, Activity, Create, Modify, Delete, Search, Refresh, and
+  collapse/expand affordances.
 - A top-level surface registry defines `cowork`, `dispatch`, `gateway`, `knowledge`,
-  `knowledge-graph`, `microsoft`, and `code`; only `cowork` is `available` by default.
+  `knowledge-graph`, `microsoft`, and `code`; `cowork` is `available`, D1-D4 surfaces
+  are `awaiting_integration`, and `code` is `planned`.
 - D1-D4 UI contracts exist as passive integration slot interfaces only. No backend
   adapter, fake production data, or mock provider was added for those surfaces.
-- Right information panel is organized around real data-backed sections: Kế hoạch,
-  Hoạt động, Tệp, and Xem lại thay đổi. Empty states remain honest when there is no
-  runtime data.
+- Minimal Workspace Navigator is implemented as a read-only service-backed tree:
+  direct children only, lazy folder expansion, bounded list size, no recursive scan,
+  and no renderer filesystem access.
+- Workspace file preview supports bounded text/Markdown/JSON/YAML/source-code style
+  text through the existing safe preview boundary. PDF, Office, image, and direct editor
+  are not started.
+- Right information panel now has active tab semantics: Kế hoạch, Hoạt động, Tệp,
+  and Xem lại. Empty states remain honest when there is no runtime data.
 
 ### Status constraints
 
 ```text
 File Work Review: PARTIAL PASS
 D1-D4: not merged / not implemented
-Minimal Workspace Navigator: not started
+Minimal Workspace Navigator: read-only implemented
+Direct editor/PDF/Office/image preview: not started
 ```
 
-Full packaged/live regression is deferred until the external integration milestone.
+Full live regression remains deferred until after the external integration milestone.
 
 ## Next Implementation Slice
 
@@ -197,13 +208,9 @@ Packaged journeys C–L need a verification redesign split (live-agent vs determ
 Next implementation action:
 
 ```text
-Product Owner must choose the next integration milestone. Current options are
-Multi-Provider Profiles and Custom Endpoint, or Minimal Workspace Navigator after the
-File Work Review blocker is closed.
+Product Owner must choose the next integration milestone. D1-D4 may now merge into
+visible awaiting-integration surfaces without the Cowork shell claiming backend capability.
 ```
-
-Minimal Workspace Navigator has not started. Do not start it until File Work Review
-reaches PASS with evidence for all required journeys.
 
 ## Useful Verification Commands
 

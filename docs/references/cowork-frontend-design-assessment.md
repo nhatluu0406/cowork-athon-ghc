@@ -8,9 +8,18 @@ Canonical source of truth remains the Cowork GHC Git HEAD and product docs.
 
 The PDF proposes a light, airy redesign for a Cowork desktop shell. It presents three main Cowork shell directions (`1a Airy`, `1b Rail`, `1c Zen`) and additional capability screens for Cowork, Code, Structure/RAG, Microsoft 365, and Settings.
 
-The strongest direction for Cowork GHC is `1a Airy`, now adopted as the integration-ready shell foundation: conversation sidebar, main chat workspace, and right information panel. It gives the main conversation enough room while preserving space for plan, activity, files, and File Work Review. `1b Rail` is useful as a future navigation pattern when multiple real product surfaces exist. `1c Zen` is useful as a focus mode or empty-state inspiration, but it hides too much operational status to be the primary shell for a packaged agent product.
+The strongest direction for Cowork GHC is now hybrid `1a Airy + 1b rail`, adopted for
+the commercial UI foundation: 56px product rail, contextual conversation/workspace
+sidebar, main chat workspace, and right information panel. It gives the main conversation
+enough room while making D1-D4 integration surfaces visible without pretending they are
+implemented. `1c Zen` remains useful as focus-mode or empty-state inspiration, but it
+hides too much operational status to be the primary shell for a packaged agent product.
 
-The PDF is visual design reference, not product truth. Code, Structure/RAG, Microsoft 365, and concurrency controls are future surfaces that require backend/product capability. They must not appear as real tabs until the corresponding systems are implemented and accepted.
+The PDF is visual design reference, not product truth. Dispatch, Gateway, Knowledge,
+Knowledge Graph, Microsoft 365, and Code may appear in the product rail, but only with
+honest `awaiting_integration` or `planned` states until matching systems are implemented
+and accepted. No mock provider route, task, cost, graph node, Microsoft account, or RAG
+result should appear before backend support exists.
 
 ## 2. What the PDF actually proposes
 
@@ -54,7 +63,8 @@ Conversation history: compatible with left sidebar history.
 
 Risk: if made too airy, critical status may become visually soft. Cowork GHC needs clear PASS/PARTIAL/BLOCKED states and packaged verification honesty.
 
-Conclusion: recommended primary direction and current shell foundation. This does not change File Work Review acceptance; the slice remains `PARTIAL PASS`.
+Conclusion: primary content direction retained inside the hybrid shell. This does not
+change File Work Review acceptance; the slice remains `PARTIAL PASS`.
 
 ### 1b Rail
 
@@ -74,7 +84,8 @@ Conversation history: can coexist with a second sidebar, but two navigation colu
 
 Risk: encourages shipping aspirational tabs as placeholders.
 
-Conclusion: keep as future navigation inspiration, not the immediate shell.
+Conclusion: adopted as the left product rail only, with dependency-specific awaiting
+integration states so the rail does not imply backend capability.
 
 ### 1c Zen
 
@@ -98,12 +109,13 @@ Conclusion: use as focus-mode or empty-state inspiration only.
 
 ## 4. Recommended shell direction
 
-Use `1a Airy` as the main design direction, with these constraints:
+Use hybrid `1a Airy + 1b rail` as the main design direction, with these constraints:
 
 - Preserve functional truth over visual calm.
 - Keep File Work Review status visible and honest.
 - Keep packaged blocker status visible until A-L passes.
-- Do not show Code, Structure/RAG, Microsoft 365, or concurrency as active capabilities before backend support exists.
+- Do not show Code, Structure/RAG, Microsoft 365, dispatch, gateway, or concurrency as
+  active capabilities before backend support exists.
 - Do not copy FPT branding, PDF mock identities, or mock model names.
 - Let capability drive layout: a workspace panel can be better than a hard-coded `Preview` tab.
 
@@ -111,12 +123,12 @@ Use `1a Airy` as the main design direction, with these constraints:
 
 | Area | Current Cowork GHC | PDF direction | Assessment |
 |---|---|---|---|
-| Main shell | Integration-ready `1a Airy` foundation with right-panel File Work Review area | More polished conversation + side information layout | Adopted as shell foundation; acceptance honesty remains unchanged. |
+| Main shell | Commercial hybrid `1a Airy + 1b rail` foundation with right-panel File Work Review area | More polished conversation + side information layout | Adopted as shell foundation; acceptance honesty remains unchanged. |
 | Conversation history | Exists as product direction/source capability | Left sidebar history | Compatible. |
 | Provider/model | Provider readiness exists | Visible selector | Safe to adopt if backed by real settings/keyring status. |
 | Skills | Foundation pass | Skills entry in composer/settings | Safe to improve discoverability. |
 | Plan/progress | Product direction exists | Visible plan/progress panel | Safe if driven by real activity events. |
-| Files/activity | File Review exists; workspace tree not started | Plan/files panel | Adopt as information architecture; do not start navigator in this task. |
+| Files/activity | File Review exists; read-only Workspace Navigator implemented | Plan/files panel | Adopted as information architecture; navigator is service-backed and read-only. |
 | Code tab | Not current capability | Workspace/editor/terminal shell | Future staged capability; avoid IDE clone. |
 | Structure/RAG | Not current capability | Graph/knowledge tab | Requires D3 backend. |
 | Microsoft 365 | Not current capability | M365 tab | Requires D2 backend. |
@@ -134,8 +146,8 @@ Use `1a Airy` as the main design direction, with these constraints:
 
 ## 7. Elements requiring product capabilities
 
-- Workspace tree and file search require Minimal Workspace Navigator.
-- Rich preview requires preview service/policy decisions.
+- Workspace tree and loaded-entry filtering are implemented by Minimal Workspace Navigator.
+- Rich preview beyond bounded text requires preview service/policy decisions.
 - Direct text editing requires dirty state, conflict handling, permission semantics, and File Work Review integration.
 - Terminal/test output requires command execution policy and packaged verification.
 - Structure/RAG requires D3.
@@ -176,7 +188,8 @@ Microsoft 365 maps to D2. Required backend capabilities:
 - Credential isolation.
 - Error/status surface.
 
-These tabs should remain hidden, disabled as future, or clearly marked as not connected until the respective systems are accepted.
+These tabs/surfaces should remain clearly marked as not connected until the respective
+systems are accepted.
 
 ## 10. Settings assessment
 
@@ -228,7 +241,10 @@ Unify activity, plan, files, and File Work Review as real event-backed surfaces.
 
 ### UI-3 - Minimal Workspace Navigator + Rich Preview
 
-Start only after packaged A-L passes and Product Owner confirms scope. Begin read-only and preview-first.
+Status: implemented read-only after Product Owner confirmed scope for this commercial UI pass.
+
+Keep it preview-first: direct children, lazy folder expansion, loaded-entry filter, bounded
+text preview in the right `Tệp` tab, and no editor/save/undo.
 
 ### UI-4 - Direct text editing
 
@@ -236,7 +252,9 @@ Add editing only after dirty state, conflict detection, permission semantics, an
 
 ### UI-5 - External-system tabs when matching backends are ready
 
-Define Structure/RAG, Microsoft 365, dispatch/concurrency, code, and gateway surfaces in a registry as hidden/coming-later slots only. Enable them as real product surfaces only when D1-D4 are accepted.
+Define Structure/RAG, Microsoft 365, dispatch/concurrency, code, and gateway surfaces in
+a registry as visible awaiting-integration/planned slots only. Enable them as real
+product surfaces only when D1-D4 are accepted.
 
 ### UI-6 - Final icons, motion, typography and theme polish
 
@@ -244,7 +262,8 @@ Polish after core capability truth is stable. Do not let visual polish hide part
 
 ## 13. Explicit non-goals
 
-- Do not start Minimal Workspace Navigator as part of this design assessment.
+- Do not expand Minimal Workspace Navigator beyond read-only tree/filter/text preview in
+  this design pass.
 - Do not implement Code/RAG/Microsoft tabs from the PDF in this task.
 - Do not expose concurrency controls before D1 exists.
 - Do not copy FPT branding, mock user identity, or mock model names.
