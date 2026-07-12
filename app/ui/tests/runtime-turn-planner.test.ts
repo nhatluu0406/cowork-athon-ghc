@@ -57,3 +57,14 @@ test("planRuntimeTurn plans new_turn when runtime terminal", async () => {
     assert.equal(plan.priorMessages.length, 2);
   }
 });
+
+test("planRuntimeTurn plans new_turn after cancelled conversation status", async () => {
+  const client = {
+    getRuntimeSession: async () => {
+      throw new Error("should not fetch terminal runtime");
+    },
+  } as unknown as ServiceClient;
+  const plan = await planRuntimeTurn(client, { ...baseRecord(), status: "cancelled" });
+  assert.equal(plan.action, "new_turn");
+  if (plan.action === "new_turn") assert.equal(plan.reason, "terminal");
+});
