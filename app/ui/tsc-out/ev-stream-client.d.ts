@@ -22,13 +22,15 @@
  * which `EventSource` cannot set. The token is used ONLY in that header — it is never passed
  * to `onView`, written to the DOM, or logged.
  */
-import { type SessionId } from "@cowork-ghc/contracts";
+import { type EvEvent, type SessionId } from "@cowork-ghc/contracts";
 import { type SessionView } from "@cowork-ghc/service/execution";
 export interface EvStreamDeps {
     readonly baseUrl: string;
     /** Per-launch client token — used only in the Authorization header; never rendered. */
     readonly clientToken: string;
     readonly sessionId: SessionId;
+    /** Called with each folded EV event (for activity timeline ordering). */
+    readonly onEvent?: (event: EvEvent) => void;
     /** Called with each folded, authoritative view (coalesced). */
     readonly onView: (view: SessionView) => void;
     /** Non-secret transport-failure message sink (e.g. to render an honest error). */

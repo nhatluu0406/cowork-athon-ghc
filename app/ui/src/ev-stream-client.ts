@@ -66,6 +66,8 @@ export interface EvStreamDeps {
   /** Per-launch client token — used only in the Authorization header; never rendered. */
   readonly clientToken: string;
   readonly sessionId: SessionId;
+  /** Called with each folded EV event (for activity timeline ordering). */
+  readonly onEvent?: (event: EvEvent) => void;
   /** Called with each folded, authoritative view (coalesced). */
   readonly onView: (view: SessionView) => void;
   /** Non-secret transport-failure message sink (e.g. to render an honest error). */
@@ -154,6 +156,7 @@ export function startEvStream(deps: EvStreamDeps): EvStreamHandle {
 
   const apply = (event: EvEvent): void => {
     view = reduceEv(view, event);
+    deps.onEvent?.(event);
     emit();
   };
 

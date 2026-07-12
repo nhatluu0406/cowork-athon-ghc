@@ -104,9 +104,18 @@ export interface ConversationSummary {
     readonly updatedAt: string;
     readonly messageCount: number;
 }
+/** Redacted activity metadata from conversation persistence (no secrets). */
+export interface PersistedActivitySnapshot {
+    readonly items: readonly Record<string, unknown>[];
+    readonly fileChanges: readonly Record<string, unknown>[];
+    readonly permissionHistory: readonly Record<string, unknown>[];
+    readonly readPaths: readonly string[];
+    readonly terminalState: string | null;
+}
 export interface ConversationRecord extends ConversationSummary {
     readonly messages: readonly ConversationMessage[];
     readonly model?: ModelRef;
+    readonly activity?: PersistedActivitySnapshot;
 }
 export interface CreateConversationInput {
     readonly workspacePath: string;
@@ -196,11 +205,19 @@ export interface ServiceClient {
         readonly title?: string;
         readonly status?: ConversationStatus;
         readonly runtimeSessionId?: string | null;
+        readonly activity?: Record<string, unknown>;
     }): Promise<ConversationRecord>;
     deleteConversation(id: string): Promise<void>;
     appendConversationMessage(id: string, role: "user" | "assistant", text: string): Promise<ConversationRecord>;
     /** Reconnect to an OpenCode session after service restart (when still available). */
     continueRuntimeSession(sessionId: string): Promise<ContinueSessionResult>;
+    previewWorkspaceFile(relativePath: string): Promise<{
+        readonly relativePath: string;
+        readonly kind: "text" | "binary" | "missing";
+        readonly content?: string;
+        readonly truncated: boolean;
+        readonly sizeBytes: number;
+    }>;
     /**
      * List the pending permission requests (CGHC-017, P1). The UI renders these honestly and
      * never fabricates activity — the list is empty when nothing is awaiting a decision.

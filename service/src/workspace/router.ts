@@ -21,9 +21,11 @@ import {
 } from "./validate.js";
 import { nodeExistenceProbe } from "./probe.js";
 import type { RecentExistenceProbe, RecentWorkspaces, RecentWorkspaceView } from "./recent.js";
+import { readWorkspaceFilePreview } from "./file-preview.js";
 
 export const WORKSPACE_GRANT_PATH = "/v1/workspace/grant";
 export const WORKSPACE_RECENT_PATH = "/v1/workspace/recent";
+export const WORKSPACE_FILE_PREVIEW_PATH = "/v1/workspace/file-preview";
 
 /**
  * Malformed grant request. Extends {@link BadRequestError} so the boundary dispatcher maps it
@@ -45,6 +47,8 @@ export type WorkspaceGrantResponse =
 export interface WorkspaceRouterOptions {
   /** Single source of truth for the MRU recent list. */
   readonly recent: RecentWorkspaces;
+  /** Active workspace root for file preview (non-secret). */
+  readonly activeWorkspaceRoot?: () => string | undefined;
   /** Filesystem seam for validation; defaults to the real `node:fs` probe. */
   readonly fsProbe?: WorkspaceFsProbe;
   /** Existence probe for the recent list; defaults to the real `node:fs` probe. */
@@ -94,6 +98,30 @@ export function createWorkspaceRouter(options: WorkspaceRouterOptions): Boundary
         handler: async (): Promise<RouteResult<{ recent: readonly RecentWorkspaceView[] }>> => {
           const list = await recent.listWithAvailability(existsProbe);
           return { status: 200, data: { recent: list } };
+        },
+      },
+      {
+        method: "GET",
+        path: WORKSPACE_FILE_PREVIEW_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const relativePath = ctx.url.searchParams.get("path")?.trim();
+          if (relativePath === undefined || relativePath.length === 0) {
+            throw new WorkspaceRequestError("path is required.");
+          }
+          if (relativePath.includes("..") || relativePath.startsWith("/") || /^[a-zA-Z]:/u.test(relativePath)) {
+            throw new WorkspaceRequestError("path must be workspace-relative.");
+          }
+          const root = options.activeWorkspaceRoot?.();
+          if (root === undefined) {
+            return { status: 404, data: { error: "no_active_workspace" } };
+          }
+          try {
+            const preview = await readWorkspaceFilePreview(root, relativePath);
+            return { status: 200, data: { preview } };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Không đọc được tệp.";
+            return { status: 400, data: { error: "preview_failed", message } };
+          }
         },
       },
     ],

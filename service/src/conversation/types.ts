@@ -23,6 +23,43 @@ export interface ConversationMessage {
   readonly at: string;
 }
 
+/** Redacted activity metadata persisted for session reopen (no secrets / raw EV). */
+export interface PersistedActivitySnapshot {
+  readonly items: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly label: string;
+    readonly status: string;
+    readonly at: string;
+    readonly seq: number;
+    readonly toolName?: string;
+    readonly callId?: string;
+    readonly summary?: string;
+    readonly relativePath?: string;
+    readonly operation?: string;
+    readonly detail?: string;
+  }[];
+  readonly fileChanges: readonly {
+    readonly id: string;
+    readonly operation: string;
+    readonly relativePath: string;
+    readonly at: string;
+    readonly seq: number;
+    readonly callId?: string;
+  }[];
+  readonly permissionHistory: readonly {
+    readonly id: string;
+    readonly requestId: string;
+    readonly at: string;
+    readonly actionLabel: string;
+    readonly targetSummary: string;
+    readonly decision: string;
+    readonly outcomeLabel: string;
+  }[];
+  readonly readPaths: readonly string[];
+  readonly terminalState: string | null;
+}
+
 /** Summary row for list/search (no messages). */
 export interface ConversationSummary {
   readonly id: string;
@@ -41,6 +78,7 @@ export interface ConversationSummary {
 export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
+  readonly activity?: PersistedActivitySnapshot;
 }
 
 export interface CreateConversationInput {

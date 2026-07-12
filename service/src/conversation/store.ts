@@ -11,6 +11,7 @@ import type {
   ConversationSummary,
   CreateConversationInput,
   ConversationStatus,
+  PersistedActivitySnapshot,
 } from "./types.js";
 import { normalizeTitle, titleFromFirstMessage } from "./title.js";
 
@@ -21,6 +22,7 @@ export interface ConversationStore {
   rename(id: string, title: string): Promise<ConversationRecord>;
   updateStatus(id: string, status: ConversationStatus): Promise<ConversationRecord>;
   setRuntimeSession(id: string, runtimeSessionId: string | null): Promise<ConversationRecord>;
+  setActivity(id: string, activity: PersistedActivitySnapshot): Promise<ConversationRecord>;
   appendMessage(id: string, message: AppendMessageInput): Promise<ConversationRecord>;
   delete(id: string): Promise<boolean>;
   recoverStaleRunning(): Promise<number>;
@@ -171,6 +173,10 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         updatedAt: clock(),
         status: runtimeSessionId === null ? record.status : "ready",
       }));
+    },
+
+    setActivity(id, activity) {
+      return mutate(id, (record) => ({ ...record, activity, updatedAt: clock() }));
     },
 
     async appendMessage(id, message) {

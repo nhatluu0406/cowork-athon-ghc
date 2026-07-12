@@ -31,6 +31,11 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Multi-conversation UI | PASS | Sidebar, search, rename, delete (metadata) |
 | Interrupted session recovery | PASS | `running` → `interrupted` on service boot |
 | OpenCode true resume | PARTIAL | Chỉ khi cùng runtime session chưa terminal; sau terminal dùng phiên tiếp nối |
+| Activity timeline (EV → UI) | PASS | `app/ui/tests/activity-model.test.ts` |
+| Verified file-change panel | PASS | Chỉ từ EV `file_mutation` |
+| Permission history (read-only) | PASS | Từ quyết định modal thật |
+| File preview API | PASS | `service/tests/workspace-file-preview.test.ts` |
+| Activity persistence on reopen | PASS | `conversation-store` `setActivity` |
 
 ## Regression không-live
 
@@ -52,7 +57,8 @@ node tools/verify/minimal-packaged-smoke.mjs
 ## Còn thiếu / chưa đủ productized
 
 - Template re-run / workflow replay packaged smoke.
-- Packaged live journey A–D với inference (tùy chọn; deterministic đã có).
+- Diff before/after đầy đủ cho file sửa (slice activity chỉ preview nội dung hiện tại).
+- Packaged live journey A–D với inference (tùy chọn; deterministic đã có trong `activity-presentation-packaged.mjs`).
 - L9 release verification đầy đủ (ngoài regression nhẹ hiện tại).
 
 ## Ghi chú bảo mật
