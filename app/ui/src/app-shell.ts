@@ -46,6 +46,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { augmentPromptWithContext } from "./transcript-context.js";
+import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import {
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
@@ -550,7 +551,8 @@ async function finalizeConversationTurn(
 
   state.lastView = view;
   state.assistantText = resolved.text;
-  updateAssistantBubble(state, resolved.text);
+  const displayText = sanitizeAssistantForDisplay(resolved.text);
+  updateAssistantBubble(state, displayText);
   state.activityLive = false;
 
   const phase =
@@ -558,7 +560,7 @@ async function finalizeConversationTurn(
       ? runtimePhaseForCompleted(resolved, terminal)
       : mapTerminalToRuntimePhase(terminal);
   await state.conv.setRuntimePhase(phase);
-  await state.conv.recordAssistantMessage(resolved.text);
+  await state.conv.recordAssistantMessage(sanitizeAssistantForDisplay(resolved.text));
   const turnStatus =
     terminal === "completed"
       ? "completed"
@@ -603,7 +605,7 @@ function bindEvStream(
       touchStreamActivity(state);
       state.lastView = view;
       state.assistantText = view.text;
-      updateAssistantBubble(state, view.text);
+      updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
       refreshActivityUi(state, dom);
       if (view.terminal !== null) {
         void finalizeConversationTurn(state, dom, view, handlers, sessionId);

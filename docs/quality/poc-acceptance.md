@@ -39,8 +39,8 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Tool-using conversation finalization | PASS | `app/ui/tests/session-finalization.test.ts`; packaged `conversation-finalization-packaged.mjs` |
 | Final response source (stream / fetch / fallback) | PASS | `text-part-mapper`, `session-finalization`, `ev-reducer` late-token grace |
 | Multi-turn trong cùng Cowork conversation | PASS | `runtime-turn-planner`, `transcript-context`, atomic PATCH; packaged `multi-turn-packaged.mjs` |
-| Multi-turn tool create/modify/read | PASS | packaged `multi-turn-tool-packaged.mjs` (3 tool turns, workspace verify) |
-| Denied permission + next-turn recovery (same conversation) | PASS | packaged `multi-turn-tool-packaged.mjs` + `planRuntimeTurn` cancelled status |
+| Multi-turn tool create/modify/read | PASS | `multi-turn-tool-packaged.mjs` |
+| Multi-turn context isolation (no wrapper leak) | PASS | `message-role-ev-mapper`, `assistant-output`; packaged `multi-turn-context-packaged.mjs` |
 | Runtime turn history persisted | PASS | `service/tests/conversation-multi-turn.test.ts` |
 | Last-active conversation on relaunch | PASS | `GET /v1/conversations/last-active` + UI auto-select |
 
@@ -59,8 +59,8 @@ Không gọi DeepSeek, không cần API key, không tạo process lâu dài.
 ```powershell
 npm run package:win
 node tools/verify/minimal-packaged-smoke.mjs
+node tools/verify/multi-turn-context-packaged.mjs
 node tools/verify/multi-turn-tool-packaged.mjs
-node tools/verify/multi-turn-packaged.mjs
 node tools/verify/conversation-finalization-packaged.mjs
 ```
 

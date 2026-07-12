@@ -29,6 +29,7 @@ Mục tiêu: người dùng quản lý, mở lại và tiếp tục phiên một
 - ~~Xóa metadata session (không xóa workspace/credential).~~ **DONE**
 - ~~**Multi-turn trong cùng Cowork conversation** — runtime turn liên kết, context bounded, relaunch restore.~~ **DONE** (2026-07-12) — `multi-turn-packaged.mjs`
 - ~~**Multi-turn tool regression** — create/modify/read + deny/recovery packaged.~~ **DONE** (2026-07-12) — `multi-turn-tool-packaged.mjs`
+- ~~**Multi-turn context isolation** — không leak envelope/prompt vào assistant output.~~ **DONE** (2026-07-12) — `multi-turn-context-packaged.mjs`
 - Template re-run / workflow replay — **chưa** (ngoài scope slice này).
 - Packaged live journey đầy đủ — deterministic trong `session-management-packaged.mjs`; live inference tùy chọn (`COWORK_SESSION_LIVE=1`).
 

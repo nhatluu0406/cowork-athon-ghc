@@ -56,9 +56,10 @@ Cowork conversation A
 └── ...
 ```
 
-- UI và `conversation` store giữ transcript, activity, workspace binding.
+- UI và `conversation` store giữ transcript sạch (chỉ user/assistant đã sanitize), activity, workspace binding.
 - Trước mỗi user message, `planRuntimeTurn` quyết định reuse (`canPrompt`) hoặc tạo session mới.
-- Khi cần session mới, context prior được prepend deterministic (bounded) vào prompt gửi OpenCode — không lưu trong user message persisted.
+- **Context handoff (untrusted):** OpenCode v1.17.11 chỉ nhận `POST /session/{id}/message` với `parts: [{type:"text"}]` — không có native multi-message seed. Cowork GHC gửi envelope nội bộ bounded (`<<<CGHC_UNTRUSTED_PRIOR_TURNS>>>` + `<<<CGHC_CURRENT_USER_REQUEST>>>`) chỉ trên wire; **không** persist trong transcript user.
+- **Assistant extraction:** EV mapper theo dõi `message.updated` role; chỉ `message.part.*` text của **assistant** được map sang `SessionView.text`. User prompt (kể cả envelope) không bao giờ hiển thị như assistant output.
 - Event stream lọc theo `runtimeSessionId` hiện hành để tránh late events từ turn cũ.
 
 Giới hạn POC: **một runtime execution active** tại một thời điểm.

@@ -35,6 +35,11 @@ import { mapPart, type BaseAllocator } from "./part-mapper.js";
 import { mapTodos } from "./todo-mapper.js";
 import { mapTextPartSnapshot, type TextPartCursorMap } from "./text-part-mapper.js";
 import { sanitizeErrorMessage } from "./error-sanitize.js";
+import {
+  createMessageRoleTracker,
+  isAssistantMessageRole,
+  type MessageRoleTracker,
+} from "./message-role-tracker.js";
 
 export interface EvMapperOptions {
   /** The session this mapper is bound to; frames for other sessions are dropped. */
@@ -98,6 +103,7 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
   const redactError = options.redactError ?? sanitizeErrorMessage;
   let seq = options.startSeq ?? 0;
   const textPartCursors: TextPartCursorMap = new Map();
+  const messageRoles: MessageRoleTracker = createMessageRoleTracker();
 
   const alloc: BaseAllocator = (): EvBase => ({
     sessionId: options.sessionId,
@@ -139,6 +145,8 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         if (!part) return [];
         const partRaw = asRecord(asRecord(frame.properties).part);
         const toolEvents = mapPart(part, alloc);
+        const role = messageRoles.roleOf(part.messageID);
+        if (!isAssistantMessageRole(role)) return toolEvents;
         const textEvents = mapTextPartSnapshot(part, partRaw, alloc, textPartCursors);
         return textEvents.length > 0 ? [...toolEvents, ...textEvents] : toolEvents;
       }
@@ -146,8 +154,10 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         const props = asRecord(frame.properties);
         const delta = readString(props, "delta");
         if (!delta) return [];
+        const messageId = readString(props, "messageID");
+        if (!isAssistantMessageRole(messageRoles.roleOf(messageId))) return [];
         const partId =
-          readString(props, "partID") ?? readString(props, "messageID") ?? "text";
+          readString(props, "partID") ?? messageId ?? "text";
         const prev = textPartCursors.get(partId) ?? "";
         textPartCursors.set(partId, prev + delta);
         return [{ ...alloc(), kind: "token", delta }];
@@ -183,6 +193,8 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
     if (owner && owner !== options.sessionId) return [];
 
     const events = dispatch(frame);
+    // Track message roles from housekeeping frames before unmapped reporting.
+    messageRoles.noteFrame(frame);
     // A frame that produced nothing is reported as unmapped ONLY when it is neither a
     // dispatched type nor a recognised-but-ignored housekeeping type. This keeps drift
     // detection meaningful: a genuinely NEW frame type still surfaces via onUnmapped.

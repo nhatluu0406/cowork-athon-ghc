@@ -17,6 +17,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { augmentPromptWithContext } from "./transcript-context.js";
+import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
@@ -398,13 +399,14 @@ async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
     }
     state.lastView = view;
     state.assistantText = resolved.text;
-    updateAssistantBubble(state, resolved.text);
+    const displayText = sanitizeAssistantForDisplay(resolved.text);
+    updateAssistantBubble(state, displayText);
     state.activityLive = false;
     const phase = terminal === "completed"
         ? runtimePhaseForCompleted(resolved, terminal)
         : mapTerminalToRuntimePhase(terminal);
     await state.conv.setRuntimePhase(phase);
-    await state.conv.recordAssistantMessage(resolved.text);
+    await state.conv.recordAssistantMessage(sanitizeAssistantForDisplay(resolved.text));
     const turnStatus = terminal === "completed"
         ? "completed"
         : terminal === "cancelled" || terminal === "denied"
@@ -444,7 +446,7 @@ function bindEvStream(state, dom, handlers, sessionId) {
             touchStreamActivity(state);
             state.lastView = view;
             state.assistantText = view.text;
-            updateAssistantBubble(state, view.text);
+            updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
             refreshActivityUi(state, dom);
             if (view.terminal !== null) {
                 void finalizeConversationTurn(state, dom, view, handlers, sessionId);
