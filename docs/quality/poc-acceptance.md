@@ -47,7 +47,7 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Attachment dispatch honesty + secret-file safety | PASS | `attachment-honesty-packaged.mjs` journeys A–J; `dispatch-plan.test.ts`, `attachment-secret-policy.test.ts` |
 | Provider readiness + functional UX preflight | PASS | `provider-readiness-packaged.mjs` journeys A–J; `provider-readiness.test.ts`, service `assessProviderReadiness` |
 | Skills Foundation Phase 1 | PASS | `skills-foundation-packaged.mjs` A–J; discovery, invalid state, use/disable, relaunch, provenance, budget, permission isolation |
-| File Work Review | PARTIAL | `file-review-packaged.mjs` A–L harness; unit/router tests PASS; live-agent file-write steps need clean-profile re-run |
+| File Work Review | PARTIAL | Live Journey A–B PASS (`file-review-packaged.mjs`); Journey C blocked by nondeterministic model/tool selection; D–L not completed; unit/router tests PASS |
 
 ## Regression không-live
 
@@ -76,7 +76,7 @@ node tools/verify/conversation-finalization-packaged.mjs
 ## Còn thiếu / chưa đủ productized
 
 - Template re-run / workflow replay packaged smoke.
-- Diff before/after đầy đủ cho file sửa — **implemented** trong File Work Review slice (bounded); packaged live journeys cần re-run.
+- Diff before/after đầy đủ cho file sửa — **implemented** trong File Work Review slice (bounded); live Journey A–B PASS; Journey C–L cần deterministic packaged coverage bổ sung.
 - Packaged live journey A–D với inference (tùy chọn; deterministic đã có trong `activity-presentation-packaged.mjs`).
 - L9 release verification đầy đủ (ngoài regression nhẹ hiện tại).
 

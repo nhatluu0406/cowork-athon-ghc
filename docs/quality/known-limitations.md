@@ -14,6 +14,8 @@ updated_at: "2026-07-12"
 - **File review (slice mới)**: before/after snapshot + unified diff bounded (64KB snapshot, 32KB diff, 500 dòng);
   persist trên activity conversation; secret-like path redact; hash mismatch banner khi file disk đã đổi sau turn.
   Không có open-file shell bridge (chỉ copy path); không universal Preview tab; không direct editor.
+  **Packaged live**: Journey A (create) và B (modify) PASS; Journey C (delete) chưa chứng minh vì live model không
+  gọi delete tool ổn định — chưa kết luận product delete-path lỗi.
 - Attachment context (`Đã đưa tệp vào ngữ cảnh`) tách khỏi runtime read (`Đã đọc tệp`) trong activity panel.
 - Activity lịch sử không replay animation live khi mở lại conversation.
 - OpenCode `permission.asked` / `permission.replied` không map sang timeline — quyền qua API Cowork + modal.
@@ -35,6 +37,8 @@ updated_at: "2026-07-12"
 
 - Full L9 / release-candidate verification PASS is incomplete. Partial packaged evidence exists, but the latest interactive UX pass did not complete live streaming/tool/file/permission/cancel/provider-recovery/native-picker journeys in one release-candidate run.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
+- **File Work Review packaged**: PARTIAL PASS — live Journey A–B PASS; Journey C blocked by nondeterministic model/tool selection; D–L not completed in latest run.
+- **Open verification decision**: Live LLM behavior must not be the sole mechanism used to verify deterministic delete/deny/redaction/persistence File Review semantics. A deterministic packaged product-path suite is still required.
 
 ## Attachments (Phase 1 + honesty)
 
