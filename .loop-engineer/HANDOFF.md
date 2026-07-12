@@ -1,73 +1,68 @@
-# Cowork GHC — Handoff (Codex)
+# Cowork GHC - Handoff
 
-Bàn giao ngắn gọn để Codex tiếp quản mà không cần lịch sử hội thoại của Claude. Cập nhật 2026-07-12.
+Updated: 2026-07-12
 
-## Bối cảnh
-- **Active agent:** Loop Engineer Lead (một agent, tuần tự). Chế độ mặc định: **`LEAN`**.
-- **Loop hiện tại:** **L6 (Implementation) = `RUNNING`, gate `PARTIAL`.** **KHÔNG bắt đầu L7.**
-- **Git:** repo **chưa** `git init`. Pass này chỉ chuẩn bị baseline an toàn; PO tự init + commit.
+## Current State
 
-## Đã hoàn tất & verify thật (unit-level, có test + review độc lập)
-- Runtime pin + supervision/identity + Windows orphan reaper; loopback service boundary (token-guarded).
-- Credential store OS-backed (keyring, ref-only, inject-at-spawn); redaction/diagnostics.
-- Workspace boundary + validation; permission enforcement tại execution boundary; file-mutation audit.
-- Provider port + SSRF hardening; EV event contract; session orchestration; two-hop SSE streaming.
-- Settings store; clean.bat allowlist; lifecycle `.bat`; packaged **launch-crash fix** (`.cjs` bundles).
-- Test suite xanh ở mức unit/integration; `tsc` strict clean. Chi tiết: `.loop-engineer/evidence/`.
+- Current commit: pending (service reachability fix commit after `bcffc9d`)
+- Working tree: partial Slice 2 renderer workspace wiring remains uncommitted
+- Loop: `L6` Implementation = `RUNNING`
+- Gate: `PARTIAL`
+- Packaged service reachability blocker: **RESOLVED**
+- Do not start `L7`
+- Web remains `DEFERRED`
 
-## Mới chỉ scaffold / chưa usable trong packaged app
-- Renderer onboarding (chọn folder, settings LLM, nhập credential, chat) **chưa hoàn chỉnh** trong bản
-  đóng gói; backend cho onboarding + connect-live có nhưng **chưa verify end-to-end**.
+## Root Cause (Packaged Service Reachability)
 
-## Packaged app — thất bại/UNVERIFIED hiện tại
-- Codex Slice 1 baseline (2026-07-12): rebuilt `win-unpacked` packaged app **boots** when
-  `ELECTRON_RUN_AS_NODE` is not inherited, loads `main.cjs`, and starts a token-guarded
-  settings-only loopback service. Verified listener: packaged main process owned `127.0.0.1:11109`;
-  `/v1/health` returned 401 without token; PID cleanup left no Cowork/OpenCode process or listener.
-- Live service restart into OpenCode **chưa verify** từ packaged GUI sau khi workspace/provider/credential
-  được cấu hình.
-- Folder/workspace picker, provider/model/credential settings: **UNVERIFIED** trong package.
-- **Chưa có luồng an toàn hoàn chỉnh để PO nhập DeepSeek token.**
-- **Chưa** verify live OpenCode session từ packaged app.
-- GUI/UX quality vs Claude Cowork / OpenWork: **`UNVERIFIED`**.
+The settings-only loopback service was started in-process correctly, but success was reported from socket bind alone. Startup trace markers such as `service_starting` and `controller_start_dispatched` appear **before** the settings-only listener exists (live launch is attempted first, then keyring-backed composition runs). Probing `/v1/health` during that window times out even though the eventual `settings_only_started` base URL is valid.
 
-## Task đã reopen → `STALE` (unit evidence vẫn hợp lệ, cần re-verify end-to-end)
-- `CGHC-008` workspace picker · `CGHC-011` secure add-credential + test-connection · `CGHC-019`
-  provider/model settings. `CGHC-028` (release-verify) giữ `IN_PROGRESS` làm anchor của gate PARTIAL.
-- Không reopen task infra/security đã có evidence hợp lệ.
+Fix: after bind, poll authenticated `GET /v1/health` with the per-launch token (`wait-for-health.ts`) before logging `settings_only_ready` / `service_started`.
 
-## Đã dọn trong pass bàn giao
-- OpenWork source (`.loop-engineer/source/openwork`, 123M + nested `.git`) **đã xoá**; provenance:
-  `docs/references/openwork-reference.md`.
-- Thêm `README.md`, `.gitignore`, `.loop-engineer/MANIFEST.md`, đồng bộ `STATUS.md`/`TASKS.md` với YAML.
-- Đồng bộ adapter Claude/Codex; `LEAN` là mặc định trong `.agent-workflow/workflow.yaml`.
+## Verified In This Checkpoint
 
-## Codex đọc trước tiên
-1. `AGENTS.md` (điểm vào) · 2. file này · 3. `.loop-engineer/state/STATUS.md` + `TASKS.md`
-4. `.agent-workflow/workflow.yaml` · 5. `docs/architecture/cowork-ghc-implementation-design.md` + ADRs.
-Bản đồ file hiện hành: `.loop-engineer/MANIFEST.md`.
+Packaged app `dist-app/win-unpacked/Cowork GHC.exe`:
 
-## Verify nhanh repository
-```
-node tools/loop-engineer/cli.mjs status     # loop/task/gate
-node tools/loop-engineer/cli.mjs verify      # schema + state consistency (kỳ vọng: PASS)
-npm install && npm run typecheck && npm test # (tuỳ chọn) build/test — không gọi live LLM
+- Electron `whenReady` completes; live launch falls back to settings-only when unconfigured
+- Trace shows `settings_only_ready` then `settings_only_started` then `service_started: http://127.0.0.1:<port>`
+- Unauthenticated `GET /v1/health` on the reported base URL returns **401** (expected token-guarded boundary)
+- Listener owned by packaged main PID on `127.0.0.1:<ephemeral-port>`
+- Root PID stop → zero `Cowork GHC` / `opencode` orphans; listener gone
+
+Focused tests:
+
+```powershell
+node --import tsx --test app/shell/tests/wait-for-health.test.ts app/shell/tests/service-controller.test.ts app/shell/tests/lifecycle.test.ts app/shell/tests/tiered-start-service.test.ts
+npm run package:win
 ```
 
-## Next product slice (đề xuất, theo thứ tự)
-1. Packaged service **auto-start/connect**: onboarding/settings-only service now boots in package;
-   continue with live restart/readiness once config exists.
-2. **Workspace folder picker** usable trong package.
-3. **Provider/model/settings** usable.
-4. **Secure DeepSeek credential input** (OS keyring; token chỉ vào child ENV; không log/chat/source).
-5. **Real OpenCode session** từ packaged app (streaming, permission Allow/Deny, file-on-disk).
-Sau đó đưa `CGHC-028` (packaged E2E) về PASS.
+## Files Changed (Service Reachability Commit)
 
-## Điều kiện để L6 hoàn tất
-Tất cả task `DONE` (gồm 3 task reopen) **và** `CGHC-028` release-verify PASS trên **bản đóng gói**
-(cài từ installer, chạy full critical path init→start→workspace→provider/model→session→streaming→
-permission→file-on-disk→stop→resume→clean, gồm cả leg provider-error). Chỉ khi đó mới xét L7.
+- `app/shell/src/service/wait-for-health.ts` (new)
+- `app/shell/tests/wait-for-health.test.ts` (new)
+- `app/shell/src/main.ts`
+- `app/shell/src/service/service-controller.ts`
+- `app/shell/tests/service-controller.test.ts`
+- `app/shell/src/lifecycle.ts`
+- `.loop-engineer/state/*.yaml` + Markdown views + this handoff
 
-## Ràng buộc
-- **Không** bắt đầu L7. **Không** build web (DEFERRED, ADR 0007). Reviewer ≠ implementer.
-- DeepSeek token do PO cấp qua secure credential flow; live LLM test bounded, opt-in, không vào default suite.
+## Still Uncommitted / Unverified
+
+Renderer workspace wiring (not part of the reachability commit):
+
+- `app/ui/src/service-client.ts`, `workspace-picker.ts`, `main.ts`, tests, `tsc-out/*`
+
+Packaged GUI still unverified:
+
+- Native folder picker
+- Provider/model settings
+- Secure keyring credential entry
+- DeepSeek test connection
+- Live OpenCode session
+
+## Credential / Paid API
+
+- No DeepSeek credential was accessed in this checkpoint.
+
+## Precise Next Action
+
+Verify packaged workspace picker end-to-end (`CGHC-008` re-verify) using `dist-app/win-unpacked/Cowork GHC.exe` once the renderer reaches `ready`. Do not start provider/model, credentials, DeepSeek, live OpenCode, or L7.

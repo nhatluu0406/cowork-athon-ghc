@@ -131,7 +131,7 @@ test("token hygiene: the token reaches the bridge but is never passed to the log
   for (const line of lines) {
     assert.equal(line.includes(TOKEN), false, `log line leaked the token: ${line}`);
   }
-  assert.ok(lines.includes("service_started"));
+  assert.ok(lines.some((line) => line.startsWith("service_started:")));
   assert.ok(lines.includes("service_stopped"));
 });
 

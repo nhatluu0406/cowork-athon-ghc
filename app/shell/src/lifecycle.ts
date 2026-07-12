@@ -32,6 +32,8 @@ export interface ShellLifecycleDeps {
   readonly controller: Pick<ServiceController, "start" | "stop">;
   /** Electron-specific ready work: protocol, CSP, IPC handlers, window creation. */
   readonly onReady: () => void;
+  /** Optional fixed-marker trace used for packaged startup diagnostics. */
+  readonly trace?: (marker: string) => void;
 }
 
 /**
@@ -54,8 +56,13 @@ export function installQuitHandler(deps: ShellLifecycleDeps): void {
  * (non-blocking) live-service start, and run the electron-specific ready work.
  */
 export async function runShellLifecycle(deps: ShellLifecycleDeps): Promise<void> {
+  deps.trace?.("lifecycle_install");
   installQuitHandler(deps);
+  deps.trace?.("before_when_ready");
   await deps.app.whenReady();
+  deps.trace?.("after_when_ready");
   void deps.controller.start();
+  deps.trace?.("controller_start_dispatched");
   deps.onReady();
+  deps.trace?.("on_ready_complete");
 }
