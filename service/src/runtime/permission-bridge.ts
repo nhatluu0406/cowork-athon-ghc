@@ -9,6 +9,7 @@
 
 import { asRecord, isRawOpencodeEvent, readArray, readString } from "../execution/opencode-events.js";
 import type { OpencodeToolPermissionEvent, ToolPermissionProxy } from "../files/tool-permission-proxy.js";
+import { resolveWorkspaceRelativePath } from "../workspace/resolve-relative.js";
 
 export interface PermissionBridgeOptions {
   readonly proxy: ToolPermissionProxy;
@@ -47,24 +48,6 @@ function mapPermissionToTool(permission: string): string {
   }
 }
 
-/** Convert an absolute in-workspace path to a workspace-relative path for the guard. */
-function toWorkspaceRelative(workspaceRoot: string, target: string): string | undefined {
-  const root = workspaceRoot.replace(/[\\/]+$/, "");
-  const normTarget = target.replace(/\\/g, "/");
-  const normRoot = root.replace(/\\/g, "/");
-  const lowerTarget = normTarget.toLowerCase();
-  const lowerRoot = normRoot.toLowerCase();
-  if (lowerTarget === lowerRoot) return ".";
-  const prefix = `${lowerRoot}/`;
-  if (lowerTarget.startsWith(prefix)) {
-    return normTarget.slice(normRoot.length + 1);
-  }
-  if (!/^[a-zA-Z]:/.test(target) && !target.startsWith("/") && !target.startsWith("\\")) {
-    return target;
-  }
-  return undefined;
-}
-
 /** Prefer a concrete filepath from metadata; fall back to the first non-glob pattern. */
 function resolveTargetPath(props: Record<string, unknown>): string | undefined {
   const metadata = asRecord(props.metadata);
@@ -96,8 +79,11 @@ export function createPermissionBridge(options: PermissionBridgeOptions): Permis
       if (seen.has(requestId)) return;
 
       const rawPath = resolveTargetPath(props);
-      const relativePath =
-        rawPath !== undefined ? toWorkspaceRelative(options.workspaceRoot, rawPath) : undefined;
+      const resolved =
+        rawPath !== undefined
+          ? await resolveWorkspaceRelativePath(options.workspaceRoot, rawPath)
+          : undefined;
+      const relativePath = resolved?.ok ? resolved.relativePath : undefined;
       const event: OpencodeToolPermissionEvent = {
         requestId,
         sessionId,

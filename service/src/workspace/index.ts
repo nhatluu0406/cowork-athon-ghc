@@ -26,6 +26,10 @@ export {
 } from "./path-safety.js";
 export { realPathInsideRoot, realpathAllowingMissing } from "./realpath.js";
 export {
+  resolveWorkspaceRelativePath,
+  type ResolveWorkspaceRelativeResult,
+} from "./resolve-relative.js";
+export {
   validateWorkspaceSelection,
   nodeFsProbe,
   type WorkspaceValidation,
