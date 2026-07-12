@@ -163,7 +163,18 @@ export function createServiceClient(baseUrl, clientToken) {
                 method: "DELETE",
             });
         },
-        appendConversationMessage: async (id, role, text) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, { method: "POST", body: JSON.stringify({ role, text }) })).conversation,
+        appendConversationMessage: async (id, role, text, attachments) => (await call(`/v1/conversations/${encodeURIComponent(id)}/messages`, {
+            method: "POST",
+            body: JSON.stringify({
+                role,
+                text,
+                ...(attachments !== undefined && attachments.length > 0 ? { attachments } : {}),
+            }),
+        })).conversation,
+        readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) => call("/v1/workspace/attachment-read", {
+            method: "POST",
+            body: JSON.stringify({ absolutePath, priorBytesUsed }),
+        }),
         continueRuntimeSession: async (sessionId) => call(`/v1/session/${encodeURIComponent(sessionId)}/continue`, { method: "POST", body: "{}" }),
         getRuntimeSession: async (sessionId) => {
             const data = await call(`/v1/session/${encodeURIComponent(sessionId)}`);

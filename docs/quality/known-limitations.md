@@ -32,10 +32,20 @@ updated_at: "2026-07-12"
 - L9 release verification đầy đủ chưa bắt đầu.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
 
+## Attachments (Phase 1)
+
+- **Workspace text file attachments: verified** — `.txt`, `.md`, `.json`, source text phổ biến; max 32KB/tệp, 64KB tổng/turn; dispatch budget 12k ký tự chung với prior-turn context.
+- **Folder attachments: not started**
+- **Image/PDF/document parsing: not started**
+- **Drag-and-drop: not started**
+- Đính kèm chỉ cấp **read context snapshot** — không bypass permission sửa/xóa file.
+- Raw file content và envelope nội bộ (`<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>`) không persist trong transcript.
+- Không claim bảo vệ tuyệt đối trước prompt injection trong file đính kèm — chỉ envelope untrusted + yêu cầu user hiện tại được ưu tiên.
+
 ## Tính năng chưa có
 
 - Skills chưa available trong GUI người dùng cuối.
-- Attachments/context input chưa available (`Tệp đã đọc` chỉ từ tool read/list thật).
+- `Tệp đã đọc` trong activity gồm cả attachment context (Phase 1) và tool read/list thật.
 - Web support vẫn `DEFERRED`.
 
 ## UX

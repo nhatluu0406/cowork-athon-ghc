@@ -26,6 +26,8 @@ export function createShellBridge(ipc: BridgeIpc): CoworkShellBridge {
   return {
     getBootstrap: () => ipc.invoke(IpcChannel.GetBootstrap),
     pickWorkspaceFolder: () => ipc.invoke(IpcChannel.PickWorkspaceFolder),
+    pickWorkspaceFile: (workspaceRoot: string) =>
+      ipc.invoke(IpcChannel.PickWorkspaceFile, workspaceRoot),
     connectLive: () => ipc.invoke(IpcChannel.ConnectLive),
   };
 }
