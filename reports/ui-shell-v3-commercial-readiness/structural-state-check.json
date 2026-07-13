@@ -1,5 +1,6 @@
 {
-  "generatedAt": "2026-07-13T04:19:23.520Z",
+  "generatedAt": "2026-07-13T04:58:44.795Z",
+  "gitHead": "4688f39eb6245ea2b6f80194f77e5cdd9e147f91",
   "structural": [
     {
       "label": "provider-missing",
@@ -160,9 +161,9 @@
       "surface": "cowork",
       "workMode": "cowork",
       "activeViews": [
-        "cowork"
+        "settings"
       ],
-      "settingsOpen": false,
+      "settingsOpen": true,
       "sidebarVisible": false,
       "inspectorVisible": false,
       "shellRoots": 1,
@@ -182,9 +183,9 @@
       "surface": "cowork",
       "workMode": "cowork",
       "activeViews": [
-        "cowork"
+        "settings"
       ],
-      "settingsOpen": false,
+      "settingsOpen": true,
       "sidebarVisible": false,
       "inspectorVisible": false,
       "shellRoots": 1,
