@@ -1,6 +1,6 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R1 — **not** implemented product capability.
+**Status:** design prototype R2 — **not** implemented product capability.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
@@ -218,12 +218,12 @@ Query: `?state=<id>` or footer **Prototype states** panel.
 | State ID | Demonstrates |
 |---|---|
 | `cowork-active` | Default conversation, DeepSeek configured |
+| `sidebar-cowork` | Cowork sidebar tab (conversation list only) |
 | `sidebar-workspace` | Workspace sidebar tab |
-| `file-document` | File document tab + inspector |
+| `file-document` | File document tab (breadcrumb + preview) |
 | `cowork-inspector-open` | Inspector visible |
 | `gateway` | Gateway awaiting D4 (dedicated surface) |
 | `knowledge-graph` | Knowledge Graph awaiting D3 (full canvas) |
-| `narrow-900` | 900px layout (dev preview) |
 | `provider-missing` | Provider not configured (consistent fixture) |
 | `waiting-permission` | Permission banner with text CTA |
 
@@ -231,27 +231,85 @@ Fixture copy only — no FPT branding, no live provider.
 
 ---
 
-## 12. Screenshots (R1)
+## 12. Visibility invariants and screenshot validation
 
-Captured under `reports/ui-shell-v3-r1/`:
+### Root cause (R1 invalid evidence)
+
+R1 screenshots under `reports/ui-shell-v3-r1/` are **invalid** as Product Owner evidence. They were captured while structural visibility bugs were present:
+
+1. **`[hidden]` overridden by layout CSS** — `.sidebar`, `.sidebar__panel`, `.view`, `.doc-panel`, `.inspector`, and `.banner` used `display: flex` without a global hidden rule, so `hidden` attributes did not remove elements from layout or paint order.
+2. **Grid auto-placement** — `drawer-scrim` inside `.shell` grid consumed the main column when sidebar/scrim were `display: none`, collapsing main to 0px width on integration surfaces.
+3. **Inspector leak** — closed inspector still had a 1px bounding box in the inspector grid track.
+
+### Global fix
+
+```css
+[hidden] {
+  display: none !important;
+}
+```
+
+Shell children use explicit `grid-column` (rail 1, sidebar 2, main 3, inspector 4). `drawer-scrim` is outside the grid. Inspector uses `hidden` when closed (not merely zero-width track).
+
+### Assertion harness
+
+`prototype.js` exports `assertVisualState`, `collectVisualState`, `applyStateAndSettle`, and `runSequentialTransitionTest`.
+
+Before each R2 screenshot, the capture script:
+
+1. Opens a **fresh browser context** per shot.
+2. Resets application state via `applyState()` (no `documentElement.style.width` mutation).
+3. Waits two animation frames.
+4. Runs `assertVisualState(state)` — **non-zero exit if failed**.
+5. Writes machine-readable results to `reports/ui-shell-v3-r2/visual-state-check.json`.
+
+Sequential transition test (must pass before capture):
+
+`file-document → gateway → cowork-active → provider-missing → knowledge-graph`
+
+Harness also verifies assertions **fail** when two `.view` elements are forced visible.
+
+### Invariants (summary)
+
+| State class | Rules |
+|---|---|
+| Cowork conversation | 1 visible `.view` (cowork), 1 sidebar panel, 1 doc panel (conversation), transcript + composer visible, integration hidden |
+| File document | 1 doc panel (file), conversation/transcript/composer/banners hidden |
+| Integration | 1 visible `.view` (integration), no sidebar/doc panels/inspector/Cowork chrome |
+| Inspector | Closed = no visible inspector rect; open = exactly one inspector |
+| 900px | No horizontal overflow; viewport set by harness only |
+
+**R2 replaces R1 as screenshot evidence.** R2 is not accepted by Product Owner — design review artifact only.
+
+---
+
+## 13. Screenshots (R2)
+
+Captured under `reports/ui-shell-v3-r2/` (with `visual-state-check.json`):
 
 | File | State / size |
 |---|---|
 | `cowork-1920.png` | cowork-active · 1920×1080 |
 | `cowork-1366.png` | cowork-active · 1366×768 |
 | `cowork-900.png` | cowork-active · 900×768 |
+| `sidebar-cowork.png` | sidebar-cowork · 1920×1080 |
 | `sidebar-workspace.png` | sidebar-workspace · 1920×1080 |
 | `file-document.png` | file-document · 1920×1080 |
-| `inspector.png` | cowork-inspector-open · 1920×1080 |
+| `inspector-open.png` | cowork-inspector-open · 1920×1080 |
 | `gateway.png` | gateway · 1366×768 |
 | `knowledge-graph.png` | knowledge-graph · 1366×768 |
 | `provider-missing.png` | provider-missing · 1920×1080 |
+| `waiting-permission.png` | waiting-permission · 1920×1080 |
 
 Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 
+### R1 (invalid — comparison only)
+
+`reports/ui-shell-v3-r1/` retained for before/after comparison. Do not use for PO sign-off.
+
 ---
 
-## 13. Production mapping (for future implementation)
+## 14. Production mapping (for future implementation)
 
 ### Keep from current baseline
 
@@ -288,3 +346,4 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 |---|---|
 | 2026-07-13 | Initial V3 design prototype + spec on branch `design/ui-shell-v3-prototype` |
 | 2026-07-13 | **R1:** sidebar tabs, document tabs, dedicated surfaces, status bar, topbar simplification, 900px drawers, fixture consistency, new screenshots |
+| 2026-07-13 | **R2:** visibility invariants (`[hidden]` rule, grid placement, inspector leak), assertion harness, R2 screenshots + `visual-state-check.json`; R1 evidence invalidated |

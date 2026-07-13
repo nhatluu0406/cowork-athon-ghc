@@ -46,6 +46,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   height: 100%;
@@ -223,6 +227,7 @@ input {
   display: grid;
   grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr) var(--inspector-w);
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -240,6 +245,7 @@ input {
 
 /* Rail */
 .rail {
+  grid-column: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -293,6 +299,7 @@ input {
 
 /* Sidebar */
 .sidebar {
+  grid-column: 2;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -451,8 +458,10 @@ input {
 
 /* Main — never collapses */
 .main {
+  grid-column: 3;
   min-width: 0;
   min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg);
@@ -462,8 +471,10 @@ input {
 .view {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
-  height: 100%;
+  width: 100%;
+  align-self: stretch;
 }
 
 .conv-header,
@@ -671,6 +682,7 @@ input {
   place-content: center;
   padding: var(--space-6);
   text-align: center;
+  min-height: 400px;
 }
 
 .integration-empty__icon {
@@ -707,6 +719,7 @@ input {
 
 /* Inspector */
 .inspector {
+  grid-column: 4;
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -1034,12 +1047,8 @@ input {
 }
 
 .view--integration {
-  height: 100%;
-}
-
-.integration-empty {
-  height: 100%;
-  min-height: 400px;
+  flex: 1;
+  min-height: 0;
 }
 
 /* R1: Status bar */
