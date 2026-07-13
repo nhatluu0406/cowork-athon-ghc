@@ -25,6 +25,7 @@ export interface CodeEditorDom {
   readonly root: HTMLElement;
   readonly tabBar: HTMLElement;
   readonly body: HTMLElement;
+  lastLoadedKey: string | null;
 }
 
 export interface CodeEditorHandlers {
@@ -40,7 +41,7 @@ export function createCodeEditor(): CodeEditorDom {
   tabBar.setAttribute("aria-label", "Tệp đang mở");
   const body = el("div", "code-editor__body");
   root.append(tabBar, body);
-  return { root, tabBar, body };
+  return { root, tabBar, body, lastLoadedKey: null };
 }
 
 export function renderCodeEditor(
@@ -53,17 +54,25 @@ export function renderCodeEditor(
   handlers: CodeEditorHandlers,
 ): void {
   renderTabs(dom.tabBar, state, handlers);
-  dom.body.replaceChildren();
   const active = state.openFiles.find((file) => file.key === state.activeKey) ?? null;
   if (active === null) {
+    dom.lastLoadedKey = null;
+    dom.body.replaceChildren();
     dom.body.append(renderWelcome());
     return;
   }
   if (active.kind === "review") {
+    dom.lastLoadedKey = null;
+    dom.body.replaceChildren();
     const review = state.reviews.find((r) => r.id === active.reviewId) ?? null;
     dom.body.append(review === null ? renderMissingReview() : renderDiff(review));
     return;
   }
+  if (dom.lastLoadedKey === active.key) {
+    return;
+  }
+  dom.lastLoadedKey = active.key;
+  dom.body.replaceChildren();
   dom.body.append(renderPlainToolbar(active));
   const pre = el("pre", "code-editor__plain", "Đang tải xem trước...");
   dom.body.append(pre);

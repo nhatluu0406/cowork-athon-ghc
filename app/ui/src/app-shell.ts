@@ -1405,13 +1405,21 @@ function recordAttachmentActivity(
   state.activityLive = true;
 }
 
+interface SendPromptOptions {
+  readonly promptOverride?: string;
+  readonly skipAttachments?: boolean;
+}
+
 async function sendPrompt(
   state: AppState,
   dom: AppDom,
   readiness: ReturnType<typeof createReadinessController>,
   handlers: Parameters<typeof renderState>[2],
+  options?: SendPromptOptions,
 ): Promise<void> {
-  const prompt = textFromComposer(dom.composerInput);
+  const promptOverride = options?.promptOverride;
+  const skipAttachments = options?.skipAttachments ?? false;
+  const prompt = promptOverride !== undefined ? promptOverride : textFromComposer(dom.composerInput);
   if (prompt.length === 0) return;
 
   if (isComposerLocked(state)) return;
@@ -1423,7 +1431,7 @@ async function sendPrompt(
     return;
   }
 
-  const pendingSnapshot = [...state.pendingAttachments];
+  const pendingSnapshot = skipAttachments ? [] : [...state.pendingAttachments];
   const { snapshots, errors } = await readAttachmentSnapshots(state, pendingSnapshot);
   if (errors.length > 0) {
     window.alert(errors.join("\n"));
@@ -1462,9 +1470,15 @@ async function sendPrompt(
   );
   state.activeAssistant = appendMessage(dom, "assistant", "");
   const pendingCleared = state.pendingAttachments;
-  setComposerText(dom.composerInput, "");
-  state.pendingAttachments = [];
-  state.composerDrafts.delete(state.conv.state.activeConversationId);
+  if (promptOverride === undefined) {
+    setComposerText(dom.composerInput, "");
+  }
+  if (!skipAttachments) {
+    state.pendingAttachments = [];
+  }
+  if (promptOverride === undefined) {
+    state.composerDrafts.delete(state.conv.state.activeConversationId);
+  }
   await state.conv.recordUserMessage(
     prompt,
     includedMetadata.length > 0 ? includedMetadata : undefined,
@@ -1878,8 +1892,19 @@ export function mountCoworkApp(root: HTMLElement): void {
   });
 
   dom.onCodePanelSend = (text: string): void => {
-    setComposerText(dom.composerInput, text);
-    void sendPrompt(state, dom, readiness, handlers);
+    void sendPrompt(state, dom, readiness, handlers, { promptOverride: text, skipAttachments: true }).catch(
+      (error) => {
+        const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+        if (!preflight.canSend) {
+          renderComposerPreflight(dom, preflight, true);
+          renderState(dom, state, handlers);
+          return;
+        }
+        void state.conv.setRuntimePhase("failed");
+        appendMessage(dom, "assistant", safeError(error));
+        renderState(dom, state, handlers);
+      },
+    );
   };
 
   dom.sendButton.addEventListener("click", () => {
