@@ -107,12 +107,14 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const inspector = createInspectorShell();
   const statusBar = createStatusBar();
 
+  const workspaceCompanionHost = el("div", "workspace-companion-host");
+  workspaceCompanionHost.append(workspaceView.root, cowork.root);
+
   const shellFrame = el("main", "shell shell-frame");
   shellFrame.append(
     rail.root,
     sidebar.root,
-    cowork.root,
-    workspaceView.root,
+    workspaceCompanionHost,
     knowledgeView.root,
     integrationSurface,
     settingsSurface.root,
