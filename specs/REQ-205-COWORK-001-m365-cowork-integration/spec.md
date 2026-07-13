@@ -35,13 +35,45 @@ These decisions resolve the ambiguities the raw request left open. They are writ
 
 **If the PO overrides this decision**: importing React scoped *only* to the new Knowledge Panel's DOM subtree (e.g., mounting a small React root inside one `<div>` the vanilla shell owns) is possible without rewriting `app-shell.ts` wholesale — flag this preference back to speckit-planner/product-architect before `plan.md` is finalized, since it changes Phase 2 task shape materially.
 
-### D2 — M365KG backend stack runs externally; Cowork's service is a thin client, not a bundler
+### D2 — ⚠️ SUPERSEDED 2026-07-13 — see D2' below
 
-**Decision**: Neo4j, PostgreSQL, the Go backend, and `llm-svc` continue to run as an **independently started local stack** (via existing `docker-compose.yml` for Postgres/Neo4j, plus `go run`/binary and `cargo run`/binary for backend/`llm-svc`, per `E2E_TESTING_GUIDE.md`). Cowork GHC does **not** bundle, spawn, or package these processes inside the Electron installer. `/service` gains a new **thin HTTP client module** that talks only to the Go backend's REST API (`/api/knowledge/query`, `/api/entities`, `/api/graph/*`, `/api/m365/*`) at a configurable base URL (default `http://localhost:8080`). Cowork never talks to Neo4j, PostgreSQL, or `llm-svc` directly — it respects the M365KG system's own boundary (Go backend is the sole entry point; `llm-svc` is internal-only per REQ-204 §3.3).
+> **This original D2 is superseded.** Kept verbatim below for the historical record (per this
+> project's "no info lost" documentation rule) — do not implement against it. The active decision
+> is **D2'**, immediately following.
 
-**Why**: Cowork GHC is a packaged Windows desktop POC; bundling Postgres + Neo4j (JVM-class memory footprint, 1–2 GB heap per `docker-compose.yml`) + two more native processes inside an Electron installer is disproportionate to this feature's value and conflicts with the product's "local-first, lightweight" positioning. Treating M365KG as an optional, separately-managed local data source is the lower-risk, non-breaking path, and matches "one owner per child-process lifecycle" (product-architect invariant) — M365KG's own process lifecycle stays owned by its own tooling, not Cowork's.
+**Decision (superseded)**: Neo4j, PostgreSQL, the Go backend, and `llm-svc` continue to run as an **independently started local stack** (via existing `docker-compose.yml` for Postgres/Neo4j, plus `go run`/binary and `cargo run`/binary for backend/`llm-svc`, per `E2E_TESTING_GUIDE.md`). Cowork GHC does **not** bundle, spawn, or package these processes inside the Electron installer. `/service` gains a new **thin HTTP client module** that talks only to the Go backend's REST API (`/api/knowledge/query`, `/api/entities`, `/api/graph/*`, `/api/m365/*`) at a configurable base URL (default `http://localhost:8080`). Cowork never talks to Neo4j, PostgreSQL, or `llm-svc` directly — it respects the M365KG system's own boundary (Go backend is the sole entry point; `llm-svc` is internal-only per REQ-204 §3.3).
 
-**Consequence**: the feature is **unavailable** (cleanly, not broken) unless the user has the M365KG stack running and has configured its endpoint in Cowork's settings. This is a first-class state the UI must represent, not an error.
+**Why (superseded)**: Cowork GHC is a packaged Windows desktop POC; bundling Postgres + Neo4j (JVM-class memory footprint, 1–2 GB heap per `docker-compose.yml`) + two more native processes inside an Electron installer is disproportionate to this feature's value and conflicts with the product's "local-first, lightweight" positioning. Treating M365KG as an optional, separately-managed local data source is the lower-risk, non-breaking path, and matches "one owner per child-process lifecycle" (product-architect invariant) — M365KG's own process lifecycle stays owned by its own tooling, not Cowork's.
+
+**Consequence (superseded)**: the feature is **unavailable** (cleanly, not broken) unless the user has the M365KG stack running and has configured its endpoint in Cowork's settings. This is a first-class state the UI must represent, not an error.
+
+### D2' — Cowork bundles and self-provisions the M365KG stack (supersedes D2, 2026-07-13)
+
+**Decision**: Reversed by explicit Product Owner (DungPham) instruction, 2026-07-13. Cowork GHC now
+**bundles, provisions, and supervises** PostgreSQL, Neo4j, the Go backend, and `llm-svc` as child
+processes of its own Local Service, using portable (no-installer, no-Administrator) Windows
+binaries downloaded and SHA-256-verified on first run — the end user installs and configures
+nothing. Full rationale, license review (PostgreSQL License permissive; Neo4j Community GPLv3 via
+"mere aggregation" as a separate child process), and lifecycle design (a new `M365KG Stack
+Supervisor` owner extending ADR 0004's existing supervision tree) are in
+**`docs/architecture/decisions/0010-m365kg-stack-bundling.md`** — that ADR is the source of truth;
+this entry exists so `spec.md` doesn't contradict it.
+
+**Why**: D2's original "external, thin-client" model made the feature usable only in a dev/test
+environment — a real Cowork GHC end user (a business user with a packaged Windows install) cannot
+be expected to install and run Postgres/Neo4j/Go/Rust services themselves. Without self-provisioning,
+the feature is effectively unusable by the actual target user.
+
+**Consequence**: `/service`'s `KnowledgeSourceClient` (D2's thin HTTP client, unchanged) now talks
+to a **Cowork-managed local instance** by default instead of a user-managed external one; the
+"M365KG stack unreachable" degraded state (D2's original UI requirement) is now rarer in practice
+but still required — provisioning/startup can still fail (disk space, port conflict, first-run
+download failure) and must degrade cleanly, not crash.
+
+**Impact on already-implemented Phase 1/2 code**: `service/src/knowledge/m365kg-client.ts`'s
+`KnowledgeSourceClient` interface and REST contract are **unchanged** — it is still a thin client
+to a base URL; only *what starts and owns the process at that base URL* changes. No changes needed
+to Phase 1/2 code on this account alone.
 
 ### D3 — Integration mechanism: bespoke REST client + new tool, not the MCP adapter stub
 
