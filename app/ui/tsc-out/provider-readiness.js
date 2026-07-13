@@ -135,7 +135,7 @@ export function providerStatus(settings, connectionTestState = "unknown") {
     return {
         label: `${subject} · Chưa kiểm tra`,
         detail: `${model.modelID} · khoá API đã cấu hình.`,
-        ok: true,
+        ok: false,
     };
 }
 export function runtimeReadinessKind(phase) {

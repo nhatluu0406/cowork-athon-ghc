@@ -1,7 +1,7 @@
 /**
  * Conversation-level provider display.
  *
- * Multi-provider profiles are not implemented yet, so this opens the production Settings modal
+ * Multi-provider profiles are not implemented yet, so this opens the production Settings surface
  * instead of pretending to be a profile dropdown.
  */
 
