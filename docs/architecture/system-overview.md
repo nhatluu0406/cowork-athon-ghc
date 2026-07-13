@@ -163,5 +163,5 @@ Giới hạn POC: **một runtime execution active** tại một thời điểm.
 
 ## Không lặp lại tài liệu cũ
 
-Các ADR và báo cáo trong `.loop-engineer/` vẫn là provenance. Khi cần làm việc hằng ngày, đọc tài liệu ngắn trong
-`docs/product/`, `docs/quality/`, và file này trước.
+Các ADR trong `docs/architecture/decisions/` và evidence trong `reports/` là provenance. Khi cần làm việc hằng ngày, đọc tài liệu canonical trong
+`docs/README.md`, `docs/product/`, `docs/quality/`, và file này trước.
