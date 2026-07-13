@@ -10,7 +10,7 @@ node_modules/
 .pnp
 .pnp.js
 app/backend/bin/
-llm-svc/target/
+app/llm-svc/target/
 
 # --- Build / compile output ---
 dist/

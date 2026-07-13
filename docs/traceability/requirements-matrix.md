@@ -36,7 +36,7 @@
 
 | ID | Summary | Acceptance Criteria | Test Coverage | Status |
 |---|---|---|---|---|
-| REQ-204 | M365 Knowledge Graph | spec.md §16 E2E acceptance flow | Go unit/integration (`app/backend/tests`), Rust (`llm-svc/tests`), Playwright (`Frontend/tests/e2e`) | Passing (per tasks.md Phase 11 audit) |
+| REQ-204 | M365 Knowledge Graph | spec.md §16 E2E acceptance flow | Go unit/integration (`app/backend/tests`), Rust (`app/llm-svc/tests`), Playwright (`Frontend/tests/e2e`) | Passing (per tasks.md Phase 11 audit) |
 | REQ-205 | Cowork GHC ↔ M365KG integration | spec.md §3 US-1–US-5 | Planned: `service/tests/knowledge/*` (unit/contract), gated integration tests (`M365KG_INTEGRATION_TESTS=1`), new E2E scenarios (tasks.md Phase 3) | Not yet written (Not Started) |
 
 ---
