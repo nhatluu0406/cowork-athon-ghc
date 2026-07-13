@@ -21,7 +21,7 @@ function el(tag, className) {
     return node;
 }
 export function createPermissionController(deps) {
-    const intervalMs = deps.pollIntervalMs ?? 2000;
+    const intervalMs = deps.pollIntervalMs ?? 500;
     const setIntervalFn = deps.timer?.setInterval.bind(deps.timer) ?? ((h, ms) => setInterval(h, ms));
     const clearIntervalFn = deps.timer?.clearInterval.bind(deps.timer) ??
         ((h) => clearInterval(h));
@@ -46,6 +46,7 @@ export function createPermissionController(deps) {
     // The last failed-decision error, kept so a re-opened modal for the SAME request still shows
     // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
     let lastError = null;
+    let consecutivePollFailures = 0;
     const setNote = (text) => {
         note.textContent = text;
         note.hidden = false;
@@ -130,9 +131,14 @@ export function createPermissionController(deps) {
         let pending;
         try {
             pending = await deps.client.listPendingPermissions();
+            consecutivePollFailures = 0;
         }
         catch {
-            // A transient poll failure must not fabricate or drop state; keep the current modal.
+            // Keep any current modal, but do not hide a broken permission transport indefinitely.
+            consecutivePollFailures += 1;
+            if (consecutivePollFailures >= 3) {
+                setNote("Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.");
+            }
             return;
         }
         const head = pending[0];

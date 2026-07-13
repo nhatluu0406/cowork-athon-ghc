@@ -75,6 +75,7 @@ export function createPermissionBridge(options: PermissionBridgeOptions): Permis
       const requestId = readString(props, "id");
       const sessionId = readString(props, "sessionID");
       const permission = readString(props, "permission");
+      const runtimeTool = readString(props, "tool");
       if (requestId === undefined || sessionId === undefined || permission === undefined) return;
       if (seen.has(requestId)) return;
 
@@ -87,7 +88,7 @@ export function createPermissionBridge(options: PermissionBridgeOptions): Permis
       const event: OpencodeToolPermissionEvent = {
         requestId,
         sessionId,
-        tool: mapPermissionToTool(permission),
+        tool: runtimeTool ?? mapPermissionToTool(permission),
         ...(relativePath !== undefined ? { path: relativePath } : {}),
       };
 

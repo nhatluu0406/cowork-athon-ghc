@@ -44,6 +44,7 @@ test("permission.asked submits a pending request with confined target path", asy
         id: "perm-1",
         sessionID: "sess-1",
         permission: "edit",
+        tool: "write",
         patterns: [join(fx.dir, "note.txt")],
         metadata: { filepath: join(fx.dir, "note.txt") },
       },
@@ -51,8 +52,26 @@ test("permission.asked submits a pending request with confined target path", asy
     const pending = fx.gate.pending();
     assert.equal(pending.length, 1);
     assert.equal(pending[0]?.requestId, "perm-1");
-    assert.equal(pending[0]?.action.kind, "file_edit");
+    assert.equal(pending[0]?.action.kind, "file_create");
     assert.ok(pending[0]?.action.targetPath?.includes("note.txt"));
+  } finally {
+    rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test("permission group is used only as a fallback when runtime tool is absent", async () => {
+  const fx = bridgeFixture();
+  try {
+    await fx.bridge.handleFrame({
+      type: "permission.asked",
+      properties: {
+        id: "perm-fallback",
+        sessionID: "sess-fallback",
+        permission: "edit",
+        metadata: { filepath: join(fx.dir, "fallback.txt") },
+      },
+    });
+    assert.equal(fx.gate.pending()[0]?.action.kind, "file_edit");
   } finally {
     rmSync(fx.dir, { recursive: true, force: true });
   }

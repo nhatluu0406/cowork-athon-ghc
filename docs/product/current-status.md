@@ -6,42 +6,44 @@ updated_at: "2026-07-13"
 
 # Trạng thái hiện tại
 
-Baseline: packaged POC `poc-v0.1` trên Windows 11. Tài liệu canonical: [docs/README.md](../README.md).
+Baseline source được vá từ snapshot `310524c`. Tài liệu canonical: [docs/README.md](../README.md).
 
 ## Capability inventory
 
-| Năng lực | Trạng thái | Ghi chú |
+| Năng lực | Trạng thái | Ghi chú trung thực |
 |---|---|---|
-| Startup | **WORKS** | `scripts\init.bat` → `build.bat` → `start.bat`; mở New Chat sạch; không auto-load history transcript. |
-| Provider profiles | **WORKS** | Multi-Provider Profiles Phase 1: DeepSeek preset + custom OpenAI-compatible; đổi profile active không cần restart. |
-| Credentials | **WORKS** | Windows keyring per profile; preflight missing-credential; không lộ secret trong UI/log. |
-| Workspace | **PARTIAL** | Workspace Companion Phase 1: navigator + preview/editor + chat; txt/md/xlsx edit; agent refresh. |
-| Chat | **WORKS** | Streaming qua OpenCode runtime; multi-turn qua envelope bounded. |
-| Conversations | **WORKS** | Tạo, tìm, đổi tên, xóa, mở lại từ sidebar; relaunch giữ history. |
-| Attachments | **PARTIAL** | Text files (.txt, .md, .json, source text); secret-like blocked; chưa drag-drop / PDF / image. |
-| Skills | **PARTIAL** | Settings → **Kỹ năng**: CRUD user `SKILL.md`, enable/disable; built-in read-only; chưa marketplace/MCP. |
-| Permissions | **WORKS** | Allow/Deny modal trước mutation; deny recovery đã verify packaged. |
-| File Work Review | **PARTIAL** | Create/modify + diff bounded PASS; delete tracking chưa tin cậy (OpenCode tool surface). |
-| D1 Dispatch | **NOT IMPLEMENTED** | UI surface + mount `d1-dispatch-root`; placeholder **Chờ tích hợp D1**; backend chưa merge. |
-| D2 Microsoft 365 | **NOT IMPLEMENTED** | UI surface + mount `d2-microsoft-root`; placeholder **Chờ tích hợp D2**; backend chưa merge. |
-| D3 Knowledge | **NOT IMPLEMENTED** | UI surface + mount `d3-knowledge-root`; placeholder **Chờ tích hợp D3**; backend chưa merge. |
-| D4 Gateway | **NOT IMPLEMENTED** | UI surface + mount `d4-gateway-root`; placeholder **Chờ tích hợp D4**; backend chưa merge. |
-| Code surface | **PLANNED** | Rail item **Đã lên kế hoạch**; mount `code-surface-root`; chưa có backend. |
-| UI readiness | **WORKS** | UI Shell V3; product rail đủ 6 mục (Cowork + D1–D4 + Code); Cowork/Workspace là mode trong Cowork. |
-| Web / Next.js | **DEFERRED** | Không bắt đầu trước desktop acceptance. |
-| Full L9 / RC | **DEFERRED** | Chưa hoàn tất một pass release-candidate đầy đủ. |
+| Startup | **BASIC WORKS** | Mở New Chat sạch; lifecycle scripts hiện hữu. |
+| Provider profiles | **PARTIAL** | DeepSeek preset + custom OpenAI-compatible profiles; packaged switching giữa hai endpoint thật vẫn cần xác nhận. |
+| Credentials | **BASIC WORKS** | Windows keyring theo profile; không persist raw key trong profile JSON. |
+| Workspace navigator | **PARTIAL** | Duyệt file và mở preview cơ bản. |
+| Workspace editing | **PARTIAL** | `.txt`/`.md` nhỏ có thể sửa; file text bị truncate là read-only; XLSX chuyển read-only để tránh mất dữ liệu. |
+| Image / PDF / DOCX preview | **PARTIAL** | Image dùng data URL; PDF dùng blob frame theo CSP; DOCX render plain text. Cần packaged PO check. |
+| Chat / streaming | **BASIC WORKS** | OpenCode runtime + conversation persistence. |
+| File create / modify bằng Agent | **BLOCKED — PACKAGED CHECK REQUIRED** | Source đã thêm action contract, permission tool mapping và false-success guard; chưa được xác nhận trên packaged Windows app. |
+| Permissions | **BLOCKED — PACKAGED CHECK REQUIRED** | Bridge nay ưu tiên `permission.asked.properties.tool`; UI poll nhanh hơn và báo lỗi transport. Golden path create→Allow và modify→Deny phải chạy thật. |
+| File Work Review | **PARTIAL** | Create/modify review có nền tảng; delete chưa tin cậy. |
+| Attachments | **PARTIAL** | Text attachments bounded; image/PDF attachment vào prompt chưa có. |
+| Skills | **BASIC WORKS** | User Skill CRUD + enable/disable; built-in read-only. |
+| UI readiness | **PARTIAL / COMMERCIAL FAIL** | Shell dùng được nhưng chưa đạt chuẩn demo thương mại; dark mode thật chưa có. |
+| D1–D4 | **NOT IMPLEMENTED** | Chỉ có integration surfaces/mount points; backend teams chưa merge. |
+| Full RC | **DEFERRED** | Chưa chạy release-candidate đầy đủ. |
 
-## Demo readiness (2026-07-13)
+## P0 recovery patch trong source này
 
-- Hành trình demo: [demo-guide.md](../demo/demo-guide.md), [demo-acceptance.md](../quality/demo-acceptance.md).
-- **Workspace Companion Phase 1** — BASIC COMPLETE trên `main` (navigator + preview/editor + chat).
-- Product rail hiển thị Cowork, Dispatch, Gateway, Knowledge, Microsoft 365, Code; D1–D4 backends **chưa merge**.
-- Scripts: `init.bat`, `build.bat`, `start.bat`, `stop.bat`, `clean.bat`, `demo-reset.bat`, `demo-seed.bat`, `verify-fast.bat`.
+- Product action contract bắt buộc model dùng file tool và không được báo thành công khi tool chưa thành công.
+- Permission bridge giữ đúng tool thật (`write` → `file_create`) thay vì làm mất thông tin qua permission group.
+- File-action response được đánh dấu **chưa xác minh** nếu không có review/disk evidence cùng runtime turn.
+- Truncated text và XLSX được chuyển sang read-only để tránh ghi đè phá dữ liệu.
+- DOCX không còn chèn HTML chưa sanitize; render plain text.
+- Workspace giữ thay đổi chưa lưu khi Agent refresh.
 
-## Gần đây đã merge
+## Exit criterion trước khi tiếp tục UI commercial pass
 
-- **Workspace Companion Phase 1** — rich preview, txt/md/xlsx edit+save, agent refresh, `demo-seed.bat`.
-- **Multi-Provider Profiles Phase 1** — profile store, active switch, migration legacy DeepSeek, Settings UI.
-- **UI Shell V3** — commercial readiness remediation và PO fixes (inspector, startup clean chat, context wrapper).
-
-Chi tiết giới hạn: [known-limitations.md](../quality/known-limitations.md).
+```text
+request create file
+→ Permission hiển thị
+→ Allow once
+→ file tồn tại đúng workspace, đúng nội dung
+→ File Work Review có bằng chứng
+→ assistant chỉ báo verified success sau mutation
+```
