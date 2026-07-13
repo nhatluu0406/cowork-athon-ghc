@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cowork GHC — UI Shell V3 R3 (Design Prototype)</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+  <div class="proto-banner" role="note">
+    Design prototype only — not implemented product capability. Fixture data; no live backend.
+  </div>
+
+  <div id="app" class="app" data-state="cowork-active" data-surface="cowork" data-work-mode="cowork" data-sidebar-hidden="false" data-inspector-open="false" data-drawer="">
+    <header class="topbar" aria-label="Thanh điều hướng">
+      <div class="topbar__leading">
+        <button type="button" class="icon-btn" id="btn-sidebar" data-tooltip="Thu gọn sidebar" aria-label="Thu gọn sidebar">
+          <span class="icon" data-icon="panel-left-close"></span>
+        </button>
+        <div class="topbar__brand">
+          <span class="topbar__brand-mark" aria-hidden="true"></span>
+          <span class="topbar__brand-name">Cowork GHC</span>
+        </div>
+      </div>
+      <div class="topbar__trailing">
+        <button type="button" class="icon-btn" id="btn-inspector" data-tooltip="Mở inspector" aria-label="Mở inspector">
+          <span class="icon" data-icon="panel-right-open"></span>
+        </button>
+        <button type="button" class="icon-btn" data-tooltip="Thông tin" aria-label="Thông tin">
+          <span class="icon" data-icon="info"></span>
+        </button>
+        <button type="button" class="icon-btn" id="btn-settings" data-tooltip="Cài đặt" aria-label="Cài đặt">
+          <span class="icon" data-icon="settings"></span>
+        </button>
+        <div class="window-controls" aria-hidden="true">
+          <span class="win-btn"></span><span class="win-btn"></span><span class="win-btn win-btn--close"></span>
+        </div>
+      </div>
+    </header>
+
+    <div class="shell" id="shell">
+      <nav class="rail" aria-label="Product surfaces">
+        <div class="rail__items" id="rail-items"></div>
+      </nav>
+
+      <aside class="sidebar" id="sidebar" aria-label="Context sidebar">
+        <div class="sidebar-tabs" role="tablist" aria-label="Chế độ làm việc">
+          <button type="button" class="sidebar-tabs__btn sidebar-tabs__btn--active" role="tab" aria-selected="true" data-work-mode="cowork" id="tab-cowork">Cowork</button>
+          <button type="button" class="sidebar-tabs__btn" role="tab" aria-selected="false" data-work-mode="workspace" id="tab-workspace">Workspace</button>
+        </div>
+
+        <div class="sidebar__panel" data-work-mode="cowork">
+          <header class="sidebar__header">
+            <div class="sidebar__header-actions">
+              <button type="button" class="icon-btn icon-btn--sm" id="btn-new-conv" data-tooltip="Cuộc trò chuyện mới" aria-label="Cuộc trò chuyện mới">
+                <span class="icon" data-icon="square-pen"></span>
+              </button>
+            </div>
+          </header>
+          <div class="sidebar__search">
+            <span class="icon icon--muted" data-icon="search"></span>
+            <input type="search" placeholder="Tìm cuộc trò chuyện…" aria-label="Tìm cuộc trò chuyện" />
+          </div>
+          <ul class="conv-list" id="conv-list" aria-label="Lịch sử cuộc trò chuyện"></ul>
+        </div>
+
+        <div class="sidebar__panel" data-work-mode="workspace" hidden>
+          <div class="workspace-identity">
+            <span class="icon icon--muted" data-icon="folder"></span>
+            <div class="workspace-identity__text">
+              <strong>cowork-athon-ghc</strong>
+              <span>C:\Workspace\cowork-athon-ghc</span>
+            </div>
+          </div>
+          <div class="sidebar__search">
+            <span class="icon icon--muted" data-icon="search"></span>
+            <input type="search" placeholder="Lọc tệp…" aria-label="Lọc tệp trong workspace" />
+          </div>
+          <div class="filter-row">
+            <button type="button" class="filter-chip filter-chip--active">Tất cả</button>
+            <button type="button" class="filter-chip">Gần đây</button>
+            <button type="button" class="filter-chip">Đã đổi</button>
+            <button type="button" class="icon-btn icon-btn--sm" data-tooltip="Làm mới cây thư mục" aria-label="Làm mới cây thư mục">
+              <span class="icon" data-icon="refresh"></span>
+            </button>
+          </div>
+          <div class="tree" id="file-tree" role="tree" aria-label="Cây thư mục workspace"></div>
+        </div>
+      </aside>
+
+      <main class="main" id="main">
+        <section class="view view--cowork" data-view="cowork">
+          <header class="conv-header">
+            <div class="conv-header__text">
+              <h1 class="conv-header__title" id="conv-title">Chuẩn bị tài liệu tích hợp</h1>
+            </div>
+            <div class="conv-header__actions">
+              <button type="button" class="icon-btn" data-tooltip="Thêm hành động" aria-label="Thêm hành động">
+                <span class="icon" data-icon="more"></span>
+              </button>
+            </div>
+          </header>
+
+          <div class="banner banner--permission" id="banner-permission" hidden>
+            <p>Đang chờ bạn phê duyệt quyền ghi tệp <code>draft-notes.md</code></p>
+            <div class="banner__actions">
+              <button type="button" class="text-cta text-cta--ghost">Từ chối</button>
+              <button type="button" class="text-cta">Cho phép</button>
+            </div>
+          </div>
+
+          <div class="banner banner--recovery" id="banner-recovery" hidden>
+            <p>Không thể kết nối provider. Kiểm tra credential hoặc base URL.</p>
+            <button type="button" class="text-cta">Mở cài đặt provider</button>
+          </div>
+
+          <div class="transcript" id="transcript"></div>
+
+          <footer class="composer">
+            <div class="composer__box">
+              <div class="composer__input" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Nhập yêu cầu" data-placeholder="Nhập yêu cầu cho Cowork GHC…"></div>
+              <div class="composer__bar">
+                <button type="button" class="icon-btn icon-btn--sm" data-tooltip="Đính kèm tệp" aria-label="Đính kèm tệp">
+                  <span class="icon" data-icon="attach"></span>
+                </button>
+                <button type="button" class="skills-btn" id="btn-skills" data-tooltip="Kỹ năng đang bật" aria-label="Kỹ năng đang bật">
+                  Skills: <span class="skills-badge" id="skills-badge">1</span>
+                </button>
+                <button type="button" class="provider-select" id="provider-select" aria-label="Provider và model của cuộc trò chuyện">
+                  <span class="status-dot status-dot--ok" id="provider-select-dot" aria-hidden="true"></span>
+                  <span class="provider-select__label" id="provider-select-label">DeepSeek / deepseek-chat</span>
+                  <span class="provider-select__caret" aria-hidden="true">▾</span>
+                </button>
+                <p class="provider-select__fail" id="provider-select-fail" hidden>Kết nối thất bại</p>
+                <span class="composer__spacer"></span>
+                <button type="button" class="icon-btn icon-btn--sm icon-btn--accent" data-tooltip="Gửi" aria-label="Gửi">
+                  <span class="icon" data-icon="send"></span>
+                </button>
+              </div>
+            </div>
+          </footer>
+          <div class="skills-popover" id="skills-popover" hidden role="dialog" aria-label="Kỹ năng">
+            <p class="skills-popover__title">Kỹ năng (fixture)</p>
+            <ul class="skills-popover__list">
+              <li>documentation</li>
+            </ul>
+          </div>
+        </section>
+
+        <section class="view view--workspace" data-view="workspace" hidden>
+          <div class="doc-tabs" id="doc-tabs" role="tablist" aria-label="Tệp đang mở" hidden></div>
+          <div class="workspace-empty" id="workspace-empty">
+            <p class="workspace-empty__text">Chọn một tệp để xem trước</p>
+            <p class="workspace-empty__hint">Nhấn tab <strong>Cowork</strong> để quay lại cuộc trò chuyện.</p>
+          </div>
+          <div class="doc-panel doc-panel--file" id="doc-file" hidden>
+            <nav class="breadcrumb" id="file-breadcrumb" aria-label="Đường dẫn tệp">
+              <span id="file-breadcrumb-path">src / README.md</span>
+            </nav>
+            <p class="file-header__meta" id="file-meta">Văn bản · 2,4 KB · sửa 2 giờ trước</p>
+            <div class="file-preview">
+              <div class="file-preview__inner">
+                <pre class="file-preview__body" id="file-body"></pre>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view view--knowledge" data-view="knowledge" hidden>
+          <header class="knowledge-header">
+            <h1 class="knowledge-header__title">Knowledge</h1>
+            <div class="knowledge-tabs" role="tablist" aria-label="Knowledge tabs" id="knowledge-tabs">
+              <button type="button" class="knowledge-tabs__btn knowledge-tabs__btn--active" role="tab" data-knowledge-tab="base" id="k-tab-base">Kho tri thức</button>
+              <button type="button" class="knowledge-tabs__btn" role="tab" data-knowledge-tab="graph" id="k-tab-graph" hidden>Đồ thị</button>
+            </div>
+          </header>
+          <div class="knowledge-body" id="knowledge-body"></div>
+        </section>
+
+        <section class="view view--integration" data-view="integration" hidden>
+          <div class="integration-empty" id="integration-empty"></div>
+        </section>
+      </main>
+
+      <aside class="inspector" id="inspector" aria-label="Inspector">
+        <header class="inspector__header">
+          <div class="inspector__tabs" role="tablist">
+            <button type="button" class="inspector__tab inspector__tab--active" role="tab" aria-selected="true" data-tab="plan">Kế hoạch</button>
+            <button type="button" class="inspector__tab" role="tab" aria-selected="false" data-tab="activity">Hoạt động</button>
+            <button type="button" class="inspector__tab" role="tab" aria-selected="false" data-tab="files">Tệp</button>
+            <button type="button" class="inspector__tab" role="tab" aria-selected="false" data-tab="review">Xem lại</button>
+          </div>
+          <button type="button" class="icon-btn icon-btn--sm" id="btn-inspector-close" data-tooltip="Đóng inspector" aria-label="Đóng inspector">
+            <span class="icon" data-icon="panel-right-close"></span>
+          </button>
+        </header>
+        <div class="inspector__body" id="inspector-body"></div>
+      </aside>
+    </div>
+
+    <div class="drawer-scrim" id="drawer-scrim" hidden></div>
+
+    <footer class="statusbar" aria-label="Trạng thái hệ thống">
+      <button type="button" class="statusbar__item" id="status-workspace" data-tooltip="Workspace hiện tại: cowork-athon-ghc">
+        <span class="statusbar__label">Workspace:</span>
+        <span class="statusbar__value">cowork-athon-ghc</span>
+      </button>
+      <span class="statusbar__item" id="status-service" data-tooltip="Local service sẵn sàng">
+        <span class="status-dot status-dot--ok" aria-hidden="true"></span>
+        <span class="statusbar__value">Service</span>
+      </span>
+      <span class="statusbar__item" id="status-runtime" data-tooltip="OpenCode runtime: nhàn rỗi">
+        <span class="status-dot status-dot--idle" aria-hidden="true"></span>
+        <span class="statusbar__value">Runtime · Nhàn rỗi</span>
+      </span>
+      <button type="button" class="statusbar__item statusbar__item--provider" id="status-provider" data-tooltip="DeepSeek: Sẵn sàng">
+        <span class="status-dot status-dot--ok" id="status-provider-dot" aria-hidden="true"></span>
+        <span class="statusbar__value" id="status-provider-value">DeepSeek · Sẵn sàng</span>
+      </button>
+      <span class="statusbar__proto" id="proto-state-label">cowork-active</span>
+    </footer>
+  </div>
+
+  <details class="proto-controls">
+    <summary>Prototype states (design only)</summary>
+    <div class="proto-controls__grid" id="state-buttons"></div>
+  </details>
+
+  <script src="./prototype.js"></script>
+  </body>
+</html>

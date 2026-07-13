@@ -2,6 +2,9 @@
 # Monorepo .gitignore — M365 Knowledge Graph + Cowork GHC
 # Keep: source, docs, config, state, evidence. Exclude: dependencies, build output,
 # secrets, runtime state, logs, caches.
+# Monorepo .gitignore — M365 Knowledge Graph + Cowork GHC
+# Keep: source, docs, config, state, evidence. Exclude: dependencies, build output,
+# secrets, runtime state, logs, caches.
 # ─────────────────────────────────────────────────────────────────────────────
 
 # --- Dependencies ---
@@ -9,13 +12,10 @@ node_modules/
 **/node_modules/
 .pnp
 .pnp.js
-<<<<<<< HEAD
 app/backend/bin/
 app/llm-svc/target/
-=======
 backend/bin/
 llm-svc/target/
->>>>>>> 2590b7e0b80e9e34eabc6e081142ee4d50ca0eb0
 
 # --- Build / compile output ---
 dist/
@@ -27,6 +27,9 @@ out/
 *.tsbuildinfo
 .vite/
 **/.vite/
+Frontend/dist/
+Frontend/build/
+Frontend/node_modules/
 Frontend/dist/
 Frontend/build/
 Frontend/node_modules/
@@ -62,9 +65,13 @@ yarn-debug.log*
 yarn-error.log*
 Frontend/playwright-report/*
 Frontend/test-results/*
+Frontend/playwright-report/*
+Frontend/test-results/*
 
 # --- Coverage / test output ---
 coverage/
+*.out
+*.test
 *.out
 *.test
 **/coverage/
@@ -84,6 +91,8 @@ crash-*.log
 
 # --- Secrets / credentials (NEVER commit) ---
 .env
+.env.local
+.env.*.local
 .env.local
 .env.*.local
 .env.*

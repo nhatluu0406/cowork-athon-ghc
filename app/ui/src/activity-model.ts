@@ -78,13 +78,17 @@ export function toRelativePath(absoluteOrRelative: string, workspaceRoot: string
   if (workspaceRoot === null || workspaceRoot.length === 0) {
     return shortenPath(absoluteOrRelative);
   }
+  const originalNorm = absoluteOrRelative.replace(/\\/g, "/");
   const normRoot = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/u, "").toLowerCase();
-  const normPath = absoluteOrRelative.replace(/\\/g, "/").toLowerCase();
-  if (normPath.startsWith(`${normRoot}/`)) {
-    return absoluteOrRelative
+  const normPath = originalNorm.toLowerCase();
+  if (normPath.startsWith(`${normRoot}/`) || normPath === normRoot) {
+    return originalNorm
       .slice(workspaceRoot.length)
       .replace(/^[/\\]+/u, "")
       .replace(/\\/g, "/");
+  }
+  if (!/^[a-zA-Z]:/u.test(absoluteOrRelative) && !absoluteOrRelative.startsWith("/") && !absoluteOrRelative.startsWith("\\")) {
+    return originalNorm;
   }
   return shortenPath(absoluteOrRelative);
 }

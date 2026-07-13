@@ -1,0 +1,1 @@
+{"version":3,"file":"inspector.d.ts","sourceRoot":"","sources":["../../src/ui-shell/inspector.ts"],"names":[],"mappings":"AAEA,MAAM,WAAW,iBAAiB;IAChC,QAAQ,CAAC,IAAI,EAAE,WAAW,CAAC;IAC3B,QAAQ,CAAC,eAAe,EAAE,WAAW,CAAC;IACtC,QAAQ,CAAC,iBAAiB,EAAE,WAAW,CAAC;CACzC;AAED,wBAAgB,oBAAoB,IAAI,iBAAiB,CAoBxD"}

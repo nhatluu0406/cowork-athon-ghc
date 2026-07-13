@@ -5,19 +5,18 @@
  */
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
-import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, showFileReview, snapshotToPersisted, } from "./activity-panel.js";
-import { createKnowledgePanel, } from "./knowledge-panel.js";
+import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, setRightPanelCollapsed, showFilePreview, showFileReview, snapshotToPersisted, } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
-import { assessSendPreflight, buildReadinessInput, localServiceStatus, providerStatus, shouldShowContinuationBanner, } from "./provider-readiness.js";
-import { closeModalWithFocus, createModalKeyHandler, openModalWithFocus, } from "./modal-focus.js";
+import { assessSendPreflight, buildReadinessInput, localServiceStatus, providerModelLabel, providerStatus, shouldShowContinuationBanner, } from "./provider-readiness.js";
 import { startEvStream } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
+import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt } from "./attachment-context.js";
@@ -25,6 +24,14 @@ import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import { createPendingAttachmentId, totalValidBytes, } from "./attachment-pending.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
+import { createProductIcon } from "./product-icons.js";
+import { PRODUCT_SURFACES, hasKnowledgeGraphCapability } from "./surface-registry.js";
+import { createAppFrame } from "./ui-shell/create-app-frame.js";
+import { applyShellLayoutClasses, applyWorkMode, shellLayoutModeForSurface, } from "./ui-shell/shell-layout.js";
+import { renderKnowledgeTab, setKnowledgeGraphCapability, } from "./ui-shell/knowledge-view.js";
+import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
+import { renderStatusBar } from "./ui-shell/status-bar.js";
+import { openWorkspaceFileInView } from "./ui-shell/workspace-view.js";
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -33,35 +40,34 @@ function el(tag, className, text) {
         node.textContent = text;
     return node;
 }
+function icon(name, label) {
+    return createProductIcon(name, label);
+}
+function renderIntegrationSurface(container, surface) {
+    container.replaceChildren();
+    const card = el("section", "integration-empty");
+    const eyebrow = surface.availability === "planned"
+        ? "Planned"
+        : surface.dependency !== undefined
+            ? `Chờ tích hợp ${surface.dependency}`
+            : "Chưa khả dụng";
+    const iconWrap = el("div", "integration-empty__icon");
+    iconWrap.append(icon(surface.icon, surface.label));
+    card.append(iconWrap, el("p", "integration-empty__eyebrow", eyebrow), el("h1", "integration-empty__title", surface.label));
+    card.append(el("p", "integration-empty__copy", surface.description));
+    if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
+        card.append(el("p", "integration-empty__note", `Không hiển thị dữ liệu giả cho ${surface.dependency}; surface này chỉ xác nhận điều hướng và contract UI.`));
+    }
+    container.append(card);
+}
+function surfaceById(id) {
+    return PRODUCT_SURFACES.find((surface) => surface.id === id) ?? PRODUCT_SURFACES[0];
+}
 function shortPath(path) {
     const parts = path.split(/[\\/]/).filter(Boolean);
     if (parts.length <= 2)
         return path;
     return `.../${parts.slice(-2).join("/")}`;
-}
-function phaseLabel(phase) {
-    switch (phase) {
-        case "idle":
-            return "Chưa bắt đầu";
-        case "starting":
-            return "Đang khởi động";
-        case "ready":
-            return "Phiên đã sẵn sàng";
-        case "running":
-            return "Đang xử lý";
-        case "cancelling":
-            return "Đang hủy";
-        case "completed":
-            return "Đã hoàn tất";
-        case "completed_without_final_message":
-            return "Đã hoàn tất (không có phản hồi cuối)";
-        case "denied":
-            return "Đã bị từ chối";
-        case "cancelled":
-            return "Đã hủy";
-        case "failed":
-            return "Có lỗi xảy ra";
-    }
 }
 function safeError(error) {
     if (error instanceof ServiceClientError)
@@ -80,6 +86,34 @@ function renderComposerPreflight(dom, preflight, hasPrompt) {
         return;
     dom.composerPreflightMessage.textContent = preflight.message;
     dom.composerPreflightCta.hidden = !preflight.showSettingsCta;
+}
+function renderCoworkEmptyState(dom, state, preflight) {
+    const title = dom.emptyState.querySelector(".empty-state__title");
+    const copy = dom.emptyState.querySelector(".empty-state__copy");
+    if (state.activeWorkspace === null) {
+        if (title !== null)
+            title.textContent = "Chọn workspace để bắt đầu";
+        if (copy !== null)
+            copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
+        dom.emptyStateCta.hidden = true;
+        return;
+    }
+    if (preflight.blockKind === "provider_missing" ||
+        preflight.blockKind === "model_missing" ||
+        preflight.blockKind === "credential_missing" ||
+        preflight.blockKind === "base_url_invalid") {
+        if (title !== null)
+            title.textContent = "Cấu hình provider để bắt đầu";
+        if (copy !== null)
+            copy.textContent = preflight.message;
+        dom.emptyStateCta.hidden = false;
+        return;
+    }
+    if (title !== null)
+        title.textContent = "Bạn muốn Cowork GHC làm gì?";
+    if (copy !== null)
+        copy.textContent = "Gửi yêu cầu đầu tiên để bắt đầu phiên làm việc với workspace hiện tại.";
+    dom.emptyStateCta.hidden = true;
 }
 function createDynamicClient(state) {
     return new Proxy({}, {
@@ -157,7 +191,7 @@ function renderAttachmentMetaList(attachments) {
                 : status === "rejected"
                     ? " (bị từ chối)"
                     : "";
-        chip.textContent = `📎 ${att.filename}${statusNote}`;
+        chip.append(icon("attachment"), el("span", "attachment-chip__label", `${att.filename}${statusNote}`));
         wrap.append(chip);
     }
     return wrap;
@@ -173,10 +207,11 @@ function renderPendingAttachmentChips(dom, pending, onRemove) {
         const chip = el("span", `attachment-chip${item.status === "error" ? " attachment-chip--error" : ""}`);
         chip.title = item.relativePath;
         const trunc = item.metadata?.truncated === true ? " (đã cắt)" : "";
-        chip.append(el("span", "attachment-chip__label", item.status === "error" ? `⚠ ${item.filename}` : `📎 ${item.filename}${trunc}`));
-        const remove = el("button", "attachment-chip__remove", "×");
+        chip.append(icon(item.status === "error" ? "permission" : "attachment"), el("span", "attachment-chip__label", `${item.filename}${trunc}`));
+        const remove = el("button", "attachment-chip__remove");
         remove.type = "button";
         remove.setAttribute("aria-label", `Gỡ ${item.filename}`);
+        remove.append(icon("file-delete", "Gỡ tệp"));
         remove.addEventListener("click", () => onRemove(item.id));
         chip.append(remove);
         if (item.status === "error" && item.errorMessage !== undefined) {
@@ -225,13 +260,36 @@ function renderSessionList(dom, state, onSelect, onRename, onDelete) {
         dom.sessionList.append(el("p", "sidebar__empty", searchQuery.length > 0 ? "Không tìm thấy cuộc trò chuyện." : "Chưa có cuộc trò chuyện."));
         return;
     }
+    const draftOrdinals = new Map();
+    let draftCount = 0;
+    for (const summary of summaries) {
+        if (summary.status === "draft" && summary.messageCount === 0) {
+            draftCount += 1;
+            draftOrdinals.set(summary.id, draftCount);
+        }
+    }
     for (const summary of summaries) {
         const item = el("button", "history-item");
         if (summary.id === activeConversationId)
             item.classList.add("history-item--active");
+        if (summary.status === "running")
+            item.classList.add("history-item--running");
+        if (summary.status === "interrupted")
+            item.classList.add("history-item--interrupted");
+        if (summary.status === "completed")
+            item.classList.add("history-item--historical");
         item.type = "button";
-        item.append(el("span", "history-item__title", summary.title));
+        item.dataset["status"] = summary.status;
+        const titleRow = el("span", "history-item__title-row");
+        const title = summary.status === "draft" && summary.messageCount === 0 && (draftOrdinals.get(summary.id) ?? 0) > 1
+            ? `${summary.title} (${draftOrdinals.get(summary.id)})`
+            : summary.title;
+        titleRow.append(el("span", "history-item__title", title));
+        if (summary.status === "draft")
+            titleRow.append(el("span", "history-item__badge", "Nháp"));
+        item.append(titleRow);
         item.append(el("span", "history-item__meta", formatConversationMeta(summary)));
+        item.title = summary.title;
         item.addEventListener("click", () => onSelect(summary.id));
         item.addEventListener("contextmenu", (event) => {
             event.preventDefault();
@@ -284,6 +342,39 @@ async function capturePermissionBeforeSnapshot(state, request) {
             relativePath,
             before,
             ...(op !== undefined ? { operation: op } : {}),
+        });
+    }
+    catch {
+        // best effort
+    }
+}
+const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit", "patch", "multiedit", "delete"]);
+async function captureBeforeOnToolStart(state, event) {
+    if (state.client === null || state.activeWorkspace === null)
+        return;
+    if (event.status !== "running" && event.status !== "pending")
+        return;
+    if (!FILE_MUTATION_TOOL_NAMES.has(event.toolName))
+        return;
+    if (event.summary === undefined || event.summary.length === 0)
+        return;
+    const relativePath = toRelativePath(event.summary, state.activeWorkspace);
+    if (relativePath.length === 0 || relativePath.startsWith("..."))
+        return;
+    for (const entry of state.pendingBeforeSnapshots.values()) {
+        if (entry.relativePath === relativePath)
+            return;
+    }
+    try {
+        const before = await state.client.captureFileReviewSnapshot(relativePath);
+        state.pendingBeforeSnapshots.set(`tool:${event.callId}`, {
+            relativePath,
+            before,
+            operation: event.toolName === "write"
+                ? "create"
+                : event.toolName === "delete"
+                    ? "delete"
+                    : "edit",
         });
     }
     catch {
@@ -435,22 +526,63 @@ function resetLiveActivity(state) {
 function renderState(dom, state, handlers) {
     const phase = state.conv.state.runtimePhase;
     const record = state.conv.state.activeRecord;
+    const activeSurface = surfaceById(state.activeSurface);
+    const layoutMode = shellLayoutModeForSurface(state.activeSurface);
+    const inspectorOpen = !dom.rightPanel.hidden;
+    const isCoworkSurface = state.activeSurface === "cowork";
+    const isKnowledgeSurface = state.activeSurface === "knowledge";
+    const settingsOpen = !dom.settingsSurface.hidden;
+    for (const [id, button] of dom.surfaceButtons) {
+        button.setAttribute("aria-current", id === state.activeSurface ? "page" : "false");
+    }
+    applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
+    dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
+    dom.shellFrame.classList.toggle("inspector-overlay", window.matchMedia("(max-width: 1366px)").matches && inspectorOpen);
+    dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
+    dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
+    dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
+    dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
+    dom.integrationSurface.hidden = settingsOpen || isCoworkSurface || isKnowledgeSurface;
+    if (isKnowledgeSurface) {
+        setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
+        renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+    }
+    else if (!isCoworkSurface) {
+        renderIntegrationSurface(dom.integrationSurface, activeSurface);
+    }
+    if (isCoworkSurface) {
+        applyWorkMode(dom.shellFrame, dom.sidebar, dom.coworkView, dom.workspaceView.root, dom.coworkSidebarPanel, dom.workspaceSidebarPanel, state.workMode);
+    }
     dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
     dom.workspaceLabel.title = state.activeWorkspace ?? "";
     const providerCopy = providerStatus(state.settings, state.connectionTestState);
-    dom.providerStatus.textContent = providerCopy.label;
-    dom.providerStatus.title = providerCopy.detail;
-    dom.providerStatus.classList.toggle("is-ok", providerCopy.ok);
-    dom.executionStatus.textContent = phaseLabel(phase);
+    const displayModelLabel = providerModelLabel(state.settings);
+    renderConversationProviderControl(dom.providerControl, {
+        visible: isCoworkSurface && state.workMode === "cowork",
+        interactive: true,
+        label: displayModelLabel,
+        status: providerCopy.ok ? "ok" : state.connectionTestState === "failed" ? "danger" : "warn",
+        failed: state.connectionTestState === "failed",
+    });
+    const hasPendingPermission = state.permissionHistory.some((entry) => entry.decision === "pending");
+    renderStatusBar(dom.statusBar, {
+        workspacePath: state.activeWorkspace,
+        serviceLabel: state.serviceLabel,
+        serviceOk: state.serviceOk,
+        runtimePhase: phase,
+        hasPendingPermission,
+        settings: state.settings,
+        connectionTestState: state.connectionTestState,
+    });
     dom.chatTitle.textContent = record?.title ?? DEFAULT_TITLE;
     dom.chatSub.textContent =
         record?.status === "interrupted"
             ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
             : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
     const showContinuation = shouldShowContinuationBanner(state.conv.state.activeConversationId, record, phase);
-    if (showContinuation) {
+    if (showContinuation && isCoworkSurface && state.workMode === "cowork") {
         if (!dom.continuationBanner.isConnected) {
-            dom.chat.insertBefore(dom.continuationBanner, dom.transcript);
+            dom.coworkView.insertBefore(dom.continuationBanner, dom.transcript);
         }
         dom.continuationBanner.hidden = false;
         dom.continuationButton.hidden = false;
@@ -463,6 +595,8 @@ function renderState(dom, state, handlers) {
     const sendPreflight = assessSendPreflight(readinessInput);
     const composerText = textFromComposer(dom.composerInput);
     renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+    renderCoworkEmptyState(dom, state, sendPreflight);
+    dom.composer.hidden = !isCoworkSurface || state.workMode !== "cowork";
     dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
     dom.composer.classList.toggle("is-locked", locked);
     dom.composerInput.contentEditable = locked ? "false" : "true";
@@ -483,7 +617,9 @@ function renderState(dom, state, handlers) {
     dom.cancelButton.disabled = phase !== "running";
     dom.newConversationButton.disabled =
         phase === "starting" || phase === "running" || state.activeWorkspace === null;
-    renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
+    if (isCoworkSurface && state.workMode === "cowork") {
+        renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
+    }
     renderPendingAttachmentChips(dom, state.pendingAttachments, (id) => {
         state.pendingAttachments = state.pendingAttachments.filter((a) => a.id !== id);
         renderState(dom, state, handlers);
@@ -538,6 +674,10 @@ function startStreamWatchdog(state, dom, sessionId, handlers) {
     state.streamWatchdog = setInterval(() => {
         if (state.conv.state.runtimePhase !== "running" && state.conv.state.runtimePhase !== "cancelling") {
             stopStreamWatchdog(state);
+            return;
+        }
+        if (state.permissionHistory.some((entry) => entry.decision === "pending")) {
+            touchStreamActivity(state);
             return;
         }
         const idleFor = Date.now() - state.lastStreamActivityAt;
@@ -651,6 +791,9 @@ function bindEvStream(state, dom, handlers, sessionId) {
             touchStreamActivity(state);
             state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
             refreshActivityUi(state, dom);
+            if (event.kind === "tool_call") {
+                void captureBeforeOnToolStart(state, event);
+            }
             if (event.kind === "file_mutation") {
                 void finalizeFileMutationReview(state, event, sessionId, dom);
             }
@@ -764,6 +907,22 @@ async function newConversation(state, dom, handlers) {
     if (state.activeWorkspace === null)
         throw new Error("Chọn workspace trước.");
     const unsent = textFromComposer(dom.composerInput);
+    const activeRecord = state.conv.state.activeRecord;
+    if (unsent.length === 0 && activeRecord?.status === "draft" && activeRecord.messageCount === 0) {
+        clearTranscript(dom);
+        setComposerText(dom.composerInput, "");
+        renderState(dom, state, handlers);
+        dom.composerInput.focus();
+        return;
+    }
+    const reusableDraft = state.conv.state.summaries.find((summary) => summary.id !== state.conv.state.activeConversationId &&
+        summary.status === "draft" &&
+        summary.messageCount === 0 &&
+        summary.workspacePath === state.activeWorkspace);
+    if (unsent.length === 0 && reusableDraft !== undefined) {
+        await switchConversation(state, dom, handlers, reusableDraft.id);
+        return;
+    }
     if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
         const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
         if (!ok)
@@ -986,6 +1145,17 @@ async function cancelRun(state, dom, handlers) {
     await state.conv.setRuntimePhase("cancelled");
     await persistActivity(state);
     state.lastView = { ...state.lastView, status: "cancelled", terminal: "cancelled" };
+    renderState(dom, state, handlers);
+}
+function openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath) {
+    if (state.activeSurface !== "cowork")
+        return;
+    state.workMode = "workspace";
+    workspaceNavigator?.selectPath(relativePath);
+    const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
+    if (state.client !== null) {
+        void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+    }
     renderState(dom, state, handlers);
 }
 function createShell(root) {
@@ -1249,6 +1419,11 @@ export function mountCoworkApp(root) {
         continuationUnlocked: true,
         localServiceReady: false,
         connectionTestState: "unknown",
+        activeSurface: "cowork",
+        workMode: "cowork",
+        knowledgeTab: "base",
+        serviceLabel: "Service · Đang khởi động",
+        serviceOk: false,
     };
     const handlers = {
         onSelect: (id) => {
@@ -1278,9 +1453,41 @@ export function mountCoworkApp(root) {
             })();
         },
     };
+    for (const [id, button] of dom.surfaceButtons) {
+        button.addEventListener("click", () => {
+            dom.closeSettings();
+            state.activeSurface = id;
+            if (id === "cowork") {
+                state.workMode = "cowork";
+            }
+            dom.skillsPanel.hidden = true;
+            renderState(dom, state, handlers);
+        });
+    }
+    dom.workModeCoworkTab.addEventListener("click", () => {
+        state.workMode = "cowork";
+        renderState(dom, state, handlers);
+    });
+    dom.workModeWorkspaceTab.addEventListener("click", () => {
+        state.workMode = "workspace";
+        renderState(dom, state, handlers);
+    });
+    for (const btn of dom.knowledgeView.root.querySelectorAll("[data-knowledge-tab]")) {
+        btn.addEventListener("click", () => {
+            const tab = btn.dataset["knowledgeTab"];
+            if (tab === "base" || tab === "graph") {
+                state.knowledgeTab = tab;
+                renderState(dom, state, handlers);
+            }
+        });
+    }
+    dom.skillsButton.addEventListener("click", () => {
+        dom.skillsPanel.hidden = !dom.skillsPanel.hidden;
+    });
     let featuresMounted = false;
     let conversationRestored = false;
     let searchTimer = null;
+    let workspaceNavigator = null;
     const dynamicClient = createDynamicClient(state);
     const readiness = createReadinessController({
         getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1291,6 +1498,8 @@ export function mountCoworkApp(root) {
         },
         onState: (readinessState) => {
             const copy = localServiceStatus(readinessState);
+            state.serviceLabel = copy.label;
+            state.serviceOk = copy.ok;
             dom.serviceStatus.textContent = copy.label;
             dom.serviceStatus.classList.toggle("is-ok", copy.ok);
             dom.serviceDetail.textContent = copy.detail;
@@ -1314,25 +1523,38 @@ export function mountCoworkApp(root) {
                 });
                 if (!featuresMounted) {
                     featuresMounted = true;
-                    mountWorkspacePicker(dom.sidebar.querySelector(".workspace-slot"), {
+                    mountWorkspacePicker(dom.workspaceBox, {
                         bridge: getShellBridge(),
                         client: dynamicClient,
                         onActivated: (rootPath) => {
                             state.activeWorkspace = rootPath;
                             void refreshSettings(state, dom, handlers);
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
                         onDeactivated: () => {
                             state.activeWorkspace = null;
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
                     });
-                    mountLlmSettingsPanel(dom.settingsBody, {
+                    workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
+                        client: dynamicClient,
+                        getWorkspaceRoot: () => state.activeWorkspace,
+                        onFileSelected: (relativePath) => {
+                            if (state.client === null)
+                                return;
+                            const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
+                            void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+                        },
+                    });
+                    mountLlmSettingsPanel(dom.settingsProviderBody, {
                         client: dynamicClient,
                         getBootstrap: () => getShellBridge().getBootstrap(),
                         onSettingsUpdated: (view) => {
                             state.settings = view;
                             state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+                            void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
                         onConnectionTestResult: (ok) => {
@@ -1340,16 +1562,17 @@ export function mountCoworkApp(root) {
                             renderState(dom, state, handlers);
                         },
                     });
-                    mountSettingsView(dom.settingsBody, { client: dynamicClient });
+                    mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
                     mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
                         const enabled = skills.filter((skill) => skill.status === "enabled").length;
-                        dom.skillsButton.textContent = `Skills: ${enabled} bật`;
-                        dom.skillsButton.setAttribute("aria-label", `Mở Skills, ${enabled} đang bật`);
+                        dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
+                        dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
                     });
                     const permissions = createPermissionController({
                         client: dynamicClient,
                         container: dom.root,
                         onPending: (request) => {
+                            touchStreamActivity(state);
                             void capturePermissionBeforeSnapshot(state, request);
                             const target = request.action.targetPath !== undefined
                                 ? toRelativePath(request.action.targetPath, state.activeWorkspace)
@@ -1367,6 +1590,7 @@ export function mountCoworkApp(root) {
                             }
                         },
                         onDecision: ({ request, outcome, requestedDecision }) => {
+                            touchStreamActivity(state);
                             const target = request.action.targetPath !== undefined
                                 ? toRelativePath(request.action.targetPath, state.activeWorkspace)
                                 : request.action.description;
@@ -1412,8 +1636,10 @@ export function mountCoworkApp(root) {
                             : state.fileReviews.find((r) => r.relativePath === relativePath && r.operation === operation);
                         if (review !== undefined) {
                             showFileReview(dom.activityPanel, review);
+                            openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
                             return;
                         }
+                        openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
                         void showFilePreview(dom.activityPanel, state.client, change);
                     });
                 }
