@@ -277,8 +277,8 @@ async function assertStructure(call, label) {
       const errors = [];
       if (shellRoots !== 1) errors.push('expected exactly one shell-frame');
       if (activeViews.length !== 1) errors.push('expected exactly one active view, got ' + activeViews.join(','));
-      if (surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
-      if (surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
+      if (!settingsOpen && surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
+      if (!settingsOpen && surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
       if (settingsOpen && (sidebarVisible || inspectorVisible)) errors.push('settings surface must not show sidebar or inspector');
       if (!settingsOpen && surface !== 'cowork' && sidebarVisible) errors.push('integration/knowledge surfaces must not show sidebar');
       if (!settingsOpen && surface !== 'cowork' && inspectorVisible) errors.push('integration/knowledge surfaces must not show inspector');
@@ -301,6 +301,29 @@ async function assertStructure(call, label) {
 
 async function captureAll(call, fixtureRoot) {
   mkdirSync(OUT_DIR, { recursive: true });
+  for (const file of [
+    "cowork-ready-1920.png",
+    "cowork-ready-1366.png",
+    "cowork-narrow.png",
+    "cowork-inspector-open.png",
+    "cowork-inspector-closed.png",
+    "workspace.png",
+    "workspace-long-path.png",
+    "settings-provider.png",
+    "settings-general.png",
+    "provider-missing.png",
+    "provider-untested.png",
+    "rail-tooltip.png",
+    "long-conversation-title.png",
+    "titlebar-controls.png",
+    "structural-state-check.json",
+  ]) {
+    try {
+      unlinkSync(join(OUT_DIR, file));
+    } catch {
+      // No previous evidence to remove.
+    }
+  }
   const structural = [];
   const fixtureLiteral = JSON.stringify(fixtureRoot);
   await call("Runtime.enable");
@@ -435,7 +458,8 @@ async function captureAll(call, fixtureRoot) {
   await sleep(300);
   structural.push(await assertStructure(call, "workspace-long-path"));
   await capture(call, "workspace-long-path.png", 1366, 768);
-  writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), structural }, null, 2));
+  const gitHead = execSync("git rev-parse HEAD", { cwd: REPO, encoding: "utf8" }).trim();
+  writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), gitHead, structural }, null, 2));
 }
 
 async function main() {
