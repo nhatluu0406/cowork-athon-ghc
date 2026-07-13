@@ -1,31 +1,29 @@
 /**
- * Capture UI Shell V3 design prototype screenshots.
+ * Capture UI Shell V3 R1 design prototype screenshots.
  * Design artifact only — not production verification.
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const HTML = join(HERE, "index.html");
-const OUT = join(REPO, "reports", "ui-shell-v3");
+const OUT = join(REPO, "reports", "ui-shell-v3-r1");
 
 const SHOTS = [
-  { file: "main-1920.png", state: "cowork-active", width: 1920, height: 1080 },
-  { file: "main-1366.png", state: "cowork-active", width: 1366, height: 768 },
-  { file: "main-900.png", state: "narrow-900", width: 900, height: 768 },
-  { file: "workspace.png", state: "workspace", width: 1920, height: 1080 },
-  { file: "inspector-open.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
+  { file: "cowork-1920.png", state: "cowork-active", width: 1920, height: 1080 },
+  { file: "cowork-1366.png", state: "cowork-active", width: 1366, height: 768 },
+  { file: "cowork-900.png", state: "cowork-active", width: 900, height: 768 },
+  { file: "sidebar-workspace.png", state: "sidebar-workspace", width: 1920, height: 1080 },
+  { file: "file-document.png", state: "file-document", width: 1920, height: 1080 },
+  { file: "inspector.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
   { file: "gateway.png", state: "gateway", width: 1366, height: 768 },
   { file: "knowledge-graph.png", state: "knowledge-graph", width: 1366, height: 768 },
+  { file: "provider-missing.png", state: "provider-missing", width: 1920, height: 1080 },
 ];
-
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
-}
 
 async function runPlaywright() {
   const { createServer } = await import("node:http");
@@ -86,7 +84,6 @@ async function main() {
   try {
     await runPlaywright();
   } catch {
-    // Fallback: npx playwright if not installed locally
     const installer = spawn(
       "npx",
       ["--yes", "playwright", "install", "chromium"],
