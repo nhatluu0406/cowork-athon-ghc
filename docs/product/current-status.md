@@ -11,6 +11,27 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
 
+## Microsoft 365 & Claude Code surfaces (2026-07-13)
+
+| Item | Status |
+|---|---|
+| Spec | `docs/superpowers/specs/2026-07-13-microsoft-claudecode-surfaces-design.md` |
+| Plan | `docs/superpowers/plans/2026-07-13-microsoft-claudecode-surfaces.md` |
+| Branch | `feature/ms365-claudecode-surfaces` |
+| Microsoft 365 surface | **Complete (honest disconnected shell)** — rail nút `microsoft` mở `section.ms-surface` với segmented "Trợ lý AI" / "Kết nối"; nút đăng nhập `.ms-connect__signin` luôn `disabled`, ghi chú hiển thị rõ "Backend D2 (Microsoft Graph) chưa được tích hợp" |
+| Claude Code surface | **Complete (3-column, shared session)** — rail nút `code` mở `section.cc-surface` với `code-explorer` (tree + SOURCE CONTROL thật), `code-editor` (chỉ đọc + diff review), `cc-panel` (dùng chung phiên hội thoại với Cowork); segmented "Phiên làm việc" / "Cách hoạt động" chuyển sang `cc-onboarding` với 4 bước |
+| Not included | Không có backend D2 (Microsoft Graph) thật; editor Claude Code không ghi tệp; không có nút accept/reject trên diff (theo đúng spec — chỉ xem lại) |
+| Packaged evidence | `reports/ui-shell-v3-commercial-readiness/` — `microsoft-assistant.png`, `microsoft-connect.png`, `code-session.png`, `code-onboarding.png` + `structural-state-check.json` |
+| Verification commands | `scripts\build.bat` → `node tools/verify/ui-shell-v3-production-screenshots.mjs` (exit 0) → `scripts\stop.bat` |
+
+Trong lúc bổ sung 4 capture mới, phát hiện một lỗi có sẵn trong assertion của verifier
+(`tools/verify/ui-shell-v3-production-screenshots.mjs`): hai điều kiện kiểm tra
+"cowork mode phải chỉ hiện view cowork" / "workspace mode phải chỉ hiện view workspace"
+thiếu guard `!settingsOpen`, nên khi Settings đang mở thì assertion tự fail sai. Đã sửa
+bằng cách thêm `!settingsOpen &&` vào cả hai điều kiện, giữ nguyên các điều kiện lân cận
+vốn đã có guard này — không nới lỏng assertion, chỉ sửa đúng lỗi logic khiến kết quả false
+negative.
+
 ## UI Shell V3 commercial readiness remediation (2026-07-13)
 
 | Item | Status |
