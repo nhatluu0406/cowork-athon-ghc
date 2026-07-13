@@ -87,6 +87,7 @@ export interface AppFrameDom {
   readonly sidebarRailToggle: HTMLButtonElement;
   openSettings: () => void;
   closeSettings: () => void;
+  closeDrawers: () => void;
   applySidebarCollapsed: (collapsed: boolean) => void;
   applyRightPanelCollapsed: (collapsed: boolean) => void;
 }
@@ -195,6 +196,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     sidebarRailToggle: rail.sidebarToggle,
     openSettings: () => undefined,
     closeSettings: () => undefined,
+    closeDrawers: () => undefined,
     applySidebarCollapsed: () => undefined,
     applyRightPanelCollapsed: () => undefined,
   };
@@ -208,6 +210,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
 
   const openSettings = (): void => {
     settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : topbar.settingsButton;
+    dom.closeDrawers();
     settingsSurface.root.hidden = false;
     shellFrame.classList.add("shell-frame--settings");
     settingsSurface.showTab("provider");
@@ -228,10 +231,32 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     if (event.key === "Escape") closeSettings();
   });
 
+  const isSidebarDrawerViewport = (): boolean => window.matchMedia("(max-width: 900px)").matches;
+  const isInspectorDrawerViewport = (): boolean => window.matchMedia("(max-width: 1024px)").matches;
+
   const setDrawerOpen = (kind: "sidebar" | "inspector" | null): void => {
     shellFrame.classList.toggle("sidebar-drawer-open", kind === "sidebar");
     shellFrame.classList.toggle("inspector-drawer-open", kind === "inspector");
     drawerScrim.hidden = kind === null;
+  };
+  dom.closeDrawers = () => setDrawerOpen(null);
+
+  const syncResponsiveDrawers = (): void => {
+    if (shellFrame.classList.contains("sidebar-drawer-open") && !isSidebarDrawerViewport()) {
+      setDrawerOpen(null);
+    }
+
+    if (inspector.root.hidden) {
+      if (shellFrame.classList.contains("inspector-drawer-open")) setDrawerOpen(null);
+      return;
+    }
+
+    if (isInspectorDrawerViewport()) {
+      setDrawerOpen("inspector");
+      return;
+    }
+
+    if (shellFrame.classList.contains("inspector-drawer-open")) setDrawerOpen(null);
   };
 
   const applySidebarCollapsed = (collapsed: boolean): void => {
@@ -249,6 +274,11 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const applyRightPanelCollapsed = (collapsed: boolean): void => {
     setRightPanelCollapsed(inspector.root, activityPanel.toggle, collapsed);
     inspector.root.hidden = collapsed;
+    shellFrame.classList.toggle("shell-frame--inspector-closed", collapsed);
+    shellFrame.classList.toggle(
+      "shell-frame--inspector-open",
+      !collapsed && shellFrame.dataset["layout"] === "work",
+    );
     topbar.inspectorToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     const inspectorLabel = collapsed ? "Mở inspector" : "Đóng inspector";
     // Use data-tooltip only; remove native title to avoid duplicate tooltip
@@ -258,13 +288,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     topbar.inspectorToggle.replaceChildren(
       icon(collapsed ? "panel-right-open" : "panel-right-close", inspectorLabel),
     );
-    shellFrame.classList.toggle("inspector-drawer-open", !collapsed && window.matchMedia("(max-width: 1366px)").matches);
-    drawerScrim.hidden = collapsed || !window.matchMedia("(max-width: 1366px)").matches;
+    syncResponsiveDrawers();
   };
   dom.applyRightPanelCollapsed = applyRightPanelCollapsed;
 
   rail.sidebarToggle.addEventListener("click", () => {
-    if (window.matchMedia("(max-width: 900px)").matches) {
+    if (isSidebarDrawerViewport()) {
       const next = shellFrame.classList.contains("sidebar-drawer-open") ? null : "sidebar";
       setDrawerOpen(next);
       return;
@@ -304,6 +333,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   });
 
   drawerScrim.addEventListener("click", () => setDrawerOpen(null));
+  window.addEventListener("resize", syncResponsiveDrawers);
 
   return dom;
 }

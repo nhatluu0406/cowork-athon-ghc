@@ -105,6 +105,7 @@ export function createAppFrame(root) {
         sidebarRailToggle: rail.sidebarToggle,
         openSettings: () => undefined,
         closeSettings: () => undefined,
+        closeDrawers: () => undefined,
         applySidebarCollapsed: () => undefined,
         applyRightPanelCollapsed: () => undefined,
     };
@@ -116,6 +117,7 @@ export function createAppFrame(root) {
     };
     const openSettings = () => {
         settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : topbar.settingsButton;
+        dom.closeDrawers();
         settingsSurface.root.hidden = false;
         shellFrame.classList.add("shell-frame--settings");
         settingsSurface.showTab("provider");
@@ -135,35 +137,58 @@ export function createAppFrame(root) {
         if (event.key === "Escape")
             closeSettings();
     });
+    const isSidebarDrawerViewport = () => window.matchMedia("(max-width: 900px)").matches;
+    const isInspectorDrawerViewport = () => window.matchMedia("(max-width: 1024px)").matches;
     const setDrawerOpen = (kind) => {
         shellFrame.classList.toggle("sidebar-drawer-open", kind === "sidebar");
         shellFrame.classList.toggle("inspector-drawer-open", kind === "inspector");
         drawerScrim.hidden = kind === null;
     };
+    dom.closeDrawers = () => setDrawerOpen(null);
+    const syncResponsiveDrawers = () => {
+        if (shellFrame.classList.contains("sidebar-drawer-open") && !isSidebarDrawerViewport()) {
+            setDrawerOpen(null);
+        }
+        if (inspector.root.hidden) {
+            if (shellFrame.classList.contains("inspector-drawer-open"))
+                setDrawerOpen(null);
+            return;
+        }
+        if (isInspectorDrawerViewport()) {
+            setDrawerOpen("inspector");
+            return;
+        }
+        if (shellFrame.classList.contains("inspector-drawer-open"))
+            setDrawerOpen(null);
+    };
     const applySidebarCollapsed = (collapsed) => {
         shellFrame.classList.toggle("sidebar-collapsed", collapsed);
         sidebar.root.hidden = collapsed;
+        const sidebarLabel = collapsed ? "Mở sidebar" : "Thu gọn sidebar";
         rail.sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-        rail.sidebarToggle.title = collapsed ? "Mở sidebar" : "Thu gọn sidebar";
-        rail.sidebarToggle.dataset["tooltip"] = rail.sidebarToggle.title;
-        rail.sidebarToggle.setAttribute("aria-label", rail.sidebarToggle.title);
+        // Use data-tooltip only; remove native title to avoid duplicate tooltip
+        rail.sidebarToggle.removeAttribute("title");
+        rail.sidebarToggle.dataset["tooltip"] = sidebarLabel;
+        rail.sidebarToggle.setAttribute("aria-label", sidebarLabel);
     };
     dom.applySidebarCollapsed = applySidebarCollapsed;
     const applyRightPanelCollapsed = (collapsed) => {
         setRightPanelCollapsed(inspector.root, activityPanel.toggle, collapsed);
         inspector.root.hidden = collapsed;
+        shellFrame.classList.toggle("shell-frame--inspector-closed", collapsed);
+        shellFrame.classList.toggle("shell-frame--inspector-open", !collapsed && shellFrame.dataset["layout"] === "work");
         topbar.inspectorToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
         const inspectorLabel = collapsed ? "Mở inspector" : "Đóng inspector";
-        topbar.inspectorToggle.title = inspectorLabel;
+        // Use data-tooltip only; remove native title to avoid duplicate tooltip
+        topbar.inspectorToggle.removeAttribute("title");
         topbar.inspectorToggle.dataset["tooltip"] = inspectorLabel;
         topbar.inspectorToggle.setAttribute("aria-label", inspectorLabel);
         topbar.inspectorToggle.replaceChildren(icon(collapsed ? "panel-right-open" : "panel-right-close", inspectorLabel));
-        shellFrame.classList.toggle("inspector-drawer-open", !collapsed && window.matchMedia("(max-width: 1366px)").matches);
-        drawerScrim.hidden = collapsed || !window.matchMedia("(max-width: 1366px)").matches;
+        syncResponsiveDrawers();
     };
     dom.applyRightPanelCollapsed = applyRightPanelCollapsed;
     rail.sidebarToggle.addEventListener("click", () => {
-        if (window.matchMedia("(max-width: 900px)").matches) {
+        if (isSidebarDrawerViewport()) {
             const next = shellFrame.classList.contains("sidebar-drawer-open") ? null : "sidebar";
             setDrawerOpen(next);
             return;
@@ -200,6 +225,7 @@ export function createAppFrame(root) {
         applyRightPanelCollapsed(true);
     });
     drawerScrim.addEventListener("click", () => setDrawerOpen(null));
+    window.addEventListener("resize", syncResponsiveDrawers);
     return dom;
 }
 function createSettingsSurface() {

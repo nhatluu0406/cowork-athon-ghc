@@ -12,7 +12,7 @@ function el(tag, className, text) {
 export function setRightPanelCollapsed(rightPanel, toggle, collapsed) {
     rightPanel.classList.toggle("right-panel--collapsed", collapsed);
     rightPanel.setAttribute("aria-hidden", collapsed ? "true" : "false");
-    toggle.textContent = collapsed ? "Mở rộng" : "Thu gọn";
+    // Toggle text/icon are managed by the caller (create-app-frame)
     toggle.setAttribute("aria-label", collapsed ? "Mở rộng bảng hoạt động" : "Thu gọn bảng hoạt động");
     toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
 }
@@ -56,9 +56,14 @@ function renderTimelineItem(item) {
 }
 export function createActivityPanel(rightPanel) {
     const header = rightPanel.querySelector(".rp-header");
-    const toggle = el("button", "rp-header__toggle", "Thu gọn");
+    // Icon-only toggle — label managed dynamically by create-app-frame via applyRightPanelCollapsed
+    const toggle = document.createElement("button");
+    toggle.className = "rp-header__toggle icon-btn icon-btn--sm";
     toggle.type = "button";
     toggle.setAttribute("aria-label", "Thu gọn bảng hoạt động");
+    toggle.setAttribute("aria-expanded", "true");
+    // Insert a simple close SVG as default; create-app-frame will replace with panel-right-close icon
+    toggle.innerHTML = `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2L4 8l6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     header?.append(toggle);
     const planCard = rightPanel.querySelector(".plan-card");
     planCard?.classList.add("info-section", "info-section--plan");

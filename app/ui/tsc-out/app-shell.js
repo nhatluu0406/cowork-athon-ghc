@@ -242,7 +242,12 @@ function renderTranscriptFromRecord(dom, record) {
         return;
     dom.emptyState.hidden = true;
     for (const message of record.messages) {
-        appendMessage(dom, message.role, message.text, true, message.attachments, message.skills);
+        // Fix #7: sanitize assistant text before display to prevent legacy context
+        // envelope artifacts (e.g., "[Ngữ cảnh cuộc trò chuyện trước ...]") from leaking into UI.
+        const displayText = message.role === "assistant"
+            ? sanitizeAssistantForDisplay(message.text)
+            : message.text;
+        appendMessage(dom, message.role, displayText, true, message.attachments, message.skills);
     }
 }
 function renderSessionList(dom, state, onSelect, onRename, onDelete) {
@@ -514,7 +519,6 @@ function renderState(dom, state, handlers) {
     }
     applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
     dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
-    dom.shellFrame.classList.toggle("inspector-overlay", window.matchMedia("(max-width: 1366px)").matches && inspectorOpen);
     dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
     dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
     dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
@@ -1202,6 +1206,7 @@ export function mountCoworkApp(root) {
     for (const [id, button] of dom.surfaceButtons) {
         button.addEventListener("click", () => {
             dom.closeSettings();
+            dom.closeDrawers();
             state.activeSurface = id;
             if (id === "cowork") {
                 state.workMode = "cowork";
@@ -1254,15 +1259,12 @@ export function mountCoworkApp(root) {
                 void refreshSettings(state, dom, handlers);
                 void state.conv.refreshList().then(async () => {
                     if (!conversationRestored && state.conv.state.activeConversationId === null) {
-                        const lastId = await state.client.getLastActiveConversationId();
-                        const pick = lastId ?? state.conv.state.summaries[0]?.id ?? null;
-                        if (pick !== null) {
-                            await state.conv.select(pick);
-                            state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
-                            loadActivityFromRecord(state, state.conv.state.activeRecord);
-                            renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
-                            restoreComposerDraft(state, dom, pick);
-                        }
+                        // PO fix #6: start with a clean new-chat slate.
+                        // History is loaded into the sidebar list but no conversation is auto-opened.
+                        // User must click a history item to load it. continuationBanner must not appear on startup.
+                        // We do NOT call state.conv.select() here; leave activeConversationId null so
+                        // the composer starts fresh. A persisted conversation is created only when the
+                        // first message is sent (conversation-controller handles that path).
                         conversationRestored = true;
                     }
                     renderState(dom, state, handlers);
