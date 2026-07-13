@@ -19,15 +19,28 @@ and the current working tree instead.
 | Audit commit | `ecce634` — `docs(quality): audit V3 commercial UI readiness` |
 | Remediation branch | `fix/ui-shell-v3-commercial-readiness` |
 | Audit verdict before fix | **PASS WITH BOUNDED FIXES** — commercial merge blocked by UI-CR-001 through UI-CR-005 |
-| Commercial readiness pass | **Code implemented; packaged evidence refresh pending** — Settings is now a full-screen application surface; workspace tree gap, provider untested status color, rail tooltip clipping, and composer alignment are remediated |
-| Packaged evidence | `reports/ui-shell-v3-commercial-readiness/` exists, but final refresh after the last Settings/tooltip fixes is still pending packaged GUI smoke |
-| Product Owner visual acceptance | **Pending** — do not claim final PASS until PO reviews the commercial-readiness screenshots |
+| Commercial readiness pass | **Verified packaged baseline** - Settings is a full-screen application surface; workspace tree gap, provider untested status color, rail tooltip clipping, composer alignment, and inspector overlay placement are remediated |
+| Packaged evidence | `reports/ui-shell-v3-commercial-readiness/` refreshed from packaged app on `4688f39`; screenshots are one batch from 2026-07-13 13:58:33-13:58:44 local time and `structural-state-check.json` records `gitHead` |
+| UI Shell V3 commercial visual baseline | **PASS** |
+| Product Owner visual acceptance | **Pending sign-off** - ready for PO visual review of the refreshed commercial-readiness screenshots |
 | D1-D4 merge | **Not started** — integration surfaces remain passive slots |
 | Multi-Provider Profiles | **Not implemented** |
 | File Work Review | **PARTIAL PASS** (unchanged) |
 | Full L9 / RC | **Not complete** |
 
 Settings is no longer a backdrop modal. The topbar Settings icon opens a full-screen surface inside the V3 application frame, below the native titlebar/topbar and above the status bar, with internal navigation for **Nhà cung cấp** and **Chung**.
+
+Closure matrix from the final packaged verification:
+
+| Issue | Closure |
+|---|---|
+| UI-CR-001 - Settings full-screen surface | **FIXED AND VERIFIED** |
+| UI-CR-002 - Workspace whitespace/layout | **VERIFIED** |
+| UI-CR-003 - Provider status color semantics | **VERIFIED** |
+| UI-CR-004 - Product rail tooltip | **VERIFIED** |
+| UI-CR-005 - Composer alignment/language/presentation | **VERIFIED** |
+
+Final verification included `scripts\build.bat`, packaged screenshot smoke, `npm run typecheck`, targeted UI tests, `npm run build:renderer`, `npm run verify:release`, `scripts\stop.bat`, and orphan process check.
 
 ## UI Shell V3 production alignment (2026-07-13)
 
