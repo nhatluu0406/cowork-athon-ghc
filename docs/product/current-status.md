@@ -11,20 +11,21 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
 
-## UI Shell V3 production port (2026-07-13)
+## UI Shell V3 production alignment (2026-07-13)
 
 | Item | Status |
 |---|---|
 | Design prototype R3 (PO-approved direction) | **Complete** — `d96f205` on `design/ui-shell-v3-prototype` |
-| Production port branch | `feature/ui-shell-v3-production` |
-| V3 shell in packaged renderer | **Ported** — modular `app/ui/src/ui-shell/`; `app-shell.ts` orchestration only |
-| Commercial UI Product Owner visual acceptance | **Pending** — awaiting review of `reports/ui-shell-v3-production/` |
+| Rejected production port | `794cb00` on `feature/ui-shell-v3-production` — PO rejected visual acceptance because packaged UI still looked like the old shell |
+| Alignment branch | `fix/ui-shell-v3-production-alignment` |
+| V3 shell in packaged renderer | **Aligned** — V3 frame/component composition replaces the legacy shell composition; `app-shell.ts` remains orchestration/state wiring |
+| Commercial UI Product Owner visual acceptance | **Pending** — awaiting review of `reports/ui-shell-v3-production-r2/` |
 | D1–D4 merge | **Not started** — integration surfaces remain `awaiting_integration` |
 | Multi-Provider Profiles | **Not implemented** — read-only `ConversationProviderControl` boundary only |
 | File Work Review | **PARTIAL PASS** (unchanged) |
 | Full external integration regression | **Deferred** to integration milestone |
 
-Production evidence: `reports/ui-shell-v3-production/` (10 PNGs). Regenerate:
+Production evidence: `reports/ui-shell-v3-production-r2/` (12 PNGs + structural state JSON). Regenerate:
 
 ```powershell
 scripts\build.bat
@@ -32,7 +33,7 @@ node tools/verify/ui-shell-v3-production-screenshots.mjs
 scripts\stop.bat
 ```
 
-Design spec: [UI Shell V3 Spec](./ui-shell-v3-spec.md). Prototype reference: `design/ui-shell-v3/`, R3 evidence `reports/ui-shell-v3-r3/`.
+Design spec: [UI Shell V3 Spec](./ui-shell-v3-spec.md). Prototype reference: `design/ui-shell-v3/`, R3 evidence `reports/ui-shell-v3-r3/`. Prior rejected evidence remains in `reports/ui-shell-v3-production/`.
 
 ## Pre-merge stabilization (2026-07-13)
 
