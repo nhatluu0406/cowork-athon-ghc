@@ -9,10 +9,8 @@ export function createProductRail() {
         const item = el("button", `product-rail__item product-rail__item--${surface.availability}`);
         item.type = "button";
         item.dataset["surfaceId"] = surface.id;
-        item.title =
-            surface.dependency !== undefined
-                ? `${surface.label} - Chờ tích hợp ${surface.dependency}`
-                : surface.label;
+        item.title = railTooltip(surface);
+        item.dataset["tooltip"] = item.title;
         item.setAttribute("aria-label", item.title);
         item.setAttribute("aria-current", surface.id === "cowork" ? "page" : "false");
         item.append(icon(surface.icon, surface.label));
@@ -22,10 +20,18 @@ export function createProductRail() {
     const sidebarToggle = el("button", "product-rail__sidebar-toggle");
     sidebarToggle.type = "button";
     sidebarToggle.title = "Mở sidebar";
+    sidebarToggle.dataset["tooltip"] = "Mở sidebar";
     sidebarToggle.setAttribute("aria-label", "Mở sidebar");
     sidebarToggle.setAttribute("aria-expanded", "false");
     sidebarToggle.append(icon("conversation", "Mở sidebar"));
     root.append(nav, sidebarToggle);
     return { root, sidebarToggle, surfaceButtons };
+}
+function railTooltip(surface) {
+    if (surface.id === "code")
+        return "Code — Đã lên kế hoạch";
+    if (surface.dependency !== undefined)
+        return `${surface.label} — Chờ tích hợp ${surface.dependency}`;
+    return surface.label;
 }
 //# sourceMappingURL=product-rail.js.map

@@ -1,5 +1,8 @@
 /**
- * Conversation-level provider display (Phase 1: read-only until multi-profile registry exists).
+ * Conversation-level provider display.
+ *
+ * Multi-provider profiles are not implemented yet, so this opens the production Settings modal
+ * instead of pretending to be a profile dropdown.
  */
 export interface ConversationProviderControl {
     readonly root: HTMLButtonElement;
