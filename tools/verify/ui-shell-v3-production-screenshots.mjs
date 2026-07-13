@@ -277,8 +277,8 @@ async function assertStructure(call, label) {
       const errors = [];
       if (shellRoots !== 1) errors.push('expected exactly one shell-frame');
       if (activeViews.length !== 1) errors.push('expected exactly one active view, got ' + activeViews.join(','));
-      if (surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
-      if (surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
+      if (!settingsOpen && surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
+      if (!settingsOpen && surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
       if (settingsOpen && (sidebarVisible || inspectorVisible)) errors.push('settings surface must not show sidebar or inspector');
       if (!settingsOpen && surface !== 'cowork' && sidebarVisible) errors.push('integration/knowledge surfaces must not show sidebar');
       if (!settingsOpen && surface !== 'cowork' && inspectorVisible) errors.push('integration/knowledge surfaces must not show inspector');
@@ -399,6 +399,7 @@ async function captureAll(call, fixtureRoot) {
     const el = document.querySelector('.settings-surface');
     return !!el && !el.hidden && getComputedStyle(el).display !== 'none';
   })()`);
+  await sleep(300);
   structural.push(await assertStructure(call, "settings-provider"));
   await capture(call, "settings-provider.png", 1366, 768);
   await clickSelector(call, '[data-settings-tab="general"]');
@@ -435,7 +436,119 @@ async function captureAll(call, fixtureRoot) {
   await sleep(300);
   structural.push(await assertStructure(call, "workspace-long-path"));
   await capture(call, "workspace-long-path.png", 1366, 768);
+
+  await clickSelector(call, '[data-surface-id="microsoft"]');
+  await waitFor(call, `(() => {
+    const el = document.querySelector('section.ms-surface');
+    return !!el && !el.hidden;
+  })()`);
+  await sleep(400);
+  structural.push(await assertMicrosoftAssistant(call, "microsoft-assistant"));
+  await capture(call, "microsoft-assistant.png", 1366, 768);
+
+  await clickSelector(call, ".ms-segmented__item:nth-of-type(2)");
+  await waitFor(call, `(() => !!document.querySelector('.ms-connect__signin'))()`);
+  await sleep(300);
+  structural.push(await assertMicrosoftConnect(call, "microsoft-connect"));
+  await capture(call, "microsoft-connect.png", 1366, 768);
+
+  await clickSelector(call, '[data-surface-id="code"]');
+  await waitFor(call, `(() => {
+    const el = document.querySelector('section.cc-surface');
+    return !!el && !el.hidden;
+  })()`);
+  await sleep(400);
+  structural.push(await assertCodeSession(call, "code-session"));
+  await capture(call, "code-session.png", 1366, 768);
+
+  await clickSelector(call, ".cc-segmented__item:nth-of-type(2)");
+  await waitFor(call, `(() => !!document.querySelector('.cc-onboarding'))()`);
+  await sleep(300);
+  structural.push(await assertCodeOnboarding(call, "code-onboarding"));
+  await capture(call, "code-onboarding.png", 1366, 768);
+
   writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), structural }, null, 2));
+}
+
+async function assertMicrosoftAssistant(call, label) {
+  const result = await evaluate(
+    call,
+    `(() => {
+      const errors = [];
+      const surface = document.querySelector('section.ms-surface');
+      if (!surface || surface.hidden) errors.push('ms-surface not visible');
+      if (surface?.dataset?.view !== 'microsoft') errors.push('ms-surface dataset.view mismatch');
+      const tabs = [...document.querySelectorAll('.ms-segmented__item')].map((el) => el.textContent?.trim());
+      if (!tabs.includes('Trợ lý AI')) errors.push('assistant tab label missing');
+      if (!tabs.includes('Kết nối')) errors.push('connect tab label missing');
+      const cta = document.querySelector('.ms-assistant__connect-cta');
+      if (!cta) errors.push('assistant connect CTA missing');
+      return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
+    })()`,
+  );
+  if (!result?.passed) throw new Error(`Structural assertion failed for ${label}: ${(result?.errors ?? []).join("; ")}`);
+  return result;
+}
+
+async function assertMicrosoftConnect(call, label) {
+  const result = await evaluate(
+    call,
+    `(() => {
+      const errors = [];
+      const signIn = document.querySelector('.ms-connect__signin');
+      if (!signIn) errors.push('ms-connect__signin missing');
+      else if (!signIn.disabled) errors.push('ms-connect__signin is not disabled');
+      const bodyText = document.body.textContent ?? '';
+      if (!bodyText.includes('Backend D2')) errors.push('page text missing "Backend D2" honesty note');
+      return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
+    })()`,
+  );
+  if (!result?.passed) throw new Error(`Structural assertion failed for ${label}: ${(result?.errors ?? []).join("; ")}`);
+  return result;
+}
+
+async function assertCodeSession(call, label) {
+  const result = await evaluate(
+    call,
+    `(() => {
+      const visible = (selector) => {
+        const el = document.querySelector(selector);
+        if (!el || el.hidden) return false;
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0;
+      };
+      const errors = [];
+      const surface = document.querySelector('section.cc-surface');
+      if (!surface || surface.hidden) errors.push('cc-surface not visible');
+      if (surface?.dataset?.view !== 'code') errors.push('cc-surface dataset.view mismatch');
+      if (!visible('.code-explorer')) errors.push('code-explorer not visible');
+      if (!visible('.code-editor')) errors.push('code-editor not visible');
+      if (!visible('.cc-panel')) errors.push('cc-panel not visible');
+      const tabs = [...document.querySelectorAll('.cc-segmented__item')].map((el) => el.textContent?.trim());
+      if (!tabs.includes('Phiên làm việc')) errors.push('session tab label missing');
+      if (!tabs.includes('Cách hoạt động')) errors.push('how-it-works tab label missing');
+      return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
+    })()`,
+  );
+  if (!result?.passed) throw new Error(`Structural assertion failed for ${label}: ${(result?.errors ?? []).join("; ")}`);
+  return result;
+}
+
+async function assertCodeOnboarding(call, label) {
+  const result = await evaluate(
+    call,
+    `(() => {
+      const errors = [];
+      const onboarding = document.querySelector('.cc-onboarding');
+      if (!onboarding) errors.push('cc-onboarding missing');
+      const steps = document.querySelectorAll('.cc-onboarding__step');
+      if (steps.length !== 4) errors.push('expected 4 cc-onboarding__step elements, got ' + steps.length);
+      return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
+    })()`,
+  );
+  if (!result?.passed) throw new Error(`Structural assertion failed for ${label}: ${(result?.errors ?? []).join("; ")}`);
+  return result;
 }
 
 async function main() {
