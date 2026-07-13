@@ -89,14 +89,19 @@ function toHit(id: unknown, name: unknown, webUrl: unknown): SharePointHit | nul
   return { id, name, webUrl };
 }
 
+/** Returns `value` unchanged when it is an array, else `[]` — guards present-but-wrong-shape fields. */
+function asArray<T>(value: T[] | undefined): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
 /** Defensively flattens the nested search response shape into hits, dropping malformed entries. */
 function flattenSearchHits(response: unknown): SharePointHit[] {
   if (!isSearchResponse(response)) return [];
   const hits: SharePointHit[] = [];
-  for (const value of response.value ?? []) {
-    for (const container of value.hitsContainers ?? []) {
-      for (const hit of container.hits ?? []) {
-        const resource = hit.resource;
+  for (const value of asArray(response.value)) {
+    for (const container of asArray(value?.hitsContainers)) {
+      for (const hit of asArray(container?.hits)) {
+        const resource = hit?.resource;
         if (resource === undefined) continue;
         const mapped = toHit(resource.id, resource.name, resource.webUrl);
         if (mapped !== null) hits.push(mapped);
@@ -109,8 +114,8 @@ function flattenSearchHits(response: unknown): SharePointHit[] {
 function flattenDriveChildren(response: unknown): SharePointHit[] {
   if (!isDriveChildrenResponse(response)) return [];
   const hits: SharePointHit[] = [];
-  for (const item of response.value ?? []) {
-    const mapped = toHit(item.id, item.name, item.webUrl);
+  for (const item of asArray(response.value)) {
+    const mapped = toHit(item?.id, item?.name, item?.webUrl);
     if (mapped !== null) hits.push(mapped);
   }
   return hits;
