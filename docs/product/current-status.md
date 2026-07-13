@@ -19,7 +19,7 @@ Baseline: packaged POC `poc-v0.1` trên Windows 11. Tài liệu canonical: [docs
 | Chat | **WORKS** | Streaming qua OpenCode runtime; multi-turn qua envelope bounded. |
 | Conversations | **WORKS** | Tạo, tìm, đổi tên, xóa, mở lại từ sidebar; relaunch giữ history. |
 | Attachments | **PARTIAL** | Text files (.txt, .md, .json, source text); secret-like blocked; chưa drag-drop / PDF / image. |
-| Skills | **PARTIAL** | Discovery + enable/disable local `SKILL.md`; **chưa** add/edit/delete trong UI. |
+| Skills | **PARTIAL** | Settings → **Kỹ năng**: CRUD user `SKILL.md`, enable/disable; built-in read-only; chưa marketplace/MCP. |
 | Permissions | **WORKS** | Allow/Deny modal trước mutation; deny recovery đã verify packaged. |
 | File Work Review | **PARTIAL** | Create/modify + diff bounded PASS; delete tracking chưa tin cậy (OpenCode tool surface). |
 | D1 Dispatch | **NOT IMPLEMENTED** | UI surface + mount `d1-dispatch-root`; placeholder **Chờ tích hợp D1**; backend chưa merge. |
