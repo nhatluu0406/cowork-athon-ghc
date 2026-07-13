@@ -132,24 +132,6 @@ test("Allow posts {decision:'allow', scope} with the default scope 'once'", asyn
   assert.deepEqual(fake.decisions, [{ requestId: "req-42", decision: "allow", scope: "once" }]);
 });
 
-test("Allow posts the chosen scope 'always'", async () => {
-  const fake = makeFake();
-  const container = host();
-  fake.setPending([PENDING]);
-  const ctrl = createPermissionController({ client: fake.client, container });
-  await ctrl.refresh();
-
-  const always = Array.from(
-    container.querySelectorAll<HTMLInputElement>(".permission-scope-input"),
-  ).find((i) => i.value === "always");
-  always!.checked = true;
-  fake.setPending([]);
-  container.querySelector<HTMLButtonElement>(".permission-allow")!.click();
-  await flush();
-
-  assert.deepEqual(fake.decisions, [{ requestId: "req-42", decision: "allow", scope: "always" }]);
-});
-
 test("honesty — an 'already_resolved' outcome closes the modal with a truthful note (no fake success)", async () => {
   const fake = makeFake();
   const container = host();

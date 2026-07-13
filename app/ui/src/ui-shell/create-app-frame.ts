@@ -368,7 +368,7 @@ function createSettingsSurface(): {
   backButton.type = "button";
   const closeButton = el("button", "icon-btn settings-surface__close") as HTMLButtonElement;
   closeButton.type = "button";
-  closeButton.title = "Đóng cài đặt";
+  closeButton.dataset["tooltip"] = "Đóng cài đặt";
   closeButton.dataset["tooltip"] = "Đóng cài đặt";
   closeButton.setAttribute("aria-label", "Đóng cài đặt");
   closeButton.append(icon("panel-right-close", "Đóng cài đặt"));

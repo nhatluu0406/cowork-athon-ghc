@@ -56,6 +56,7 @@ import {
   type SettingsView,
 } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
+import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
@@ -837,6 +838,7 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
   try {
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
+    applyThemePreference(state.settings.general.theme);
   } catch {
     state.settings = null;
   }
