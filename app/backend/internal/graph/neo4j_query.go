@@ -3,9 +3,23 @@ package graph
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
+
+// cypherIdentifierPattern matches a safe Cypher label/relationship-type
+// identifier: letters, digits, underscore, not starting with a digit. Any
+// value that doesn't match this is rejected rather than interpolated into a
+// query string, since Neo4j's driver has no way to parameterize a label or
+// relationship type (only property values) — string formatting is the only
+// option, so untrusted input must be validated first to prevent Cypher
+// injection.
+var cypherIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+func validCypherIdentifier(s string) bool {
+	return cypherIdentifierPattern.MatchString(s)
+}
 
 type QueryBuilder struct {
 	driver neo4j.DriverWithContext
@@ -187,9 +201,20 @@ func (qb *QueryBuilder) GetEntityCount(ctx context.Context, nodeType string) (in
 }
 
 // ListNodes returns up to `limit` entity nodes, optionally filtered by label
-// (e.g. "Person", "Project", "Technology", "Customer", "Department"). Used by
-// GET /api/graph/nodes (tasks.md T185).
-func (qb *QueryBuilder) ListNodes(ctx context.Context, label string, limit int) ([]map[string]interface{}, error) {
+// (e.g. "Person", "Project", "Technology", "Customer", "Department"), and
+// scoped to allowedFileIDs (Stage-0 permission filtering per INVARIANT-1,
+// same semantics as ListEntities: nil disables scoping, a non-nil empty
+// slice means "no access to anything"). Used by GET /api/graph/nodes
+// (tasks.md T185).
+func (qb *QueryBuilder) ListNodes(ctx context.Context, label string, allowedFileIDs []int, limit int) ([]map[string]interface{}, error) {
+	if label != "" && !validCypherIdentifier(label) {
+		return nil, fmt.Errorf("ListNodes: invalid label %q", label)
+	}
+
+	if allowedFileIDs != nil && len(allowedFileIDs) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
 	session := qb.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -197,13 +222,23 @@ func (qb *QueryBuilder) ListNodes(ctx context.Context, label string, limit int) 
 		limit = 100
 	}
 
-	var query string
-	params := map[string]interface{}{"limit": limit}
+	matchClause := "MATCH (n)"
 	if label != "" {
-		query = fmt.Sprintf(`MATCH (n:%s) RETURN n.id as id, labels(n) as labels, properties(n) as props LIMIT $limit`, label)
-	} else {
-		query = `MATCH (n) RETURN n.id as id, labels(n) as labels, properties(n) as props LIMIT $limit`
+		matchClause = fmt.Sprintf("MATCH (n:%s)", label)
 	}
+
+	params := map[string]interface{}{"limit": limit}
+	whereClause := ""
+	if allowedFileIDs != nil {
+		ids := make([]interface{}, len(allowedFileIDs))
+		for i, id := range allowedFileIDs {
+			ids[i] = id
+		}
+		params["allowed_ids"] = ids
+		whereClause = " WHERE n.source_file_id IN $allowed_ids"
+	}
+
+	query := matchClause + whereClause + " RETURN n.id as id, labels(n) as labels, properties(n) as props LIMIT $limit"
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
 		res, err := tx.Run(ctx, query, params)
@@ -244,9 +279,18 @@ func (qb *QueryBuilder) ListNodes(ctx context.Context, label string, limit int) 
 }
 
 // ListEdges returns up to `limit` relationships, optionally filtered by
-// relationship type (e.g. "WORKS_ON", "MEMBER_OF"). Used by GET
-// /api/graph/edges (tasks.md T185).
-func (qb *QueryBuilder) ListEdges(ctx context.Context, relType string, limit int) ([]map[string]interface{}, error) {
+// relationship type (e.g. "WORKS_ON", "MEMBER_OF"), and scoped to
+// allowedFileIDs on both endpoint nodes (same semantics as ListNodes/
+// ListEntities). Used by GET /api/graph/edges (tasks.md T185).
+func (qb *QueryBuilder) ListEdges(ctx context.Context, relType string, allowedFileIDs []int, limit int) ([]map[string]interface{}, error) {
+	if relType != "" && !validCypherIdentifier(relType) {
+		return nil, fmt.Errorf("ListEdges: invalid relationship type %q", relType)
+	}
+
+	if allowedFileIDs != nil && len(allowedFileIDs) == 0 {
+		return []map[string]interface{}{}, nil
+	}
+
 	session := qb.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 
@@ -254,13 +298,23 @@ func (qb *QueryBuilder) ListEdges(ctx context.Context, relType string, limit int
 		limit = 100
 	}
 
-	var query string
-	params := map[string]interface{}{"limit": limit}
+	matchClause := "MATCH (a)-[r]->(b)"
 	if relType != "" {
-		query = fmt.Sprintf(`MATCH (a)-[r:%s]->(b) RETURN a.id as from, b.id as to, type(r) as type, properties(r) as props LIMIT $limit`, relType)
-	} else {
-		query = `MATCH (a)-[r]->(b) RETURN a.id as from, b.id as to, type(r) as type, properties(r) as props LIMIT $limit`
+		matchClause = fmt.Sprintf("MATCH (a)-[r:%s]->(b)", relType)
 	}
+
+	params := map[string]interface{}{"limit": limit}
+	whereClause := ""
+	if allowedFileIDs != nil {
+		ids := make([]interface{}, len(allowedFileIDs))
+		for i, id := range allowedFileIDs {
+			ids[i] = id
+		}
+		params["allowed_ids"] = ids
+		whereClause = " WHERE a.source_file_id IN $allowed_ids AND b.source_file_id IN $allowed_ids"
+	}
+
+	query := matchClause + whereClause + " RETURN a.id as from, b.id as to, type(r) as type, properties(r) as props LIMIT $limit"
 
 	result, err := session.ExecuteRead(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
 		res, err := tx.Run(ctx, query, params)
@@ -309,6 +363,10 @@ func (qb *QueryBuilder) ListEdges(ctx context.Context, relType string, limit int
 // this is the secure-by-default behavior INVARIANT-1 requires until
 // ingestion (Group B) stamps every extracted entity with its source file.
 func (qb *QueryBuilder) ListEntities(ctx context.Context, entityType string, allowedFileIDs []int, limit int) ([]map[string]interface{}, error) {
+	if entityType != "" && !validCypherIdentifier(entityType) {
+		return nil, fmt.Errorf("ListEntities: invalid entity type %q", entityType)
+	}
+
 	session := qb.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeRead})
 	defer session.Close(ctx)
 

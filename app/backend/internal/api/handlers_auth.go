@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
@@ -66,24 +67,28 @@ func HandleLogin(entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, redirectURI
 
 			tokenResp, err := entraAuth.ExchangeCode(r.Context(), req.Code, redirectURI)
 			if err != nil {
-				http.Error(w, "entra code exchange failed: "+err.Error(), http.StatusUnauthorized)
+				slog.ErrorContext(r.Context(), "entra code exchange failed", "err", err)
+				http.Error(w, "authentication failed", http.StatusUnauthorized)
 				return
 			}
 
 			userInfo, err := entraAuth.GetUserInfo(r.Context(), tokenResp.AccessToken)
 			if err != nil {
-				http.Error(w, "failed to fetch user info: "+err.Error(), http.StatusUnauthorized)
+				slog.ErrorContext(r.Context(), "failed to fetch entra user info", "err", err)
+				http.Error(w, "authentication failed", http.StatusUnauthorized)
 				return
 			}
 
 			accessToken, err := jwtAuth.GenerateTokenWithClaims(userInfo.UserID, userInfo.Email, userInfo.DisplayName, userInfo.ObjectID, accessTokenTTLSeconds)
 			if err != nil {
-				http.Error(w, "failed to issue access token: "+err.Error(), http.StatusInternalServerError)
+				slog.ErrorContext(r.Context(), "failed to issue access token", "err", err)
+				http.Error(w, "failed to issue access token", http.StatusInternalServerError)
 				return
 			}
 			refreshToken, err := jwtAuth.GenerateTokenWithClaims(userInfo.UserID, userInfo.Email, userInfo.DisplayName, userInfo.ObjectID, refreshTokenTTLSeconds)
 			if err != nil {
-				http.Error(w, "failed to issue refresh token: "+err.Error(), http.StatusInternalServerError)
+				slog.ErrorContext(r.Context(), "failed to issue refresh token", "err", err)
+				http.Error(w, "failed to issue refresh token", http.StatusInternalServerError)
 				return
 			}
 
@@ -103,12 +108,14 @@ func HandleLogin(entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, redirectURI
 
 		accessToken, err := jwtAuth.GenerateToken(req.Username, req.Username, accessTokenTTLSeconds)
 		if err != nil {
-			http.Error(w, "failed to issue access token: "+err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "failed to issue access token", "err", err)
+			http.Error(w, "failed to issue access token", http.StatusInternalServerError)
 			return
 		}
 		refreshToken, err := jwtAuth.GenerateToken(req.Username, req.Username, refreshTokenTTLSeconds)
 		if err != nil {
-			http.Error(w, "failed to issue refresh token: "+err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "failed to issue refresh token", "err", err)
+			http.Error(w, "failed to issue refresh token", http.StatusInternalServerError)
 			return
 		}
 
@@ -142,18 +149,21 @@ func HandleRefreshToken(jwtAuth *auth.JWTAuth) http.HandlerFunc {
 
 		claims, err := jwtAuth.VerifyToken(req.RefreshToken)
 		if err != nil {
-			http.Error(w, "invalid or expired refresh token: "+err.Error(), http.StatusUnauthorized)
+			slog.WarnContext(r.Context(), "refresh token verification failed", "err", err)
+			http.Error(w, "invalid or expired refresh token", http.StatusUnauthorized)
 			return
 		}
 
 		accessToken, err := jwtAuth.GenerateTokenWithClaims(claims.UserID, claims.Email, claims.DisplayName, claims.ObjectID, accessTokenTTLSeconds)
 		if err != nil {
-			http.Error(w, "failed to issue access token: "+err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "failed to issue access token", "err", err)
+			http.Error(w, "failed to issue access token", http.StatusInternalServerError)
 			return
 		}
 		refreshToken, err := jwtAuth.GenerateTokenWithClaims(claims.UserID, claims.Email, claims.DisplayName, claims.ObjectID, refreshTokenTTLSeconds)
 		if err != nil {
-			http.Error(w, "failed to issue refresh token: "+err.Error(), http.StatusInternalServerError)
+			slog.ErrorContext(r.Context(), "failed to issue refresh token", "err", err)
+			http.Error(w, "failed to issue refresh token", http.StatusInternalServerError)
 			return
 		}
 
