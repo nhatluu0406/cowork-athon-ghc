@@ -11,6 +11,11 @@ import type { RuntimePhase } from "./conversation-controller.js";
 import { needsContinuation } from "./conversation-controller.js";
 import { PROVIDER_PRESETS } from "./provider-presets.js";
 
+const DEEPSEEK_MODELS = [
+  { id: "deepseek-chat", label: "DeepSeek Chat" },
+  { id: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+] as const;
+
 export type ReadinessKind =
   | "local_service_unavailable"
   | "workspace_missing"
@@ -91,7 +96,13 @@ function providerRow(settings: SettingsView, providerId: string) {
   return settings.providers.find((p) => p.providerId === providerId);
 }
 
+function activeProfile(settings: SettingsView | null) {
+  return settings?.providerProfiles?.find((p) => p.isActive);
+}
+
 export function providerDisplayName(settings: SettingsView | null): string {
+  const profile = activeProfile(settings);
+  if (profile !== undefined) return profile.displayName;
   const model = settings?.defaultModel;
   if (model === null || model === undefined) return "Provider";
   const preset = PROVIDER_PRESETS.find(
@@ -107,6 +118,14 @@ export function providerDisplayName(settings: SettingsView | null): string {
 }
 
 export function providerModelLabel(settings: SettingsView | null): string {
+  const profile = activeProfile(settings);
+  if (profile !== undefined) {
+    const friendly =
+      profile.providerType === "deepseek"
+        ? DEEPSEEK_MODELS.find((m) => m.id === profile.modelId)?.label ?? profile.modelId
+        : profile.modelId;
+    return `${profile.displayName} / ${friendly}`;
+  }
   const model = settings?.defaultModel;
   if (model === null || model === undefined) return "Provider chưa cấu hình";
   return `${providerDisplayName(settings)} / ${model.modelID}`;
@@ -126,6 +145,51 @@ export function providerStatus(
   settings: SettingsView | null,
   connectionTestState: ConnectionTestState = "unknown",
 ): StatusCopy {
+  const profile = activeProfile(settings);
+  if (profile !== undefined) {
+    const subject = profile.displayName;
+    if (!isBaseUrlLocallyValid(profile.baseUrl)) {
+      return {
+        label: `${subject} · Cấu hình chưa hợp lệ`,
+        detail: "Base URL không hợp lệ.",
+        ok: false,
+      };
+    }
+    if (!profile.credentialConfigured) {
+      return {
+        label: `${subject} · Chưa cấu hình`,
+        detail: "Cần khoá API trước khi bắt đầu.",
+        ok: false,
+      };
+    }
+    if (profile.modelId.trim().length === 0) {
+      return {
+        label: `${subject} · Cấu hình chưa hợp lệ`,
+        detail: "Mô hình không được để trống.",
+        ok: false,
+      };
+    }
+    if (connectionTestState === "failed") {
+      return {
+        label: `${subject} · Kết nối thất bại`,
+        detail: "Kiểm tra kết nối không thành công — mở cài đặt để sửa.",
+        ok: false,
+      };
+    }
+    if (connectionTestState === "ok") {
+      return {
+        label: `${subject} · Sẵn sàng`,
+        detail: `${profile.modelId} · khoá API đã cấu hình.`,
+        ok: true,
+      };
+    }
+    return {
+      label: `${subject} · Chưa kiểm tra`,
+      detail: `${profile.modelId} · khoá API đã cấu hình.`,
+      ok: true,
+    };
+  }
+
   const subject = providerDisplayName(settings);
   if (settings === null) {
     return {
@@ -253,6 +317,39 @@ export function assessSendPreflight(input: ProviderReadinessInput): SendPrefligh
       blockKind: "provider_missing",
       message: "Chưa tải cấu hình provider.",
       showSettingsCta: true,
+    };
+  }
+  const profile = activeProfile(input.settings);
+  if (profile !== undefined) {
+    if (!isBaseUrlLocallyValid(profile.baseUrl)) {
+      return {
+        canSend: false,
+        blockKind: "base_url_invalid",
+        message: "Base URL không hợp lệ. Sửa trong cài đặt provider.",
+        showSettingsCta: true,
+      };
+    }
+    if (profile.modelId.trim().length === 0) {
+      return {
+        canSend: false,
+        blockKind: "model_missing",
+        message: "Mô hình không được để trống.",
+        showSettingsCta: true,
+      };
+    }
+    if (!profile.credentialConfigured) {
+      return {
+        canSend: false,
+        blockKind: "credential_missing",
+        message: "Cần cấu hình khoá API trước khi bắt đầu",
+        showSettingsCta: true,
+      };
+    }
+    return {
+      canSend: true,
+      blockKind: null,
+      message: "",
+      showSettingsCta: false,
     };
   }
   const model = input.settings.defaultModel;

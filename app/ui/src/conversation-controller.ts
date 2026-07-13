@@ -8,9 +8,11 @@
 import type { SessionView } from "@cowork-ghc/service/execution";
 import type {
   AttachmentMetadata,
+  ConversationProviderSnapshot,
   ConversationRecord,
   ConversationStatus,
   ConversationSummary,
+  CreateConversationInput,
   RuntimeTurnRecord,
   ServiceClient,
   SkillUseMetadata,
@@ -44,7 +46,12 @@ export interface ConversationManager {
   readonly state: ConversationManagerState;
   refreshList(): Promise<void>;
   setSearch(query: string): Promise<void>;
-  createNew(workspacePath: string, providerId?: string, modelId?: string): Promise<ConversationRecord>;
+  createNew(
+    workspacePath: string,
+    providerId?: string,
+    modelId?: string,
+    providerSnapshot?: ConversationProviderSnapshot,
+  ): Promise<ConversationRecord>;
   select(id: string): Promise<void>;
   rename(id: string, title: string): Promise<void>;
   deleteConversation(id: string): Promise<void>;
@@ -190,12 +197,14 @@ export function createConversationManager(
       await this.refreshList();
     },
 
-    async createNew(workspacePath, providerId, modelId) {
-      const record = await (await client()).createConversation({
+    async createNew(workspacePath, providerId, modelId, providerSnapshot) {
+      const input: CreateConversationInput = {
         workspacePath,
         ...(providerId !== undefined ? { providerId } : {}),
         ...(modelId !== undefined ? { modelId } : {}),
-      });
+        ...(providerSnapshot !== undefined ? { providerSnapshot } : {}),
+      };
+      const record = await (await client()).createConversation(input);
       await this.refreshList();
       await syncRecord(record);
       state.runtimePhase = "idle";
