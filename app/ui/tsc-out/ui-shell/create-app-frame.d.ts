@@ -1,12 +1,15 @@
 /**
- * V3 application frame — layout DOM only (no business logic).
+ * V3 application frame composition.
+ *
+ * This module wires layout components together and exposes DOM handles for app-shell state.
+ * Business behavior stays in app-shell.ts and service/controller modules.
  */
-import { type ProductSurfaceId } from "../surface-registry.js";
 import { type ActivityPanelDom } from "../activity-panel.js";
-import { type ConversationProviderControl } from "./conversation-provider-control.js";
+import type { ProductSurfaceId } from "../surface-registry.js";
 import { type KnowledgeViewDom } from "./knowledge-view.js";
 import { type StatusBarDom } from "./status-bar.js";
 import { type WorkspaceViewDom } from "./workspace-view.js";
+import type { ConversationProviderControl } from "./conversation-provider-control.js";
 export interface AppFrameDom {
     readonly root: HTMLElement;
     readonly shellFrame: HTMLElement;
