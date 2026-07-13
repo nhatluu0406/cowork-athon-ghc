@@ -7,8 +7,8 @@
 
 import { createActivityPanel, setRightPanelCollapsed, type ActivityPanelDom } from "../activity-panel.js";
 import type { ProductSurfaceId } from "../surface-registry.js";
-import { closeModalWithFocus, createModalKeyHandler, openModalWithFocus } from "../modal-focus.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
+import type { ConversationProviderControl } from "./conversation-provider-control.js";
 import { createCoworkView } from "./cowork-view.js";
 import { el, icon } from "./dom-utils.js";
 import { createInspectorShell } from "./inspector.js";
@@ -17,8 +17,8 @@ import { createKnowledgeView, type KnowledgeViewDom } from "./knowledge-view.js"
 import { createProductRail } from "./product-rail.js";
 import { createStatusBar, type StatusBarDom } from "./status-bar.js";
 import { createTopbar } from "./topbar.js";
+import { installShellTooltips } from "./tooltip.js";
 import { createWorkspaceView, type WorkspaceViewDom } from "./workspace-view.js";
-import type { ConversationProviderControl } from "./conversation-provider-control.js";
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 
@@ -60,13 +60,12 @@ export interface AppFrameDom {
   readonly newConversationButton: HTMLButtonElement;
   readonly providerControl: ConversationProviderControl;
   readonly skillsButton: HTMLButtonElement;
-  readonly settingsModal: HTMLElement;
-  readonly settingsPanel: HTMLElement;
-  readonly settingsBody: HTMLElement;
+  readonly settingsSurface: HTMLElement;
+  readonly settingsProviderBody: HTMLElement;
+  readonly settingsGeneralBody: HTMLElement;
   readonly settingsButton: HTMLButtonElement;
   readonly closeSettingsButton: HTMLButtonElement;
   settingsOpener: HTMLElement | null;
-  readonly modalKeyHandler: (event: KeyboardEvent) => void;
   readonly activityPanel: ActivityPanelDom;
   readonly executionStatus: HTMLElement;
   readonly permissionSummary: HTMLElement;
@@ -87,6 +86,7 @@ export interface AppFrameDom {
   readonly rightPanelTopbarToggle: HTMLButtonElement;
   readonly sidebarRailToggle: HTMLButtonElement;
   openSettings: () => void;
+  closeSettings: () => void;
   applySidebarCollapsed: (collapsed: boolean) => void;
   applyRightPanelCollapsed: (collapsed: boolean) => void;
 }
@@ -102,6 +102,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const workspaceView = createWorkspaceView();
   const knowledgeView = createKnowledgeView();
   const integrationSurface = createIntegrationView();
+  const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
   const statusBar = createStatusBar();
 
@@ -113,44 +114,20 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     workspaceView.root,
     knowledgeView.root,
     integrationSurface,
+    settingsSurface.root,
     inspector.root,
   );
 
   const drawerScrim = el("div", "drawer-scrim");
   drawerScrim.hidden = true;
 
-  const settingsModal = el("div", "modal");
-  settingsModal.hidden = true;
-  settingsModal.setAttribute("role", "dialog");
-  settingsModal.setAttribute("aria-modal", "true");
-  settingsModal.setAttribute("aria-label", "Cài đặt");
-  settingsModal.setAttribute("aria-hidden", "true");
-  const settingsPanel = el("div", "modal__panel");
-  const settingsHeader = el("div", "modal__header");
-  const modalTitle = el("h2", "modal__title", "Cài đặt");
-  modalTitle.tabIndex = -1;
-  const closeSettings = el("button", "icon-btn", "Đóng") as HTMLButtonElement;
-  closeSettings.type = "button";
-  settingsHeader.append(modalTitle, closeSettings);
-  const settingsBody = el("div", "modal__body");
-  settingsPanel.append(settingsHeader, settingsBody);
-  settingsModal.append(settingsPanel);
-
   const skillsPanel = el("section", "skills-panel skills-drawer");
   skillsPanel.hidden = true;
 
-  root.append(topbar.root, shellFrame, statusBar.root, drawerScrim, settingsModal, skillsPanel);
+  root.append(topbar.root, shellFrame, statusBar.root, drawerScrim, skillsPanel);
+  installShellTooltips(root);
 
   let settingsOpener: HTMLElement | null = null;
-  const modalKeyHandler = createModalKeyHandler({
-    panel: settingsPanel,
-    closeButton: closeSettings,
-    onClose: () => {
-      closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
-      settingsOpener = null;
-    },
-  });
-
   const activityPanel = createActivityPanel(inspector.root);
 
   const dom: AppFrameDom = {
@@ -191,13 +168,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     newConversationButton: sidebar.newConversationButton,
     providerControl: cowork.providerControl,
     skillsButton: cowork.skillsButton,
-    settingsModal,
-    settingsPanel,
-    settingsBody,
+    settingsSurface: settingsSurface.root,
+    settingsProviderBody: settingsSurface.providerBody,
+    settingsGeneralBody: settingsSurface.generalBody,
     settingsButton: topbar.settingsButton,
-    closeSettingsButton: closeSettings,
+    closeSettingsButton: settingsSurface.closeButton,
     settingsOpener: null,
-    modalKeyHandler,
     activityPanel,
     executionStatus: inspector.executionStatus,
     permissionSummary: inspector.permissionSummary,
@@ -218,28 +194,38 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     rightPanelTopbarToggle: topbar.inspectorToggle,
     sidebarRailToggle: rail.sidebarToggle,
     openSettings: () => undefined,
+    closeSettings: () => undefined,
     applySidebarCollapsed: () => undefined,
     applyRightPanelCollapsed: () => undefined,
   };
 
+  const closeSettings = (): void => {
+    settingsSurface.root.hidden = true;
+    shellFrame.classList.remove("shell-frame--settings");
+    settingsOpener?.focus();
+    settingsOpener = null;
+  };
+
   const openSettings = (): void => {
     settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : topbar.settingsButton;
-    const initial =
-      settingsBody.querySelector<HTMLElement>(".llm-provider-select") ??
-      settingsBody.querySelector<HTMLElement>(".llm-settings-title") ??
-      closeSettings;
-    openModalWithFocus(settingsModal, initial, modalKeyHandler);
+    settingsSurface.root.hidden = false;
+    shellFrame.classList.add("shell-frame--settings");
+    settingsSurface.showTab("provider");
+    const initial = settingsSurface.providerBody.querySelector<HTMLElement>(".llm-provider-select") ?? settingsSurface.providerTab;
+    initial.focus();
   };
   dom.openSettings = openSettings;
+  dom.closeSettings = closeSettings;
 
   topbar.settingsButton.addEventListener("click", openSettings);
   statusBar.provider.addEventListener("click", openSettings);
   cowork.providerControl.root.addEventListener("click", openSettings);
   cowork.composerPreflightCta.addEventListener("click", openSettings);
   cowork.emptyStateCta.addEventListener("click", openSettings);
-  closeSettings.addEventListener("click", () => {
-    closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
-    settingsOpener = null;
+  settingsSurface.closeButton.addEventListener("click", closeSettings);
+  settingsSurface.backButton.addEventListener("click", closeSettings);
+  settingsSurface.root.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSettings();
   });
 
   const setDrawerOpen = (kind: "sidebar" | "inspector" | null): void => {
@@ -253,6 +239,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     sidebar.root.hidden = collapsed;
     rail.sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     rail.sidebarToggle.title = collapsed ? "Mở sidebar" : "Thu gọn sidebar";
+    rail.sidebarToggle.dataset["tooltip"] = rail.sidebarToggle.title;
     rail.sidebarToggle.setAttribute("aria-label", rail.sidebarToggle.title);
   };
   dom.applySidebarCollapsed = applySidebarCollapsed;
@@ -268,11 +255,6 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     topbar.inspectorToggle.replaceChildren(
       icon(collapsed ? "panel-right-open" : "panel-right-close", inspectorLabel),
     );
-    topbar.inspectorToggle.title = collapsed ? "Mở inspector" : "Đóng inspector";
-    topbar.inspectorToggle.setAttribute("aria-label", topbar.inspectorToggle.title);
-    topbar.inspectorToggle.title = inspectorLabel;
-    topbar.inspectorToggle.dataset["tooltip"] = inspectorLabel;
-    topbar.inspectorToggle.setAttribute("aria-label", inspectorLabel);
     shellFrame.classList.toggle("inspector-drawer-open", !collapsed && window.matchMedia("(max-width: 1366px)").matches);
     drawerScrim.hidden = collapsed || !window.matchMedia("(max-width: 1366px)").matches;
   };
@@ -321,4 +303,91 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   drawerScrim.addEventListener("click", () => setDrawerOpen(null));
 
   return dom;
+}
+
+function createSettingsSurface(): {
+  readonly root: HTMLElement;
+  readonly providerBody: HTMLElement;
+  readonly generalBody: HTMLElement;
+  readonly providerTab: HTMLButtonElement;
+  readonly closeButton: HTMLButtonElement;
+  readonly backButton: HTMLButtonElement;
+  readonly showTab: (tab: "provider" | "general") => void;
+} {
+  const root = el("section", "view view--settings settings-surface");
+  root.hidden = true;
+  root.dataset["view"] = "settings";
+  root.setAttribute("aria-label", "Cài đặt");
+
+  const header = el("div", "settings-surface__header");
+  const titleBlock = el("div", "settings-surface__header-text");
+  titleBlock.append(
+    el("p", "settings-surface__eyebrow", "Cowork GHC"),
+    el("h1", "settings-surface__title", "Cài đặt"),
+  );
+  const actions = el("div", "settings-surface__actions");
+  const backButton = el("button", "settings-surface__back", "Trở về") as HTMLButtonElement;
+  backButton.type = "button";
+  const closeButton = el("button", "icon-btn settings-surface__close") as HTMLButtonElement;
+  closeButton.type = "button";
+  closeButton.title = "Đóng cài đặt";
+  closeButton.dataset["tooltip"] = "Đóng cài đặt";
+  closeButton.setAttribute("aria-label", "Đóng cài đặt");
+  closeButton.append(icon("panel-right-close", "Đóng cài đặt"));
+  actions.append(backButton, closeButton);
+  header.append(titleBlock, actions);
+
+  const layout = el("div", "settings-surface__layout");
+  const nav = el("nav", "settings-surface__nav");
+  nav.setAttribute("aria-label", "Mục cài đặt");
+  const providerTab = el("button", "settings-surface__tab settings-surface__tab--active", "Nhà cung cấp") as HTMLButtonElement;
+  providerTab.type = "button";
+  providerTab.dataset["settingsTab"] = "provider";
+  providerTab.setAttribute("aria-current", "page");
+  const generalTab = el("button", "settings-surface__tab", "Chung") as HTMLButtonElement;
+  generalTab.type = "button";
+  generalTab.dataset["settingsTab"] = "general";
+  nav.append(providerTab, generalTab);
+
+  const content = el("div", "settings-surface__content");
+  const providerBody = el("section", "settings-surface__panel settings-surface__panel--provider");
+  providerBody.setAttribute("aria-label", "Cài đặt nhà cung cấp");
+  const generalBody = el("section", "settings-surface__panel settings-surface__panel--general");
+  generalBody.hidden = true;
+  generalBody.setAttribute("aria-label", "Cài đặt chung");
+  content.append(providerBody, generalBody);
+  layout.append(nav, content);
+  root.append(header, layout);
+
+  const showTab = (tab: "provider" | "general"): void => {
+    const provider = tab === "provider";
+    providerBody.hidden = !provider;
+    generalBody.hidden = provider;
+    providerTab.classList.toggle("settings-surface__tab--active", provider);
+    generalTab.classList.toggle("settings-surface__tab--active", !provider);
+    providerTab.setAttribute("aria-current", provider ? "page" : "false");
+    generalTab.setAttribute("aria-current", provider ? "false" : "page");
+  };
+
+  providerTab.addEventListener("click", () => showTab("provider"));
+  generalTab.addEventListener("click", () => showTab("general"));
+
+  for (const tab of [providerTab, generalTab]) {
+    tab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
+      event.preventDefault();
+      const target =
+        event.key === "Home"
+          ? providerTab
+          : event.key === "End"
+            ? generalTab
+            : tab === providerTab
+              ? generalTab
+              : providerTab;
+      target.focus();
+      target.click();
+    });
+  }
+
+  return { root, providerBody, generalBody, providerTab, closeButton, backButton, showTab };
 }

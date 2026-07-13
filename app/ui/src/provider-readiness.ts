@@ -188,7 +188,7 @@ export function providerStatus(
   return {
     label: `${subject} · Chưa kiểm tra`,
     detail: `${model.modelID} · khoá API đã cấu hình.`,
-    ok: true,
+    ok: false,
   };
 }
 

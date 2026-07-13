@@ -1,6 +1,6 @@
 /**
- * Packaged UI Shell V3 production screenshots.
- * Launches win-unpacked app, drives renderer via CDP, writes reports/ui-shell-v3-production-r3/.
+ * Packaged UI Shell V3 commercial readiness screenshots.
+ * Launches win-unpacked app, drives renderer via CDP, writes reports/ui-shell-v3-commercial-readiness/.
  */
 
 import { spawn, execSync } from "node:child_process";
@@ -12,7 +12,7 @@ import { packagedChildEnv } from "./packaged-launch-env.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
-const OUT_DIR = join(REPO, "reports", "ui-shell-v3-production-r3");
+const OUT_DIR = join(REPO, "reports", "ui-shell-v3-commercial-readiness");
 const CDP_PORT = 19228;
 const SAFE_TMP = "C:\\tmp";
 
@@ -21,6 +21,7 @@ function createSafeFixtureWorkspace() {
   const root = mkdtempSync(join(SAFE_TMP, "cghc-ui-shell-v3-fixture-"));
   mkdirSync(join(root, "src"), { recursive: true });
   mkdirSync(join(root, "docs"), { recursive: true });
+  mkdirSync(join(root, "docs", "commercial-readiness", "very-long-folder-name-for-ellipsis"), { recursive: true });
   writeFileSync(
     join(root, "src", "README.md"),
     [
@@ -37,6 +38,22 @@ function createSafeFixtureWorkspace() {
       "# Integration readiness",
       "",
       "Safe fixture content for packaged UI Shell V3 screenshots.",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(root, "docs", "commercial-readiness", "very-long-folder-name-for-ellipsis", "workspace-long-path-preview.md"),
+    [
+      "# Workspace long path preview",
+      "",
+      "Safe fixture content for long path and ellipsis validation.",
+    ].join("\n"),
+  );
+  writeFileSync(
+    join(root, "this-is-a-very-long-commercial-readiness-workspace-file-name-for-truncation-preview.md"),
+    [
+      "# Long visible fixture",
+      "",
+      "Safe fixture content for file-row truncation and workspace path preview.",
     ].join("\n"),
   );
   return root;
@@ -238,10 +255,11 @@ async function assertStructure(call, label) {
         const r = el.getBoundingClientRect();
         return cs.display !== 'none' && cs.visibility !== 'hidden' && r.width > 0 && r.height > 0;
       };
-      const activeViews = ['cowork', 'workspace', 'knowledge', 'integration']
+      const activeViews = ['cowork', 'workspace', 'knowledge', 'integration', 'settings']
         .filter((name) => visible('[data-view="' + name + '"]'));
       const surface = document.querySelector('.product-rail__item[aria-current="page"]')?.dataset.surfaceId ?? '';
       const workMode = document.querySelector('.shell-frame')?.dataset.workMode ?? '';
+      const settingsOpen = activeViews[0] === 'settings';
       const sidebarVisible = visible('.contextual-sidebar');
       const inspectorVisible = visible('.inspector-shell');
       const shellRoots = document.querySelectorAll('.shell-frame').length;
@@ -261,8 +279,9 @@ async function assertStructure(call, label) {
       if (activeViews.length !== 1) errors.push('expected exactly one active view, got ' + activeViews.join(','));
       if (surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
       if (surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
-      if (surface !== 'cowork' && sidebarVisible) errors.push('integration/knowledge surfaces must not show sidebar');
-      if (surface !== 'cowork' && inspectorVisible) errors.push('integration/knowledge surfaces must not show inspector');
+      if (settingsOpen && (sidebarVisible || inspectorVisible)) errors.push('settings surface must not show sidebar or inspector');
+      if (!settingsOpen && surface !== 'cowork' && sidebarVisible) errors.push('integration/knowledge surfaces must not show sidebar');
+      if (!settingsOpen && surface !== 'cowork' && inspectorVisible) errors.push('integration/knowledge surfaces must not show inspector');
       if (legacyTextButton) errors.push('legacy continuation text button visible');
       if (oldWorkspacePathCard) errors.push('old workspace path card visible in Cowork sidebar');
       if (duplicateKnowledgeRail) errors.push('Knowledge Graph rail item visible');
@@ -270,8 +289,8 @@ async function assertStructure(call, label) {
       if (fauxWindowControls !== 0) errors.push('custom window controls visible in DOM');
       if (!settingsButton) errors.push('topbar settings button missing');
       if (!providerStatusButton) errors.push('status bar provider is not a button');
-      if (!equalTabs && surface === 'cowork') errors.push('work mode tabs are not equal width');
-      return { label: ${JSON.stringify(label)}, surface, workMode, activeViews, sidebarVisible, inspectorVisible, shellRoots, legacyTextButton, oldWorkspacePathCard, duplicateKnowledgeRail, horizontalOverflow, fauxWindowControls, settingsButton, providerStatusButton, equalTabs, passed: errors.length === 0, errors };
+      if (!equalTabs && surface === 'cowork' && !settingsOpen) errors.push('work mode tabs are not equal width');
+      return { label: ${JSON.stringify(label)}, surface, workMode, activeViews, settingsOpen, sidebarVisible, inspectorVisible, shellRoots, legacyTextButton, oldWorkspacePathCard, duplicateKnowledgeRail, horizontalOverflow, fauxWindowControls, settingsButton, providerStatusButton, equalTabs, passed: errors.length === 0, errors };
     })()`,
   );
   if (!result?.passed) {
@@ -336,6 +355,20 @@ async function captureAll(call, fixtureRoot) {
         headers,
         body: JSON.stringify({ providerId, ref: { store: 'os', account: 'cghc-ui-r3-fake-provider-ref' } }),
       });
+      const longTitle = 'Nháp thương mại với tiêu đề rất dài để kiểm tra truncation, tooltip và metadata phụ trong sidebar Cowork';
+      const created = await fetch(bootstrap.serviceBaseUrl + '/v1/conversations', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ workspacePath: ${fixtureLiteral}, title: longTitle }),
+      }).then((r) => r.json());
+      const conversationId = created?.data?.conversation?.id;
+      if (conversationId) {
+        await fetch(bootstrap.serviceBaseUrl + '/v1/conversations/' + encodeURIComponent(conversationId), {
+          method: 'PATCH',
+          headers,
+          body: JSON.stringify({ title: longTitle, lastActive: true }),
+        });
+      }
       return true;
     })()`,
   );
@@ -343,33 +376,46 @@ async function captureAll(call, fixtureRoot) {
   await waitFor(call, `(() => /DeepSeek/.test(document.body.textContent ?? ''))()`);
   await sleep(800);
 
+  structural.push(await assertStructure(call, "provider-untested"));
+  await capture(call, "provider-untested.png", 1366, 768);
   structural.push(await assertStructure(call, "cowork-ready-1920"));
   await capture(call, "cowork-ready-1920.png", 1920, 1080);
   await capture(call, "titlebar-controls.png", 1920, 1080);
   structural.push(await assertStructure(call, "cowork-ready-1366"));
   await capture(call, "cowork-ready-1366.png", 1366, 768);
-  structural.push(await assertStructure(call, "cowork-ready-900"));
-  await capture(call, "cowork-ready-900.png", 900, 768);
+  structural.push(await assertStructure(call, "long-conversation-title"));
+  await capture(call, "long-conversation-title.png", 1366, 768);
+  structural.push(await assertStructure(call, "cowork-narrow"));
+  await capture(call, "cowork-narrow.png", 900, 768);
 
-  await evaluate(call, `(() => document.querySelector('[data-surface-id="dispatch"]')?.classList.add('is-tooltip-visible'))()`);
+  await evaluate(call, `(() => document.querySelector('[data-surface-id="dispatch"]')?.focus())()`);
   await sleep(300);
-  structural.push(await assertStructure(call, "rail-tooltips"));
-  await capture(call, "rail-tooltips.png", 1366, 768);
-  await evaluate(call, `(() => document.querySelector('[data-surface-id="dispatch"]')?.classList.remove('is-tooltip-visible'))()`);
+  structural.push(await assertStructure(call, "rail-tooltip"));
+  await capture(call, "rail-tooltip.png", 1366, 768);
+  await evaluate(call, `(() => document.querySelector('.topbar__settings')?.focus())()`);
 
   await clickSelector(call, ".topbar__settings");
-  await waitFor(call, `(() => !document.querySelector('.modal')?.hidden)()`);
+  await waitFor(call, `(() => {
+    const el = document.querySelector('.settings-surface');
+    return !!el && !el.hidden && getComputedStyle(el).display !== 'none';
+  })()`);
   structural.push(await assertStructure(call, "settings-provider"));
   await capture(call, "settings-provider.png", 1366, 768);
-  await evaluate(call, `(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))()`);
+  await clickSelector(call, '[data-settings-tab="general"]');
+  await sleep(250);
+  structural.push(await assertStructure(call, "settings-general"));
+  await capture(call, "settings-general.png", 1366, 768);
+  await evaluate(call, `(() => document.querySelector('.settings-surface')?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))()`);
   await sleep(300);
 
   await clickSelector(call, ".topbar__inspector-toggle");
   await sleep(300);
-  structural.push(await assertStructure(call, "inspector-open"));
-  await capture(call, "inspector-open.png", 1366, 768);
+  structural.push(await assertStructure(call, "cowork-inspector-open"));
+  await capture(call, "cowork-inspector-open.png", 1366, 768);
   await clickSelector(call, ".topbar__inspector-toggle");
   await sleep(300);
+  structural.push(await assertStructure(call, "cowork-inspector-closed"));
+  await capture(call, "cowork-inspector-closed.png", 1366, 768);
 
   await clickSelector(call, '[data-work-mode="workspace"]');
   await sleep(400);
@@ -377,22 +423,18 @@ async function captureAll(call, fixtureRoot) {
   await capture(call, "workspace.png", 1366, 768);
 
   await evaluate(call, `(() => {
-    const srcFolder = [...document.querySelectorAll('.workspace-tree__row--folder')]
-      .find((row) => /(^|[\\\\/])src$/i.test(row.title ?? '') || /src/i.test(row.textContent ?? ''));
-    srcFolder?.click();
-  })()`);
-  await sleep(400);
-  await evaluate(call, `(() => {
     const rows = [...document.querySelectorAll('.workspace-tree__row--file')];
     const safe = rows.find((row) => {
       const path = row.title ?? '';
       if (/\.env/i.test(path) || /credential|secret|\.pem|\.key/i.test(path)) return false;
-      return /README\.md$/i.test(path) || /\.md$/i.test(path);
+      return /very-long-commercial-readiness/i.test(path) || /README\.md$/i.test(path) || /\.md$/i.test(path);
     });
     (safe ?? rows.find((row) => !/\\.env/i.test(row.title ?? '')))?.click();
   })()`);
   await waitFor(call, `(() => !!document.querySelector('.workspace-preview__body')?.textContent)`);
   await sleep(300);
+  structural.push(await assertStructure(call, "workspace-long-path"));
+  await capture(call, "workspace-long-path.png", 1366, 768);
   writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), structural }, null, 2));
 }
 

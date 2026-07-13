@@ -92,9 +92,9 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
 
   const skillsButton = el("button", "skills-btn composer-skills-btn") as HTMLButtonElement;
   skillsButton.type = "button";
-  skillsButton.textContent = "Skills: 0";
-  skillsButton.title = "Skills";
-  skillsButton.setAttribute("aria-label", "Mở Skills");
+  skillsButton.textContent = "Kỹ năng: 0";
+  skillsButton.title = "Kỹ năng";
+  skillsButton.setAttribute("aria-label", "Mở Kỹ năng");
 
   const providerControl = createConversationProviderControl();
 

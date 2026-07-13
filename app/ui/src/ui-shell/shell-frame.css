@@ -114,8 +114,22 @@ textarea,
   grid-template-areas: "rail main";
 }
 
+.shell-frame.shell-frame--settings {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-areas: "rail main";
+}
+
 .shell-frame.shell-frame--no-sidebar .contextual-sidebar,
-.shell-frame.shell-frame--no-sidebar .inspector-shell {
+.shell-frame.shell-frame--no-sidebar .inspector-shell,
+.shell-frame.shell-frame--settings .contextual-sidebar,
+.shell-frame.shell-frame--settings .inspector-shell {
+  display: none !important;
+}
+
+.shell-frame.shell-frame--settings .view--cowork,
+.shell-frame.shell-frame--settings .view--workspace,
+.shell-frame.shell-frame--settings .view--knowledge,
+.shell-frame.shell-frame--settings .view--integration {
   display: none !important;
 }
 
@@ -178,12 +192,9 @@ textarea,
   position: relative;
 }
 
-[data-tooltip]:hover::after,
-[data-tooltip]:focus-visible::after,
-[data-tooltip].is-tooltip-visible::after {
-  content: attr(data-tooltip);
+.shell-tooltip {
   position: fixed;
-  z-index: 50;
+  z-index: 80;
   min-width: 168px;
   max-width: min(280px, calc(100vw - 24px));
   padding: 6px 8px;
@@ -197,34 +208,6 @@ textarea,
   pointer-events: none;
 }
 
-.product-rail [data-tooltip]:hover::after,
-.product-rail [data-tooltip]:focus-visible::after,
-.product-rail [data-tooltip].is-tooltip-visible::after {
-  left: calc(var(--rail-w) + 6px);
-  top: max(8px, min(var(--tooltip-y, 80px), calc(100vh - 48px)));
-}
-
-.topbar [data-tooltip]:hover::after,
-.topbar [data-tooltip]:focus-visible::after,
-.topbar [data-tooltip].is-tooltip-visible::after {
-  right: 140px;
-  top: 38px;
-}
-
-.composer [data-tooltip]:hover::after,
-.composer [data-tooltip]:focus-visible::after,
-.composer [data-tooltip].is-tooltip-visible::after {
-  right: 24px;
-  bottom: calc(var(--statusbar-h) + 86px);
-}
-
-.statusbar [data-tooltip]:hover::after,
-.statusbar [data-tooltip]:focus-visible::after,
-.statusbar [data-tooltip].is-tooltip-visible::after {
-  right: 12px;
-  bottom: calc(var(--statusbar-h) + 6px);
-}
-
 .contextual-sidebar {
   grid-area: sidebar;
 }
@@ -232,10 +215,123 @@ textarea,
 .view--cowork,
 .view--workspace,
 .view--knowledge,
-.view--integration {
+.view--integration,
+.view--settings {
   grid-area: main;
   min-width: 0;
   min-height: 0;
+}
+
+.settings-surface {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper);
+}
+
+.settings-surface__header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 64px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.settings-surface__eyebrow,
+.settings-surface__title {
+  margin: 0;
+}
+
+.settings-surface__eyebrow {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.settings-surface__title {
+  color: var(--text-strong);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.settings-surface__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-surface__back {
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-warm);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-strong);
+  font-weight: 500;
+}
+
+.settings-surface__layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.settings-surface__nav {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  padding: 14px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.settings-surface__tab {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-body);
+  text-align: left;
+  font-weight: 500;
+}
+
+.settings-surface__tab:hover,
+.settings-surface__tab:focus-visible,
+.settings-surface__tab--active {
+  border-color: var(--line-soft);
+  background: var(--surface-muted);
+  color: var(--text-strong);
+}
+
+.settings-surface__content {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-surface__panel {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+
+.settings-surface .llm-settings,
+.settings-surface .settings-view {
+  width: min(760px, 100%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.settings-surface .llm-field,
+.settings-surface .settings-field,
+.settings-surface .settings-toggle {
+  max-width: 620px;
 }
 
 .inspector-shell {
@@ -310,5 +406,24 @@ textarea,
 
   .product-rail__sidebar-toggle {
     display: inline-flex;
+  }
+
+  .settings-surface__layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-surface__nav {
+    grid-template-columns: 1fr 1fr;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .settings-surface__tab {
+    text-align: center;
+  }
+
+  .settings-surface__panel {
+    padding: 14px;
   }
 }

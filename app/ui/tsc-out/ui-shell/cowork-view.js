@@ -56,9 +56,9 @@ export function createCoworkView(defaultTitle) {
     attachButton.append(icon("attachment", "Đính kèm"));
     const skillsButton = el("button", "skills-btn composer-skills-btn");
     skillsButton.type = "button";
-    skillsButton.textContent = "Skills: 0";
-    skillsButton.title = "Skills";
-    skillsButton.setAttribute("aria-label", "Mở Skills");
+    skillsButton.textContent = "Kỹ năng: 0";
+    skillsButton.title = "Kỹ năng";
+    skillsButton.setAttribute("aria-label", "Mở Kỹ năng");
     const providerControl = createConversationProviderControl();
     const cancelButton = el("button", "text-cta text-cta--ghost stop-btn", "Dừng");
     cancelButton.type = "button";

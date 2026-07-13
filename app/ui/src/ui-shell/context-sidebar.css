@@ -198,8 +198,8 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
-  gap: 8px;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 6px;
   padding: 0 12px 12px;
 }
 
@@ -277,6 +277,7 @@
 .workspace-nav__body {
   min-height: 0;
   overflow: auto;
+  margin-top: 0;
 }
 
 .workspace-tree {
@@ -487,7 +488,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px 10px;
+  min-height: 44px;
+  padding: 6px 10px 8px;
 }
 
 .composer__spacer {
@@ -507,6 +509,7 @@
 .text-cta {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   min-height: 30px;
   padding: 0 10px;
@@ -521,6 +524,13 @@
 .provider-select {
   max-width: min(280px, 34vw);
   overflow: hidden;
+}
+
+.composer .icon-btn--sm,
+.composer-skills-btn,
+.composer .provider-select {
+  align-self: center;
+  flex: 0 0 auto;
 }
 
 .provider-select:disabled {
