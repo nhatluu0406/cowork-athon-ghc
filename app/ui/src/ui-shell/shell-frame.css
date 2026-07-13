@@ -94,6 +94,7 @@ textarea,
   -webkit-app-region: no-drag;
 }
 
+/* ── Shell frame: desktop default (>1366px) — inspector is a docked column ── */
 .shell-frame {
   display: grid;
   min-width: 0;
@@ -133,6 +134,7 @@ textarea,
   display: none !important;
 }
 
+/* ── Product rail ── */
 .product-rail {
   grid-area: rail;
   display: flex;
@@ -188,10 +190,8 @@ textarea,
   display: none;
 }
 
-[data-tooltip] {
-  position: relative;
-}
-
+/* ── Tooltip (custom implementation via data-tooltip / JS) ── */
+/* No position:relative on [data-tooltip] — tooltip is fixed-positioned by JS */
 .shell-tooltip {
   position: fixed;
   z-index: 80;
@@ -208,10 +208,13 @@ textarea,
   pointer-events: none;
 }
 
+/* ── Contextual sidebar ── */
 .contextual-sidebar {
   grid-area: sidebar;
+  min-width: 200px;
 }
 
+/* ── Main views ── */
 .view--cowork,
 .view--workspace,
 .view--knowledge,
@@ -222,6 +225,7 @@ textarea,
   min-height: 0;
 }
 
+/* ── Settings surface (full-screen, no modal backdrop) ── */
 .settings-surface {
   display: flex;
   flex-direction: column;
@@ -334,21 +338,19 @@ textarea,
   max-width: 620px;
 }
 
+/* ── Inspector: docked column on desktop, flex column full height ── */
 .inspector-shell {
   grid-area: inspector;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
 }
 
-.shell-frame .inspector-shell:not([hidden]) {
-  position: fixed;
-  top: var(--topbar-h);
-  right: 0;
-  bottom: var(--statusbar-h);
-  width: min(var(--panel-w), 92vw);
-  z-index: 20;
-  box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
-}
-
+/* ── Drawer scrim (used only for narrow viewports) ── */
 .drawer-scrim {
   position: fixed;
   inset: var(--topbar-h) 0 var(--statusbar-h) 0;
@@ -356,9 +358,10 @@ textarea,
   background: rgba(16, 24, 40, 0.28);
 }
 
+/* ── 1366px: inspector becomes fixed overlay, sidebar still visible ── */
 @media (max-width: 1366px) {
   .shell-frame {
-    grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(680px, 1fr);
+    grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr);
     grid-template-areas: "rail sidebar main";
   }
 
@@ -373,6 +376,7 @@ textarea,
   }
 }
 
+/* ── 900px: rail + main only, sidebar/inspector as drawers ── */
 @media (max-width: 900px) {
   .topbar__brand-name {
     display: none;

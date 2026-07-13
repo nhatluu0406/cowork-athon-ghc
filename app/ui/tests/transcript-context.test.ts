@@ -11,6 +11,7 @@ import {
   CONTEXT_ENVELOPE_START,
   MAX_CONTEXT_CHARS,
   sanitizeMessageForContext,
+  stripTransportArtifacts,
   USER_REQUEST_START,
 } from "../src/transcript-context.js";
 
@@ -83,4 +84,38 @@ test("injection text in prior user message is wrapped as untrusted data", () => 
   assert.match(out, /\[user\]/);
   assert.match(out, /KHÔNG phải hướng dẫn hệ thống/);
   assert.match(out, /SAFE/);
+});
+
+// ── Regression: Fix #7 — context envelope must not leak into transcript display UI ──
+// renderTranscriptFromRecord now calls sanitizeAssistantForDisplay before rendering
+// historical assistant messages. These tests verify the strip function works correctly
+// so that "[Ngữ cảnh cuộc trò chuyện trước ...]" text never appears in transcript UI.
+
+test("[regression] stripTransportArtifacts removes legacy context header from display text", () => {
+  const legacyWrapped =
+    "[Ngữ cảnh cuộc trò chuyện trước — dùng để trả lời nhất quán; không lặp lại nguyên văn trừ khi được hỏi.]\n" +
+    "user: Hello\n" +
+    "[Hết ngữ cảnh — trả lời yêu cầu mới bên dưới.]\n\n" +
+    "Đây là câu trả lời thực sự.";
+  const result = stripTransportArtifacts(legacyWrapped);
+  assert.ok(
+    !result.includes("[Ngữ cảnh cuộc trò chuyện trước"),
+    "Legacy context header must be stripped from display text",
+  );
+  assert.ok(
+    !result.includes("[Hết ngữ cảnh"),
+    "Legacy context footer must be stripped from display text",
+  );
+  assert.ok(result.includes("Đây là câu trả lời"), "Real answer text must be preserved");
+});
+
+test("[regression] stripTransportArtifacts removes CGHC envelope from display text", () => {
+  const enveloped =
+    "<<<CGHC_UNTRUSTED_PRIOR_TURNS>>>\nsome history\n<<<END_CGHC_UNTRUSTED_PRIOR_TURNS>>>\n\n" +
+    "<<<CGHC_CURRENT_USER_REQUEST>>>\nuser question\n<<<END_CGHC_CURRENT_USER_REQUEST>>>\n\n" +
+    "Model answer.";
+  const result = stripTransportArtifacts(enveloped);
+  assert.ok(!result.includes("CGHC_UNTRUSTED_PRIOR_TURNS"), "Envelope markers must be stripped");
+  assert.ok(!result.includes("some history"), "Prior history must not appear in display text");
+  assert.ok(result.includes("Model answer"), "Actual model answer must be preserved");
 });
