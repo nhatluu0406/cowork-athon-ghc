@@ -47,8 +47,37 @@ export function createMockLlmGateway(options = {}) {
     return scripts[scriptIndex++];
   }
 
-  function toolCallResponse(step, model) {
-    const toolName = step.toolNames?.[0] ?? "write";
+function resolveToolName(step, requestedTools) {
+  const preferred = [...(step.toolNames ?? []), ...(step.toolHint ? [step.toolHint] : [])];
+  for (const name of preferred) {
+    if (requestedTools.includes(name)) return name;
+    const fuzzy = requestedTools.find((n) => n.toLowerCase() === String(name).toLowerCase());
+    if (fuzzy) return fuzzy;
+  }
+  if (step.toolOperation === "delete") {
+    const deleteLike = requestedTools.find((n) => /^(delete|remove|unlink|rm)$/iu.test(n));
+    if (deleteLike) return deleteLike;
+    const patchLike = requestedTools.find((n) => /^(apply_patch|patch)$/iu.test(n));
+    if (patchLike) return patchLike;
+  }
+  if (step.toolOperation === "edit") {
+    const editLike = requestedTools.find((n) => /^(edit|patch|write)$/iu.test(n));
+    if (editLike) return editLike;
+  }
+  if (step.toolOperation === "create") {
+    const createLike = requestedTools.find((n) => /^(write|create)$/iu.test(n));
+    if (createLike) return createLike;
+  }
+  if (step.toolOperation === "read") {
+    const readLike = requestedTools.find((n) => /^read$/iu.test(n));
+    if (readLike) return readLike;
+  }
+  if (requestedTools.length > 0) return requestedTools[0];
+  return step.toolNames?.[0] ?? "write";
+}
+
+function toolCallResponse(step, model, requestedTools) {
+  const toolName = resolveToolName(step, requestedTools);
     const args = JSON.stringify(step.toolArguments ?? {});
     return {
       id: `chatcmpl-mock-${requestNumber}`,
@@ -135,7 +164,7 @@ export function createMockLlmGateway(options = {}) {
       });
       const id = `chatcmpl-mock-${requestNumber}`;
       if (step.kind === "tool_call") {
-        const toolName = step.toolNames?.[0] ?? "write";
+        const toolName = resolveToolName(step, requestedTools);
         const args = JSON.stringify(step.toolArguments ?? {});
         res.write(
           `data: ${JSON.stringify({
@@ -207,7 +236,7 @@ export function createMockLlmGateway(options = {}) {
 
     const payload =
       step.kind === "tool_call"
-        ? toolCallResponse(step, model)
+        ? toolCallResponse(step, model, requestedTools)
         : finalTextResponse(step.text ?? "OK", model);
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify(payload));
@@ -258,7 +287,11 @@ export function createMockLlmGateway(options = {}) {
             try {
               handleChat(body, res);
             } catch (error) {
-              finish(500, { error: error instanceof Error ? error.message : "script_error" });
+              if (!res.headersSent) {
+                finish(500, { error: error instanceof Error ? error.message : "script_error" });
+              } else if (!res.writableEnded) {
+                res.end();
+              }
             }
           });
           return;

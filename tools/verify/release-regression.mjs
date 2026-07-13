@@ -41,7 +41,7 @@ try {
 
   run(
     "activity-presentation",
-    "node --import tsx --test app/ui/tests/activity-model.test.ts app/ui/tests/session-finalization.test.ts service/tests/workspace-file-preview.test.ts service/tests/file-review.test.ts service/tests/file-review-router.test.ts service/tests/text-part-mapper.test.ts service/tests/conversation-store.test.ts service/tests/workspace-resolve-relative.test.ts service/tests/e2e-mock-llm.test.ts",
+    "node --import tsx --test app/ui/tests/activity-model.test.ts app/ui/tests/file-review-delete.test.ts app/ui/tests/session-finalization.test.ts service/tests/part-mapper.test.ts service/tests/workspace-file-preview.test.ts service/tests/file-review.test.ts service/tests/file-review-router.test.ts service/tests/text-part-mapper.test.ts service/tests/conversation-store.test.ts service/tests/workspace-resolve-relative.test.ts service/tests/e2e-mock-llm.test.ts",
   );
 
   run("mock-llm-gateway", "node --test tools/verify/mock-llm-gateway.test.mjs");
