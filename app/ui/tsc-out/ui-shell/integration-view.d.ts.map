@@ -1,0 +1,1 @@
+{"version":3,"file":"integration-view.d.ts","sourceRoot":"","sources":["../../src/ui-shell/integration-view.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,wBAAwB,CAAC;AAGvE,wBAAgB,qBAAqB,IAAI,WAAW,CAKnD;AAED,wBAAgB,wBAAwB,CAAC,SAAS,EAAE,WAAW,EAAE,OAAO,EAAE,wBAAwB,GAAG,IAAI,CAaxG"}
