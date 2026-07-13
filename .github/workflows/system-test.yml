@@ -1,0 +1,95 @@
+name: System Test (M365KG real-stack integration)
+
+# REQ-205 Phase 3 (T3.1-T3.4): runs the REAL M365 Knowledge Graph stack —
+# real PostgreSQL, real Neo4j, the real Go backend, the real Rust llm-svc.
+# No fakes, no mocks, no proxy, and (per project policy) no Docker for any
+# of these: scripts/system-test/run.sh starts real PostgreSQL/Neo4j binaries
+# directly. This job installs those binaries via their own official apt
+# packages/repos (PostgreSQL's default Ubuntu package; Neo4j's own signed
+# apt repo) and then stops the systemd-managed default instances so
+# run.sh's own start/stop lifecycle (identical to local dev) owns them for
+# the rest of the job. See E2E_TESTING_GUIDE.md.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "app/backend/**"
+      - "app/llm-svc/**"
+      - "service/src/knowledge/**"
+      - "service/tests/knowledge/**"
+      - "scripts/system-test/**"
+      - ".github/workflows/system-test.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "app/backend/**"
+      - "app/llm-svc/**"
+      - "service/src/knowledge/**"
+      - "service/tests/knowledge/**"
+      - "scripts/system-test/**"
+      - ".github/workflows/system-test.yml"
+  workflow_dispatch:
+
+jobs:
+  m365kg-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install protoc (required by llm-svc's tonic-build)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install PostgreSQL server (official Ubuntu package)
+        run: |
+          sudo apt-get install -y postgresql postgresql-client
+          sudo systemctl stop postgresql
+          sudo systemctl disable postgresql
+
+      - name: Install Neo4j server (Neo4j's own signed apt repo)
+        run: |
+          curl -fsSL https://debian.neo4j.com/neotechnology.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/neo4j.gpg
+          echo "deb [signed-by=/usr/share/keyrings/neo4j.gpg] https://debian.neo4j.com stable 5" | sudo tee /etc/apt/sources.list.d/neo4j.list
+          sudo apt-get update
+          sudo apt-get install -y neo4j
+          sudo systemctl stop neo4j
+          sudo systemctl disable neo4j
+
+      - name: Cache cargo registry/build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            app/llm-svc/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Run the real M365KG system-test environment
+        run: ./scripts/system-test/run.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "--- PostgreSQL log ---"
+          cat /tmp/m365kg-systest-postgres.log 2>/dev/null || true
+          echo "--- Neo4j logs ---"
+          sudo journalctl -u neo4j --no-pager --lines=200 2>/dev/null || true
+          find / -maxdepth 6 -iname "neo4j.log" 2>/dev/null -exec tail -n 200 {} \; || true

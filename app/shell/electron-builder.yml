@@ -15,6 +15,14 @@
 #
 # Wave C runs the actual `electron-builder` to produce the installer/portable + a packaged smoke
 # test. This file only DECLARES the packaging contract; it is validated by a config parse here.
+#
+# ADR 0010 (M365KG stack bundling) — Postgres/Neo4j/the Temurin JRE/`llm-svc`/the Go backend are
+# NOT declared here. Per the ADR's Open Items, this app follows "download at first run" (smaller
+# installer, requires network on first launch; `provisioning.ts` downloads+SHA-256-verifies+
+# extracts them under `<userData>/m365kg-stack/`) rather than "bundle in installer" (larger
+# installer, works offline). Only the SQL/Cypher migration files this app ships itself (NOT
+# downloaded — see `app/backend/migrations`) go through `extraResources` below, since
+# `M365KGStackInitializer` needs them on first launch before any download would even complete.
 appId: com.coworkghc.desktop
 productName: Cowork GHC
 copyright: Copyright (c) 2026 Cowork GHC
@@ -63,6 +71,11 @@ extraResources:
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  # M365KG stack migrations (ADR 0010) — small (a few KB of `.sql`/`.cypher` text), shipped with
+  # the app itself (not downloaded). `M365KGStackInitializer` reads them from
+  # `<resourcesPath>/m365kg-migrations` in a packaged build (see `m365kg-stack-paths.ts`).
+  - from: "app/backend/migrations"
+    to: "m365kg-migrations"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.

@@ -66,6 +66,30 @@ Depends on Phase 1 + Phase 2. Depends on T0.4 (local M365KG stack available).
 
 **Phase 3 exit**: T3.1–T3.4 pass locally with the stack running; T3.1's flag-gating verified by also running default `npm test` with the flag unset and confirming no failure/hang.
 
+**Implementation status (this session)**: T3.1–T3.4 are implemented as
+`service/tests/knowledge/m365kg-integration.test.ts`, run via the new
+`scripts/system-test/run.sh` — real PostgreSQL (`initdb`/`pg_ctl`), real Neo4j
+(`neo4j`/`cypher-shell`), real Go backend, real Rust llm-svc, all built and run directly on the
+host with **no Docker anywhere** in this environment (no fakes, no mocks, no proxy either). T3.2
+seeds a real Neo4j `Person`/`Project`/`OWNS` fixture (cleaned up after); T3.3 sends a real
+`SIGTERM` to the real backend process; T3.4 sends a real `SIGSTOP`/`SIGCONT` past the 35s
+boundary. See `E2E_TESTING_GUIDE.md` v2.1. **Not yet independently confirmed PASS against a live
+stack** — the authoring environment for this change had neither Docker daemon access nor
+PostgreSQL/Neo4j installed, so `scripts/system-test/run.sh` could not actually be run end-to-end.
+Whoever runs it next with PostgreSQL + Neo4j installed should flip this note to a dated PASS/FAIL
+and check the boxes above.
+
+**ADR 0010 bundling: DONE (init + packaging wired), separate session.** The above is about the
+DEV/CI *system-test* environment (T0.4/T3.1–T3.4) and is unaffected. Separately, D2 was reversed
+(2026-07-13, same day as the original T0.2 sign-off): the *packaged desktop app* no longer needs
+an externally-run stack at all — it now bundles and self-provisions its own Postgres/Neo4j/backend/
+`llm-svc` (see `docs/architecture/decisions/0010-m365kg-stack-bundling.md` and
+`specs/ADR-0010-BUNDLE/`). The remaining application-layer work that closes ADR 0010 —
+`M365KGStackInitializer` (one-time `initdb`/Neo4j-password/migrations), its wiring into
+`app/shell`'s startup lifecycle, and `electron-builder.yml`'s `m365kg-migrations` resource — landed
+in a later session; see `docs/product/current-status.md`'s "ADR 0010 Phase 4" section for the
+implementation record and smoke-test result (PASS/PARTIAL).
+
 ---
 
 ## Phase 4: Regression, Security, and Packaging
