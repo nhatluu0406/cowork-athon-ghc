@@ -12,26 +12,28 @@ File Work Review journeys A–L. It does not change product scope or UI design.
 Current required status:
 
 ```text
-File Work Review: PARTIAL PASS
+File Work Review: PARTIAL PASS — delete journey blocked on OpenCode v1.17.11 tool surface
 Live Journey A: PASS
 Live Journey B: PASS
-Journey C: blocked by nondeterministic model/tool selection
-Journeys D–L: not completed in the latest run
+Journey C: BLOCKED (no patch/delete in LLM tool schema on pinned runtime)
+Journeys D–L: not completed in latest deterministic run
+Evidence: reports/file-work-review-completion/
 ```
 
-## 1. Latest rerun summary
+## 1. Latest rerun summary (completion pass 2026-07-13)
 
-After verifier hardening (`d3ab6d8`) and product capture fixes, a clean packaged rerun with
-live DeepSeek produced:
+Packaged live rerun after UI Shell V3 harness alignment and product fixes:
 
 | Journey | Result | Evidence |
 |---|---|---|
-| A create (A01–A12) | **PASS** | Disk `create-blue.txt`, review artifact, permission approved |
-| B modify | **PASS** | `modify-me.txt` → `SECOND_VERSION`, unified diff, `reviewId` persisted |
-| C delete | **FAIL** | Model did not reliably invoke delete tool; sometimes bash/edit or no tool |
-| D–L | **NOT RUN** | Verifier stopped after C |
+| A create (A01–A12) | **PASS** | `reports/file-work-review-completion/create-result.json` |
+| B modify | **PASS** | `reports/file-work-review-completion/modify-result.json` |
+| C delete (deterministic) | **BLOCKED** | `reports/file-work-review-completion/delete-result.json` + `opencode-agent-build.txt` |
+| D–L | **NOT RUN** | Stopped after C |
+| Historical integrity | **PASS (focused)** | `historical-relaunch-result.json` + service relaunch tests |
+| Secret redaction | **PASS (focused)** | `redaction-result.json` + service redaction tests |
 
-Best artifact root: `%TEMP%\cghc-freview-artifacts-ubFNmc`
+Prior artifact (pre-V3 harness): `%TEMP%\cghc-freview-artifacts-ubFNmc`
 
 First-rerun artifact (pre-harness-fix): `%TEMP%\cghc-freview-artifacts-p8eavF` — failed at
 A07 because verifier required `create-blue.txt` in permission dialog fields while OpenCode
@@ -57,20 +59,23 @@ emitted `file_edit` with empty `relativePath`. Permission **was** observed; harn
 
 ## 3. Open blocker — Journey C
 
-**Classification:** insufficient proof of product delete-path failure.
+**Classification:** OpenCode pinned runtime tool surface — not a Cowork review-finalization defect.
 
-Observed behavior in latest runs:
+Observed behavior in completion pass (deterministic mock gateway log):
 
-- Model sometimes completes turn with tool events but no delete permission.
-- Model sometimes requests `bash` (`command_exec`) or `file_edit` instead of `file_delete`.
-- When delete tool is not invoked, disk file remains — verifier correctly fails.
+- OpenCode **v1.17.11** build agent exposes LLM tools:
+  `[edit, glob, grep, question, read, skill, task, todowrite, write]` only.
+- `tools.patch: true` and `agent.build.tools.patch: true` in written `opencode.json` do **not**
+  add `patch` / `apply_patch` to the LLM schema.
+- Mock gateway correctly refuses to invent `delete`; fallback `edit` with `patchText` args fails —
+  no permission, no `file_mutation`, file remains on disk.
+- Cowork product path for delete via `apply_patch` `*** Delete File:` is implemented in
+  `part-mapper.ts` and awaits a runtime that exposes the patch tool.
 
-This is **not** documented as a proven product defect in the delete permission bridge or
-review finalization path. The delete product path was not exercised because the live model
-did not reliably select the delete tool.
+Live DeepSeek delete remains nondeterministic; do **not** use live-only proof for delete semantics.
 
-Do **not** conclude the failure is provider-only; deterministic packaged coverage is still
-required for delete semantics.
+**Next product/runtime action (out of this slice):** OpenCode pin upgrade or runtime config that
+actually exposes `patch`/`apply_patch` to the LLM tool list on Windows packaged builds.
 
 ## 4. Open verification decision
 

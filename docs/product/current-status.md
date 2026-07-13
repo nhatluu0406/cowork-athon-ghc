@@ -86,7 +86,7 @@ Design spec: [UI Shell V3 Spec](./ui-shell-v3-spec.md). Prototype reference: `de
 | Comprehensive project audit | **Complete** — [audit report](../quality/cowork-ghc-comprehensive-project-audit.md) |
 | Commercial UI Product Owner acceptance | **FAIL** — collapsed layout and polish gaps identified before stabilization |
 | Pre-merge stabilization | **Applied** — dead verifiers removed, File Review CLI consolidated, shell layout collapse fixes |
-| File Work Review | **PARTIAL PASS** — live Journey A–B PASS; Journey C blocked; D–L not completed |
+| File Work Review | **PARTIAL PASS** — live A–B PASS; delete blocked on OpenCode v1.17.11 tool surface |
 | D1–D4 external integration | **Not merged** — surfaces remain `awaiting_integration` slots only |
 | Next milestone | **External integration intake** (D1–D4 merge) — [readiness doc](../integration/external-systems-integration-readiness.md) |
 | Architecture refactor (`app-shell.ts`, snapshot/watchdog to service) | **Deferred** until after combined external integration merge |
@@ -193,40 +193,46 @@ They do not show mock provider, task, graph, Microsoft, cost, or RAG data.
 - **Skills**: file events inherit turn Skill provenance via existing turn metadata; Skills do not bypass permission.
 - **UI**: activity right panel review (`Xem lại thay đổi`), copy relative path; open-file deferred.
 
-### Packaged live verification (latest rerun)
+### Packaged live verification (completion pass 2026-07-13)
 
 ```text
-File Work Review: PARTIAL PASS
-Live Journey A: PASS
-Live Journey B: PASS
-Journey C: blocked by nondeterministic model/tool selection
-Journeys D–L: not completed in the latest run
+File Work Review: PARTIAL PASS — delete journey blocked on OpenCode v1.17.11 tool surface
+Live Journey A: PASS (packaged)
+Live Journey B: PASS (packaged)
+Journey C delete: BLOCKED — OpenCode 1.17.11 does not expose patch/apply_patch/delete in LLM tool schema
+Journeys D–L: not completed in packaged deterministic run (stopped at C)
+Historical integrity: PASS (service relaunch tests + live profile persistence)
+Secret redaction: PASS (focused service/UI policy tests)
 ```
 
-Evidence artifact (best full run): `%TEMP%\cghc-freview-artifacts-ubFNmc`
+Evidence: `reports/file-work-review-completion/` (`create-result.json`, `modify-result.json`,
+`delete-result.json`, `historical-relaunch-result.json`, `redaction-result.json`,
+`opencode-agent-build.txt`)
 
 | Stage / journey | Result | Notes |
 |---|---|---|
-| A01–A12 create | PASS | Permission, disk file, review artifact, terminal |
-| B modify | PASS | `modify-me.txt` diff persisted (`review-11`) |
-| C delete | NOT PASS | Model sometimes skips delete tool or uses bash/edit instead |
-| D–L | NOT RUN | Stopped after C failure |
+| A01–A12 create | PASS | Review panel shows after snapshot; UI click no longer switches to workspace view |
+| B modify | PASS | Unified diff persisted; inspector/review tab selectors aligned to UI Shell V3 |
+| C delete | BLOCKED | Mock gateway sees tools `[edit, write, read, …]` only; `patch` not offered despite `opencode.json` |
+| D–L | NOT RUN | Deterministic suite stops after C |
+| Historical / redaction | PASS (focused) | Service relaunch + redaction tests; live reviews persisted with `reviewId` |
 
-### Product bugs closed in hardening pass
-
-| ID | Issue | Fix |
-|---|---|---|
-| RC2 | Windows 8.3 short path (`NHATLU~1`) did not map to long workspace root → review snapshot failed | `toRelativePath()` folder-segment match |
-| RC4 | Stream watchdog (90s) treated permission wait as stall | Pause watchdog while permission `pending` |
-| RC5 | Before snapshot missing when permission has no `targetPath` | Capture on `tool_call` start via early `filePath` in summary |
-
-### Harness fixes (verifier only)
+### Product fixes in completion pass
 
 | ID | Issue | Fix |
 |---|---|---|
-| RC1 | A07 required filename in permission dialog when OpenCode emits empty path | Accept file write/edit permission kinds |
-| RC3 | `waitTerminalAfterPermission` approved without visible dialog | Staged `waitPermissionRequest` + `approveObservedPermission` |
-| — | Review click targeted wrong file row | `clickFileChange(relativePath)` |
+| RC6 | Clicking file review row switched to workspace view and hid review body | Stop calling `openWorkspaceFileFromCowork` when persisted review exists |
+| RC7 | Delete after-snapshot retry waited for `after.exists === true` | Break retry when delete and `!after.exists` |
+| RC8 | OpenCode delete via `apply_patch` `*** Delete File:` not mapped | `parseApplyPatchMarker` in `part-mapper.ts`; enable `tools.patch` in `opencode.json` |
+
+### Harness fixes (completion pass)
+
+| ID | Issue | Fix |
+|---|---|---|
+| RC9 | A11 timeout after V3 shell — wrong `.file-preview__body` / collapsed inspector | Open inspector, activate review tab, scoped selector |
+| RC10 | V3 shell stale selectors | `packaged-launch-env.mjs` status/settings/new-conversation selectors |
+| RC11 | Permission wait failed when OpenCode auto-allowed write | `waitPermissionOrMutation` accepts verified mutation without dialog |
+| RC12 | Mock delete used invalid tool name | Resolve `apply_patch`/`patch` from requested tools; log `requestedToolNames` |
 
 ### Open verification decision
 
