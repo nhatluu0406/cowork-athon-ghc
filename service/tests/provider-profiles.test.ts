@@ -4,12 +4,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
 import { createMemoryStore } from "../src/credential/memory-store.js";
 import { credentialAccountForProfile, credentialRef } from "../src/credential/store.js";
 import { openSettingsStore } from "../src/diagnostics/settings-store.js";
 import { CUSTOM_OPENAI_COMPAT_ID } from "../src/provider/descriptors.js";
 import {
   createProviderConnectionTester,
+  createProviderProfileRouter,
   createProviderProfileStore,
   migrateLegacySettingsToProfiles,
   resolveRuntimeProviderConfig,
@@ -18,6 +20,7 @@ import { createSsrfPolicy, type ResolvedAddress } from "../src/provider/index.js
 import { createCredentialService } from "../src/credential/credential-service.js";
 import { createSecretScrubber } from "../src/diagnostics/secret-scrubber.js";
 import type { ProviderProfile } from "../src/provider-profiles/types.js";
+import { createService } from "../src/server/http-service.js";
 
 const PUBLIC_RESOLVER = async (): Promise<readonly ResolvedAddress[]> => [
   { address: "93.184.216.34", family: 4 },
@@ -33,6 +36,36 @@ async function openTestStore() {
   };
   const store = await openSettingsStore({ fs });
   return { store, backing };
+}
+
+async function startMockOpenAiGateway(): Promise<{ baseUrl: string; stop: () => Promise<void> }> {
+  const server: Server = createServer((req, res) => {
+    if (req.url === "/v1/models") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data: [{ id: "mock-model" }] }));
+      return;
+    }
+    if (req.url === "/v1/chat/completions" && req.method === "POST") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ id: "chatcmpl-test", choices: [] }));
+      return;
+    }
+    res.writeHead(404, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: { message: "not found" } }));
+  });
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+  const address = server.address();
+  assert.ok(address !== null && typeof address === "object");
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}/v1`,
+    stop: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
+  };
 }
 
 test("credentialAccountForProfile namespaces keyring by profile id", () => {
@@ -128,6 +161,169 @@ test("connection test state is isolated per profile id", async () => {
   const stateA = tester.lastResultFor("profile-a");
   const stateB = tester.lastResultFor("profile-b");
   assert.notEqual(stateA?.profileId, stateB?.profileId);
+});
+
+test("profile test route maps SSRF/base URL policy failure to failed TestResult, not internal", async () => {
+  const { store } = await openTestStore();
+  const credentialStore = createMemoryStore();
+  const credentialService = createCredentialService({
+    store: credentialStore,
+    scrubber: createSecretScrubber(),
+  });
+  const profiles = createProviderProfileStore({ store, now: () => "2026-07-13T00:00:00.000Z" });
+  const profile = await profiles.create({
+    displayName: "Blocked endpoint",
+    providerType: "custom-openai-compat",
+    baseUrl: "http://127.0.0.1:1/v1",
+    modelId: "mock-model",
+  });
+  await credentialStore.set(credentialAccountForProfile(profile.id), "redacted-test-credential-route");
+  await profiles.setCredentialRef(profile.id, credentialRef(credentialAccountForProfile(profile.id)));
+
+  const tester = createProviderConnectionTester({
+    credentials: credentialService,
+    dnsResolver: PUBLIC_RESOLVER,
+    now: () => "2026-07-13T00:00:01.000Z",
+  });
+  const token = "profile-test-token-123456789012345";
+  const service = createService({ clientToken: token });
+  service.mount(createProviderProfileRouter({
+    profiles,
+    tester,
+    runtimeBridge: { syncActiveProfile: async () => {} },
+    bindCredentialRef: async () => {},
+    removeCredential: async () => {},
+  }));
+  const address = await service.start();
+  try {
+    const res = await fetch(`http://${address.host}:${address.port}/v1/provider-profiles/${profile.id}/test-connection`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json() as {
+      ok: true;
+      data: {
+        profileId: string;
+        result: { ok: boolean; error?: { message: string } };
+        state: { profileId: string; ok: boolean; errorMessage?: string } | null;
+      };
+    };
+    assert.equal(body.ok, true);
+    assert.equal(body.data.profileId, profile.id);
+    assert.equal(body.data.result.ok, false);
+    assert.match(body.data.result.error?.message ?? "", /endpoint|policy/i);
+    assert.equal(body.data.state?.profileId, profile.id);
+    assert.equal(JSON.stringify(body).includes("redacted-test-credential-route"), false);
+    assert.equal(JSON.stringify(body).toLowerCase().includes("authorization"), false);
+    assert.equal(JSON.stringify(body).toLowerCase().includes("internal boundary"), false);
+  } finally {
+    await service.stop();
+  }
+});
+
+test("profile connection refused maps to failed TestResult without leaking credentials", async () => {
+  const credentialStore = createMemoryStore();
+  const secret = "redacted-test-credential-transport";
+  await credentialStore.set("profile:transport", secret);
+  const tester = createProviderConnectionTester({
+    credentials: createCredentialService({ store: credentialStore, scrubber: createSecretScrubber() }),
+    dnsResolver: PUBLIC_RESOLVER,
+    e2eMockLlmBaseUrl: "http://127.0.0.1:1/v1",
+  });
+  const result = await tester.testProfile({
+    id: "transport",
+    displayName: "Transport",
+    providerType: "custom-openai-compat",
+    baseUrl: "http://127.0.0.1:1/v1",
+    modelId: "mock-model",
+    envVar: "COWORK_TRANSPORT_KEY",
+    createdAt: "t",
+    updatedAt: "t",
+    credentialRef: credentialRef("profile:transport"),
+  });
+  assert.equal(result.ok, false);
+  assert.ok(result.error);
+  assert.equal(JSON.stringify(result).includes(secret), false);
+  assert.equal(JSON.stringify(result).toLowerCase().includes("authorization"), false);
+});
+
+test("profile test failure is isolated and a successful retry works without service restart", async () => {
+  const gateway = await startMockOpenAiGateway();
+  try {
+    const credentialStore = createMemoryStore();
+    await credentialStore.set("profile:a", "redacted-test-credential-a");
+    await credentialStore.set("profile:b", "redacted-test-credential-b");
+    const tester = createProviderConnectionTester({
+      credentials: createCredentialService({ store: credentialStore, scrubber: createSecretScrubber() }),
+      dnsResolver: PUBLIC_RESOLVER,
+      now: (() => {
+        let tick = 0;
+        return () => `2026-07-13T00:00:0${tick++}.000Z`;
+      })(),
+      e2eMockLlmBaseUrl: gateway.baseUrl,
+    });
+    const profileA: ProviderProfile = {
+      id: "profile-a",
+      displayName: "A",
+      providerType: "custom-openai-compat",
+      baseUrl: "http://127.0.0.1:1/v1",
+      modelId: "mock-model",
+      envVar: "COWORK_A_KEY",
+      createdAt: "t",
+      updatedAt: "t",
+      credentialRef: credentialRef("profile:a"),
+    };
+    const profileB: ProviderProfile = {
+      ...profileA,
+      id: "profile-b",
+      displayName: "B",
+      baseUrl: gateway.baseUrl,
+      credentialRef: credentialRef("profile:b"),
+    };
+
+    const failure = await tester.testProfile(profileA);
+    assert.equal(failure.ok, false);
+    assert.equal(tester.lastResultFor(profileA.id)?.ok, false);
+    assert.equal(tester.lastResultFor(profileB.id), undefined);
+
+    const successB = await tester.testProfile(profileB);
+    assert.equal(successB.ok, true);
+    assert.equal(tester.lastResultFor(profileB.id)?.ok, true);
+    assert.equal(tester.lastResultFor(profileA.id)?.ok, false);
+
+    const correctedA = await tester.testProfile({ ...profileA, baseUrl: gateway.baseUrl });
+    assert.equal(correctedA.ok, true);
+    assert.equal(tester.lastResultFor(profileA.id)?.ok, true);
+    assert.equal(tester.lastResultFor(profileB.id)?.ok, true);
+  } finally {
+    await gateway.stop();
+  }
+});
+
+test("unexpected profile test programming errors still reject", async () => {
+  const tester = createProviderConnectionTester({
+    credentials: {
+      resolveInjection: async () => {
+        throw new Error("synthetic credential store defect");
+      },
+    },
+    dnsResolver: PUBLIC_RESOLVER,
+  });
+  await assert.rejects(
+    () => tester.testProfile({
+      id: "unexpected",
+      displayName: "Unexpected",
+      providerType: "custom-openai-compat",
+      baseUrl: "https://api.example.com/v1",
+      modelId: "mock-model",
+      envVar: "COWORK_UNEXPECTED_KEY",
+      createdAt: "t",
+      updatedAt: "t",
+      credentialRef: credentialRef("profile:unexpected"),
+    }),
+    /credential store defect/,
+  );
 });
 
 test("runtime resolver maps profile to custom-openai-compat adapter", () => {
