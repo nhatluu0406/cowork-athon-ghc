@@ -48,6 +48,13 @@ export interface HttpGraphClient {
   bytes(req: GraphClientRequest): Promise<Uint8Array>;
 }
 
+/**
+ * Provider-neutral alias used by consumers (connector, SharePoint service) that only need
+ * the request/response shape, not the HTTP-specific construction options. Same shape as
+ * {@link HttpGraphClient}; kept as a distinct name so callers depend on the narrow contract.
+ */
+export type GraphClient = HttpGraphClient;
+
 export function createHttpGraphClient(options: HttpGraphClientOptions): HttpGraphClient {
   const baseUrl = options.baseUrl ?? "https://graph.microsoft.com/v1.0";
   const fetchFn = options.fetchFn ?? fetch;
