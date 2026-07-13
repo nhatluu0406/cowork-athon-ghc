@@ -53,6 +53,8 @@ giữ cột sidebar trống (`shell-frame--no-sidebar`).
 Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
 integration data giả để làm đẹp layout.
 
+Settings là một surface ứng dụng trong cùng V3 frame, không phải backdrop modal. Topbar Settings, provider control, provider status và readiness CTA mở surface này; Back/Close quay về surface trước đó. Surface có hai panel `Nhà cung cấp` và `Chung`, reuse toàn bộ behavior production hiện có cho provider/model/Base URL/keyring/test connection/general settings và không triển khai Multi-Provider Profiles.
+
 Top-level product surfaces được khai báo tập trung trong `app/ui/src/surface-registry.ts`:
 
 ```text

@@ -1,6 +1,6 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R3 approved; production port at `794cb00` was **rejected** by Product Owner; production alignment pass completed and major V3 composition approved; product chrome / UX completion pass applied on `fix/ui-shell-v3-production-alignment`.
+**Status:** design prototype R3 approved; production port at `794cb00` was **rejected** by Product Owner; production alignment pass completed and major V3 composition approved; product chrome / UX completion pass applied on `fix/ui-shell-v3-production-alignment`; commercial-readiness remediation is bounded to audit `ecce634` on `fix/ui-shell-v3-commercial-readiness`.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
@@ -8,7 +8,7 @@
 
 **Prototype evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`).
 
-**Production evidence:** `reports/ui-shell-v3-production-r3/` — Product Owner packaged visual acceptance **pending**.
+**Production evidence:** `reports/ui-shell-v3-production-r3/` and `reports/ui-shell-v3-commercial-readiness/` — Product Owner packaged visual acceptance **pending**.
 
 **Rejected evidence:** `reports/ui-shell-v3-production/` — shows the old-shell-dominant production port that did not match R3.
 
@@ -116,10 +116,10 @@ No mock sources, indexes, retrieval, or graph data.
 Footer layout:
 
 ```text
-Attach | Skills: N | ● DeepSeek / deepseek-chat | spacer | Send
+Attach | Kỹ năng: N | ● DeepSeek / deepseek-chat | spacer | Send
 ```
 
-**Provider control** shows the configured production provider/model and opens the existing Settings modal. Multi-Provider Profiles are **not implemented**; the control must not pretend to be a dropdown registry.
+**Provider control** shows the configured production provider/model and opens the production Settings surface. Multi-Provider Profiles are **not implemented**; the control must not pretend to be a dropdown registry.
 
 | State | UI |
 |---|---|
@@ -127,7 +127,7 @@ Attach | Skills: N | ● DeepSeek / deepseek-chat | spacer | Send
 | Missing | Control remains readable; status bar `Provider · Chưa cấu hình`; Settings CTA when needed |
 | Failed | Control remains readable; status bar `DeepSeek · Kết nối thất bại` |
 
-**Skills:** compact `Skills: 1` (or badge) opens popover — not a sidebar tab.
+**Skills:** compact `Kỹ năng: 1` opens popover — not a sidebar tab.
 
 ---
 
@@ -152,6 +152,18 @@ Right: provider **connectivity** with explicit subject text (`DeepSeek · Sẵn 
 ## 9. Topbar
 
 Brand + inspector toggle + info + icon-only **Settings** action. Windows uses Electron native titlebar overlay controls for minimize/maximize/close, Snap Layout, double-click maximize/restore, and high-DPI behavior; the renderer reserves spacing and does not draw custom close/minimize/maximize controls. No filename, no service/provider/runtime pills.
+
+### Settings surface
+
+Settings is a full-screen application surface inside the V3 frame, not a backdrop modal. It opens from the topbar Settings icon, provider control, provider status, and readiness CTA; it remembers the previous product surface and Back/Close returns there without discarding in-progress input. The surface sits below the native titlebar/topbar and above the status bar. It hides contextual sidebar and inspector while open, keeps the product rail available, and owns its own panel scrolling.
+
+Required internal navigation:
+
+```text
+Nhà cung cấp | Chung
+```
+
+`Nhà cung cấp` reuses the production provider/model/Base URL/keyring/test-connection behavior. `Chung` reuses existing general settings. This does not implement Multi-Provider Profiles.
 
 ---
 
@@ -232,3 +244,4 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 | 2026-07-13 | **R3:** work modes, unified Knowledge, provider/skills composer, PO decisions, R3 screenshots |
 | 2026-07-13 | Production alignment pass: replaced legacy shell composition with V3 frame/components; R2 packaged screenshots generated; major composition approved |
 | 2026-07-13 | Product chrome / UX completion pass: Settings restored, native titlebar controls retained, provider/status copy clarified, composer/new conversation/rail discoverability polished; R3 packaged screenshots pending PO review |
+| 2026-07-13 | Commercial-readiness remediation: Settings converted from modal to full-screen application surface; workspace gap, provider untested semantics, rail tooltip primitive, and composer alignment remediated; commercial screenshots pending PO review |
