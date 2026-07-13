@@ -1,13 +1,10 @@
 /**
- * Production OpenCode project-config writer for the supervisor (CGHC-028 Wave A1).
+ * Production OpenCode project-config writer for the supervisor.
  *
- * OpenCode needs a NON-SECRET provider definition to reach a user-defined OpenAI-compatible
- * endpoint (base URL + adapter + model list). The API key is written ONLY as the literal
- * `{env:NAME}` reference OpenCode resolves from the child process env at launch (verified
- * against pinned v1.17.11). The resolved key value NEVER touches this file — it flows solely
- * via the injected child env (runtime `buildLaunchSpec`), so we never write `auth.json`/`env.json`
- * or persist a key (ADR 0001 / ADR 0006 SEC-1). This mirrors the proven CGHC-024 capture-tool
- * writer, promoted to a production module (tool code is not a build dependency).
+ * The generated config is intentionally non-secret. Credentials are injected into the child
+ * environment and referenced here only through `{env:NAME}`. The permission policy is duplicated
+ * at the project and primary-agent levels because OpenCode agent-specific configuration can
+ * override project defaults. Cowork GHC must never depend on implicit defaults for file writes.
  */
 
 import { writeFileSync } from "node:fs";
@@ -17,35 +14,37 @@ import { isE2eMockLlmUrl } from "../provider/e2e-mock-llm.js";
 
 /** Non-secret provider definition for the child's `opencode.json`. */
 export interface OpencodeProviderConfig {
-  /** Provider id OpenCode registers (e.g. "custom-openai-compat", "openai"). */
   readonly providerId: string;
-  /** Human label (non-functional). */
   readonly displayName?: string;
-  /** Env var OpenCode reads the key from; injected into the child env by the supervisor. */
   readonly envVar: string;
-  /** Model ids to expose (e.g. ["deepseek-chat"]). */
   readonly models: readonly string[];
-  /**
-   * OpenAI-compatible base URL — present ONLY for a user-defined custom endpoint. When set it
-   * MUST be https and non-loopback/non-private. Omit for a built-in provider (models.dev-known).
-   */
   readonly baseUrl?: string;
-  /** Optional per-tool permission map for the workspace (e.g. `{ edit: "ask" }`). */
   readonly permission?: Readonly<Record<string, string>>;
 }
 
-/** Live-session tool permission policy written into `opencode.json` (non-secret). */
-export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = {
+/**
+ * Live-session policy. `edit` is explicit because OpenCode gates write/edit/apply_patch through
+ * that single permission key. `doom_loop` is allowed so a headless `serve` process cannot stall on
+ * an internal recovery prompt that Cowork does not present as a product permission.
+ */
+export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = Object.freeze({
   "*": "ask",
   read: "allow",
   list: "allow",
   glob: "allow",
   grep: "allow",
-  delete: "ask",
+  skill: "allow",
+  question: "allow",
+  todowrite: "allow",
+  edit: "ask",
   bash: "deny",
+  task: "deny",
+  external_directory: "deny",
+  doom_loop: "allow",
   webfetch: "deny",
   websearch: "deny",
-};
+});
+
 function assertSafeBaseUrl(baseUrl: string): void {
   if (isE2eMockLlmUrl(baseUrl)) return;
   let url: URL;
@@ -75,8 +74,7 @@ function assertSafeBaseUrl(baseUrl: string): void {
   }
 }
 
-/** Build the NON-SECRET `opencode.json` object. The api key is only the `{env:NAME}` template. */
-export function buildOpencodeConfig(config: OpencodeProviderConfig): Record<string, unknown> {
+function buildProvider(config: OpencodeProviderConfig): Record<string, unknown> {
   if (!config.providerId.trim()) throw new Error("providerId must be non-empty");
   if (!isValidEnvName(config.envVar)) {
     throw new Error(`Invalid env var name: ${JSON.stringify(config.envVar)}`);
@@ -100,32 +98,34 @@ export function buildOpencodeConfig(config: OpencodeProviderConfig): Record<stri
     options["baseURL"] = config.baseUrl;
     provider["npm"] = OPENAI_COMPATIBLE_NPM;
   }
+  return { [config.providerId]: provider };
+}
+
+/** Build the non-secret project config. A provider block is optional for built-in providers. */
+export function buildOpencodeConfig(config?: OpencodeProviderConfig): Record<string, unknown> {
+  const permission = {
+    ...LIVE_SESSION_PERMISSION_POLICY,
+    ...(config?.permission ?? {}),
+  };
 
   return {
     $schema: "https://opencode.ai/config.json",
-    ...(config.permission ? { permission: config.permission } : {}),
-    tools: {
-      patch: true,
-    },
+    permission,
+    // OpenCode permits agent-specific overrides. Repeat the policy for the primary build agent so
+    // a legacy/default agent config cannot silently auto-approve a write.
     agent: {
       build: {
-        tools: {
-          patch: true,
-        },
+        permission,
       },
     },
-    provider: { [config.providerId]: provider },
+    ...(config !== undefined ? { provider: buildProvider(config) } : {}),
   };
 }
 
-/**
- * Write the non-secret `opencode.json` into `configDir` and return its path. Throws if the
- * serialized bytes would somehow contain the raw key value (defense in depth: they never should,
- * since only the `{env:...}` reference is written). `forbiddenSecret` is the resolved key value.
- */
+/** Write `opencode.json`; the resolved key value is forbidden from the serialized bytes. */
 export function writeOpencodeConfig(
   configDir: string,
-  config: OpencodeProviderConfig,
+  config?: OpencodeProviderConfig,
   forbiddenSecret?: string,
 ): string {
   const serialized = JSON.stringify(buildOpencodeConfig(config), null, 2);
