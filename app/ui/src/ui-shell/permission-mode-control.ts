@@ -5,15 +5,15 @@ export type PermissionMode = "ask" | "workspace_auto" | "read_only";
 const MODE_COPY: Readonly<Record<PermissionMode, { label: string; description: string }>> = {
   ask: {
     label: "Hỏi trước",
-    description: "Hiển thị yêu cầu quyền trước mỗi thay đổi tệp.",
+    description: "Xin phép trước mọi thay đổi tệp hoặc lệnh thực thi.",
   },
   workspace_auto: {
     label: "Tự động",
-    description: "Tự động cho phép tạo và sửa tệp trong workspace; hành động rủi ro cao vẫn hỏi.",
+    description: "Tự động cho phép thao tác tệp tiêu chuẩn trong workspace; hành động tác động cao vẫn hỏi.",
   },
   read_only: {
     label: "Chỉ đọc",
-    description: "Từ chối mọi thay đổi tệp và lệnh thực thi.",
+    description: "Không cho phép thay đổi tệp hoặc chạy lệnh.",
   },
 };
 
@@ -60,6 +60,18 @@ export function createPermissionModeControl(initialMode: PermissionMode = "ask")
     }
   };
 
+  const positionMenu = (): void => {
+    if (menu.hidden) return;
+    const rect = button.getBoundingClientRect();
+    const width = Math.min(292, Math.max(240, window.innerWidth - 24));
+    menu.style.width = `${width}px`;
+    const left = Math.min(Math.max(12, rect.left), Math.max(12, window.innerWidth - width - 12));
+    const measuredHeight = menu.offsetHeight || 180;
+    const top = Math.max(12, rect.top - measuredHeight - 10);
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  };
+
   const close = (): void => {
     menu.hidden = true;
     button.setAttribute("aria-expanded", "false");
@@ -91,7 +103,10 @@ export function createPermissionModeControl(initialMode: PermissionMode = "ask")
     const open = menu.hidden;
     menu.hidden = !open;
     button.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) options.get(mode)?.focus();
+    if (open) {
+      positionMenu();
+      options.get(mode)?.focus();
+    }
   });
 
   root.addEventListener("keydown", (event) => {
@@ -102,11 +117,15 @@ export function createPermissionModeControl(initialMode: PermissionMode = "ask")
   });
 
   document.addEventListener("pointerdown", (event) => {
-    if (!root.contains(event.target as Node)) close();
+    const target = event.target as Node;
+    if (!root.contains(target) && !menu.contains(target)) close();
   });
+  window.addEventListener("resize", positionMenu);
+  window.addEventListener("scroll", positionMenu, true);
 
   update();
-  root.append(button, menu);
+  root.append(button);
+  document.body.append(menu);
 
   return {
     root,

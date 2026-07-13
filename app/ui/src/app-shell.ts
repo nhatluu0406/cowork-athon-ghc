@@ -42,7 +42,6 @@ import {
   localServiceStatus,
   providerModelLabel,
   providerStatus,
-  shouldShowContinuationBanner,
   type ConnectionTestState,
 } from "./provider-readiness.js";
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
@@ -57,7 +56,7 @@ import {
 } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
-import { mountWorkspacePicker } from "./workspace-picker.js";
+import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
@@ -155,7 +154,7 @@ interface AppState {
 type AppDom = AppFrameDom;
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
-const PERMISSION_MODE_STORAGE_KEY = "cowork-ghc.permission-mode";
+const PERMISSION_MODE_STORAGE_KEY = "cowork-ghc.permission-mode.v3";
 
 function readPermissionMode(): PermissionMode {
   try {
@@ -375,12 +374,10 @@ function renderPendingAttachmentChips(
   }
 }
 
-function isComposerLocked(state: AppState): boolean {
-  const record = state.conv.state.activeRecord;
-  const phase = state.conv.state.runtimePhase;
-  if (phase === "running" || phase === "starting" || phase === "cancelling") return false;
-  if (!needsContinuation(record)) return false;
-  return !state.continuationUnlocked;
+function isComposerLocked(_state: AppState): boolean {
+  // Historical conversations continue transparently on the next send. The runtime planner
+  // creates a continuation turn when needed, so a persistent banner/lock only adds friction.
+  return false;
 }
 
 function clearTranscript(dom: AppDom): void {
@@ -450,35 +447,92 @@ function renderSessionList(
   }
 
   for (const summary of summaries) {
-    const item = el("button", "history-item");
+    const item = el("div", "history-item");
+    item.dataset["conversationId"] = summary.id;
     if (summary.id === activeConversationId) item.classList.add("history-item--active");
     if (summary.status === "running") item.classList.add("history-item--running");
     if (summary.status === "interrupted") item.classList.add("history-item--interrupted");
     if (summary.status === "completed") item.classList.add("history-item--historical");
-    item.type = "button";
     item.dataset["status"] = summary.status;
+
+    const select = el("button", "history-item__select") as HTMLButtonElement;
+    select.type = "button";
+    select.setAttribute("aria-label", `Mở cuộc trò chuyện ${summary.title}`);
     const titleRow = el("span", "history-item__title-row");
     const title =
       summary.status === "draft" && summary.messageCount === 0 && (draftOrdinals.get(summary.id) ?? 0) > 1
         ? `${summary.title} (${draftOrdinals.get(summary.id)})`
         : summary.title;
-    titleRow.append(el("span", "history-item__title", title));
+    const titleText = el("span", "history-item__title", title);
+    titleRow.append(titleText);
     if (summary.status === "draft") titleRow.append(el("span", "history-item__badge", "Nháp"));
-    item.append(titleRow);
-    item.append(el("span", "history-item__meta", formatConversationMeta(summary)));
-    item.title = summary.title;
-    item.addEventListener("click", () => onSelect(summary.id));
-    item.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      const action = window.prompt("Đổi tên (nhập tiêu đề mới) hoặc gõ DELETE để xóa:", summary.title);
-      if (action === null) return;
-      if (action.trim().toUpperCase() === "DELETE") {
+    select.append(titleRow, el("span", "history-item__meta", formatConversationMeta(summary)));
+    select.addEventListener("click", () => onSelect(summary.id));
+
+    const actions = el("span", "history-item__actions");
+    const rename = el("button", "history-item__action") as HTMLButtonElement;
+    rename.type = "button";
+    rename.dataset["tooltip"] = "Đổi tên";
+    rename.setAttribute("aria-label", `Đổi tên ${summary.title}`);
+    rename.append(icon("pencil", "Đổi tên"));
+
+    const remove = el("button", "history-item__action history-item__action--delete") as HTMLButtonElement;
+    remove.type = "button";
+    remove.dataset["tooltip"] = "Xóa";
+    remove.setAttribute("aria-label", `Xóa ${summary.title}`);
+    remove.append(icon("trash", "Xóa"));
+
+    rename.addEventListener("click", () => {
+      if (item.classList.contains("history-item--renaming")) return;
+      item.classList.add("history-item--renaming");
+      const input = el("input", "history-item__rename-input") as HTMLInputElement;
+      input.value = summary.title;
+      input.setAttribute("aria-label", "Tên cuộc trò chuyện mới");
+      titleText.replaceWith(input);
+      input.focus();
+      input.select();
+      const finish = (save: boolean): void => {
+        if (!input.isConnected) return;
+        const next = input.value.trim();
+        input.replaceWith(titleText);
+        item.classList.remove("history-item--renaming");
+        if (save && next.length > 0 && next !== summary.title) onRename(summary.id, next);
+      };
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(true);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener("blur", () => finish(true), { once: true });
+    });
+
+    let deleteTimer: ReturnType<typeof setTimeout> | null = null;
+    remove.addEventListener("click", () => {
+      if (remove.dataset["confirm"] === "true") {
+        if (deleteTimer !== null) clearTimeout(deleteTimer);
         onDelete(summary.id);
         return;
       }
-      const trimmed = action.trim();
-      if (trimmed.length > 0 && trimmed !== summary.title) onRename(summary.id, trimmed);
+      remove.dataset["confirm"] = "true";
+      remove.classList.add("is-confirming");
+      remove.replaceChildren(icon("check", "Xác nhận xóa"));
+      remove.dataset["tooltip"] = "Bấm lại để xóa";
+      remove.setAttribute("aria-label", `Xác nhận xóa ${summary.title}`);
+      deleteTimer = setTimeout(() => {
+        remove.dataset["confirm"] = "false";
+        remove.classList.remove("is-confirming");
+        remove.replaceChildren(icon("trash", "Xóa"));
+        remove.dataset["tooltip"] = "Xóa";
+        remove.setAttribute("aria-label", `Xóa ${summary.title}`);
+      }, 3000);
     });
+
+    actions.append(rename, remove);
+    item.append(select, actions);
     dom.sessionList.append(item);
   }
 }
@@ -735,10 +789,11 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const record = state.conv.state.activeRecord;
   const activeSurface = surfaceById(state.activeSurface);
   const layoutMode = shellLayoutModeForSurface(state.activeSurface);
-  const inspectorOpen = !dom.rightPanel.hidden;
   const isCoworkSurface = state.activeSurface === "cowork";
   const isKnowledgeSurface = state.activeSurface === "knowledge";
   const settingsOpen = !dom.settingsSurface.hidden;
+  const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
+  const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
 
   for (const [id, button] of dom.surfaceButtons) {
     button.setAttribute("aria-current", id === state.activeSurface ? "page" : "false");
@@ -746,6 +801,8 @@ function renderState(dom: AppDom, state: AppState, handlers: {
 
   applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
   dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
+  dom.rightPanelTopbarToggle.hidden = !inspectorAvailable;
+  dom.rightPanel.classList.toggle("inspector-shell--surface-hidden", !inspectorAvailable);
 
   dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
@@ -803,20 +860,9 @@ function renderState(dom: AppDom, state: AppState, handlers: {
       ? "Phiên trước đã gián đoạn — mở lại lịch sử hoặc tạo phiên tiếp nối."
       : "Cowork GHC sử dụng workspace và provider đã cấu hình.";
 
-  const showContinuation = shouldShowContinuationBanner(
-    state.conv.state.activeConversationId,
-    record,
-    phase,
-  );
-  if (showContinuation && isCoworkSurface && state.workMode === "cowork") {
-    if (!dom.continuationBanner.isConnected) {
-      dom.coworkView.insertBefore(dom.continuationBanner, dom.transcript);
-    }
-    dom.continuationBanner.hidden = false;
-    dom.continuationButton.hidden = false;
-  } else if (dom.continuationBanner.isConnected) {
-    dom.continuationBanner.remove();
-  }
+  // Historical conversations continue transparently on the next send. A persistent banner
+  // consumes transcript space and duplicates the runtime planner's continuation behavior.
+  if (dom.continuationBanner.isConnected) dom.continuationBanner.remove();
 
   const locked = isComposerLocked(state);
   const readinessInput = buildReadinessInput(state.localServiceReady, state);
@@ -1609,7 +1655,6 @@ export function mountCoworkApp(root: HTMLElement): void {
       void state.conv.rename(id, title).then(() => renderState(dom, state, handlers));
     },
     onDelete: (id: string) => {
-      if (!window.confirm("Xóa cuộc trò chuyện này? Workspace và khoá provider không bị xóa.")) return;
       const wasActive = state.conv.state.activeConversationId === id;
       void (async () => {
         if (wasActive && state.conv.state.runtimePhase === "running" && state.conv.state.runtimeSessionId !== null) {
@@ -1666,6 +1711,7 @@ export function mountCoworkApp(root: HTMLElement): void {
   let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
+  let workspacePicker: WorkspacePickerHandle | null = null;
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
     getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1698,7 +1744,7 @@ export function mountCoworkApp(root: HTMLElement): void {
         });
         if (!featuresMounted) {
           featuresMounted = true;
-          mountWorkspacePicker(dom.workspaceBox, {
+          workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
             bridge: getShellBridge(),
             client: dynamicClient,
             onActivated: (rootPath) => {
@@ -1716,6 +1762,7 @@ export function mountCoworkApp(root: HTMLElement): void {
           workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
+            onChooseWorkspace: () => void workspacePicker?.choose(),
             onFileSelected: (relativePath) => {
               state.workMode = "workspace";
               void workspaceCompanionHandle?.open(relativePath);
