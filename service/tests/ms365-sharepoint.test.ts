@@ -74,6 +74,30 @@ test("search returns [] without throwing on a malformed/empty response", async (
   assert.deepEqual(hits, []);
 });
 
+test("search returns [] when value is present but not an array", async () => {
+  const seen: GraphClientRequest[] = [];
+  const conn = connectorReturning(seen, () => ({ value: {} }));
+  const svc = createSharePointService({ connector: conn, files: { readBytes: async () => new Uint8Array() } });
+  const hits = await svc.search("anything");
+  assert.deepEqual(hits, []);
+});
+
+test("search returns [] when a nested hitsContainers field is not an array", async () => {
+  const seen: GraphClientRequest[] = [];
+  const conn = connectorReturning(seen, () => ({ value: [{ hitsContainers: "oops" }] }));
+  const svc = createSharePointService({ connector: conn, files: { readBytes: async () => new Uint8Array() } });
+  const hits = await svc.search("anything");
+  assert.deepEqual(hits, []);
+});
+
+test("listSiteFiles returns [] when value is present but not an array", async () => {
+  const seen: GraphClientRequest[] = [];
+  const conn = connectorReturning(seen, () => ({ value: "not-an-array" }));
+  const svc = createSharePointService({ connector: conn, files: { readBytes: async () => new Uint8Array() } });
+  const hits = await svc.listSiteFiles("site-1");
+  assert.deepEqual(hits, []);
+});
+
 test("listSiteFiles maps drive children and caps at maxResults", async () => {
   const seen: GraphClientRequest[] = [];
   const conn = connectorReturning(seen, () => ({
