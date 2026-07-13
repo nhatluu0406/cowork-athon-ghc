@@ -6,7 +6,7 @@ updated_at: "2026-07-12"
 
 # Packaged POC acceptance
 
-Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi tiết lịch sử nằm trong `.loop-engineer/evidence/` (maintenance-only).
+Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi tiết demo: [demo-acceptance.md](./demo-acceptance.md).
 
 ## Bằng chứng packaged đã quan sát
 
@@ -55,7 +55,7 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 npm run verify:release
 ```
 
-Bao gồm: `typecheck`, provider contract tests, permission bridge, app lifecycle CLI, lifecycle script structure, OpenCode binary presence, shell bundle, `loop-engineer verify` (optional).
+Bao gồm: `typecheck`, provider contract tests, permission bridge, app lifecycle CLI, lifecycle script structure, OpenCode binary presence, shell bundle.
 
 Không gọi DeepSeek, không cần API key, không tạo process lâu dài.
 
