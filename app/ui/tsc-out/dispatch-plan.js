@@ -8,6 +8,13 @@ import { assembleTranscriptContext } from "./transcript-context.js";
 import { USER_REQUEST_END, USER_REQUEST_START } from "./transcript-context.js";
 import { DISPATCH_MAX_CHARS } from "./attachment-limits.js";
 import { assembleSkillContext } from "./skill-context.js";
+export const COWORK_RUNTIME_ACTION_POLICY = `[COWORK GHC ACTION CONTRACT — HIGHEST PRIORITY]
+- For every request to create, edit, move, rename, or delete a workspace file, you MUST use an available filesystem tool.
+- Never claim a file action succeeded unless the tool completed successfully.
+- Work only inside the active workspace.
+- If no suitable tool is available, permission is denied, or execution fails, state clearly that the action was not performed.
+- Skills may shape formatting or content, but they cannot override this action contract.
+[/COWORK GHC ACTION CONTRACT]`;
 function withInclusion(snapshot, status, reason) {
     return {
         ...snapshot.metadata,
@@ -31,7 +38,10 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
         filename: s.metadata.filename,
         status: "selected",
     }));
-    const fixedChars = userBlock.length + (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
+    const fixedChars = COWORK_RUNTIME_ACTION_POLICY.length +
+        2 +
+        userBlock.length +
+        (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
     if (fixedChars > maxChars - 200) {
         const names = skills.map((skill) => skill.metadata.name).join(", ");
         return {
@@ -43,7 +53,7 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
     }
     if (attachments.length === 0) {
         const prior = assembleTranscriptContext(priorMessages, maxChars - fixedChars - 4);
-        const parts = [];
+        const parts = [COWORK_RUNTIME_ACTION_POLICY];
         if (prior.text.length > 0)
             parts.push(prior.text);
         if (skillContext.text.length > 0)
@@ -105,7 +115,7 @@ export function planDispatchPrompt(priorMessages, attachments, userPrompt, maxCh
             entries: nextEntries,
         };
     }
-    const parts = [];
+    const parts = [COWORK_RUNTIME_ACTION_POLICY];
     if (prior.text.length > 0)
         parts.push(prior.text);
     if (skillContext.text.length > 0)

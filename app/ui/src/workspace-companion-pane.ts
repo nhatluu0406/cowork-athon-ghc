@@ -108,15 +108,18 @@ export function mountWorkspaceCompanionPane(
         const input = el("input", "workspace-companion-pane__grid-input") as HTMLInputElement;
         input.type = "text";
         input.value = row[c] ?? "";
+        input.readOnly = !file.editable;
         input.dataset["row"] = String(r);
         input.dataset["col"] = String(c);
-        input.addEventListener("input", () => {
-          const ri = Number(input.dataset["row"]);
-          const ci = Number(input.dataset["col"]);
-          const target = ensureRow(ri);
-          target[ci] = input.value;
-          markDirty();
-        });
+        if (file.editable) {
+          input.addEventListener("input", () => {
+            const ri = Number(input.dataset["row"]);
+            const ci = Number(input.dataset["col"]);
+            const target = ensureRow(ri);
+            target[ci] = input.value;
+            markDirty();
+          });
+        }
         td.append(input);
         tr.append(td);
       }
@@ -159,7 +162,8 @@ export function mountWorkspaceCompanionPane(
       const editor = el("textarea", "workspace-companion-pane__editor") as HTMLTextAreaElement;
       editor.value = file.content ?? "";
       editor.spellcheck = false;
-      editor.addEventListener("input", markDirty);
+      editor.readOnly = !file.editable;
+      if (file.editable) editor.addEventListener("input", markDirty);
       body.replaceChildren(editor);
       if (file.truncated) {
         setStatus("Đã cắt bớt — tệp lớn hơn 512 KiB", 0);
@@ -167,9 +171,8 @@ export function mountWorkspaceCompanionPane(
       return;
     }
     if (file.kind === "image" && file.dataBase64 && file.mimeType) {
-      blobUrl = base64ToBlobUrl(file.dataBase64, file.mimeType);
       const img = el("img", "workspace-companion-pane__image") as HTMLImageElement;
-      img.src = blobUrl;
+      img.src = `data:${file.mimeType};base64,${file.dataBase64}`;
       img.alt = file.relativePath;
       body.replaceChildren(img);
       return;
@@ -184,18 +187,23 @@ export function mountWorkspaceCompanionPane(
     }
     if (file.kind === "docx") {
       const article = el("article", "workspace-companion-pane__docx");
-      article.innerHTML = file.html ?? "";
+      article.textContent = file.content ?? "";
       body.replaceChildren(article);
       return;
     }
     if (file.kind === "spreadsheet") {
       renderSpreadsheet(file);
+      if (!file.editable) setStatus("Chỉ xem — bảo toàn công thức và định dạng XLSX", 0);
       return;
     }
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Không hiển thị được tệp."));
   };
 
   const load = async (relativePath: string): Promise<void> => {
+    if (dirty && openPath !== null && relativePath !== openPath) {
+      setStatus("Bạn có thay đổi chưa lưu. Hãy lưu trước khi mở tệp khác.", 0);
+      return;
+    }
     openPath = relativePath;
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Đang tải..."));
     try {
@@ -241,10 +249,18 @@ export function mountWorkspaceCompanionPane(
     open: load,
     refresh: async () => {
       if (openPath === null) return;
+      if (dirty) {
+        setStatus("Tệp đã thay đổi bên ngoài. Hãy lưu hoặc mở lại sau khi xử lý thay đổi hiện tại.", 0);
+        return;
+      }
       await load(openPath);
     },
     getOpenPath: () => openPath,
     showAgentUpdated: () => {
+      if (dirty) {
+        setStatus("Agent đã cập nhật tệp. Thay đổi chưa lưu của bạn được giữ nguyên.", 0);
+        return;
+      }
       setStatus("Agent đã cập nhật tệp", 3500);
       void load(openPath ?? "");
     },

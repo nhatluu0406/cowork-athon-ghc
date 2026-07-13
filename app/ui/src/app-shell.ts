@@ -65,6 +65,12 @@ import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-contex
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
 import {
+  detectFileActionIntent,
+  hasVerifiedFileAction,
+  markFileActionUnverified,
+  type FileActionIntent,
+} from "./file-action-integrity.js";
+import {
   createPendingAttachmentId,
   totalValidBytes,
   type PendingAttachment,
@@ -130,6 +136,8 @@ interface AppState {
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
+  currentFileActionIntent: FileActionIntent | null;
+  fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
   continuationUnlocked: boolean;
   localServiceReady: boolean;
@@ -915,6 +923,12 @@ function startStreamWatchdog(
   }, STREAM_POLL_INTERVAL_MS);
 }
 
+async function settleFileVerificationTasks(state: AppState): Promise<void> {
+  const tasks = [...state.fileVerificationTasks];
+  if (tasks.length === 0) return;
+  await Promise.allSettled(tasks);
+}
+
 async function finalizeConversationTurn(
   state: AppState,
   dom: AppDom,
@@ -957,6 +971,15 @@ async function finalizeConversationTurn(
     resolved = { text, outcome: "failed" };
   }
 
+  await settleFileVerificationTasks(state);
+  if (
+    terminal === "completed" &&
+    state.currentFileActionIntent !== null &&
+    !hasVerifiedFileAction(state.fileReviews, sessionId, state.currentFileActionIntent)
+  ) {
+    resolved = { ...resolved, text: markFileActionUnverified(resolved.text) };
+  }
+
   state.lastView = view;
   state.assistantText = resolved.text;
   const displayText = sanitizeAssistantForDisplay(resolved.text);
@@ -978,6 +1001,8 @@ async function finalizeConversationTurn(
   await state.conv.completeRuntimeTurn(sessionId, turnStatus);
   await persistActivity(state);
   state.finalizingTurn = false;
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.continuationUnlocked = true;
   renderState(dom, state, handlers);
 }
@@ -1012,7 +1037,15 @@ function bindEvStream(
         void captureBeforeOnToolStart(state, event);
       }
       if (event.kind === "file_mutation") {
-        void finalizeFileMutationReview(state, event, sessionId, dom, workspaceCompanionHandle);
+        const task = finalizeFileMutationReview(
+          state,
+          event,
+          sessionId,
+          dom,
+          workspaceCompanionHandle,
+        );
+        state.fileVerificationTasks.add(task);
+        void task.finally(() => state.fileVerificationTasks.delete(task));
       }
     },
     onView: (view) => {
@@ -1125,6 +1158,8 @@ async function switchConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
   await state.conv.select(id);
   state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
@@ -1173,6 +1208,8 @@ async function newConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
 
   const model = state.settings?.defaultModel;
@@ -1372,6 +1409,8 @@ async function sendPrompt(
   );
 
   resetLiveActivity(state);
+  state.currentFileActionIntent = detectFileActionIntent(prompt);
+  state.fileVerificationTasks.clear();
   const includedMetadata = dispatchPlan.includedMetadata;
   appendMessage(
     dom,
@@ -1413,6 +1452,8 @@ async function sendPrompt(
         enabledSkills,
       );
       if (!retryPlan.ok) {
+        state.currentFileActionIntent = null;
+        state.fileVerificationTasks.clear();
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", retryPlan.message);
         renderState(dom, state, handlers);
@@ -1420,10 +1461,14 @@ async function sendPrompt(
       }
       const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
       if (!second.accepted) {
+        state.currentFileActionIntent = null;
+        state.fileVerificationTasks.clear();
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
       }
     } else {
+      state.currentFileActionIntent = null;
+      state.fileVerificationTasks.clear();
       await state.conv.setRuntimePhase("failed");
       appendMessage(
         dom,
@@ -1506,6 +1551,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
+    currentFileActionIntent: null,
+    fileVerificationTasks: new Set(),
     pendingAttachments: [],
     continuationUnlocked: true,
     localServiceReady: false,

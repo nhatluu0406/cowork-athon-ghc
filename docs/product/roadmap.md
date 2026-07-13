@@ -6,83 +6,35 @@ updated_at: "2026-07-13"
 
 # Lộ trình sản phẩm
 
-Canonical plan: [product-plan.md](./product-plan.md). Trạng thái: [current-status.md](./current-status.md).
+## NOW — một golden path đáng tin cậy
 
-## NOW — demo và acceptance cơ bản
+- [x] Thêm Cowork file-action contract vào dispatch prompt.
+- [x] Map `permission.asked.properties.tool` đúng (`write` → create, `edit` → modify).
+- [x] Thêm false-success guard dựa trên File Work Review/disk evidence.
+- [x] Tắt các đường ghi file nguy hiểm: truncated text và XLSX destructive save.
+- [ ] Packaged manual: create file → Permission → Allow → file tồn tại.
+- [ ] Packaged manual: modify file → Deny → file không đổi.
+- [ ] Xác nhận File Work Review create/modify sau golden path.
 
-- Ổn định hành trình demo 10 bước (packaged app).
-- Multi-Provider Profiles Phase 1 — **đã implement**, chờ PO sign-off.
-- **Workspace Companion Phase 1** — **BASIC COMPLETE** trên `main` (navigator + preview/editor + chat).
-- File Work Review create/modify — **PARTIAL**; delete chưa tin cậy.
-- Skills CRUD Basic — **đang implement** trên `feature/skills-crud-basic` (Settings → Kỹ năng).
-- Scripts lifecycle + `verify-fast.bat` + `demo-reset.bat` + `demo-seed.bat`.
+## NEXT — demo xuất sắc sau khi P0 PASS
 
-## NEXT — sau demo review
+- [ ] Một commercial UI pass thống nhất: design tokens, icons, tooltip, permission card, transcript, Settings, Workspace, Skills.
+- [ ] Light/dark mode thật, gồm titlebar overlay và toàn bộ surface.
+- [ ] Capture tối đa 10 màn hình packaged sau khi các feature thật đã ổn định.
+- [ ] Hoàn thiện preview Office an toàn; chỉ mở edit khi bảo toàn dữ liệu được chứng minh.
 
-- **External product surfaces** — rail + placeholder UI cho D1–D4 và Code (**UI restored**; backends chưa merge).
-- File Work Review hardening (delete path, deterministic packaged suite).
-- Attachment Phase 2 (drag-drop, folder) khi có brief rõ.
-- Full packaged release verification (streaming live, native picker, installed keyring).
+## WAITING — team khác
 
-## LATER — mở rộng sản phẩm
+- [ ] D1 Dispatch backend integration.
+- [ ] D2 Microsoft 365 integration.
+- [ ] D3 Knowledge/RAG integration.
+- [ ] D4 Advanced Gateway integration.
 
-- Full Office editing (Word/Excel parity).
-- Installer, upgrade, uninstall, migration.
-- Final UX polish (không đổi scope chức năng).
-- External integration intake D1–D4 (khi backend teams merge).
+## DEFERRED
 
-## WAITING — không bắt đầu
-
-| Mục | Lý do |
-|---|---|
-| Web / Next.js | ADR 0007 — deferred đến desktop RC |
-| D1–D4 backends | Chưa merge; **UI surfaces restored** với mount boundaries và placeholder tiếng Việt |
-| Skill marketplace / MCP | Ngoài Skills Foundation Phase 1 |
-| Full IDE workspace | Ngoài Workspace Companion Phase 1 |
-| Cloud / multi-user | Ngoài local-first POC |
-
-## External product surfaces (UI intake)
-
-| Rail | Mount ID | Status UI | Backend |
-|---|---|---|---|
-| Cowork | (shell) | **Available** — Cowork + Workspace modes | Core POC |
-| Dispatch (D1) | `d1-dispatch-root` | Chờ tích hợp D1 | **Not merged** |
-| Gateway (D4) | `d4-gateway-root` | Chờ tích hợp D4 | **Not merged** |
-| Knowledge (D3) | `d3-knowledge-root` | Chờ tích hợp D3 | **Not merged** |
-| Microsoft 365 (D2) | `d2-microsoft-root` | Chờ tích hợp D2 | **Not merged** |
-| Code | `code-surface-root` | Đã lên kế hoạch | **Not merged** |
-
-Placeholder surfaces: không metric giả, không bản ghi mẫu; team thay nội dung trong mount boundary qua `integration-surface-adapters.ts` registry.
-
-- [x] Rail hiển thị đủ 6 mục
-- [x] Điều hướng mở full surface
-- [x] Placeholder tiếng Việt theo D1–D4 / Code
-- [x] Mount boundary ổn định cho team UI
-- [ ] Backend D1 merge
-- [ ] Backend D2 merge
-- [ ] Backend D3 merge
-- [ ] Backend D4 merge
-
-## Workspace Companion Phase 1 — happy path
-
-- [x] Chọn workspace và duyệt navigator
-- [x] Xem trước `.txt` / `.md`
-- [x] Xem trước `.png` / `.jpg` / `.webp`
-- [x] Xem trước `.pdf` (read-only)
-- [x] Xem trước `.docx` (read-only HTML)
-- [x] Xem trước `.xlsx` (grid)
-- [x] Chỉnh sửa và lưu `.txt` / `.md`
-- [x] Chỉnh sửa cell cơ bản và lưu `.xlsx`
-- [x] Chat Cowork cạnh preview (workspace mode)
-- [x] Agent refresh preview khi sửa file đang mở
-- [ ] Multi-sheet Excel
-- [ ] `.docx` edit in-app
-- [ ] Drag-drop vào preview
-
-## Skills CRUD Basic — happy path
-
-- [x] Settings tab Kỹ năng
-- [x] List + search + enable/disable
-- [x] Create / edit / delete user Skills
-- [x] Built-in read-only
-- [ ] Marketplace / cloud catalog / MCP
+- File Work Review delete trên OpenCode v1.17.11.
+- XLSX direct editing cho đến khi patch-in-place giữ công thức/format/sheet.
+- Full DOCX/PPTX editor.
+- Routing, failover, key pool, cost routing.
+- Web/Next.js.
+- Full L9/RC.

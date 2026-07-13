@@ -39,7 +39,7 @@ export interface PermissionControllerDeps {
     readonly client: Pick<ServiceClient, "listPendingPermissions" | "decidePermission">;
     /** Where the modal + status note mount (usually the app root). */
     readonly container: HTMLElement;
-    /** Poll cadence for `start()`; defaults to 2s. Tests drive `refresh()` directly instead. */
+    /** Poll cadence for `start()`; defaults to 500ms while the app is active. */
     readonly pollIntervalMs?: number;
     /** Timer seam; defaults to host `setInterval`/`clearInterval`. Tests inject a fake. */
     readonly timer?: PermissionControllerTimer;
