@@ -4,12 +4,51 @@ status: "active"
 updated_at: "2026-07-14"
 ---
 
-# Current Status
+# Trạng thái hiện tại
 
-Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
+Baseline source được vá từ snapshot `310524c`. Tài liệu canonical: [docs/README.md](../README.md).
 
-Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
-and the current working tree instead.
+## Capability inventory
+
+| Năng lực | Trạng thái | Ghi chú trung thực |
+|---|---|---|
+| Startup | **BASIC WORKS** | Mở New Chat sạch; lifecycle scripts hiện hữu. |
+| Provider profiles | **PARTIAL** | DeepSeek preset + custom OpenAI-compatible profiles; packaged switching giữa hai endpoint thật vẫn cần xác nhận. |
+| Credentials | **BASIC WORKS** | Windows keyring theo profile; không persist raw key trong profile JSON. |
+| Workspace navigator | **PARTIAL** | Duyệt file và mở preview cơ bản. |
+| Workspace editing | **PARTIAL** | `.txt`/`.md` nhỏ có thể sửa; file text bị truncate là read-only; XLSX chuyển read-only để tránh mất dữ liệu. |
+| Image / PDF / DOCX preview | **PARTIAL** | Image dùng data URL; PDF dùng blob frame theo CSP; DOCX render plain text. Cần packaged PO check. |
+| Chat / streaming | **BASIC WORKS** | OpenCode runtime + conversation persistence. |
+| File create / modify bằng Agent | **BLOCKED — PACKAGED CHECK REQUIRED** | Source đã thêm action contract, permission tool mapping và false-success guard; chưa được xác nhận trên packaged Windows app. |
+| Permissions | **BLOCKED — PACKAGED CHECK REQUIRED** | Bridge nay ưu tiên `permission.asked.properties.tool`; UI poll nhanh hơn và báo lỗi transport. Golden path create→Allow và modify→Deny phải chạy thật. |
+| File Work Review | **PARTIAL** | Create/modify review có nền tảng; delete chưa tin cậy. |
+| Attachments | **PARTIAL** | Text attachments bounded; image/PDF attachment vào prompt chưa có. |
+| Skills | **BASIC WORKS** | User Skill CRUD + enable/disable; built-in read-only. |
+| UI readiness | **PARTIAL / COMMERCIAL FAIL** | Shell dùng được nhưng chưa đạt chuẩn demo thương mại; dark mode thật chưa có. |
+| D1–D4 | **NOT IMPLEMENTED** | Chỉ có integration surfaces/mount points; backend teams chưa merge. |
+| Full RC | **DEFERRED** | Chưa chạy release-candidate đầy đủ. |
+
+## P0 recovery patch trong source này
+
+- Product action contract bắt buộc model dùng file tool và không được báo thành công khi tool chưa thành công.
+- Permission bridge giữ đúng tool thật (`write` → `file_create`) thay vì làm mất thông tin qua permission group.
+- File-action response được đánh dấu **chưa xác minh** nếu không có review/disk evidence cùng runtime turn.
+- Truncated text và XLSX được chuyển sang read-only để tránh ghi đè phá dữ liệu.
+- DOCX không còn chèn HTML chưa sanitize; render plain text.
+- Workspace giữ thay đổi chưa lưu khi Agent refresh.
+
+## Exit criterion trước khi tiếp tục UI commercial pass
+
+```text
+request create file
+→ Permission hiển thị
+→ Allow once
+→ file tồn tại đúng workspace, đúng nội dung
+→ File Work Review có bằng chứng
+→ assistant chỉ báo verified success sau mutation
+```
+
+---
 
 ## MS365 connector + SharePoint slice — D2 (2026-07-14)
 
@@ -268,120 +307,3 @@ Journeys D–L: not completed in the latest run
 ```
 
 Evidence artifact (best full run): `%TEMP%\cghc-freview-artifacts-ubFNmc`
-
-| Stage / journey | Result | Notes |
-|---|---|---|
-| A01–A12 create | PASS | Permission, disk file, review artifact, terminal |
-| B modify | PASS | `modify-me.txt` diff persisted (`review-11`) |
-| C delete | NOT PASS | Model sometimes skips delete tool or uses bash/edit instead |
-| D–L | NOT RUN | Stopped after C failure |
-
-### Product bugs closed in hardening pass
-
-| ID | Issue | Fix |
-|---|---|---|
-| RC2 | Windows 8.3 short path (`NHATLU~1`) did not map to long workspace root → review snapshot failed | `toRelativePath()` folder-segment match |
-| RC4 | Stream watchdog (90s) treated permission wait as stall | Pause watchdog while permission `pending` |
-| RC5 | Before snapshot missing when permission has no `targetPath` | Capture on `tool_call` start via early `filePath` in summary |
-
-### Harness fixes (verifier only)
-
-| ID | Issue | Fix |
-|---|---|---|
-| RC1 | A07 required filename in permission dialog when OpenCode emits empty path | Accept file write/edit permission kinds |
-| RC3 | `waitTerminalAfterPermission` approved without visible dialog | Staged `waitPermissionRequest` + `approveObservedPermission` |
-| — | Review click targeted wrong file row | `clickFileChange(relativePath)` |
-
-### Open verification decision
-
-```text
-Live LLM behavior must not be the sole mechanism used to verify deterministic
-delete/deny/redaction/persistence File Review semantics.
-```
-
-### Limits (configured)
-
-| Limit | Value |
-|---|---|
-| Max snapshot bytes | 64 KiB (`FILE_REVIEW_MAX_SNAPSHOT_BYTES`) |
-| Max preview bytes | 64 KiB (`FILE_REVIEW_MAX_PREVIEW_BYTES`) |
-| Max diff chars | 32 KiB (`FILE_REVIEW_MAX_DIFF_CHARS`) |
-| Max diff lines per side | 500 (`FILE_REVIEW_MAX_DIFF_LINES`) |
-
-### Verification
-
-- `npm run verify:release` PASS (includes file-review unit/router tests, activity-model 8.3 path test).
-- `npm run package:win` PASS.
-- `node tools/verify/file-review-packaged.mjs` — A–B PASS in latest clean rerun; C–L incomplete.
-
-Full L9 / release-candidate verification is **not** complete.
-
-## Commercial UI Foundation and Workspace Shell
-
-### What shipped
-
-- Hybrid `1a Airy + 1b rail` is the active shell direction: 56px product rail,
-  contextual Cowork sidebar, central chat workspace, and right information panel.
-- Typography is standardized on bundled local `Be Vietnam Pro` with Segoe/Noto fallback;
-  no runtime CDN font load is required.
-- Central design tokens now cover semantic background/surface/border/text/accent,
-  status colors, spacing, typography, radius, shadow, and transition.
-- The inline SVG icon system covers Cowork, Dispatch, Gateway, Knowledge,
-  Knowledge Graph, Microsoft 365, Code, Workspace, Folder, File, Attachment,
-  Settings, Permission, Activity, Create, Modify, Delete, Search, Refresh, and
-  collapse/expand affordances.
-- A top-level surface registry defines `cowork`, `dispatch`, `gateway`, `knowledge`,
-  `knowledge-graph`, `microsoft`, and `code`; `cowork` is `available`, D1-D4 surfaces
-  are `awaiting_integration`, and `code` is `planned`.
-- D1-D4 UI contracts exist as passive integration slot interfaces only. No backend
-  adapter, fake production data, or mock provider was added for those surfaces.
-- Minimal Workspace Navigator is implemented as a read-only service-backed tree:
-  direct children only, lazy folder expansion, bounded list size, no recursive scan,
-  and no renderer filesystem access.
-- Workspace file preview supports bounded text/Markdown/JSON/YAML/source-code style
-  text through the existing safe preview boundary. PDF, Office, image, and direct editor
-  are not started.
-- Right information panel now has active tab semantics: Kế hoạch, Hoạt động, Tệp,
-  and Xem lại. Empty states remain honest when there is no runtime data.
-
-### Status constraints
-
-```text
-File Work Review: PARTIAL PASS
-D1-D4: not merged / not implemented
-Minimal Workspace Navigator: read-only implemented
-Direct editor/PDF/Office/image preview: not started
-```
-
-Full live regression remains deferred until after the external integration milestone.
-
-## Next Implementation Slice
-
-Next Agent: Cursor.
-
-Current blocker:
-
-```text
-File Work Review: PARTIAL PASS
-Packaged journeys C–L need a verification redesign split (live-agent vs deterministic product-path).
-```
-
-Next implementation action:
-
-```text
-Receive D1–D4 intake reports per docs/integration/external-systems-integration-readiness.md.
-Do not merge until matrix row is filled and track acceptance gates pass.
-```
-
-## Useful Verification Commands
-
-```powershell
-npm run verify:release
-npm run package:win
-node tools/verify/file-review-packaged.mjs --mode live
-node tools/verify/file-review-packaged.mjs --mode deterministic
-node tools/verify/skills-foundation-packaged.mjs
-node tools/verify/attachment-honesty-packaged.mjs
-node tools/verify/provider-readiness-packaged.mjs
-node tools/verify/ui-shell-v3-production-screenshots.mjs
-```

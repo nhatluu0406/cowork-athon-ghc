@@ -1,3 +1,4 @@
+import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -12,6 +13,9 @@ import type {
   KnowledgeIntegrationView,
   MicrosoftIntegrationView,
 } from "../src/integration-slots.js";
+import { getIntegrationSurfaceAdapter } from "../src/integration-surface-adapters.js";
+import { createAppFrame } from "../src/ui-shell/create-app-frame.js";
+import { renderIntegrationSurface } from "../src/ui-shell/integration-view.js";
 
 test("surface registry declares the six top-level product surfaces", () => {
   const registry = createSurfaceRegistry();
@@ -33,7 +37,7 @@ test("surface registry declares the six top-level product surfaces", () => {
   }
 });
 
-test("production default exposes product rail surfaces with honest availability", () => {
+test("production default exposes all navigable product rail surfaces", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
     ["cowork", "available"],
@@ -45,13 +49,45 @@ test("production default exposes product rail surfaces with honest availability"
   ]);
 });
 
+test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
+  const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
+  assert.deepEqual(visible.map((surface) => surface.id), ["cowork"]);
+});
+
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.equal(visible.find((surface) => surface.id === "dispatch")?.dependency, "D1");
   assert.equal(visible.find((surface) => surface.id === "microsoft")?.dependency, "D2");
   assert.equal(visible.find((surface) => surface.id === "knowledge")?.dependency, "D3");
   assert.equal(visible.find((surface) => surface.id === "gateway")?.dependency, "D4");
-  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /Backend Gateway chưa được merge/u);
+  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /D4/u);
+});
+
+test("integration adapters declare stable mount boundaries", () => {
+  assert.equal(getIntegrationSurfaceAdapter("dispatch")?.statusLabel, "Chờ tích hợp D1");
+  assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Chờ tích hợp D4");
+  assert.equal(getIntegrationSurfaceAdapter("knowledge")?.statusLabel, "Chờ tích hợp D3");
+  assert.equal(getIntegrationSurfaceAdapter("microsoft")?.statusLabel, "Chờ tích hợp D2");
+  assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã lên kế hoạch");
+  assert.equal(getIntegrationSurfaceAdapter("dispatch")?.mountId, "d1-dispatch-root");
+  assert.equal(getIntegrationSurfaceAdapter("cowork"), null);
+});
+
+test("product rail renders six surface buttons with mount-ready integration placeholders", () => {
+  const root = document.createElement("main");
+  const frame = createAppFrame(root);
+  assert.equal(frame.surfaceButtons.size, 6);
+  assert.ok(frame.surfaceButtons.has("dispatch"));
+  assert.ok(frame.surfaceButtons.has("gateway"));
+  assert.equal(frame.knowledgeView.root.id, "d3-knowledge-root");
+
+  const dispatch = createSurfaceRegistry().find((surface) => surface.id === "dispatch")!;
+  renderIntegrationSurface(frame.integrationSurface, dispatch);
+  const mount = frame.integrationSurface.querySelector("#d1-dispatch-root");
+  assert.ok(mount instanceof HTMLElement);
+  assert.equal(mount.dataset["integrationComponent"], "DispatchIntegrationSlot");
+  assert.match(mount.textContent ?? "", /Chờ tích hợp D1/u);
+  assert.doesNotMatch(mount.textContent ?? "", /metric|bản ghi mẫu|fake/i);
 });
 
 test("D1-D4 integration slots are passive UI contracts", () => {

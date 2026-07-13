@@ -7,11 +7,13 @@
  */
 
 import { mountCoworkApp } from "./app-shell.js";
+import { applyThemePreference } from "./theme-manager.js";
 import "@fontsource/be-vietnam-pro/400.css";
 import "@fontsource/be-vietnam-pro/500.css";
 import "@fontsource/be-vietnam-pro/600.css";
 
 function main(): void {
+  applyThemePreference("system");
   const root = document.getElementById("app");
   if (!(root instanceof HTMLElement)) {
     return;

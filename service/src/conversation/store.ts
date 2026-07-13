@@ -167,6 +167,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
         ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
         ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),
+        ...(input.providerSnapshot !== undefined ? { providerSnapshot: input.providerSnapshot } : {}),
         ...(input.modelId !== undefined && input.providerId !== undefined
           ? { model: { providerID: input.providerId, modelID: input.modelId } }
           : {}),
@@ -215,6 +216,9 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         }
         if (patch.activity !== undefined) {
           next = { ...next, activity: patch.activity };
+        }
+        if (patch.providerSnapshot !== undefined) {
+          next = { ...next, providerSnapshot: patch.providerSnapshot };
         }
         if (patch.registerRuntimeTurn !== undefined) {
           const turns = [...(next.runtimeTurns ?? []), patch.registerRuntimeTurn];

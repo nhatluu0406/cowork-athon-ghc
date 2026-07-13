@@ -44,6 +44,7 @@ test("permission.asked submits a pending request with confined target path", asy
         id: "perm-1",
         sessionID: "sess-1",
         permission: "edit",
+        tool: "write",
         patterns: [join(fx.dir, "note.txt")],
         metadata: { filepath: join(fx.dir, "note.txt") },
       },
@@ -51,8 +52,26 @@ test("permission.asked submits a pending request with confined target path", asy
     const pending = fx.gate.pending();
     assert.equal(pending.length, 1);
     assert.equal(pending[0]?.requestId, "perm-1");
-    assert.equal(pending[0]?.action.kind, "file_edit");
+    assert.equal(pending[0]?.action.kind, "file_create");
     assert.ok(pending[0]?.action.targetPath?.includes("note.txt"));
+  } finally {
+    rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test("permission group is used only as a fallback when runtime tool is absent", async () => {
+  const fx = bridgeFixture();
+  try {
+    await fx.bridge.handleFrame({
+      type: "permission.asked",
+      properties: {
+        id: "perm-fallback",
+        sessionID: "sess-fallback",
+        permission: "edit",
+        metadata: { filepath: join(fx.dir, "fallback.txt") },
+      },
+    });
+    assert.equal(fx.gate.pending()[0]?.action.kind, "file_edit");
   } finally {
     rmSync(fx.dir, { recursive: true, force: true });
   }
@@ -85,5 +104,46 @@ test("non-permission frames are ignored", async () => {
     assert.equal(fx.gate.pending().length, 0);
   } finally {
     rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+
+test("dedupe state resets after permission.replied and session idle", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "cghc-perm-reset-")));
+  const calls: unknown[] = [];
+  const bridge = createPermissionBridge({
+    proxy: {
+      handle: async (event: unknown) => {
+        calls.push(event);
+        return { outcome: "submitted", requestId: "perm-reset", actionKind: "file_create" };
+      },
+    } as never,
+    workspaceRoot: dir,
+  });
+  const frame = {
+    type: "permission.asked",
+    properties: {
+      id: "perm-reset",
+      sessionID: "sess-reset",
+      permission: "edit",
+      tool: "write",
+      metadata: { filepath: join(dir, "reset.txt") },
+    },
+  };
+
+  try {
+    await bridge.handleFrame(frame);
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 1, "duplicate frame in the same pending request is ignored");
+
+    await bridge.handleFrame({ type: "permission.replied", properties: { id: "perm-reset" } });
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 2, "a replied permission id can be observed again");
+
+    await bridge.handleFrame({ type: "session.idle", properties: { sessionID: "sess-reset" } });
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 3, "session terminal state clears transient dedupe state");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

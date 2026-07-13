@@ -30,7 +30,8 @@ export interface ProductSurfaceDefinition {
 }
 
 export interface SurfaceRegistryEnv {
-  readonly revealFutureSurfaces?: boolean;
+  /** Demo-only: hide awaiting/planned surfaces and show Cowork alone. */
+  readonly onlyAvailable?: boolean;
 }
 
 const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
@@ -52,7 +53,8 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "external_dispatch_backend",
     availability: "awaiting_integration",
     dependency: "D1",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Dispatch chưa được merge vào Cowork GHC.",
+    description:
+      "Điều phối fan-out agent và theo dõi tác vụ con. Backend D1 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
     component: "DispatchIntegrationSlot",
   },
   {
@@ -63,7 +65,8 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "advanced_gateway_backend",
     availability: "awaiting_integration",
     dependency: "D4",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Gateway chưa được merge vào Cowork GHC.",
+    description:
+      "Gateway đa provider, failover và key pool. Backend D4 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
     component: "GatewayIntegrationSlot",
   },
   {
@@ -74,7 +77,8 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "knowledge_index_backend",
     availability: "awaiting_integration",
     dependency: "D3",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Knowledge chưa được merge vào Cowork GHC.",
+    description:
+      "RAG, chỉ mục và truy vấn có provenance. Backend D3 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
     component: "KnowledgeIntegrationSlot",
   },
   {
@@ -108,8 +112,13 @@ export function createSurfaceRegistry(
 
 export function visibleProductSurfaces(
   surfaces: readonly ProductSurfaceDefinition[],
+  env: SurfaceRegistryEnv = {},
 ): readonly ProductSurfaceDefinition[] {
-  return surfaces.filter((surface) => surface.availability !== "hidden");
+  const base = surfaces.filter((surface) => surface.availability !== "hidden");
+  if (env.onlyAvailable === true) {
+    return base.filter((surface) => surface.availability === "available");
+  }
+  return base;
 }
 
 export const PRODUCT_SURFACES = createSurfaceRegistry();

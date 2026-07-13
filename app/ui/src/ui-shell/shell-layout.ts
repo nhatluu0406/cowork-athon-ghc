@@ -40,6 +40,8 @@ export function applyWorkMode(
   }
   coworkPanel.hidden = mode !== "cowork";
   workspacePanel.hidden = mode !== "workspace";
-  coworkView.hidden = mode !== "cowork";
+  // Workspace Companion keeps the Cowork conversation/composer visible beside the editor.
+  // This function is only called while the top-level Cowork surface is active.
+  coworkView.hidden = false;
   workspaceView.hidden = mode !== "workspace";
 }

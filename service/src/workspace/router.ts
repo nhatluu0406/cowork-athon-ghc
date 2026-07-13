@@ -22,6 +22,7 @@ import {
 import { nodeExistenceProbe } from "./probe.js";
 import type { RecentExistenceProbe, RecentWorkspaces, RecentWorkspaceView } from "./recent.js";
 import { readWorkspaceFilePreview } from "./file-preview.js";
+import { readWorkspaceFileContent, writeWorkspaceFileContent } from "./file-content.js";
 import { readWorkspaceAttachment } from "./attachment-read.js";
 import { listWorkspaceChildren } from "./list.js";
 
@@ -29,6 +30,7 @@ export const WORKSPACE_GRANT_PATH = "/v1/workspace/grant";
 export const WORKSPACE_RECENT_PATH = "/v1/workspace/recent";
 export const WORKSPACE_LIST_PATH = "/v1/workspace/list";
 export const WORKSPACE_FILE_PREVIEW_PATH = "/v1/workspace/file-preview";
+export const WORKSPACE_FILE_CONTENT_PATH = "/v1/workspace/file-content";
 export const WORKSPACE_ATTACHMENT_READ_PATH = "/v1/workspace/attachment-read";
 
 /**
@@ -155,6 +157,66 @@ export function createWorkspaceRouter(options: WorkspaceRouterOptions): Boundary
                 : 0,
           });
           return { status: 200, data: result };
+        },
+      },
+      {
+        method: "GET",
+        path: WORKSPACE_FILE_CONTENT_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const relativePath = ctx.url.searchParams.get("path")?.trim();
+          if (relativePath === undefined || relativePath.length === 0) {
+            throw new WorkspaceRequestError("path is required.");
+          }
+          if (relativePath.includes("..") || relativePath.startsWith("/") || /^[a-zA-Z]:/u.test(relativePath)) {
+            throw new WorkspaceRequestError("path must be workspace-relative.");
+          }
+          const root = options.activeWorkspaceRoot?.();
+          if (root === undefined) {
+            return { status: 404, data: { error: "no_active_workspace" } };
+          }
+          try {
+            const file = await readWorkspaceFileContent(root, relativePath);
+            return { status: 200, data: { file } };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Không đọc được tệp.";
+            return { status: 400, data: { error: "content_failed", message } };
+          }
+        },
+      },
+      {
+        method: "PUT",
+        path: WORKSPACE_FILE_CONTENT_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          if (typeof ctx.body !== "object" || ctx.body === null) {
+            throw new WorkspaceRequestError("Request body must be a JSON object.");
+          }
+          const rec = ctx.body as Record<string, unknown>;
+          const relativePath = rec["relativePath"];
+          const kind = rec["kind"];
+          if (typeof relativePath !== "string" || relativePath.length === 0) {
+            throw new WorkspaceRequestError("relativePath is required.");
+          }
+          if (relativePath.includes("..") || relativePath.startsWith("/") || /^[a-zA-Z]:/u.test(relativePath)) {
+            throw new WorkspaceRequestError("path must be workspace-relative.");
+          }
+          if (kind !== "text" && kind !== "spreadsheet") {
+            throw new WorkspaceRequestError("kind must be text or spreadsheet.");
+          }
+          const root = options.activeWorkspaceRoot?.();
+          if (root === undefined) {
+            return { status: 404, data: { error: "no_active_workspace" } };
+          }
+          try {
+            const result = await writeWorkspaceFileContent(root, relativePath, {
+              kind,
+              ...(typeof rec["content"] === "string" ? { content: rec["content"] } : {}),
+              ...(Array.isArray(rec["sheets"]) ? { sheets: rec["sheets"] as never } : {}),
+            });
+            return { status: 200, data: { result } };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Không ghi được tệp.";
+            return { status: 400, data: { error: "write_failed", message } };
+          }
         },
       },
       {

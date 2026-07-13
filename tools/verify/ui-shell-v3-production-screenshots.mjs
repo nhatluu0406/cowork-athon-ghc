@@ -301,6 +301,29 @@ async function assertStructure(call, label) {
 
 async function captureAll(call, fixtureRoot) {
   mkdirSync(OUT_DIR, { recursive: true });
+  for (const file of [
+    "cowork-ready-1920.png",
+    "cowork-ready-1366.png",
+    "cowork-narrow.png",
+    "cowork-inspector-open.png",
+    "cowork-inspector-closed.png",
+    "workspace.png",
+    "workspace-long-path.png",
+    "settings-provider.png",
+    "settings-general.png",
+    "provider-missing.png",
+    "provider-untested.png",
+    "rail-tooltip.png",
+    "long-conversation-title.png",
+    "titlebar-controls.png",
+    "structural-state-check.json",
+  ]) {
+    try {
+      unlinkSync(join(OUT_DIR, file));
+    } catch {
+      // No previous evidence to remove.
+    }
+  }
   const structural = [];
   const fixtureLiteral = JSON.stringify(fixtureRoot);
   await call("Runtime.enable");
@@ -467,7 +490,8 @@ async function captureAll(call, fixtureRoot) {
   structural.push(await assertCodeOnboarding(call, "code-onboarding"));
   await capture(call, "code-onboarding.png", 1366, 768);
 
-  writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), structural }, null, 2));
+  const gitHead = execSync("git rev-parse HEAD", { cwd: REPO, encoding: "utf8" }).trim();
+  writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), gitHead, structural }, null, 2));
 }
 
 async function assertMicrosoftAssistant(call, label) {

@@ -41,7 +41,7 @@ try {
 
   run(
     "activity-presentation",
-    "node --import tsx --test app/ui/tests/activity-model.test.ts app/ui/tests/session-finalization.test.ts service/tests/workspace-file-preview.test.ts service/tests/file-review.test.ts service/tests/file-review-router.test.ts service/tests/text-part-mapper.test.ts service/tests/conversation-store.test.ts service/tests/workspace-resolve-relative.test.ts service/tests/e2e-mock-llm.test.ts",
+    "node --import tsx --test app/ui/tests/activity-model.test.ts app/ui/tests/file-review-delete.test.ts app/ui/tests/session-finalization.test.ts service/tests/part-mapper.test.ts service/tests/workspace-file-preview.test.ts service/tests/file-review.test.ts service/tests/file-review-router.test.ts service/tests/text-part-mapper.test.ts service/tests/conversation-store.test.ts service/tests/workspace-resolve-relative.test.ts service/tests/e2e-mock-llm.test.ts",
   );
 
   run("mock-llm-gateway", "node --test tools/verify/mock-llm-gateway.test.mjs");
@@ -58,12 +58,6 @@ try {
   );
 
   run("lifecycle-scripts", "node tools/verify/lifecycle-scripts.mjs");
-
-  try {
-    run("loop-engineer-verify", "node tools/loop-engineer/cli.mjs verify");
-  } catch {
-    process.stdout.write("release-regression: loop-engineer-verify SKIP (maintenance-only)\n");
-  }
 
   console.log("release-regression: PASS");
 } catch (err) {
