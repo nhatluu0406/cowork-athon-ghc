@@ -17,6 +17,9 @@ import { handleToolCall, type ToolResult } from "../src/ms365/ms365-tools.js";
 import { createPermissionGate, createInMemoryAuditSink } from "../src/permission/index.js";
 import type { PermissionGate } from "../src/permission/index.js";
 import { createFakeTime, recordingDenialSink, recordingReplyPort } from "./permission-fakes.js";
+import type { RouteContext } from "../src/boundary/contract.js";
+import type { Ms365Connector } from "../src/ms365/ms365-connector.js";
+import { createMs365Router, MS365_CONNECT_PATH, MS365_TOOL_CALL_PATH, MS365_VIEW_PATH } from "../src/ms365/index.js";
 
 function gateFixture(): PermissionGate {
   const time = createFakeTime();
@@ -112,4 +115,103 @@ test("invalid args → invalid_input (upload missing targetName)", async () => {
   );
   assert.equal(errorKind(res), "invalid_input");
   assert.equal(sp.uploadCalls, 0);
+});
+
+// ---- Router-shape tests (Task 10) -------------------------------------------
+
+function ctx(method: RouteContext["method"], path: string, body?: unknown): RouteContext {
+  return { method, url: new URL(`http://127.0.0.1${path}`), params: {}, body };
+}
+
+function fakeConnector(overrides?: Partial<Ms365Connector>): Ms365Connector {
+  return {
+    connectionState: () => "connected",
+    connectWithToken: async () => {},
+    disconnect: async () => {},
+    graph: () => ({ json: async () => ({}) as never, bytes: async () => new Uint8Array() }),
+    source: () => "manual_token",
+    lastError: () => null,
+    ...overrides,
+  };
+}
+
+function router(overrides?: Partial<Ms365Connector>) {
+  return createMs365Router({
+    tools: { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t" },
+    connector: fakeConnector(overrides),
+    scopes: ["Sites.Read.All"],
+  });
+}
+
+test("router is token-guarded and mounts the tool-call route", () => {
+  const r = router();
+  assert.equal(r.name, "ms365");
+  for (const route of r.routes) {
+    assert.notEqual((route as { publicUnauthenticated?: true }).publicUnauthenticated, true);
+  }
+  assert.ok(r.routes.some((route) => "path" in route && route.path === MS365_TOOL_CALL_PATH));
+});
+
+test("GET view returns the view data", async () => {
+  const r = router();
+  const route = r.routes.find((route) => route.method === "GET" && "path" in route && route.path === MS365_VIEW_PATH);
+  assert.ok(route && "handler" in route);
+  const result = await route.handler(ctx("GET", MS365_VIEW_PATH));
+  assert.equal(result.status, 200);
+  const data = result.data as { connectionState: string };
+  assert.equal(data.connectionState, "connected");
+});
+
+test("POST connect with a missing token → status 400", async () => {
+  const r = router();
+  const route = r.routes.find((route) => route.method === "POST" && "path" in route && route.path === MS365_CONNECT_PATH);
+  assert.ok(route && "handler" in route);
+  await assert.rejects(() => route.handler(ctx("POST", MS365_CONNECT_PATH, {})));
+});
+
+test("POST connect with a valid token connects and returns the fresh view", async () => {
+  let connected: string | null = null;
+  const r = router({
+    connectWithToken: async (token: string) => {
+      connected = token;
+    },
+  });
+  const route = r.routes.find((route) => route.method === "POST" && "path" in route && route.path === MS365_CONNECT_PATH);
+  assert.ok(route && "handler" in route);
+  const result = await route.handler(ctx("POST", MS365_CONNECT_PATH, { token: "abc" }));
+  assert.equal(result.status, 200);
+  assert.equal(connected, "abc");
+});
+
+test("POST tool-call with an invalid body (bad tool name) → status 400", async () => {
+  const r = router();
+  const route = r.routes.find((route) => route.method === "POST" && "path" in route && route.path === MS365_TOOL_CALL_PATH);
+  assert.ok(route && "handler" in route);
+  await assert.rejects(() =>
+    route.handler(
+      ctx("POST", MS365_TOOL_CALL_PATH, {
+        name: "not_a_real_tool",
+        args: {},
+        sessionId: "s",
+        requestId: "r",
+      }),
+    ),
+  );
+});
+
+test("POST tool-call with a valid read call dispatches through handleToolCall", async () => {
+  const r = router();
+  const route = r.routes.find((route) => route.method === "POST" && "path" in route && route.path === MS365_TOOL_CALL_PATH);
+  assert.ok(route && "handler" in route);
+  const result = await route.handler(
+    ctx("POST", MS365_TOOL_CALL_PATH, {
+      name: "sharepoint_search",
+      args: { query: "x" },
+      sessionId: "s",
+      requestId: "r",
+    }),
+  );
+  assert.equal(result.status, 200);
+  const data = result.data as ToolResult;
+  assert.equal(data.ok, true);
 });
