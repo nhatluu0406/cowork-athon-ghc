@@ -370,7 +370,7 @@ Before deploying to production:
 ## Resources
 
 - **Playwright Docs**: https://playwright.dev/docs/intro
-- **Backend Tests**: `backend/tests/` directory
+- **Backend Tests**: `app/backend/tests/` directory
 - **LLM Service Tests**: `llm-svc/src/` (inline tests)
 - **Frontend Tests**: `Frontend/tests/e2e/` directory
 - **Docker Compose**: `docker-compose.yml` (infrastructure)
