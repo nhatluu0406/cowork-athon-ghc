@@ -720,10 +720,6 @@ function renderState(dom: AppDom, state: AppState, handlers: {
 
   applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
   dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
-  dom.shellFrame.classList.toggle(
-    "inspector-overlay",
-    window.matchMedia("(max-width: 1366px)").matches && inspectorOpen,
-  );
 
   dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
@@ -1546,6 +1542,7 @@ export function mountCoworkApp(root: HTMLElement): void {
   for (const [id, button] of dom.surfaceButtons) {
     button.addEventListener("click", () => {
       dom.closeSettings();
+      dom.closeDrawers();
       state.activeSurface = id;
       if (id === "cowork") {
         state.workMode = "cowork";
