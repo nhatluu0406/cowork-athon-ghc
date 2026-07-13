@@ -237,10 +237,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const applySidebarCollapsed = (collapsed: boolean): void => {
     shellFrame.classList.toggle("sidebar-collapsed", collapsed);
     sidebar.root.hidden = collapsed;
+    const sidebarLabel = collapsed ? "Mở sidebar" : "Thu gọn sidebar";
     rail.sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    rail.sidebarToggle.title = collapsed ? "Mở sidebar" : "Thu gọn sidebar";
-    rail.sidebarToggle.dataset["tooltip"] = rail.sidebarToggle.title;
-    rail.sidebarToggle.setAttribute("aria-label", rail.sidebarToggle.title);
+    // Use data-tooltip only; remove native title to avoid duplicate tooltip
+    rail.sidebarToggle.removeAttribute("title");
+    rail.sidebarToggle.dataset["tooltip"] = sidebarLabel;
+    rail.sidebarToggle.setAttribute("aria-label", sidebarLabel);
   };
   dom.applySidebarCollapsed = applySidebarCollapsed;
 
@@ -249,7 +251,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     inspector.root.hidden = collapsed;
     topbar.inspectorToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
     const inspectorLabel = collapsed ? "Mở inspector" : "Đóng inspector";
-    topbar.inspectorToggle.title = inspectorLabel;
+    // Use data-tooltip only; remove native title to avoid duplicate tooltip
+    topbar.inspectorToggle.removeAttribute("title");
     topbar.inspectorToggle.dataset["tooltip"] = inspectorLabel;
     topbar.inspectorToggle.setAttribute("aria-label", inspectorLabel);
     topbar.inspectorToggle.replaceChildren(
