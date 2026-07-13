@@ -96,6 +96,15 @@ export interface PersistedActivitySnapshot {
   readonly terminalState: string | null;
 }
 
+/** Provider/model identity snapshotted on first conversation turn (secret-free). */
+export interface ConversationProviderSnapshot {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly providerType: "deepseek" | "custom-openai-compat";
+  readonly modelId: string;
+  readonly baseUrl: string;
+}
+
 /** Summary row for list/search (no messages). */
 export interface ConversationSummary {
   readonly id: string;
@@ -114,6 +123,7 @@ export interface ConversationSummary {
 export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
   readonly activity?: PersistedActivitySnapshot;
   /** Historical OpenCode runtime turns for this conversation (newest last). */
   readonly runtimeTurns?: readonly RuntimeTurnRecord[];
@@ -125,6 +135,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
 /** Atomic patch for conversation records (router applies all fields in one write). */
@@ -133,6 +144,7 @@ export interface ConversationPatch {
   readonly status?: ConversationStatus;
   readonly runtimeSessionId?: string | null;
   readonly activity?: PersistedActivitySnapshot;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
   readonly registerRuntimeTurn?: RuntimeTurnRecord;
   readonly completeRuntimeTurn?: {
     readonly runtimeSessionId: string;
