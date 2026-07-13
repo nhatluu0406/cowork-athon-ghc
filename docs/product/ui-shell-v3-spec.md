@@ -1,26 +1,30 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R2 — **not** implemented product capability.
+**Status:** design prototype R3 — **not** implemented product capability.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
 **Production code:** unchanged (`app/ui/`, Electron shell, service/runtime).
 
+**Screenshot evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`). R1/R2 retained for history only.
+
 ---
 
-## 1. Purpose
+## 1. Product Owner decisions (R3)
 
-Refine V3 information architecture and responsive behavior while keeping the established neutral visual palette. R1 addresses Product Owner feedback before any production shell port.
+| Decision | Spec |
+|---|---|
+| Cowork / Workspace | Two **work modes** — switching tabs changes sidebar **and** main area |
+| Workspace tabs | File tabs only — **no** `Cuộc trò chuyện` tab |
+| Click file in Cowork | Switches to Workspace mode and opens file |
+| Knowledge | **One** rail surface; internal tabs `Kho tri thức \| Đồ thị` |
+| Graph tab | Capability-gated by D3 contract (`knowledge-no-graph` vs `knowledge-with-graph` fixtures) |
+| Provider selector | **Conversation-level** in composer (Phase 1) — not per-turn override |
+| Bottom status bar | **Connectivity/status only** — not primary provider picker |
+| Workspace Phase 1 | Read-only preview + File Review — no direct editor |
+| Inspector labels | Vietnamese: Kế hoạch, Hoạt động, Tệp, Xem lại |
 
-Goals:
-
-- **Contextual sidebar tabs** — Cowork and Workspace never shown together.
-- **Document tab model** — files open as main tabs, not floating overlays.
-- **Dedicated D1–D4 surfaces** — integration views replace entire main content.
-- **Bottom status bar** — workspace, service, runtime, provider (no topbar pills).
-- **900px drawer UX** — one overlay at a time, scrim, Escape, focus trap.
-
-Implementation into `app/ui/` remains a **separate** decision after acceptance.
+Implementation into `app/ui/` is **not** approved by this document.
 
 ---
 
@@ -28,220 +32,138 @@ Implementation into `app/ui/` remains a **separate** decision after acceptance.
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ Topbar (brand, context, icon actions, window controls)      │
+│ Topbar (brand, icon actions, window controls)               │
 ├──┬──────────┬──────────────────────────────┬───────────────┤
-│R │ Sidebar  │ Main workspace               │ Inspector     │
-│a │ Cowork | │ (conversation / document /   │ (docked or    │
-│i │ Workspace│  integration empty)          │  overlay)     │
-│l │ tabs     │                              │               │
+│R │ Sidebar  │ Main (work mode or surface)  │ Inspector     │
+│a │ Cowork | │                              │ (docked/      │
+│i │ Workspace│                              │  overlay)     │
+│l │ work tabs│                              │               │
 ├──┴──────────┴──────────────────────────────┴───────────────┤
-│ Status bar (workspace · service · runtime · provider)       │
+│ Status bar (workspace · service · runtime · connectivity)   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-| Region | Width | Collapse behavior |
-|---|---|---|
-| Product rail | 48–52px | Always visible |
-| Context sidebar | ~280px | Cowork **or** Workspace tab; drawer overlay at ≤900px |
-| Main | `minmax(680px, 1fr)` at 1366; flex at 900 | **Never collapses** |
-| Inspector | 340–360px docked | Overlay at ≤1366px |
-| Status bar | full width | Always visible |
+Main workspace **never collapses**. Palette, typography, icon system, and visibility model from R2 are preserved.
 
 ---
 
-## 3. Navigation model
-
-### Product rail (icon-only)
-
-| Surface | Production mapping | Prototype state |
-|---|---|---|
-| Cowork | `cowork` available | Active default; sidebar tabs inside |
-| Dispatch | D1 `awaiting_integration` | Dedicated integration surface |
-| Gateway | D4 `awaiting_integration` | Dedicated integration surface |
-| Knowledge | D3 `awaiting_integration` | Dedicated integration surface |
-| Knowledge Graph | D3 `awaiting_integration` | Full empty canvas |
-| Microsoft 365 | D2 `awaiting_integration` | Dedicated integration surface |
-| Code | `planned` | Dedicated integration surface |
-
-**R1 change:** Workspace is **not** a separate rail entry. Workspace file tree lives in the **Workspace** sidebar tab when Cowork surface is active.
-
-**Rules:**
-
-- One Cowork icon only (no duplicate brand in rail + sidebar header).
-- Tooltip + `aria-label` on every rail button.
-- Awaiting surfaces show badge dot; tooltip includes `Chờ tích hợp D*`.
-
-### Context sidebar tabs
-
-| Tab | Content |
-|---|---|
-| **Cowork** | Conversation search, conversation list, icon-only New Conversation, three-dot actions |
-| **Workspace** | Workspace identity, search/filter, recent/changed filters, refresh, full-height file tree |
-
-Only one tab panel renders at a time. Conversation list and file tree are **never** stacked vertically.
-
----
-
-## 4. Main workspace modes
-
-### Cowork — conversation document
-
-- Document tab: `[ Cuộc trò chuyện ]` (default).
-- Conversation header (title 20–22px).
-- Chat transcript (content max ~760–900px centered).
-- Compact composer (icon attach + icon send).
-- Optional banners: waiting permission, provider recovery (text CTA allowed).
-
-### Cowork — file document
-
-When user clicks a file in Workspace tab:
-
-- Opens as a closable document tab, e.g. `[ Cuộc trò chuyện ] [ README.md × ]`.
-- File tab shows: breadcrumb, metadata, read-only preview.
-- Optional File Review in inspector (Review or Files tab).
-- **When file tab is active:** composer hidden, transcript hidden, no floating file preview.
-
-### D1–D4 / Code integration surfaces
-
-Selecting Dispatch, Gateway, Knowledge, Knowledge Graph, Microsoft, or Code:
-
-- Replaces **entire** main content area.
-- No conversation header, provider banner, permission banner, composer, transcript, or file preview.
-- No Cowork inspector File Review.
-- Sidebar column hidden (`shell--integration`).
-
-Unintegrated copy example:
+## 3. Product rail
 
 ```text
-Gateway
-Chờ tích hợp D4
+Cowork | Dispatch | Gateway | Knowledge | Microsoft 365 | Code
 ```
 
-No mock backend data. Knowledge Graph uses full empty canvas only.
+No separate **Knowledge Graph** rail item.
+
+| Surface | Prototype |
+|---|---|
+| Cowork | Work modes (Cowork / Workspace) via sidebar tabs |
+| Dispatch / Gateway / Microsoft / Code | Integration empty — no Cowork chrome |
+| Knowledge | Header + `Kho tri thức \| Đồ thị` tabs — no Cowork chrome |
 
 ---
 
-## 5. Topbar
+## 4. Work modes (Cowork rail surface)
 
-Minimal chrome:
+Sidebar tabs **Cowork | Workspace** switch the **entire** work mode.
 
-- Compact product identity (mark + name).
-- Document/conversation context when a file tab is active.
-- Icon-only: sidebar toggle, inspector toggle, info, settings.
-- Window controls (prototype decoration).
+### Cowork mode
 
-Service, provider, and runtime status **moved to bottom status bar**. No long center pills.
+**Shows:** conversation search, list, icon New Conversation, conversation title, transcript, composer (attach, skills, provider selector, send), permission/recovery banners when needed.
+
+**Hides:** file document tabs, file preview, workspace empty state, `Cuộc trò chuyện` document tab.
+
+### Workspace mode
+
+**Shows:** workspace identity, search/filter, filters, refresh, file tree, file tabs (files only), breadcrumb, metadata, read-only preview (max-width ~1160px), optional inspector (Tệp / Xem lại).
+
+**Hides:** conversation list, title, transcript, composer, Cowork permission banners.
+
+**Empty main:** `Chọn một tệp để xem trước` + hint to click **Cowork** tab.
+
+### Click file from Cowork
+
+Transcript attachment / file link → Workspace mode → tree selection → file tab → optional File Review in inspector. Never overlays transcript.
 
 ---
 
-## 6. Bottom status bar
+## 5. Knowledge surface
 
-Compact persistent footer:
+Single rail entry **Knowledge** with:
 
 ```text
-Workspace: cowork-athon-ghc    Service ●    Runtime ○ Nhàn rỗi    DeepSeek ●
+Knowledge
+[Kho tri thức | Đồ thị]
 ```
 
-| Segment | States |
+| Tab | Unintegrated copy |
 |---|---|
-| Workspace | Active workspace name (tooltip with path) |
-| Service | Ready / not ready |
-| Runtime | Nhàn rỗi · Đang khởi động · Đang chạy · Chờ quyền · Lỗi |
-| Provider | DeepSeek: Sẵn sàng · Chưa kiểm tra · Provider: Chưa cấu hình · Kết nối thất bại |
+| Kho tri thức | `Kho tri thức` + `Chờ tích hợp D3` |
+| Đồ thị | `Đồ thị tri thức` + `Chờ tích hợp D3` — full main canvas |
 
-**Removed:** `OpenCode chỉ chạy khi bạn gửi yêu cầu` inline hint.
+**Capability gate:** `Đồ thị` tab visible only when D3 reports graph support (`knowledge-no-graph` fixture hides it).
 
-**Provider missing:** status bar amber + subtle pulse (respect `prefers-reduced-motion`); click opens settings. Main recovery banner only when recovery is truly needed.
-
-Fixture states must be internally consistent — never show configured provider and “Chưa cấu hình” together.
+No mock sources, indexes, retrieval, or graph data.
 
 ---
 
-## 7. Inspector
+## 6. Composer — provider & skills (Phase 1 semantics)
 
-| Tab | Content rule |
+Footer layout:
+
+```text
+Attach | Skills: N | ● DeepSeek / deepseek-chat ▾ | spacer | Send
+```
+
+**Provider selector** sets the **active provider profile for the current conversation** (snapshot on new conversation from global default). Changing provider applies to **future turns** only — does not rewrite history.
+
+| State | UI |
 |---|---|
-| Plan | Ordered steps only |
-| Activity | Short status lines |
-| Files | Path list |
-| Review | One review summary |
+| Configured | Selector visible; status bar green `DeepSeek · Sẵn sàng` |
+| Missing | Selector hidden/disabled; status bar amber; recovery CTA when needed |
+| Failed | Selector + `Kết nối thất bại` text; status bar red |
 
-**Only the active tab renders** — no simultaneous empty cards.
-
-Docked ≥1367px; overlay drawer ≤1366px. When a file document is selected, default to Files or Review as appropriate.
-
-Icon-only open/close in topbar and inspector header.
+**Skills:** compact `Skills: 1` (or badge) opens popover — not a sidebar tab.
 
 ---
 
-## 8. Icon-only chrome
+## 7. Status bar
 
-| Control | Icon | Tooltip + aria-label |
-|---|---|---|
-| New conversation | SquarePen | Required |
-| Continue | PlayCircle | Required |
-| Sidebar open/close | PanelLeftOpen / PanelLeftClose | Required |
-| Inspector open/close | PanelRightOpen / PanelRightClose | Required |
-| Settings | Settings | Required |
-| Search, refresh, attach, send, menu | Matching icons | Required |
+Left: `Workspace` · `Service` · `Runtime`
 
-Text CTA reserved for: Allow/Deny permission, provider recovery, destructive confirmation, onboarding CTA.
+Right: provider **connectivity** (green / amber / red / gray) — click may open settings/details. **Not** the conversation profile picker.
 
 ---
 
-## 9. Typography & visual language
+## 8. Inspector
 
-Unchanged from V3 baseline:
-
-- Segoe UI Variable / Inter Variable stack.
-- Neutral white / light gray surfaces.
-- Orange (`#e85d1a`) accent only.
-- Light borders; drawer shadow only.
-- 4/8px spacing scale.
-
----
-
-## 10. Responsive breakpoints
-
-| Viewport | Behavior |
+| Mode | Tabs |
 |---|---|
-| **1920** | Rail + sidebar + main + optional docked inspector |
-| **1366** | Inspector → overlay; main `min-width` 680px |
-| **900** | Rail remains; main fills width; sidebar and inspector are drawer overlays; **one drawer at a time**; scrim; Escape closes; focus trapped; no horizontal overflow; main width unchanged when drawer opens |
+| Cowork | Kế hoạch, Hoạt động, Tệp, Xem lại — not open by default |
+| Workspace | Prefer Tệp, Xem lại — default Xem lại when File Review relevant |
+| D1–D4 / Knowledge | No Cowork inspector reuse |
 
 ---
 
-## 11. Prototype states
+## 9. Topbar
 
-Query: `?state=<id>` or footer **Prototype states** panel.
+Brand + sidebar/inspector toggles + info + settings + window controls. No filename, no service/provider/runtime pills.
 
-| State ID | Demonstrates |
+---
+
+## 10. Responsive
+
+| Width | Behavior |
 |---|---|
-| `cowork-active` | Default conversation, DeepSeek configured |
-| `sidebar-cowork` | Cowork sidebar tab (conversation list only) |
-| `sidebar-workspace` | Workspace sidebar tab |
-| `file-document` | File document tab (breadcrumb + preview) |
-| `cowork-inspector-open` | Inspector visible |
-| `gateway` | Gateway awaiting D4 (dedicated surface) |
-| `knowledge-graph` | Knowledge Graph awaiting D3 (full canvas) |
-| `provider-missing` | Provider not configured (consistent fixture) |
-| `waiting-permission` | Permission banner with text CTA |
-
-Fixture copy only — no FPT branding, no live provider.
+| 1920 | Rail + sidebar + main + optional docked inspector |
+| 1366 | Inspector overlay; main min ~680px |
+| 900 | Rail + main; sidebar/inspector drawers; one at a time; scrim; Escape; focus trap; no horizontal overflow |
 
 ---
 
-## 12. Visibility invariants and screenshot validation
+## 11. Visibility invariants and screenshot validation
 
-### Root cause (R1 invalid evidence)
-
-R1 screenshots under `reports/ui-shell-v3-r1/` are **invalid** as Product Owner evidence. They were captured while structural visibility bugs were present:
-
-1. **`[hidden]` overridden by layout CSS** — `.sidebar`, `.sidebar__panel`, `.view`, `.doc-panel`, `.inspector`, and `.banner` used `display: flex` without a global hidden rule, so `hidden` attributes did not remove elements from layout or paint order.
-2. **Grid auto-placement** — `drawer-scrim` inside `.shell` grid consumed the main column when sidebar/scrim were `display: none`, collapsing main to 0px width on integration surfaces.
-3. **Inspector leak** — closed inspector still had a 1px bounding box in the inspector grid track.
-
-### Global fix
+Global rule (from R2):
 
 ```css
 [hidden] {
@@ -249,94 +171,50 @@ R1 screenshots under `reports/ui-shell-v3-r1/` are **invalid** as Product Owner 
 }
 ```
 
-Shell children use explicit `grid-column` (rail 1, sidebar 2, main 3, inspector 4). `drawer-scrim` is outside the grid. Inspector uses `hidden` when closed (not merely zero-width track).
+Harness: `assertVisualState`, `applyStateAndSettle`, `runSequentialTransitionTest`, `assertClickFromChat`. Fresh browser context per screenshot. Non-zero exit on failure.
 
-### Assertion harness
-
-`prototype.js` exports `assertVisualState`, `collectVisualState`, `applyStateAndSettle`, and `runSequentialTransitionTest`.
-
-Before each R2 screenshot, the capture script:
-
-1. Opens a **fresh browser context** per shot.
-2. Resets application state via `applyState()` (no `documentElement.style.width` mutation).
-3. Waits two animation frames.
-4. Runs `assertVisualState(state)` — **non-zero exit if failed**.
-5. Writes machine-readable results to `reports/ui-shell-v3-r2/visual-state-check.json`.
-
-Sequential transition test (must pass before capture):
-
-`file-document → gateway → cowork-active → provider-missing → knowledge-graph`
-
-Harness also verifies assertions **fail** when two `.view` elements are forced visible.
-
-### Invariants (summary)
-
-| State class | Rules |
-|---|---|
-| Cowork conversation | 1 visible `.view` (cowork), 1 sidebar panel, 1 doc panel (conversation), transcript + composer visible, integration hidden |
-| File document | 1 doc panel (file), conversation/transcript/composer/banners hidden |
-| Integration | 1 visible `.view` (integration), no sidebar/doc panels/inspector/Cowork chrome |
-| Inspector | Closed = no visible inspector rect; open = exactly one inspector |
-| 900px | No horizontal overflow; viewport set by harness only |
-
-**R2 replaces R1 as screenshot evidence.** R2 is not accepted by Product Owner — design review artifact only.
+**R1/R2 screenshots are invalid** for overlapping views; **R3** is current evidence (not PO-accepted).
 
 ---
 
-## 13. Screenshots (R2)
+## 12. Prototype states
 
-Captured under `reports/ui-shell-v3-r2/` (with `visual-state-check.json`):
-
-| File | State / size |
+| State ID | Demonstrates |
 |---|---|
-| `cowork-1920.png` | cowork-active · 1920×1080 |
-| `cowork-1366.png` | cowork-active · 1366×768 |
-| `cowork-900.png` | cowork-active · 900×768 |
-| `sidebar-cowork.png` | sidebar-cowork · 1920×1080 |
-| `sidebar-workspace.png` | sidebar-workspace · 1920×1080 |
-| `file-document.png` | file-document · 1920×1080 |
-| `inspector-open.png` | cowork-inspector-open · 1920×1080 |
-| `gateway.png` | gateway · 1366×768 |
-| `knowledge-graph.png` | knowledge-graph · 1366×768 |
-| `provider-missing.png` | provider-missing · 1920×1080 |
-| `waiting-permission.png` | waiting-permission · 1920×1080 |
+| `cowork-active` | Cowork mode, provider configured |
+| `cowork-inspector-open` | Inspector open in Cowork mode |
+| `workspace-empty` | Workspace mode, no file |
+| `workspace-file` | File tab + preview |
+| `workspace-file-review` | File + inspector Xem lại |
+| `knowledge-no-graph` | Knowledge — Kho only |
+| `knowledge-base` | Knowledge — both tabs, base selected |
+| `knowledge-graph` | Knowledge — graph tab (capability on) |
+| `gateway` | Gateway integration |
+| `provider-missing` | Amber status, no selector |
+| `provider-failed` | Red status + failure text |
+| `waiting-permission` | Permission banner |
+| `cowork-900` / `workspace-900` | Narrow layouts |
 
 Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 
-### R1 (invalid — comparison only)
+---
 
-`reports/ui-shell-v3-r1/` retained for before/after comparison. Do not use for PO sign-off.
+## 13. Screenshots (R3)
+
+`reports/ui-shell-v3-r3/` — 15 PNGs + `visual-state-check.json`:
+
+`cowork-1920`, `cowork-1366`, `cowork-900`, `cowork-inspector`, `workspace-empty`, `workspace-file`, `workspace-file-review`, `workspace-900`, `knowledge-no-graph`, `knowledge-base`, `knowledge-graph`, `gateway`, `provider-missing`, `provider-failed`, `waiting-permission`.
 
 ---
 
-## 14. Production mapping (for future implementation)
-
-### Keep from current baseline
-
-- Service/runtime boundaries, keyring, permissions, conversation store.
-- Surface registry concept (`surface-registry.ts`, integration slots).
-- File Review service path (behavior unchanged in V3 design).
-- Packaged lifecycle scripts.
-
-### Replace / rework in production shell (after PO acceptance)
-
-- Dual sidebar + collapsed mini-columns layout.
-- Workspace as separate rail entry (if PO accepts R1 IA).
-- Text-heavy chrome buttons and giant orange CTA.
-- Floating file preview over transcript.
-- Cowork chrome bleeding into D1–D4 surfaces.
-- Topbar status pills duplicating status bar.
-- `OpenCode chỉ chạy khi bạn gửi yêu cầu` as primary runtime hint.
-
-### Open Product Owner decisions
+## 14. Open Product Owner decisions (post-R3)
 
 | ID | Question |
 |---|---|
-| PO-V3-1 | Accept V3 R1 as target shell for post-integration implementation? |
-| PO-V3-2 | Inter Variable bundled vs Segoe-only on Windows? |
-| PO-V3-3 | Inspector default tab when opening file (Files vs Review)? |
-| PO-V3-4 | Confirm Workspace as sidebar tab only (no rail entry)? |
-| PO-V3-5 | When to schedule production port relative to D4→D1 merge order? |
+| PO-V3-6 | Confirm conversation provider change requires confirmation when history exists? |
+| PO-V3-7 | Default inspector tab in Workspace without File Review? |
+| PO-V3-8 | Skills popover vs modal for Phase 1 production? |
+| PO-V3-9 | Schedule production port relative to D3/D4 intake? |
 
 ---
 
@@ -344,6 +222,7 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 
 | Date | Change |
 |---|---|
-| 2026-07-13 | Initial V3 design prototype + spec on branch `design/ui-shell-v3-prototype` |
-| 2026-07-13 | **R1:** sidebar tabs, document tabs, dedicated surfaces, status bar, topbar simplification, 900px drawers, fixture consistency, new screenshots |
-| 2026-07-13 | **R2:** visibility invariants (`[hidden]` rule, grid placement, inspector leak), assertion harness, R2 screenshots + `visual-state-check.json`; R1 evidence invalidated |
+| 2026-07-13 | Initial V3 prototype |
+| 2026-07-13 | R1: sidebar tabs, document tabs, status bar |
+| 2026-07-13 | R2: visibility invariants; R1/R2 screenshot overlap invalidated |
+| 2026-07-13 | **R3:** work modes, unified Knowledge, provider/skills composer, PO decisions, R3 screenshots |
