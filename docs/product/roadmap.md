@@ -14,14 +14,13 @@ Canonical plan: [product-plan.md](./product-plan.md). Trạng thái: [current-st
 - Multi-Provider Profiles Phase 1 — **đã implement**, chờ PO sign-off.
 - **Workspace Companion Phase 1** — **BASIC COMPLETE** trên `main` (navigator + preview/editor + chat).
 - File Work Review create/modify — **PARTIAL**; delete chưa tin cậy.
-- Skills Foundation Phase 1 — discovery/enable; chưa editor CRUD.
+- Skills CRUD Basic — **đang implement** trên `feature/skills-crud-basic` (Settings → Kỹ năng).
 - Scripts lifecycle + `verify-fast.bat` + `demo-reset.bat` + `demo-seed.bat`.
 
 ## NEXT — sau demo review
 
 - **External product surfaces** — rail + placeholder UI cho D1–D4 và Code (**UI restored**; backends chưa merge).
 - File Work Review hardening (delete path, deterministic packaged suite).
-- Skills add/edit/delete trong UI (nếu PO chọn slice).
 - Attachment Phase 2 (drag-drop, folder) khi có brief rõ.
 - Full packaged release verification (streaming live, native picker, installed keyring).
 
@@ -79,3 +78,11 @@ Placeholder surfaces: không metric giả, không bản ghi mẫu; team thay n�
 - [ ] Multi-sheet Excel
 - [ ] `.docx` edit in-app
 - [ ] Drag-drop vào preview
+
+## Skills CRUD Basic — happy path
+
+- [x] Settings tab Kỹ năng
+- [x] List + search + enable/disable
+- [x] Create / edit / delete user Skills
+- [x] Built-in read-only
+- [ ] Marketplace / cloud catalog / MCP
