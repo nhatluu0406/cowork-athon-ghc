@@ -12,7 +12,7 @@ import type {
   MicrosoftIntegrationView,
 } from "../src/integration-slots.js";
 
-test("surface registry declares the seven top-level product surfaces", () => {
+test("surface registry declares the six top-level product surfaces", () => {
   const registry = createSurfaceRegistry();
   const ids = registry.map((surface) => surface.id);
   assert.deepEqual(ids, [
@@ -20,7 +20,6 @@ test("surface registry declares the seven top-level product surfaces", () => {
     "dispatch",
     "gateway",
     "knowledge",
-    "knowledge-graph",
     "microsoft",
     "code",
   ] satisfies ProductSurfaceId[]);
@@ -40,7 +39,6 @@ test("production default exposes product rail surfaces with honest availability"
     ["dispatch", "awaiting_integration"],
     ["gateway", "awaiting_integration"],
     ["knowledge", "awaiting_integration"],
-    ["knowledge-graph", "awaiting_integration"],
     ["microsoft", "awaiting_integration"],
     ["code", "planned"],
   ]);

@@ -9,8 +9,10 @@ interface WorkspaceNavigatorOptions {
     readonly getWorkspaceRoot: () => string | null;
     readonly onFileSelected: (relativePath: string) => void;
 }
-export declare function mountWorkspaceNavigator(container: HTMLElement, options: WorkspaceNavigatorOptions): {
-    refresh: () => Promise<void>;
-};
+export interface WorkspaceNavigatorHandle {
+    refresh(): Promise<void>;
+    selectPath(relativePath: string): void;
+}
+export declare function mountWorkspaceNavigator(container: HTMLElement, options: WorkspaceNavigatorOptions): WorkspaceNavigatorHandle;
 export {};
 //# sourceMappingURL=workspace-navigator.d.ts.map
