@@ -75,6 +75,7 @@ export interface AppFrameDom {
     readonly sidebarRailToggle: HTMLButtonElement;
     openSettings: () => void;
     closeSettings: () => void;
+    closeDrawers: () => void;
     applySidebarCollapsed: (collapsed: boolean) => void;
     applyRightPanelCollapsed: (collapsed: boolean) => void;
 }

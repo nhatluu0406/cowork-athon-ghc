@@ -358,14 +358,19 @@ textarea,
   background: rgba(16, 24, 40, 0.28);
 }
 
-/* ── 1366px: inspector becomes fixed overlay, sidebar still visible ── */
-@media (max-width: 1366px) {
+/* ── 1024px: inspector becomes a drawer; desktop/tablet widths keep it docked ── */
+@media (max-width: 1024px) {
   .shell-frame {
     grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr);
     grid-template-areas: "rail sidebar main";
   }
 
-  .shell-frame .inspector-shell:not([hidden]) {
+  .shell-frame .inspector-shell {
+    display: none;
+  }
+
+  .shell-frame.inspector-drawer-open .inspector-shell:not([hidden]) {
+    display: flex;
     position: fixed;
     top: var(--topbar-h);
     right: 0;
@@ -401,21 +406,6 @@ textarea,
     width: min(300px, calc(100vw - var(--rail-w)));
     z-index: 20;
     box-shadow: 8px 0 28px rgba(16, 24, 40, 0.14);
-  }
-
-  .shell-frame .inspector-shell {
-    display: none;
-  }
-
-  .shell-frame.inspector-drawer-open .inspector-shell:not([hidden]) {
-    display: flex;
-    position: fixed;
-    top: var(--topbar-h);
-    right: 0;
-    bottom: var(--statusbar-h);
-    width: min(var(--panel-w), 92vw);
-    z-index: 20;
-    box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
   }
 
   .product-rail__sidebar-toggle {
