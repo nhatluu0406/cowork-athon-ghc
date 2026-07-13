@@ -9,7 +9,7 @@ export interface StatusBarDom {
   readonly workspace: HTMLElement;
   readonly service: HTMLElement;
   readonly runtime: HTMLElement;
-  readonly provider: HTMLElement;
+  readonly provider: HTMLButtonElement;
 }
 
 export function createStatusBar(): StatusBarDom {
@@ -19,7 +19,9 @@ export function createStatusBar(): StatusBarDom {
   const service = el("span", "status-bar__segment status-bar__service", "Service");
   const runtime = el("span", "status-bar__segment status-bar__runtime", "Runtime");
   left.append(workspace, service, runtime);
-  const provider = el("span", "status-bar__segment status-bar__provider", "Provider");
+  const provider = el("button", "status-bar__segment status-bar__provider", "Provider") as HTMLButtonElement;
+  provider.type = "button";
+  provider.setAttribute("aria-label", "Mở Settings provider");
   root.append(left, provider);
   return { root, workspace, service, runtime, provider };
 }
@@ -37,7 +39,6 @@ function runtimeStatusLabel(phase: RuntimePhase, hasPendingPermission: boolean):
     case "cancelled":
     case "completed":
     case "completed_without_final_message":
-      return "Runtime · Nhàn rỗi";
     case "idle":
     case "ready":
     default:
@@ -73,9 +74,13 @@ export function renderStatusBar(
   dom.runtime.classList.toggle("is-danger", input.runtimePhase === "failed");
 
   const provider = providerStatus(input.settings, input.connectionTestState);
-  dom.provider.textContent = provider.label.replace(/^Provider:\s*/i, "");
+  dom.provider.textContent = provider.label;
   dom.provider.title = provider.detail;
+  dom.provider.dataset["tooltip"] = provider.detail;
+  dom.provider.setAttribute("aria-label", `Mở Settings provider: ${provider.label}`);
   dom.provider.classList.toggle("is-ok", provider.ok);
+  dom.provider.classList.toggle("is-warn", !provider.ok && input.connectionTestState !== "failed");
+  dom.provider.classList.toggle("is-danger", input.connectionTestState === "failed");
 }
 
 function shortWorkspaceLabel(path: string): string {

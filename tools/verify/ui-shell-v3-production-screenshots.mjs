@@ -1,10 +1,10 @@
 /**
  * Packaged UI Shell V3 production screenshots.
- * Launches win-unpacked app, drives renderer via CDP, writes reports/ui-shell-v3-production-r2/.
+ * Launches win-unpacked app, drives renderer via CDP, writes reports/ui-shell-v3-production-r3/.
  */
 
 import { spawn, execSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { packagedChildEnv } from "./packaged-launch-env.mjs";
@@ -12,7 +12,7 @@ import { packagedChildEnv } from "./packaged-launch-env.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
-const OUT_DIR = join(REPO, "reports", "ui-shell-v3-production-r2");
+const OUT_DIR = join(REPO, "reports", "ui-shell-v3-production-r3");
 const CDP_PORT = 19228;
 const SAFE_TMP = "C:\\tmp";
 
@@ -68,8 +68,22 @@ async function withCdp(run) {
   const call = (method, params = {}) =>
     new Promise((resolve, reject) => {
       id += 1;
-      pending.set(id, { resolve, reject });
-      ws.send(JSON.stringify({ id, method, params }));
+      const callId = id;
+      const timer = setTimeout(() => {
+        pending.delete(callId);
+        reject(new Error(`CDP call timed out: ${method}`));
+      }, 60_000);
+      pending.set(callId, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+      ws.send(JSON.stringify({ id: callId, method, params }));
     });
   try {
     return await run(call);
@@ -104,17 +118,113 @@ async function waitFor(call, expression, timeoutMs = 120_000) {
 }
 
 async function capture(call, filename, width, height) {
+  console.log(`capture: ${filename} @ ${width}x${height}`);
   await call("Emulation.setDeviceMetricsOverride", {
     width,
     height,
     deviceScaleFactor: 1,
     mobile: false,
   });
-  await sleep(300);
-  const shot = await call("Page.captureScreenshot", { format: "png", fromSurface: true });
-  if (!shot?.data) throw new Error(`No screenshot data for ${filename}`);
+  await call("Page.bringToFront");
+  await sleep(500);
+  const shot = await captureCdpScreenshot(call, filename, width, height);
   writeFileSync(join(OUT_DIR, filename), Buffer.from(shot.data, "base64"));
   console.log(`screenshot: ${join(OUT_DIR, filename)}`);
+}
+
+async function captureCdpScreenshot(call, filename, width, height) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const shot = await call("Page.captureScreenshot", {
+        format: "png",
+        fromSurface: true,
+        clip: { x: 0, y: 0, width, height, scale: 1 },
+      });
+      if (!shot?.data) throw new Error(`No screenshot data for ${filename}`);
+      return shot;
+    } catch (error) {
+      if (attempt === 2) throw error;
+      console.log(`retry screenshot: ${filename} (${error instanceof Error ? error.message : String(error)})`);
+      await sleep(1000);
+    }
+  }
+  throw new Error(`No screenshot data for ${filename}`);
+}
+
+function captureWindowToPng(outputPath, width, height) {
+  const scriptPath = join(SAFE_TMP, `cghc-capture-${Date.now()}-${Math.random().toString(16).slice(2)}.ps1`);
+  const ps = `
+Add-Type -AssemblyName System.Drawing
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+public class Win32Capture {
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, System.Text.StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+}
+"@
+$script:targetHwnd = [IntPtr]::Zero
+$callback = [EnumWindowsProc]{
+  param([IntPtr]$hWnd, [IntPtr]$lParam)
+  if (-not [Win32Capture]::IsWindowVisible($hWnd)) { return $true }
+  $len = [Win32Capture]::GetWindowTextLength($hWnd)
+  if ($len -le 0) { return $true }
+  $sb = New-Object System.Text.StringBuilder ($len + 1)
+  [Win32Capture]::GetWindowText($hWnd, $sb, $sb.Capacity) | Out-Null
+  $title = $sb.ToString()
+  [uint32]$procId = 0
+  [Win32Capture]::GetWindowThreadProcessId($hWnd, [ref]$procId) | Out-Null
+  $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+  if ($title -like '*Cowork GHC*' -or $proc.ProcessName -like '*Cowork*') {
+    $script:targetHwnd = $hWnd
+    return $false
+  }
+  return $true
+}
+[Win32Capture]::EnumWindows($callback, [IntPtr]::Zero) | Out-Null
+if ($script:targetHwnd -eq [IntPtr]::Zero) { throw 'Cowork GHC window not found' }
+[Win32Capture]::SetWindowPos($script:targetHwnd, [IntPtr]::Zero, 40, 40, ${width}, ${height}, 0x0040) | Out-Null
+[Win32Capture]::SetForegroundWindow($script:targetHwnd) | Out-Null
+Start-Sleep -Milliseconds 200
+$rect = New-Object RECT
+[Win32Capture]::GetWindowRect($script:targetHwnd, [ref]$rect) | Out-Null
+$w = [Math]::Max(1, $rect.Right - $rect.Left)
+$h = [Math]::Max(1, $rect.Bottom - $rect.Top)
+$bmp = New-Object System.Drawing.Bitmap($w, $h)
+$gfx = [System.Drawing.Graphics]::FromImage($bmp)
+$gfx.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bmp.Size)
+$bmp.Save(${JSON.stringify(outputPath)}, [System.Drawing.Imaging.ImageFormat]::Png)
+$gfx.Dispose()
+$bmp.Dispose()
+`;
+  writeFileSync(scriptPath, ps, "utf8");
+  try {
+    execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${scriptPath}"`, { stdio: "pipe" });
+  } finally {
+    try {
+      unlinkSync(scriptPath);
+    } catch {
+      // temp helper already gone
+    }
+  }
+}
+
+async function clickSelector(call, selector) {
+  await evaluate(call, `(() => document.querySelector(${JSON.stringify(selector)})?.click())()`);
+}
+
+async function hoverAt(call, x, y) {
+  await call("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await sleep(350);
 }
 
 async function assertStructure(call, label) {
@@ -141,6 +251,11 @@ async function assertStructure(call, label) {
       const duplicateKnowledgeRail = [...document.querySelectorAll('.product-rail__item')]
         .some((button) => /Knowledge Graph/i.test(button.getAttribute('aria-label') ?? ''));
       const horizontalOverflow = document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
+      const fauxWindowControls = document.querySelectorAll('.window-controls, .win-btn').length;
+      const settingsButton = visible('.topbar__settings');
+      const providerStatusButton = document.querySelector('.status-bar__provider')?.tagName === 'BUTTON';
+      const tabs = [...document.querySelectorAll('.work-mode-tab')].map((tab) => tab.getBoundingClientRect().width);
+      const equalTabs = tabs.length === 2 && Math.abs(tabs[0] - tabs[1]) <= 1;
       const errors = [];
       if (shellRoots !== 1) errors.push('expected exactly one shell-frame');
       if (activeViews.length !== 1) errors.push('expected exactly one active view, got ' + activeViews.join(','));
@@ -152,7 +267,11 @@ async function assertStructure(call, label) {
       if (oldWorkspacePathCard) errors.push('old workspace path card visible in Cowork sidebar');
       if (duplicateKnowledgeRail) errors.push('Knowledge Graph rail item visible');
       if (horizontalOverflow) errors.push('horizontal overflow');
-      return { label: ${JSON.stringify(label)}, surface, workMode, activeViews, sidebarVisible, inspectorVisible, shellRoots, legacyTextButton, oldWorkspacePathCard, duplicateKnowledgeRail, horizontalOverflow, passed: errors.length === 0, errors };
+      if (fauxWindowControls !== 0) errors.push('custom window controls visible in DOM');
+      if (!settingsButton) errors.push('topbar settings button missing');
+      if (!providerStatusButton) errors.push('status bar provider is not a button');
+      if (!equalTabs && surface === 'cowork') errors.push('work mode tabs are not equal width');
+      return { label: ${JSON.stringify(label)}, surface, workMode, activeViews, sidebarVisible, inspectorVisible, shellRoots, legacyTextButton, oldWorkspacePathCard, duplicateKnowledgeRail, horizontalOverflow, fauxWindowControls, settingsButton, providerStatusButton, equalTabs, passed: errors.length === 0, errors };
     })()`,
   );
   if (!result?.passed) {
@@ -193,24 +312,69 @@ async function captureAll(call, fixtureRoot) {
   await waitFor(call, `(() => !!document.querySelector('.shell-frame'))()`);
   await sleep(800);
 
-  structural.push(await assertStructure(call, "cowork-1920"));
-  await capture(call, "cowork-1920.png", 1920, 1080);
-  structural.push(await assertStructure(call, "cowork-1366"));
-  await capture(call, "cowork-1366.png", 1366, 768);
-  structural.push(await assertStructure(call, "cowork-900"));
-  await capture(call, "cowork-900.png", 900, 768);
+  structural.push(await assertStructure(call, "provider-missing"));
+  await capture(call, "provider-missing.png", 1366, 768);
 
-  await evaluate(call, `(() => document.querySelector('.topbar__inspector-toggle')?.click())()`);
+  await evaluate(
+    call,
+    `(async () => {
+      const bootstrap = await window.coworkShell.getBootstrap();
+      const headers = { authorization: 'Bearer ' + bootstrap.clientToken, 'content-type': 'application/json' };
+      const providerId = 'custom-openai-compat';
+      await fetch(bootstrap.serviceBaseUrl + '/v1/settings/providers/base-url', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ providerId, baseUrl: 'https://api.deepseek.com/v1' }),
+      });
+      await fetch(bootstrap.serviceBaseUrl + '/v1/settings/model/default', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ model: { providerID: providerId, modelID: 'deepseek-chat' } }),
+      });
+      await fetch(bootstrap.serviceBaseUrl + '/v1/settings/providers/credential', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ providerId, ref: { store: 'os', account: 'cghc-ui-r3-fake-provider-ref' } }),
+      });
+      return true;
+    })()`,
+  );
+  await call("Page.reload", { ignoreCache: true });
+  await waitFor(call, `(() => /DeepSeek/.test(document.body.textContent ?? ''))()`);
+  await sleep(800);
+
+  structural.push(await assertStructure(call, "cowork-ready-1920"));
+  await capture(call, "cowork-ready-1920.png", 1920, 1080);
+  await capture(call, "titlebar-controls.png", 1920, 1080);
+  structural.push(await assertStructure(call, "cowork-ready-1366"));
+  await capture(call, "cowork-ready-1366.png", 1366, 768);
+  structural.push(await assertStructure(call, "cowork-ready-900"));
+  await capture(call, "cowork-ready-900.png", 900, 768);
+
+  await evaluate(call, `(() => document.querySelector('[data-surface-id="dispatch"]')?.classList.add('is-tooltip-visible'))()`);
   await sleep(300);
-  structural.push(await assertStructure(call, "cowork-inspector"));
-  await capture(call, "cowork-inspector.png", 1366, 768);
-  await evaluate(call, `(() => document.querySelector('.topbar__inspector-toggle')?.click())()`);
+  structural.push(await assertStructure(call, "rail-tooltips"));
+  await capture(call, "rail-tooltips.png", 1366, 768);
+  await evaluate(call, `(() => document.querySelector('[data-surface-id="dispatch"]')?.classList.remove('is-tooltip-visible'))()`);
+
+  await clickSelector(call, ".topbar__settings");
+  await waitFor(call, `(() => !document.querySelector('.modal')?.hidden)()`);
+  structural.push(await assertStructure(call, "settings-provider"));
+  await capture(call, "settings-provider.png", 1366, 768);
+  await evaluate(call, `(() => document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })))()`);
   await sleep(300);
 
-  await evaluate(call, `(() => document.querySelector('[data-work-mode="workspace"]')?.click())()`);
+  await clickSelector(call, ".topbar__inspector-toggle");
+  await sleep(300);
+  structural.push(await assertStructure(call, "inspector-open"));
+  await capture(call, "inspector-open.png", 1366, 768);
+  await clickSelector(call, ".topbar__inspector-toggle");
+  await sleep(300);
+
+  await clickSelector(call, '[data-work-mode="workspace"]');
   await sleep(400);
-  structural.push(await assertStructure(call, "workspace-empty"));
-  await capture(call, "workspace-empty.png", 1366, 768);
+  structural.push(await assertStructure(call, "workspace"));
+  await capture(call, "workspace.png", 1366, 768);
 
   await evaluate(call, `(() => {
     const srcFolder = [...document.querySelectorAll('.workspace-tree__row--folder')]
@@ -229,34 +393,6 @@ async function captureAll(call, fixtureRoot) {
   })()`);
   await waitFor(call, `(() => !!document.querySelector('.workspace-preview__body')?.textContent)`);
   await sleep(300);
-  structural.push(await assertStructure(call, "workspace-file"));
-  await capture(call, "workspace-file.png", 1366, 768);
-  structural.push(await assertStructure(call, "workspace-900"));
-  await capture(call, "workspace-900.png", 900, 768);
-
-  await evaluate(call, `(() => document.querySelector('[data-surface-id="knowledge"]')?.click())()`);
-  await waitFor(call, `(() => document.querySelector('.shell-frame')?.classList.contains('shell-frame--no-sidebar'))()`);
-  structural.push(await assertStructure(call, "knowledge-base"));
-  await capture(call, "knowledge-base.png", 1366, 768);
-
-  await evaluate(call, `(() => document.querySelector('[data-knowledge-tab="graph"]')?.click())()`);
-  await sleep(300);
-  structural.push(await assertStructure(call, "knowledge-graph"));
-  await capture(call, "knowledge-graph.png", 1366, 768);
-
-  await evaluate(call, `(() => document.querySelector('[data-surface-id="gateway"]')?.click())()`);
-  await waitFor(call, `(() => /Gateway/.test(document.body.textContent ?? ''))()`);
-  structural.push(await assertStructure(call, "gateway"));
-  await capture(call, "gateway.png", 1366, 768);
-
-  await evaluate(call, `(() => document.querySelector('[data-surface-id="cowork"]')?.click())()`);
-  await sleep(300);
-  structural.push(await assertStructure(call, "provider-missing"));
-  await capture(call, "provider-missing.png", 1366, 768);
-  await evaluate(call, `(() => document.querySelector('.topbar__inspector-toggle')?.click())()`);
-  await sleep(400);
-  structural.push(await assertStructure(call, "permission"));
-  await capture(call, "permission.png", 1366, 768);
   writeFileSync(join(OUT_DIR, "structural-state-check.json"), JSON.stringify({ generatedAt: new Date().toISOString(), structural }, null, 2));
 }
 

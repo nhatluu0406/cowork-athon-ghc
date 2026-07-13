@@ -33,6 +33,7 @@ export interface AppFrameDom {
     readonly continuationButton: HTMLButtonElement;
     readonly transcriptInner: HTMLElement;
     readonly emptyState: HTMLElement;
+    readonly emptyStateCta: HTMLButtonElement;
     readonly thinking: HTMLElement;
     readonly composer: HTMLElement;
     readonly composerInput: HTMLElement;

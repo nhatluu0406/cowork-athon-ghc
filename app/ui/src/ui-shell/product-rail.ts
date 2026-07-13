@@ -1,4 +1,4 @@
-import { PRODUCT_SURFACES, visibleProductSurfaces, type ProductSurfaceId } from "../surface-registry.js";
+import { PRODUCT_SURFACES, visibleProductSurfaces, type ProductSurfaceDefinition, type ProductSurfaceId } from "../surface-registry.js";
 import { el, icon } from "./dom-utils.js";
 
 export interface ProductRailDom {
@@ -17,10 +17,8 @@ export function createProductRail(): ProductRailDom {
     const item = el("button", `product-rail__item product-rail__item--${surface.availability}`) as HTMLButtonElement;
     item.type = "button";
     item.dataset["surfaceId"] = surface.id;
-    item.title =
-      surface.dependency !== undefined
-        ? `${surface.label} - Chờ tích hợp ${surface.dependency}`
-        : surface.label;
+    item.title = railTooltip(surface);
+    item.dataset["tooltip"] = item.title;
     item.setAttribute("aria-label", item.title);
     item.setAttribute("aria-current", surface.id === "cowork" ? "page" : "false");
     item.append(icon(surface.icon, surface.label));
@@ -31,10 +29,17 @@ export function createProductRail(): ProductRailDom {
   const sidebarToggle = el("button", "product-rail__sidebar-toggle") as HTMLButtonElement;
   sidebarToggle.type = "button";
   sidebarToggle.title = "Mở sidebar";
+  sidebarToggle.dataset["tooltip"] = "Mở sidebar";
   sidebarToggle.setAttribute("aria-label", "Mở sidebar");
   sidebarToggle.setAttribute("aria-expanded", "false");
   sidebarToggle.append(icon("conversation", "Mở sidebar"));
 
   root.append(nav, sidebarToggle);
   return { root, sidebarToggle, surfaceButtons };
+}
+
+function railTooltip(surface: ProductSurfaceDefinition): string {
+  if (surface.id === "code") return "Code — Đã lên kế hoạch";
+  if (surface.dependency !== undefined) return `${surface.label} — Chờ tích hợp ${surface.dependency}`;
+  return surface.label;
 }
