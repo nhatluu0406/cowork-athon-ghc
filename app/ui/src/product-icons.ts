@@ -33,7 +33,13 @@ export type ProductIconName =
   | "paper-plane"
   | "square-pen"
   | "expand"
-  | "collapse";
+  | "collapse"
+  | "sparkle"
+  | "shield"
+  | "history"
+  | "split"
+  | "play"
+  | "git-branch";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -66,6 +72,12 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   "square-pen": ["M5 5h10v4M5 5v14h14V9", "M10 14l7-7 2 2-7 7h-2v-2Z"],
   expand: ["M9 6l6 6-6 6"],
   collapse: ["M6 9l6 6 6-6"],
+  sparkle: ["M12 4l1.8 4.6L18.5 10l-4.7 1.4L12 16l-1.8-4.6L5.5 10l4.7-1.4L12 4Z", "M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15Z"],
+  shield: ["M12 3l7 3v6c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6l7-3Z", "M9.5 12l2 2 3.5-3.5"],
+  history: ["M4 12a8 8 0 1 1 2.3 5.7", "M4 12H2.5M4 12l-1.5 3", "M12 8v4l3 2"],
+  split: ["M5 5h6v14H5zM13 5h6v14h-6z"],
+  play: ["M8 6l10 6-10 6V6Z"],
+  "git-branch": ["M7 5a2 2 0 1 0 0 .1M7 19a2 2 0 1 0 0 .1M17 7a2 2 0 1 0 0 .1", "M7 7v10", "M17 9a6 6 0 0 1-6 6"],
 });
 
 export function createProductIcon(name: ProductIconName, label?: string): SVGSVGElement {

@@ -86,17 +86,17 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     availability: "awaiting_integration",
     dependency: "D2",
     description: "Surface này đã sẵn sàng về giao diện và contract. Backend Microsoft 365 chưa được merge vào Cowork GHC.",
-    component: "MicrosoftIntegrationSlot",
+    component: "MicrosoftSurfaceView",
   },
   {
     id: "code",
-    label: "Code",
+    label: "Claude Code",
     icon: "code",
     featureFlag: "code.workspace",
     requiredCapability: "workspace_code_surface",
-    availability: "planned",
-    description: "Surface Code được lên kế hoạch sau navigator/preview read-only; chưa có editor hoặc terminal.",
-    component: "CodeIntegrationSlot",
+    availability: "available",
+    description: "IDE surface: Explorer, xem diff chỉ đọc và panel Claude Code dùng chung phiên Cowork.",
+    component: "ClaudeCodeSurface",
   },
 ]);
 
