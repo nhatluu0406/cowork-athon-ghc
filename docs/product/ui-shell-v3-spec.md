@@ -1,6 +1,6 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype only — **not** implemented product capability.
+**Status:** design prototype R1 — **not** implemented product capability.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
@@ -10,14 +10,17 @@
 
 ## 1. Purpose
 
-Replace the rejected packaged shell visual direction with a neutral, icon-first layout that:
+Refine V3 information architecture and responsive behavior while keeping the established neutral visual palette. R1 addresses Product Owner feedback before any production shell port.
 
-- Keeps **main workspace always visible** (never collapses to zero).
-- Uses **one contextual sidebar** (Cowork conversations OR Workspace file tree — never both stacked).
-- Docks **inspector** on wide screens; uses **overlay drawer** at ≤1366px.
-- Shows D1–D4 as **awaiting integration** without fake backend data.
+Goals:
 
-This document is the Product Owner review artifact. Implementation into `app/ui/` is a **separate** decision after acceptance.
+- **Contextual sidebar tabs** — Cowork and Workspace never shown together.
+- **Document tab model** — files open as main tabs, not floating overlays.
+- **Dedicated D1–D4 surfaces** — integration views replace entire main content.
+- **Bottom status bar** — workspace, service, runtime, provider (no topbar pills).
+- **900px drawer UX** — one overlay at a time, scrim, Escape, focus trap.
+
+Implementation into `app/ui/` remains a **separate** decision after acceptance.
 
 ---
 
@@ -25,23 +28,24 @@ This document is the Product Owner review artifact. Implementation into `app/ui/
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│ Topbar (compact status, provider chip, icon actions)        │
+│ Topbar (brand, context, icon actions, window controls)      │
 ├──┬──────────┬──────────────────────────────┬───────────────┤
-│R │ Context  │ Main workspace               │ Inspector     │
-│a │ sidebar  │ (Cowork | Workspace |         │ (docked or    │
-│i │ (one)    │  Integration empty)          │  overlay)     │
-│l │          │                              │               │
+│R │ Sidebar  │ Main workspace               │ Inspector     │
+│a │ Cowork | │ (conversation / document /   │ (docked or    │
+│i │ Workspace│  integration empty)          │  overlay)     │
+│l │ tabs     │                              │               │
 ├──┴──────────┴──────────────────────────────┴───────────────┤
-│ Status bar                                                  │
+│ Status bar (workspace · service · runtime · provider)       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 | Region | Width | Collapse behavior |
 |---|---|---|
 | Product rail | 48–52px | Always visible |
-| Context sidebar | ~280px | Hidden → overlay at ≤900px |
+| Context sidebar | ~280px | Cowork **or** Workspace tab; drawer overlay at ≤900px |
 | Main | `minmax(680px, 1fr)` at 1366; flex at 900 | **Never collapses** |
 | Inspector | 340–360px docked | Overlay at ≤1366px |
+| Status bar | full width | Always visible |
 
 ---
 
@@ -51,14 +55,15 @@ This document is the Product Owner review artifact. Implementation into `app/ui/
 
 | Surface | Production mapping | Prototype state |
 |---|---|---|
-| Cowork | `cowork` available | Active default |
-| Workspace | Workspace navigator context | File tree sidebar |
-| Dispatch | D1 `awaiting_integration` | Empty integration |
-| Gateway | D4 `awaiting_integration` | Empty integration |
-| Knowledge | D3 `awaiting_integration` | Empty integration |
-| Knowledge Graph | D3 `awaiting_integration` | Empty integration |
-| Microsoft 365 | D2 `awaiting_integration` | Empty integration |
-| Code | `planned` | Empty integration |
+| Cowork | `cowork` available | Active default; sidebar tabs inside |
+| Dispatch | D1 `awaiting_integration` | Dedicated integration surface |
+| Gateway | D4 `awaiting_integration` | Dedicated integration surface |
+| Knowledge | D3 `awaiting_integration` | Dedicated integration surface |
+| Knowledge Graph | D3 `awaiting_integration` | Full empty canvas |
+| Microsoft 365 | D2 `awaiting_integration` | Dedicated integration surface |
+| Code | `planned` | Dedicated integration surface |
+
+**R1 change:** Workspace is **not** a separate rail entry. Workspace file tree lives in the **Workspace** sidebar tab when Cowork surface is active.
 
 **Rules:**
 
@@ -66,41 +71,93 @@ This document is the Product Owner review artifact. Implementation into `app/ui/
 - Tooltip + `aria-label` on every rail button.
 - Awaiting surfaces show badge dot; tooltip includes `Chờ tích hợp D*`.
 
-### Context sidebar
+### Context sidebar tabs
 
-| Rail selection | Sidebar content |
+| Tab | Content |
 |---|---|
-| Cowork | Search, conversation list, icon New Conversation in header |
-| Workspace | File tree (VS Code style), filter chips, refresh — **no** conversation list |
+| **Cowork** | Conversation search, conversation list, icon-only New Conversation, three-dot actions |
+| **Workspace** | Workspace identity, search/filter, recent/changed filters, refresh, full-height file tree |
 
-Workspace tree is **not** placed under conversation list.
+Only one tab panel renders at a time. Conversation list and file tree are **never** stacked vertically.
 
 ---
 
 ## 4. Main workspace modes
 
-### Cowork mode
+### Cowork — conversation document
 
+- Document tab: `[ Cuộc trò chuyện ]` (default).
 - Conversation header (title 20–22px).
 - Chat transcript (content max ~760–900px centered).
 - Compact composer (icon attach + icon send).
-- Optional banners: missing provider, waiting permission (text CTA allowed).
+- Optional banners: waiting permission, provider recovery (text CTA allowed).
 
-### Workspace mode
+### Cowork — file document
 
-- File metadata header.
-- Text preview (no direct editor).
-- Contextual File Review snippet (not a tab farm).
+When user clicks a file in Workspace tab:
 
-### D1–D4 / Code mode
+- Opens as a closable document tab, e.g. `[ Cuộc trò chuyện ] [ README.md × ]`.
+- File tab shows: breadcrumb, metadata, read-only preview.
+- Optional File Review in inspector (Review or Files tab).
+- **When file tab is active:** composer hidden, transcript hidden, no floating file preview.
 
-- Single integration empty state in main area.
-- Dependency badge (`Chờ tích hợp D1` … `planned`).
-- No mock tasks, graphs, costs, or Microsoft data.
+### D1–D4 / Code integration surfaces
+
+Selecting Dispatch, Gateway, Knowledge, Knowledge Graph, Microsoft, or Code:
+
+- Replaces **entire** main content area.
+- No conversation header, provider banner, permission banner, composer, transcript, or file preview.
+- No Cowork inspector File Review.
+- Sidebar column hidden (`shell--integration`).
+
+Unintegrated copy example:
+
+```text
+Gateway
+Chờ tích hợp D4
+```
+
+No mock backend data. Knowledge Graph uses full empty canvas only.
 
 ---
 
-## 5. Inspector
+## 5. Topbar
+
+Minimal chrome:
+
+- Compact product identity (mark + name).
+- Document/conversation context when a file tab is active.
+- Icon-only: sidebar toggle, inspector toggle, info, settings.
+- Window controls (prototype decoration).
+
+Service, provider, and runtime status **moved to bottom status bar**. No long center pills.
+
+---
+
+## 6. Bottom status bar
+
+Compact persistent footer:
+
+```text
+Workspace: cowork-athon-ghc    Service ●    Runtime ○ Nhàn rỗi    DeepSeek ●
+```
+
+| Segment | States |
+|---|---|
+| Workspace | Active workspace name (tooltip with path) |
+| Service | Ready / not ready |
+| Runtime | Nhàn rỗi · Đang khởi động · Đang chạy · Chờ quyền · Lỗi |
+| Provider | DeepSeek: Sẵn sàng · Chưa kiểm tra · Provider: Chưa cấu hình · Kết nối thất bại |
+
+**Removed:** `OpenCode chỉ chạy khi bạn gửi yêu cầu` inline hint.
+
+**Provider missing:** status bar amber + subtle pulse (respect `prefers-reduced-motion`); click opens settings. Main recovery banner only when recovery is truly needed.
+
+Fixture states must be internally consistent — never show configured provider and “Chưa cấu hình” together.
+
+---
+
+## 7. Inspector
 
 | Tab | Content rule |
 |---|---|
@@ -111,107 +168,90 @@ Workspace tree is **not** placed under conversation list.
 
 **Only the active tab renders** — no simultaneous empty cards.
 
-Docked ≥1367px viewport width; overlay drawer ≤1366px. Icon-only open/close in topbar and inspector header.
+Docked ≥1367px; overlay drawer ≤1366px. When a file document is selected, default to Files or Review as appropriate.
+
+Icon-only open/close in topbar and inspector header.
 
 ---
 
-## 6. Icon-only chrome
+## 8. Icon-only chrome
 
-| Former text control | V3 icon | Tooltip required |
+| Control | Icon | Tooltip + aria-label |
 |---|---|---|
-| Cuộc trò chuyện mới | SquarePen | Yes |
-| Tiếp tục cuộc trò chuyện này | PlayCircle | Yes |
-| Thu gọn sidebar | PanelLeftClose | Yes |
-| Mở sidebar | PanelLeftOpen | Yes |
-| Mở inspector | PanelRightOpen | Yes |
-| Đóng inspector | PanelRightClose | Yes |
-| Cài đặt | Settings | Yes |
+| New conversation | SquarePen | Required |
+| Continue | PlayCircle | Required |
+| Sidebar open/close | PanelLeftOpen / PanelLeftClose | Required |
+| Inspector open/close | PanelRightOpen / PanelRightClose | Required |
+| Settings | Settings | Required |
+| Search, refresh, attach, send, menu | Matching icons | Required |
 
-Text CTA reserved for onboarding, error recovery, confirmation, permission approve/deny.
-
----
-
-## 7. Typography
-
-```css
-font-family:
-  "Segoe UI Variable",
-  "Inter Variable",
-  "Segoe UI",
-  sans-serif;
-```
-
-| Use | Size | Weight |
-|---|---|---|
-| Metadata | 12px | 400–500 |
-| Secondary / compact body | 13–14px | 400–500 |
-| Body | 15px | 400 |
-| Section heading | 17px | 600 |
-| Conversation title | 20–22px | 600 |
-
-Avoid 700/800 except where platform requires.
+Text CTA reserved for: Allow/Deny permission, provider recovery, destructive confirmation, onboarding CTA.
 
 ---
 
-## 8. Visual language
+## 9. Typography & visual language
 
+Unchanged from V3 baseline:
+
+- Segoe UI Variable / Inter Variable stack.
 - Neutral white / light gray surfaces.
-- Orange (`#e85d1a`) accent only — no large orange fills or giant CTA buttons.
-- Light borders; minimal shadow (drawer only).
+- Orange (`#e85d1a`) accent only.
+- Light borders; drawer shadow only.
 - 4/8px spacing scale.
-- No gradients, no decorative animation.
 
 ---
 
-## 9. Responsive breakpoints
+## 10. Responsive breakpoints
 
 | Viewport | Behavior |
 |---|---|
-| **1920** | Rail + sidebar + main + optional docked inspector; chat ~860px |
+| **1920** | Rail + sidebar + main + optional docked inspector |
 | **1366** | Inspector → overlay; main `min-width` 680px |
-| **900** | Sidebar + inspector → overlay; rail + main only; no word-per-line wraps; no horizontal scroll |
+| **900** | Rail remains; main fills width; sidebar and inspector are drawer overlays; **one drawer at a time**; scrim; Escape closes; focus trapped; no horizontal overflow; main width unchanged when drawer opens |
 
 ---
 
-## 10. Prototype states
+## 11. Prototype states
 
 Query: `?state=<id>` or footer **Prototype states** panel.
 
 | State ID | Demonstrates |
 |---|---|
-| `cowork-active` | Default conversation |
-| `cowork-sidebar-hidden` | Sidebar collapsed / overlay mode |
+| `cowork-active` | Default conversation, DeepSeek configured |
+| `sidebar-workspace` | Workspace sidebar tab |
+| `file-document` | File document tab + inspector |
 | `cowork-inspector-open` | Inspector visible |
-| `workspace` | File tree + preview |
-| `gateway` | Awaiting D4 |
-| `knowledge-graph` | Awaiting D3 |
-| `narrow-900` | 900px layout |
-| `missing-provider` | Provider error banner |
-| `waiting-permission` | Permission banner |
+| `gateway` | Gateway awaiting D4 (dedicated surface) |
+| `knowledge-graph` | Knowledge Graph awaiting D3 (full canvas) |
+| `narrow-900` | 900px layout (dev preview) |
+| `provider-missing` | Provider not configured (consistent fixture) |
+| `waiting-permission` | Permission banner with text CTA |
 
 Fixture copy only — no FPT branding, no live provider.
 
 ---
 
-## 11. Screenshots
+## 12. Screenshots (R1)
 
-Captured under `reports/ui-shell-v3/`:
+Captured under `reports/ui-shell-v3-r1/`:
 
 | File | State / size |
 |---|---|
-| `main-1920.png` | cowork-active · 1920×1080 |
-| `main-1366.png` | cowork-active · 1366×768 |
-| `main-900.png` | narrow-900 · 900×768 |
-| `workspace.png` | workspace · 1920×1080 |
-| `inspector-open.png` | cowork-inspector-open · 1920×1080 |
+| `cowork-1920.png` | cowork-active · 1920×1080 |
+| `cowork-1366.png` | cowork-active · 1366×768 |
+| `cowork-900.png` | cowork-active · 900×768 |
+| `sidebar-workspace.png` | sidebar-workspace · 1920×1080 |
+| `file-document.png` | file-document · 1920×1080 |
+| `inspector.png` | cowork-inspector-open · 1920×1080 |
 | `gateway.png` | gateway · 1366×768 |
 | `knowledge-graph.png` | knowledge-graph · 1366×768 |
+| `provider-missing.png` | provider-missing · 1920×1080 |
 
 Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 
 ---
 
-## 12. Production mapping (for future implementation)
+## 13. Production mapping (for future implementation)
 
 ### Keep from current baseline
 
@@ -223,20 +263,21 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 ### Replace / rework in production shell (after PO acceptance)
 
 - Dual sidebar + collapsed mini-columns layout.
-- Text-heavy chrome buttons (New Conversation, Thu gọn, giant orange CTA).
-- Right panel that collapses to 58px strip.
-- Multiple simultaneous empty cards in inspector.
-- Workspace navigator under conversation list.
-- Be Vietnam Pro + card-heavy visual pass (if PO selects V3 typography).
+- Workspace as separate rail entry (if PO accepts R1 IA).
+- Text-heavy chrome buttons and giant orange CTA.
+- Floating file preview over transcript.
+- Cowork chrome bleeding into D1–D4 surfaces.
+- Topbar status pills duplicating status bar.
+- `OpenCode chỉ chạy khi bạn gửi yêu cầu` as primary runtime hint.
 
 ### Open Product Owner decisions
 
 | ID | Question |
 |---|---|
-| PO-V3-1 | Accept V3 as target shell for post-integration implementation? |
+| PO-V3-1 | Accept V3 R1 as target shell for post-integration implementation? |
 | PO-V3-2 | Inter Variable bundled vs Segoe-only on Windows? |
-| PO-V3-3 | Inspector default tab (Plan vs Activity)? |
-| PO-V3-4 | Workspace rail entry vs Cowork sub-mode? |
+| PO-V3-3 | Inspector default tab when opening file (Files vs Review)? |
+| PO-V3-4 | Confirm Workspace as sidebar tab only (no rail entry)? |
 | PO-V3-5 | When to schedule production port relative to D4→D1 merge order? |
 
 ---
@@ -246,3 +287,4 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 | Date | Change |
 |---|---|
 | 2026-07-13 | Initial V3 design prototype + spec on branch `design/ui-shell-v3-prototype` |
+| 2026-07-13 | **R1:** sidebar tabs, document tabs, dedicated surfaces, status bar, topbar simplification, 900px drawers, fixture consistency, new screenshots |

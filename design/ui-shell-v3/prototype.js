@@ -1,11 +1,9 @@
 /**
- * Cowork GHC UI Shell V3 — design prototype only.
- * Self-contained fixture UI; no production imports; no backend.
+ * Cowork GHC UI Shell V3 R1 — design prototype only.
  */
 
 const ICONS = {
   cowork: '<path d="M5 12a7 7 0 0 1 14 0v4a2 2 0 0 1-2 2h-2.5l-1.5 1.5-1.5-1.5H7a2 2 0 0 1-2-2v-4"/><path d="M9 11h6M9 15h4"/>',
-  workspace: '<path d="M4 7h7l2 2h7v9H4V7Z"/>',
   dispatch: '<rect x="4" y="5" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/><path d="M10 8h4M10 17h4"/>',
   gateway: '<path d="M4 7h16M4 17h16"/><path d="M8 7v10M16 7v10M7 12h10"/>',
   knowledge: '<path d="M6 5h9a3 3 0 0 1 3 3v11H8a2 2 0 0 1-2-2V5Z"/><path d="M9 8h6M9 12h5"/>',
@@ -27,11 +25,11 @@ const ICONS = {
   more: '<circle cx="12" cy="6" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="12" cy="18" r="1.2"/>',
   folder: '<path d="M4 7h6l2 2h8v9H4V7Z"/>',
   file: '<path d="M7 4h7l4 4v12H7V4Z"/><path d="M14 4v5h5"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
 };
 
 const SURFACES = [
-  { id: "cowork", label: "Cowork", icon: "cowork", context: "cowork", view: "cowork" },
-  { id: "workspace", label: "Workspace", icon: "workspace", context: "workspace", view: "workspace" },
+  { id: "cowork", label: "Cowork", icon: "cowork", view: "cowork" },
   { id: "dispatch", label: "Dispatch", icon: "dispatch", awaiting: "D1", view: "integration" },
   { id: "gateway", label: "Gateway", icon: "gateway", awaiting: "D4", view: "integration" },
   { id: "knowledge", label: "Knowledge", icon: "knowledge", awaiting: "D3", view: "integration" },
@@ -47,96 +45,96 @@ const CONVERSATIONS = [
 ];
 
 const FILE_TREE = [
-  { type: "folder", name: "src", depth: 0, open: true },
-  { type: "file", name: "README.md", depth: 1, active: true },
-  { type: "file", name: "app-shell-notes.md", depth: 1 },
-  { type: "folder", name: "docs", depth: 0, open: true },
-  { type: "file", name: "integration-readiness.md", depth: 1 },
-  { type: "folder", name: "service", depth: 0 },
+  { type: "folder", name: "src", depth: 0, path: "src" },
+  { type: "file", name: "README.md", depth: 1, path: "src/README.md" },
+  { type: "file", name: "app-shell-notes.md", depth: 1, path: "src/app-shell-notes.md" },
+  { type: "folder", name: "docs", depth: 0, path: "docs" },
+  { type: "file", name: "integration-readiness.md", depth: 1, path: "docs/integration-readiness.md" },
 ];
+
+const FILE_CONTENT = {
+  "src/README.md": "# README (prototype fixture)\n\nShell V3 R1: sidebar tabs, document tabs, dedicated surfaces.\n\nKhông phải production build.",
+};
 
 const TRANSCRIPT = [
   { role: "Bạn", user: true, text: "Tóm tắt checklist intake cho team D4." },
-  {
-    role: "Cowork",
-    user: false,
-    text: "Checklist gồm: track ID, commit hash, contract API, credential model, feature flag mặc định OFF, và demo journey không dùng backend thật.",
-  },
+  { role: "Cowork", user: false, text: "Checklist gồm: track ID, commit hash, contract API, credential model, feature flag OFF, demo journey không backend thật." },
   { role: "Bạn", user: true, text: "Nhắc lại ranh giới keyring và permission." },
-  {
-    role: "Cowork",
-    user: false,
-    text: "Keyring chỉ ở service; permission modal không được bypass bởi child task hay connector.",
-  },
+  { role: "Cowork", user: false, text: "Keyring chỉ ở service; permission modal không bypass bởi child task hay connector." },
 ];
 
-const INSPECTOR_FIXTURE = {
-  plan: [
-    "Thu thập intake report từ team D4",
-    "Kiểm tra contract gateway và failover",
-    "Chạy focused test trên branch integration/d4-gateway",
-  ],
-  activity: [
-    { label: "Đọc tài liệu readiness", status: "done" },
-    { label: "Soạn prototype shell V3", status: "done" },
-    { label: "Chờ merge D4", status: "pending" },
-  ],
-  files: [
-    { path: "docs/integration/external-systems-integration-readiness.md", kind: "đọc" },
-    { path: "design/ui-shell-v3/index.html", kind: "tạo" },
-  ],
-  review: {
-    path: "design/ui-shell-v3/styles.css",
-    summary: "+248 dòng layout responsive; không đụng production shell.",
-  },
-};
-
 const INTEGRATION_COPY = {
-  dispatch: { title: "Dispatch", dep: "D1", copy: "Fan-out agent và điều phối tác vụ con sẽ xuất hiện sau khi track D1 được tích hợp." },
-  gateway: { title: "Gateway", dep: "D4", copy: "Gateway đa profile, failover và routing sẽ kết nối tại đây sau intake D4." },
-  knowledge: { title: "Knowledge", dep: "D3", copy: "Chỉ mục RAG và retrieval có provenance sẽ bật khi backend D3 sẵn sàng." },
+  dispatch: { title: "Dispatch", dep: "D1", copy: "Fan-out agent sẽ xuất hiện sau khi track D1 được tích hợp." },
+  gateway: { title: "Gateway", dep: "D4", copy: "Gateway đa profile và failover sẽ kết nối sau intake D4." },
+  knowledge: { title: "Knowledge", dep: "D3", copy: "RAG và retrieval có provenance sẽ bật khi backend D3 sẵn sàng." },
   "knowledge-graph": { title: "Knowledge Graph", dep: "D3", copy: "Graph explorer chỉ hiển thị dữ liệu thật sau tích hợp D3." },
-  microsoft: { title: "Microsoft 365", dep: "D2", copy: "Teams, SharePoint và Graph connector sẽ thay thế trạng thái chờ này." },
-  code: { title: "Code", dep: "planned", copy: "Surface Code được lên kế hoạch; chưa có backend hay mock dữ liệu." },
+  microsoft: { title: "Microsoft 365", dep: "D2", copy: "Graph connector sẽ thay thế trạng thái chờ này." },
+  code: { title: "Code", dep: "planned", copy: "Surface Code được lên kế hoạch; chưa có backend." },
 };
 
 const STATES = [
-  { id: "cowork-active", label: "Cowork — conversation active" },
-  { id: "cowork-sidebar-hidden", label: "Cowork — sidebar hidden" },
-  { id: "cowork-inspector-open", label: "Cowork — inspector open" },
-  { id: "workspace", label: "Workspace — file tree + preview" },
-  { id: "gateway", label: "Gateway — awaiting D4" },
-  { id: "knowledge-graph", label: "Knowledge Graph — awaiting D3" },
+  { id: "cowork-active", label: "Cowork active (DeepSeek)" },
+  { id: "sidebar-workspace", label: "Sidebar Workspace tab" },
+  { id: "file-document", label: "File document tab" },
+  { id: "cowork-inspector-open", label: "Inspector open" },
+  { id: "gateway", label: "Gateway awaiting D4" },
+  { id: "knowledge-graph", label: "Knowledge Graph awaiting D3" },
   { id: "narrow-900", label: "Width ~900px" },
-  { id: "missing-provider", label: "Missing provider" },
+  { id: "provider-missing", label: "Provider missing" },
   { id: "waiting-permission", label: "Waiting permission" },
 ];
 
+const appState = {
+  surface: "cowork",
+  sidebarTab: "cowork",
+  activeDoc: "conversation",
+  openFiles: [],
+  inspectorOpen: false,
+  sidebarHidden: false,
+  drawer: "",
+  provider: "configured",
+  runtime: "idle",
+};
+
+let focusTrapHandler = null;
+
 function icon(name) {
-  const path = ICONS[name] ?? ICONS.file;
-  return `<svg viewBox="0 0 24 24" aria-hidden="true">${path}</svg>`;
+  return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] ?? ICONS.file}</svg>`;
 }
 
 function mountIcons(root = document) {
-  for (const el of root.querySelectorAll("[data-icon]")) {
-    el.innerHTML = icon(el.dataset.icon);
-  }
+  for (const el of root.querySelectorAll("[data-icon]")) el.innerHTML = icon(el.dataset.icon);
 }
 
-function renderRail(activeId) {
+function isNarrow() { return window.innerWidth <= 900; }
+function isInspectorOverlay() { return window.innerWidth <= 1366; }
+
+function renderRail() {
   const host = document.getElementById("rail-items");
   host.replaceChildren();
   for (const s of SURFACES) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `rail__btn${s.awaiting ? " rail__btn--awaiting" : ""}`;
-    btn.dataset.surface = s.id;
-    btn.dataset.tooltip = s.awaiting ? `${s.label} — Chờ tích hợp ${s.awaiting}` : s.label;
-    btn.setAttribute("aria-label", btn.dataset.tooltip);
-    if (s.id === activeId) btn.setAttribute("aria-current", "page");
+    const tip = s.awaiting ? `${s.label} — Chờ tích hợp ${s.awaiting}` : s.label;
+    btn.dataset.tooltip = tip;
+    btn.setAttribute("aria-label", tip);
+    if (s.id === appState.surface) btn.setAttribute("aria-current", "page");
     btn.innerHTML = `<span class="icon">${icon(s.icon)}</span>`;
     btn.addEventListener("click", () => activateSurface(s.id));
     host.append(btn);
+  }
+}
+
+function setSidebarTab(tab) {
+  appState.sidebarTab = tab;
+  for (const btn of document.querySelectorAll(".sidebar-tabs__btn")) {
+    const active = btn.dataset.sidebarTab === tab;
+    btn.classList.toggle("sidebar-tabs__btn--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  for (const panel of document.querySelectorAll(".sidebar__panel")) {
+    panel.hidden = panel.dataset.sidebarTab !== tab;
   }
 }
 
@@ -146,35 +144,84 @@ function renderConversations() {
   for (const c of CONVERSATIONS) {
     const li = document.createElement("li");
     li.className = `conv-item${c.id === "c1" ? " conv-item--active" : ""}`;
-    li.innerHTML = `
-      <span class="conv-item__title">${c.title}</span>
+    li.innerHTML = `<span class="conv-item__title">${c.title}</span>
       <button type="button" class="icon-btn icon-btn--sm" data-tooltip="Thêm hành động" aria-label="Thêm hành động cho ${c.title}">
-        <span class="icon" data-icon="more"></span>
-      </button>
+        <span class="icon" data-icon="more"></span></button>
       <span class="conv-item__meta">${c.meta}</span>`;
     list.append(li);
   }
   mountIcons(list);
 }
 
-function renderTree() {
+function renderTree(activePath = "src/README.md") {
   const tree = document.getElementById("file-tree");
   tree.replaceChildren();
   for (const row of FILE_TREE) {
     const div = document.createElement("div");
-    div.className = `tree__row${row.active ? " tree__row--active" : ""}`;
+    div.className = `tree__row${row.path === activePath ? " tree__row--active" : ""}`;
     div.style.paddingLeft = `${8 + row.depth * 14}px`;
-    div.innerHTML = `
-      <span class="tree__indent"></span>
-      <span class="icon icon--muted" data-icon="${row.type === "folder" ? "folder" : "file"}"></span>
-      <span>${row.name}</span>`;
+    div.innerHTML = `<span class="tree__indent"></span>
+      <span class="icon icon--muted" data-icon="${row.type === "folder" ? "folder" : "file"}"></span><span>${row.name}</span>`;
+    if (row.type === "file") div.addEventListener("click", () => openFileDocument(row.path, row.name));
     tree.append(div);
   }
   mountIcons(tree);
 }
 
+function renderDocTabs() {
+  const host = document.getElementById("doc-tabs");
+  host.replaceChildren();
+  const convTab = document.createElement("button");
+  convTab.type = "button";
+  convTab.className = `doc-tab${appState.activeDoc === "conversation" ? " doc-tab--active" : ""}`;
+  convTab.setAttribute("role", "tab");
+  convTab.setAttribute("aria-selected", appState.activeDoc === "conversation" ? "true" : "false");
+  convTab.textContent = "Cuộc trò chuyện";
+  convTab.addEventListener("click", () => setActiveDoc("conversation"));
+  host.append(convTab);
+  for (const f of appState.openFiles) {
+    const tab = document.createElement("button");
+    tab.type = "button";
+    tab.className = `doc-tab${appState.activeDoc === f.path ? " doc-tab--active" : ""}`;
+    tab.setAttribute("role", "tab");
+    tab.setAttribute("aria-selected", appState.activeDoc === f.path ? "true" : "false");
+    tab.innerHTML = `<span>${f.name}</span><span class="doc-tab__close icon" data-icon="close" role="button" aria-label="Đóng ${f.name}"></span>`;
+    tab.querySelector(".doc-tab__close").addEventListener("click", (e) => { e.stopPropagation(); closeFileDocument(f.path); });
+    tab.addEventListener("click", () => setActiveDoc(f.path));
+    host.append(tab);
+  }
+  mountIcons(host);
+}
+
+function setActiveDoc(docId) {
+  appState.activeDoc = docId;
+  const isConv = docId === "conversation";
+  document.getElementById("doc-conversation").hidden = !isConv;
+  document.getElementById("doc-file").hidden = isConv;
+  const ctx = document.getElementById("topbar-context");
+  if (isConv) { ctx.hidden = true; ctx.textContent = ""; }
+  else { ctx.hidden = false; ctx.textContent = docId.split("/").pop() ?? docId; }
+  renderDocTabs();
+  if (!isConv) {
+    document.getElementById("file-body").textContent = FILE_CONTENT[docId] ?? "(prototype fixture)";
+    selectInspectorTab("files");
+  }
+}
+
+function openFileDocument(path, name) {
+  if (!appState.openFiles.some((f) => f.path === path)) appState.openFiles.push({ path, name });
+  setActiveDoc(path);
+  renderTree(path);
+}
+
+function closeFileDocument(path) {
+  appState.openFiles = appState.openFiles.filter((f) => f.path !== path);
+  if (appState.activeDoc === path) setActiveDoc("conversation");
+  else renderDocTabs();
+  renderTree(appState.openFiles.at(-1)?.path);
+}
+
 function renderTranscript() {
-  const host = document.getElementById("transcript");
   const inner = document.createElement("div");
   inner.className = "transcript__inner";
   for (const m of TRANSCRIPT) {
@@ -183,207 +230,240 @@ function renderTranscript() {
     div.innerHTML = `<div class="msg__role">${m.role}</div><div class="msg__body">${m.text}</div>`;
     inner.append(div);
   }
-  host.replaceChildren(inner);
+  document.getElementById("transcript").replaceChildren(inner);
 }
 
-function renderInspectorTab(tab) {
+function selectInspectorTab(tab) {
+  for (const btn of document.querySelectorAll(".inspector__tab")) {
+    const active = btn.dataset.tab === tab;
+    btn.classList.toggle("inspector__tab--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  }
   const body = document.getElementById("inspector-body");
   body.replaceChildren();
   const panel = document.createElement("div");
   panel.className = "inspector-panel";
-
   if (tab === "plan") {
     const ol = document.createElement("ol");
-    ol.style.margin = "0";
-    ol.style.paddingLeft = "18px";
-    for (const step of INSPECTOR_FIXTURE.plan) {
+    ol.style.cssText = "margin:0;padding-left:18px";
+    for (const s of ["Thu thập intake D4", "Kiểm tra contract gateway", "Focused test integration/d4-gateway"]) {
       const li = document.createElement("li");
       li.className = "inspector-panel__line";
-      li.textContent = step;
+      li.textContent = s;
       ol.append(li);
     }
     panel.append(ol);
   } else if (tab === "activity") {
-    for (const a of INSPECTOR_FIXTURE.activity) {
-      const p = document.createElement("p");
-      p.className = "inspector-panel__line";
-      p.innerHTML = `<strong>${a.label}</strong> — ${a.status === "done" ? "hoàn tất" : "đang chờ"}`;
-      panel.append(p);
-    }
+    panel.innerHTML = `<p class="inspector-panel__line"><strong>Soạn prototype V3 R1</strong> — hoàn tất</p>
+      <p class="inspector-panel__line"><strong>Chờ merge D4</strong> — đang chờ</p>`;
   } else if (tab === "files") {
-    for (const f of INSPECTOR_FIXTURE.files) {
-      const p = document.createElement("p");
-      p.className = "inspector-panel__line";
-      p.innerHTML = `<code>${f.path}</code> · ${f.kind}`;
-      panel.append(p);
-    }
+    const pth = appState.activeDoc !== "conversation" ? appState.activeDoc : "docs/integration/external-systems-integration-readiness.md";
+    panel.innerHTML = `<p class="inspector-panel__line"><code>${pth}</code></p>`;
   } else {
-    const p = document.createElement("p");
-    p.className = "inspector-panel__line";
-    p.innerHTML = `<strong>${INSPECTOR_FIXTURE.review.path}</strong><br>${INSPECTOR_FIXTURE.review.summary}`;
-    panel.append(p);
+    const pth = appState.activeDoc !== "conversation" ? appState.activeDoc : "design/ui-shell-v3/styles.css";
+    panel.innerHTML = `<p class="inspector-panel__line"><strong>${pth}</strong><br>Prototype fixture — bounded diff khi có backend.</p>`;
   }
-
   body.append(panel);
 }
 
 function renderIntegration(surfaceId) {
   const copy = INTEGRATION_COPY[surfaceId] ?? INTEGRATION_COPY.gateway;
-  const surface = SURFACES.find((s) => s.id === surfaceId) ?? SURFACES[3];
+  const surface = SURFACES.find((s) => s.id === surfaceId) ?? SURFACES[2];
   const host = document.getElementById("integration-empty");
-  host.innerHTML = `
-    <div class="integration-empty__icon icon" data-icon="${surface.icon}"></div>
+  host.innerHTML = `<div class="integration-empty__icon icon" data-icon="${surface.icon}"></div>
     <h1 class="integration-empty__title">${copy.title}</h1>
     <p class="integration-empty__copy">${copy.copy}</p>
     <span class="integration-empty__badge">Chờ tích hợp ${copy.dep}</span>`;
   mountIcons(host);
 }
 
-function setSidebarContext(context) {
-  for (const panel of document.querySelectorAll(".sidebar__panel")) {
-    panel.hidden = panel.dataset.context !== context;
-  }
+function setMainView(view, surfaceId = "cowork") {
+  for (const v of document.querySelectorAll(".view")) v.hidden = v.dataset.view !== view;
+  const shell = document.getElementById("shell");
+  const sidebar = document.getElementById("sidebar");
+  if (view === "integration") { shell.classList.add("shell--integration"); sidebar.hidden = true; renderIntegration(surfaceId); }
+  else { shell.classList.remove("shell--integration"); sidebar.hidden = false; }
 }
 
-function setMainView(view, surfaceId = "cowork") {
-  for (const v of document.querySelectorAll(".view")) {
-    v.hidden = v.dataset.view !== view;
+function updateStatusBar() {
+  const providerBtn = document.getElementById("status-provider");
+  const runtimeEl = document.getElementById("status-runtime");
+  providerBtn.classList.remove("statusbar__item--warn", "statusbar__item--pulse");
+  if (appState.provider === "missing") {
+    providerBtn.querySelector(".statusbar__value").textContent = "Provider · Chưa cấu hình";
+    providerBtn.dataset.tooltip = "Provider: Chưa cấu hình — nhấn để mở cài đặt";
+    providerBtn.querySelector(".status-dot").className = "status-dot status-dot--warn";
+    providerBtn.classList.add("statusbar__item--warn", "statusbar__item--pulse");
+  } else {
+    providerBtn.querySelector(".statusbar__value").textContent = "DeepSeek · Sẵn sàng";
+    providerBtn.dataset.tooltip = "DeepSeek: Sẵn sàng";
+    providerBtn.querySelector(".status-dot").className = "status-dot status-dot--ok";
   }
-  if (view === "integration") renderIntegration(surfaceId);
-  if (view === "workspace") {
-    document.getElementById("file-body").textContent =
-      "# README (prototype fixture)\n\nShell V3 tách product rail, contextual sidebar, main workspace và inspector.\n\nKhông phải production build.";
+  const rtMap = { idle: "Nhàn rỗi", starting: "Đang khởi động", running: "Đang chạy", permission: "Chờ quyền", error: "Lỗi" };
+  const rt = rtMap[appState.runtime] ?? "Nhàn rỗi";
+  runtimeEl.querySelector(".statusbar__value").textContent = `Runtime · ${rt}`;
+  runtimeEl.dataset.tooltip = `OpenCode runtime: ${rt.toLowerCase()}`;
+  const dot = runtimeEl.querySelector(".status-dot");
+  dot.className = "status-dot" + (appState.runtime === "permission" ? " status-dot--warn" : appState.runtime === "running" ? " status-dot--ok" : " status-dot--idle");
+}
+
+function closeDrawer() {
+  appState.drawer = "";
+  appState.sidebarHidden = true;
+  appState.inspectorOpen = false;
+  syncChrome();
+}
+
+function openDrawer(kind) {
+  if (appState.drawer === kind) { closeDrawer(); return; }
+  appState.drawer = kind;
+  appState.sidebarHidden = kind !== "sidebar";
+  appState.inspectorOpen = kind === "inspector";
+  syncChrome();
+}
+
+function trapFocus(container) {
+  releaseFocusTrap();
+  if (!container) return;
+  focusTrapHandler = (e) => {
+    if (e.key === "Escape") { closeDrawer(); return; }
+    if (e.key !== "Tab") return;
+    const nodes = container.querySelectorAll('button, input, [tabindex]:not([tabindex="-1"])');
+    if (!nodes.length) return;
+    const first = nodes[0], last = nodes[nodes.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener("keydown", focusTrapHandler);
+}
+
+function releaseFocusTrap() {
+  if (focusTrapHandler) { document.removeEventListener("keydown", focusTrapHandler); focusTrapHandler = null; }
+}
+
+function syncChrome() {
+  const app = document.getElementById("app");
+  const narrow = isNarrow();
+  const overlayInspector = isInspectorOverlay();
+  app.dataset.surface = appState.surface;
+  app.dataset.sidebarHidden = appState.sidebarHidden ? "true" : "false";
+  app.dataset.inspectorOpen = appState.inspectorOpen ? "true" : "false";
+  app.dataset.drawer = appState.drawer;
+  document.getElementById("drawer-scrim").hidden = !(narrow && appState.drawer);
+  const sidebar = document.getElementById("sidebar");
+  const inspector = document.getElementById("inspector");
+  sidebar.classList.toggle("sidebar--drawer", narrow);
+  inspector.classList.toggle("inspector--drawer", overlayInspector);
+  if (narrow) {
+    sidebar.classList.toggle("sidebar--open", appState.drawer === "sidebar");
+    inspector.classList.toggle("inspector--open", appState.drawer === "inspector");
+    if (appState.drawer) trapFocus(appState.drawer === "sidebar" ? sidebar : inspector);
+    else releaseFocusTrap();
+  } else {
+    sidebar.classList.remove("sidebar--open");
+    inspector.classList.toggle("inspector--open", appState.inspectorOpen && overlayInspector);
+    releaseFocusTrap();
   }
+  const btnSidebar = document.getElementById("btn-sidebar");
+  const showOpen = appState.sidebarHidden || (narrow && appState.drawer !== "sidebar");
+  btnSidebar.dataset.tooltip = showOpen ? "Mở sidebar" : "Thu gọn sidebar";
+  btnSidebar.setAttribute("aria-label", btnSidebar.dataset.tooltip);
+  btnSidebar.querySelector("[data-icon]").dataset.icon = showOpen ? "panel-left-open" : "panel-left-close";
+  mountIcons(btnSidebar);
+  const btnInspector = document.getElementById("btn-inspector");
+  btnInspector.dataset.tooltip = appState.inspectorOpen ? "Đóng inspector" : "Mở inspector";
+  btnInspector.setAttribute("aria-label", btnInspector.dataset.tooltip);
+  btnInspector.querySelector("[data-icon]").dataset.icon = appState.inspectorOpen ? "panel-right-close" : "panel-right-open";
+  mountIcons(btnInspector);
+  btnSidebar.hidden = appState.surface !== "cowork";
 }
 
 function activateSurface(surfaceId) {
+  appState.surface = surfaceId;
   const surface = SURFACES.find((s) => s.id === surfaceId) ?? SURFACES[0];
-  renderRail(surface.id);
-  if (surface.context) {
-    setSidebarContext(surface.context);
-  } else {
-    setSidebarContext("cowork");
-  }
+  renderRail();
   setMainView(surface.view, surface.id);
-  document.getElementById("app").dataset.surface = surface.id;
+  if (surface.view === "cowork") {
+    setSidebarTab(appState.sidebarTab);
+    renderDocTabs();
+    setActiveDoc(appState.activeDoc);
+  } else {
+    appState.drawer = "";
+    appState.sidebarHidden = true;
+    appState.inspectorOpen = false;
+    document.getElementById("banner-permission").hidden = true;
+    document.getElementById("banner-recovery").hidden = true;
+  }
+  syncChrome();
+  updateStatusBar();
 }
 
-function setInspectorOpen(open) {
-  const app = document.getElementById("app");
-  app.dataset.inspectorOpen = open ? "true" : "false";
-  const btn = document.getElementById("btn-inspector");
-  const backdrop = document.getElementById("inspector-backdrop");
-  btn.dataset.tooltip = open ? "Đóng inspector" : "Mở inspector";
-  btn.setAttribute("aria-label", btn.dataset.tooltip);
-  btn.querySelector("[data-icon]").dataset.icon = open ? "panel-right-close" : "panel-right-open";
-  mountIcons(btn);
-  backdrop.hidden = !open;
-}
-
-function setSidebarHidden(hidden) {
-  const app = document.getElementById("app");
-  app.dataset.sidebarHidden = hidden ? "true" : "false";
-  const btn = document.getElementById("btn-sidebar");
-  const backdrop = document.getElementById("sidebar-backdrop");
-  btn.dataset.tooltip = hidden ? "Mở sidebar" : "Thu gọn sidebar";
-  btn.setAttribute("aria-label", btn.dataset.tooltip);
-  btn.querySelector("[data-icon]").dataset.icon = hidden ? "panel-left-open" : "panel-left-close";
-  mountIcons(btn);
-  backdrop.hidden = hidden || window.innerWidth > 900;
+function applyFixtureFlags() {
+  document.getElementById("banner-permission").hidden = appState.runtime !== "permission";
+  document.getElementById("banner-recovery").hidden = appState.provider !== "failed";
+  updateStatusBar();
 }
 
 function applyState(stateId) {
-  const app = document.getElementById("app");
-  app.dataset.state = stateId;
-  document.getElementById("proto-state-label").textContent = `State: ${stateId}`;
-
-  document.getElementById("banner-missing-provider").hidden = true;
-  document.getElementById("banner-permission").hidden = true;
-  document.getElementById("btn-continue").hidden = true;
-  document.getElementById("provider-chip").classList.remove("compact-chip--error");
-
-  setSidebarHidden(false);
-  setInspectorOpen(false);
-
+  appState.surface = "cowork";
+  appState.sidebarTab = "cowork";
+  appState.activeDoc = "conversation";
+  appState.openFiles = [];
+  appState.inspectorOpen = false;
+  appState.sidebarHidden = false;
+  appState.drawer = "";
+  appState.provider = "configured";
+  appState.runtime = "idle";
+  document.getElementById("proto-state-label").textContent = stateId;
+  document.getElementById("app").dataset.state = stateId;
   const url = new URL(window.location.href);
   url.searchParams.set("state", stateId);
   window.history.replaceState({}, "", url);
-
   switch (stateId) {
-    case "cowork-active":
-      activateSurface("cowork");
-      break;
-    case "cowork-sidebar-hidden":
-      activateSurface("cowork");
-      setSidebarHidden(true);
-      break;
-    case "cowork-inspector-open":
-      activateSurface("cowork");
-      setInspectorOpen(true);
-      break;
-    case "workspace":
-      activateSurface("workspace");
-      break;
-    case "gateway":
-      activateSurface("gateway");
-      setSidebarHidden(true);
-      break;
-    case "knowledge-graph":
-      activateSurface("knowledge-graph");
-      setSidebarHidden(true);
-      break;
-    case "narrow-900":
-      activateSurface("cowork");
-      document.documentElement.style.width = "900px";
-      setSidebarHidden(true);
-      break;
-    case "missing-provider":
-      activateSurface("cowork");
-      document.getElementById("banner-missing-provider").hidden = false;
-      document.getElementById("provider-chip").classList.add("compact-chip--error");
-      document.getElementById("provider-chip").setAttribute("aria-label", "Provider: chưa cấu hình");
-      break;
-    case "waiting-permission":
-      activateSurface("cowork");
-      document.getElementById("banner-permission").hidden = false;
-      break;
-    default:
-      activateSurface("cowork");
+    case "cowork-active": activateSurface("cowork"); break;
+    case "sidebar-workspace": activateSurface("cowork"); setSidebarTab("workspace"); renderTree(); break;
+    case "file-document": activateSurface("cowork"); setSidebarTab("workspace"); openFileDocument("src/README.md", "README.md"); selectInspectorTab("review"); break;
+    case "cowork-inspector-open": activateSurface("cowork"); appState.inspectorOpen = true; if (isNarrow()) appState.drawer = "inspector"; syncChrome(); selectInspectorTab("activity"); break;
+    case "gateway": activateSurface("gateway"); break;
+    case "knowledge-graph": activateSurface("knowledge-graph"); break;
+    case "narrow-900": activateSurface("cowork"); document.documentElement.style.width = "900px"; break;
+    case "provider-missing": activateSurface("cowork"); appState.provider = "missing"; break;
+    case "waiting-permission": activateSurface("cowork"); appState.runtime = "permission"; break;
+    default: activateSurface("cowork");
   }
-
-  if (stateId !== "narrow-900") {
-    document.documentElement.style.width = "";
-  }
+  if (stateId !== "narrow-900") document.documentElement.style.width = "";
+  applyFixtureFlags();
 }
 
-function bindInspectorTabs() {
-  for (const tab of document.querySelectorAll(".inspector__tab")) {
-    tab.addEventListener("click", () => {
-      for (const t of document.querySelectorAll(".inspector__tab")) {
-        const active = t === tab;
-        t.classList.toggle("inspector__tab--active", active);
-        t.setAttribute("aria-selected", active ? "true" : "false");
-      }
-      renderInspectorTab(tab.dataset.tab);
-    });
-  }
-}
-
-function bindChrome() {
+function bindEvents() {
   document.getElementById("btn-sidebar").addEventListener("click", () => {
-    const app = document.getElementById("app");
-    setSidebarHidden(app.dataset.sidebarHidden !== "true");
+    if (appState.surface !== "cowork") return;
+    if (isNarrow()) { openDrawer(appState.drawer === "sidebar" ? "" : "sidebar"); return; }
+    appState.sidebarHidden = !appState.sidebarHidden;
+    syncChrome();
   });
   document.getElementById("btn-inspector").addEventListener("click", () => {
-    const app = document.getElementById("app");
-    setInspectorOpen(app.dataset.inspectorOpen !== "true");
+    if (isNarrow() || isInspectorOverlay()) { openDrawer(appState.drawer === "inspector" ? "" : "inspector"); return; }
+    appState.inspectorOpen = !appState.inspectorOpen;
+    syncChrome();
   });
-  document.getElementById("btn-inspector-close").addEventListener("click", () => setInspectorOpen(false));
-  document.getElementById("sidebar-backdrop").addEventListener("click", () => setSidebarHidden(true));
-  document.getElementById("inspector-backdrop").addEventListener("click", () => setInspectorOpen(false));
+  document.getElementById("btn-inspector-close").addEventListener("click", () => { appState.inspectorOpen = false; appState.drawer = ""; syncChrome(); });
+  document.getElementById("drawer-scrim").addEventListener("click", closeDrawer);
+  document.getElementById("tab-cowork").addEventListener("click", () => setSidebarTab("cowork"));
+  document.getElementById("tab-workspace").addEventListener("click", () => { setSidebarTab("workspace"); renderTree(); });
+  for (const tab of document.querySelectorAll(".inspector__tab")) tab.addEventListener("click", () => selectInspectorTab(tab.dataset.tab));
+  window.addEventListener("resize", syncChrome);
 }
 
-function renderStateButtons() {
+function init() {
+  mountIcons();
+  renderRail();
+  renderConversations();
+  renderTree();
+  renderTranscript();
+  renderDocTabs();
+  selectInspectorTab("plan");
+  bindEvents();
   const host = document.getElementById("state-buttons");
   for (const s of STATES) {
     const btn = document.createElement("button");
@@ -392,31 +472,9 @@ function renderStateButtons() {
     btn.addEventListener("click", () => applyState(s.id));
     host.append(btn);
   }
-}
-
-function init() {
-  mountIcons();
-  renderRail("cowork");
-  renderConversations();
-  renderTree();
-  renderTranscript();
-  renderInspectorTab("plan");
-  bindInspectorTabs();
-  bindChrome();
-  renderStateButtons();
-
   const initial = new URLSearchParams(window.location.search).get("state") ?? "cowork-active";
   applyState(STATES.some((s) => s.id === initial) ? initial : "cowork-active");
-
-  window.addEventListener("resize", () => {
-    const app = document.getElementById("app");
-    if (window.innerWidth <= 900 && app.dataset.sidebarHidden === "false") {
-      document.getElementById("sidebar-backdrop").hidden = false;
-    }
-  });
 }
 
 init();
-
-// Screenshot helper hook (used by capture script)
-window.__cghcV3Prototype = { applyState, STATES, setInspectorOpen, setSidebarHidden, activateSurface };
+window.__cghcV3Prototype = { applyState, STATES, activateSurface, setSidebarTab, openFileDocument };
