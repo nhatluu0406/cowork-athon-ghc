@@ -4,7 +4,7 @@ description: Turns capabilities into Cowork GHC requirements and a defensible de
 tools: Glob, Grep, Read, Write, Edit, Bash, WebFetch, WebSearch
 ---
 
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/product-architect.md`.
+Follow `docs/README.md` and `AGENTS.md` for project context.
 
 Key constraints:
 - Produce design + ADRs, not whole feature implementations.

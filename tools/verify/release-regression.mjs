@@ -59,12 +59,6 @@ try {
 
   run("lifecycle-scripts", "node tools/verify/lifecycle-scripts.mjs");
 
-  try {
-    run("loop-engineer-verify", "node tools/loop-engineer/cli.mjs verify");
-  } catch {
-    process.stdout.write("release-regression: loop-engineer-verify SKIP (maintenance-only)\n");
-  }
-
   console.log("release-regression: PASS");
 } catch (err) {
   console.error("release-regression: FAIL", err instanceof Error ? err.message : err);

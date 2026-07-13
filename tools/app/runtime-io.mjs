@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, appendFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { readPidRecords, verifyRecord, powershellAvailable } from '../loop-engineer/supervision.mjs';
+import { readPidRecords, verifyRecord, powershellAvailable } from './supervision.mjs';
 
 export const RUNTIME_DIRS = ['pids', 'logs', 'state', 'temp'];
 
