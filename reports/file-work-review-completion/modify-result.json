@@ -1,0 +1,7 @@
+{
+  "journey": "B",
+  "result": "PASS",
+  "at": "2026-07-13T07:43:23.920Z",
+  "relativePath": "modify-me.txt",
+  "reviewSnippet": "Trước:\nFIRST_VERSION\n\nSau:\nSECOND_VERSION\n\nDiff:\n--- modify-me.txt\n+++ modify-me.txt\n-FIRST_VERSION\n+SECOND_VERSION"
+}
