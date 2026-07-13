@@ -46,7 +46,7 @@ import {
   type ConnectionTestState,
 } from "./provider-readiness.js";
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
-import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
+import { mountProviderProfilesPanel } from "./provider-profiles-panel.js";
 import { createPermissionController } from "./permission-controller.js";
 import {
   createServiceClient,
@@ -1192,10 +1192,22 @@ async function newConversation(
   state.lastView = initialSessionView("");
 
   const model = state.settings?.defaultModel;
+  const activeProfile = state.settings?.providerProfiles?.find((p) => p.isActive);
+  const providerSnapshot =
+    activeProfile !== undefined
+      ? {
+          profileId: activeProfile.id,
+          displayName: activeProfile.displayName,
+          providerType: activeProfile.providerType,
+          modelId: activeProfile.modelId,
+          baseUrl: activeProfile.baseUrl,
+        }
+      : undefined;
   await state.conv.createNew(
     state.activeWorkspace,
     model?.providerID,
     model?.modelID,
+    providerSnapshot,
   );
   clearTranscript(dom);
   setComposerText(dom.composerInput, "");
@@ -1645,16 +1657,15 @@ export function mountCoworkApp(root: HTMLElement): void {
               void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
             },
           });
-          mountLlmSettingsPanel(dom.settingsProviderBody, {
+          mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
-            getBootstrap: () => getShellBridge().getBootstrap(),
             onSettingsUpdated: (view) => {
               state.settings = view;
               state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
               void workspaceNavigator?.refresh();
               renderState(dom, state, handlers);
             },
-            onConnectionTestResult: (ok) => {
+            onConnectionTestResult: (_profileId, ok) => {
               state.connectionTestState = ok ? "ok" : "failed";
               renderState(dom, state, handlers);
             },
