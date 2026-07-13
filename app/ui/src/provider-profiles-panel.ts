@@ -56,20 +56,47 @@ const ACTIVE_PROFILE_DELETE_MESSAGE = "Hãy đặt một profile khác làm acti
 
 export function mountProviderProfilesPanel(container: HTMLElement, deps: ProviderProfilesPanelDeps): void {
   const root = el("section", "provider-profiles llm-settings");
-  root.setAttribute("aria-label", "Hồ sơ nhà cung cấp");
+  root.setAttribute("aria-label", "Nhà cung cấp và mô hình");
 
-  const title = el("h2", "llm-settings-title", "Hồ sơ nhà cung cấp");
+  const title = el("h2", "llm-settings-title", "Nhà cung cấp & mô hình");
+  const intro = el(
+    "p",
+    "provider-profiles__intro",
+    "Lưu nhiều kết nối API, chọn kết nối đang dùng và đổi model cho cuộc trò chuyện mới.",
+  );
   const status = el("p", "llm-settings-status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
 
   const listView = el("div", "provider-profiles__list-view");
+  const listHeader = el("div", "provider-profiles__list-header");
+  const listHeading = el("div", "provider-profiles__list-heading");
+  listHeading.append(
+    el("h3", "provider-profiles__list-title", "Kết nối đã lưu"),
+    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong Windows keyring."),
+  );
+  const addBtn = el("button", "provider-profiles__add provider-profiles__add--primary", "Thêm kết nối") as HTMLButtonElement;
+  addBtn.type = "button";
+  addBtn.setAttribute("aria-expanded", "false");
+  listHeader.append(listHeading, addBtn);
+
   const list = el("ul", "provider-profiles__list");
-  const addDeepSeekBtn = el("button", "provider-profiles__add", "Thêm DeepSeek") as HTMLButtonElement;
+  const addChooser = el("div", "provider-profiles__add-chooser");
+  addChooser.hidden = true;
+  const addDeepSeekBtn = el("button", "provider-profiles__preset") as HTMLButtonElement;
   addDeepSeekBtn.type = "button";
-  const addCustomBtn = el("button", "provider-profiles__add", "Thêm tuỳ chỉnh") as HTMLButtonElement;
+  addDeepSeekBtn.append(
+    el("strong", "provider-profiles__preset-title", "DeepSeek"),
+    el("span", "provider-profiles__preset-copy", "Preset nhanh cho DeepSeek Chat hoặc Reasoner."),
+  );
+  const addCustomBtn = el("button", "provider-profiles__preset") as HTMLButtonElement;
   addCustomBtn.type = "button";
-  listView.append(list, el("div", "provider-profiles__add-row", undefined), addDeepSeekBtn, addCustomBtn);
+  addCustomBtn.append(
+    el("strong", "provider-profiles__preset-title", "OpenAI-compatible"),
+    el("span", "provider-profiles__preset-copy", "Nhập tên, endpoint, model ID và API token bất kỳ."),
+  );
+  addChooser.append(addDeepSeekBtn, addCustomBtn);
+  listView.append(listHeader, addChooser, list);
 
   const formView = el("div", "provider-profiles__form-view");
   formView.hidden = true;
@@ -137,7 +164,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     actions,
   );
 
-  root.append(title, status, listView, formView);
+  root.append(title, intro, status, listView, formView);
   container.replaceChildren(root);
 
   let panel: PanelView = "list";
@@ -235,7 +262,12 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const renderList = (): void => {
     list.replaceChildren();
     if (profiles.length === 0) {
-      list.append(el("li", "provider-profiles__empty", "Chưa có hồ sơ nhà cung cấp."));
+      const empty = el("li", "provider-profiles__empty");
+      empty.append(
+        el("strong", "provider-profiles__empty-title", "Chưa có kết nối mô hình"),
+        el("span", "provider-profiles__empty-copy", "Thêm DeepSeek hoặc một endpoint OpenAI-compatible để bắt đầu."),
+      );
+      list.append(empty);
       return;
     }
     for (const profile of profiles) {
@@ -244,7 +276,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       const name = el("span", "provider-profiles__item-name", profile.displayName);
       if (profile.isActive) {
         name.append(document.createTextNode(" "));
-        const badge = el("span", "provider-profiles__active-badge", "Active");
+        const badge = el("span", "provider-profiles__active-badge", "Đang dùng");
         name.append(badge);
       }
       const meta = el(
@@ -275,8 +307,21 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     setStatus("");
   });
 
-  addDeepSeekBtn.addEventListener("click", () => showForm("add", undefined, "deepseek"));
-  addCustomBtn.addEventListener("click", () => showForm("add", undefined, "custom-openai-compat"));
+  addBtn.addEventListener("click", () => {
+    const open = addChooser.hidden;
+    addChooser.hidden = !open;
+    addBtn.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  addDeepSeekBtn.addEventListener("click", () => {
+    addChooser.hidden = true;
+    addBtn.setAttribute("aria-expanded", "false");
+    showForm("add", undefined, "deepseek");
+  });
+  addCustomBtn.addEventListener("click", () => {
+    addChooser.hidden = true;
+    addBtn.setAttribute("aria-expanded", "false");
+    showForm("add", undefined, "custom-openai-compat");
+  });
 
   saveBtn.addEventListener("click", () => {
     void (async () => {
@@ -427,14 +472,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     setStatus("Đang tải…");
     try {
       await refresh();
-      if (profiles.length === 0) {
-        await deps.client.createProviderProfile({
-          displayName: "DeepSeek",
-          providerType: "deepseek",
-          presetId: "deepseek",
-        });
-        await refresh();
-      }
       showList();
       setStatus("");
     } catch (error) {

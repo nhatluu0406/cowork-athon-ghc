@@ -98,7 +98,7 @@ export function mountWorkspaceNavigator(
   title.append(icon("workspace"), el("span", "icon-label", "Workspace"));
   const refreshButton = el("button", "workspace-nav__refresh") as HTMLButtonElement;
   refreshButton.type = "button";
-  refreshButton.title = "Làm mới workspace";
+  refreshButton.dataset["tooltip"] = "Làm mới workspace";
   refreshButton.setAttribute("aria-label", "Làm mới workspace");
   refreshButton.append(icon("refresh", "Làm mới"));
   header.append(title, refreshButton);
