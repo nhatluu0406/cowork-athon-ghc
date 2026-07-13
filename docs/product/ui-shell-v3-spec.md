@@ -1,6 +1,6 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R3 approved; **production port applied** on `feature/ui-shell-v3-production`.
+**Status:** design prototype R3 approved; production port at `794cb00` was **rejected** by Product Owner; alignment pass applied on `fix/ui-shell-v3-production-alignment`.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
@@ -8,7 +8,9 @@
 
 **Prototype evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`).
 
-**Production evidence:** `reports/ui-shell-v3-production/` — Product Owner packaged visual acceptance **pending**.
+**Production evidence:** `reports/ui-shell-v3-production-r2/` — Product Owner packaged visual acceptance **pending**.
+
+**Rejected evidence:** `reports/ui-shell-v3-production/` — shows the old-shell-dominant production port that did not match R3.
 
 ---
 
@@ -228,3 +230,4 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 | 2026-07-13 | R1: sidebar tabs, document tabs, status bar |
 | 2026-07-13 | R2: visibility invariants; R1/R2 screenshot overlap invalidated |
 | 2026-07-13 | **R3:** work modes, unified Knowledge, provider/skills composer, PO decisions, R3 screenshots |
+| 2026-07-13 | Production alignment pass: replaced legacy shell composition with V3 frame/components; R2 packaged screenshots generated; PO visual acceptance still pending |

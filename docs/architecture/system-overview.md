@@ -46,7 +46,7 @@ connectivity probe cho API key/model invalid sau request.
 
 ## Boundary UI shell / product surfaces
 
-Renderer dùng **UI Shell V3** (production port 2026-07-13): 56px product rail → contextual
+Renderer dùng **UI Shell V3** (alignment pass 2026-07-13): ~50px product rail → contextual
 sidebar (Cowork \| Workspace work modes) → main workspace → optional inspector → bottom status bar.
 Integration surfaces (Dispatch, Gateway, Knowledge, Microsoft 365, Code) dùng full-width main **không**
 giữ cột sidebar trống (`shell-frame--no-sidebar`).
@@ -60,15 +60,15 @@ cowork
 dispatch
 gateway
 knowledge
-knowledge-graph
 microsoft
 code
 ```
 
 Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`,
 `dependency`, `description`, và `component`. Production default expose toàn bộ product rail:
-`cowork` là `available`; Dispatch/Gateway/Knowledge/Knowledge Graph/Microsoft 365 là
-`awaiting_integration` với dependency D1-D4 cụ thể; `code` là `planned`. Các surface này
+`cowork` là `available`; Dispatch/Gateway/Knowledge/Microsoft 365 là
+`awaiting_integration` với dependency D1-D4 cụ thể; `code` là `planned`. Knowledge Graph không phải rail surface riêng;
+nó là tab nội bộ `Đồ thị` trong Knowledge và vẫn chỉ hiển thị trạng thái chờ D3. Các surface này
 không phải capability backend thật và không render mock production data.
 
 D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slots.ts`:
