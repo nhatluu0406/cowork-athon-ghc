@@ -111,12 +111,42 @@ export interface ProviderSettingsView {
   readonly envVar?: string;
 }
 
+export type ProviderProfileType = "deepseek" | "custom-openai-compat";
+
+export interface ProviderProfileView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly baseUrl: string;
+  readonly modelId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly credentialConfigured: boolean;
+  readonly credentialAccount?: string;
+  readonly presetId?: string;
+  readonly isActive: boolean;
+}
+
+export interface ProviderProfileRecord {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly baseUrl: string;
+  readonly modelId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly credentialConfigured: boolean;
+  readonly presetId?: string;
+}
+
 /** The non-secret settings projection the service returns to the renderer (CGHC-022 SD1). */
 export interface SettingsView {
   readonly general: GeneralSettingsView;
   readonly providers: readonly ProviderSettingsView[];
   readonly defaultModel: ModelRef | null;
   readonly activeWorkspace: { readonly rootPath: string } | null;
+  readonly providerProfiles?: readonly ProviderProfileView[];
+  readonly activeProfileId?: string | null;
 }
 
 /** Result of dispatching a prompt to a live session. */
@@ -237,8 +267,17 @@ export interface PersistedActivitySnapshot {
 export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
   readonly activity?: PersistedActivitySnapshot;
   readonly runtimeTurns?: readonly RuntimeTurnRecord[];
+}
+
+export interface ConversationProviderSnapshot {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly modelId: string;
+  readonly baseUrl: string;
 }
 
 export interface RuntimeTurnRecord {
@@ -254,6 +293,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
 export interface ContinueSessionResult {
@@ -316,6 +356,26 @@ export interface ServiceClient {
   setProviderEnvVar(providerId: string, envVar: string): Promise<SettingsView>;
   /** Bounded provider connectivity test (resolves credential from keyring). */
   testProviderConnection(providerId: string): Promise<TestResult>;
+  listProviderProfiles(): Promise<{
+    readonly profiles: readonly ProviderProfileView[];
+    readonly activeProfileId: string | null;
+  }>;
+  createProviderProfile(input: {
+    readonly displayName: string;
+    readonly providerType: ProviderProfileType;
+    readonly baseUrl?: string;
+    readonly modelId?: string;
+    readonly presetId?: string;
+  }): Promise<ProviderProfileRecord>;
+  updateProviderProfile(
+    profileId: string,
+    input: { readonly displayName?: string; readonly baseUrl?: string; readonly modelId?: string },
+  ): Promise<ProviderProfileRecord>;
+  deleteProviderProfile(profileId: string, forceUnconfigured?: boolean): Promise<void>;
+  setActiveProviderProfile(profileId: string): Promise<SettingsView>;
+  storeProfileCredential(profileId: string, secret: string): Promise<SettingsView>;
+  removeProfileCredential(profileId: string): Promise<SettingsView>;
+  testProfileConnection(profileId: string): Promise<TestResult>;
   /** Patch general settings; returns the updated settings view. */
   updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
   /**
@@ -499,6 +559,73 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         method: "POST",
         body: JSON.stringify({ providerId }),
       })).result,
+    listProviderProfiles: async () =>
+      call<{ profiles: readonly ProviderProfileView[]; activeProfileId: string | null }>(
+        "/v1/provider-profiles",
+      ),
+    createProviderProfile: async (input) =>
+      (await call<{ profile: ProviderProfileRecord }>("/v1/provider-profiles", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })).profile,
+    updateProviderProfile: async (profileId, input) =>
+      (await call<{ profile: ProviderProfileRecord }>(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      })).profile,
+    deleteProviderProfile: async (profileId, forceUnconfigured = false) => {
+      await call<{ deleted: boolean }>(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+        method: "DELETE",
+        body: JSON.stringify({ forceUnconfigured }),
+      });
+    },
+    setActiveProviderProfile: async (profileId) => {
+      await call<{ profile: ProviderProfileRecord; activeProfileId: string }>(
+        "/v1/provider-profiles/active",
+        {
+          method: "PUT",
+          body: JSON.stringify({ profileId }),
+        },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    storeProfileCredential: async (profileId, secret) => {
+      const account = `profile:${profileId}`;
+      const { ref } = await call<{ ref: CredentialRef }>("/v1/credentials", {
+        method: "POST",
+        body: JSON.stringify({ providerId: profileId, secret, account }),
+      });
+      await call<{ profile: ProviderProfileRecord }>(
+        `/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ ref }),
+        },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    removeProfileCredential: async (profileId) => {
+      const settings = await call<{ settings: SettingsView }>("/v1/settings").then((r) => r.settings);
+      const row = settings.providerProfiles?.find((p) => p.id === profileId);
+      if (row?.credentialConfigured && row.credentialAccount !== undefined) {
+        await call<{ removed: boolean }>("/v1/credentials", {
+          method: "DELETE",
+          body: JSON.stringify({ ref: { store: "os", account: row.credentialAccount } }),
+        });
+      }
+      await call<{ profile: ProviderProfileRecord }>(
+        `/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`,
+        { method: "DELETE" },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    testProfileConnection: async (profileId) =>
+      (
+        await call<{ result: TestResult }>(
+          `/v1/provider-profiles/${encodeURIComponent(profileId)}/test-connection`,
+          { method: "POST", body: JSON.stringify({}) },
+        )
+      ).result,
     updateGeneral: async (patch) =>
       (
         await call<{ settings: SettingsView }>("/v1/settings/general", {
