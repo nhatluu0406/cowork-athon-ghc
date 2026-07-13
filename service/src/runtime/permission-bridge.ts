@@ -69,7 +69,26 @@ export function createPermissionBridge(options: PermissionBridgeOptions): Permis
 
   return {
     async handleFrame(frame: unknown): Promise<void> {
-      if (!isRawOpencodeEvent(frame) || frame.type !== "permission.asked") return;
+      if (!isRawOpencodeEvent(frame)) return;
+
+      if (frame.type === "permission.replied") {
+        const props = asRecord(frame.properties);
+        const requestId =
+          readString(props, "id") ??
+          readString(props, "requestID") ??
+          readString(props, "requestId");
+        if (requestId !== undefined) seen.delete(requestId);
+        return;
+      }
+
+      if (frame.type === "session.idle" || frame.type === "session.completed") {
+        // OpenCode may scope permission request identifiers to a session. Clearing the transient
+        // de-dupe set at terminal session boundaries prevents a later turn from being suppressed.
+        seen.clear();
+        return;
+      }
+
+      if (frame.type !== "permission.asked") return;
 
       const props = asRecord(frame.properties);
       const requestId = readString(props, "id");

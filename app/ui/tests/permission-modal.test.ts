@@ -217,3 +217,18 @@ test("honesty — no secret/token string appears in the DOM after render", () =>
   // The projection carries no secret; assert none of the usual secret markers leaked.
   assert.doesNotMatch(text, /Bearer|authorization|token|sk-/i);
 });
+
+
+test("Allow menu exposes an explicit session-scoped choice", () => {
+  const host = mountHost();
+  const allow = spy();
+  openPermissionModal(host, STANDARD, { onAllow: allow.fn as never, onDeny: () => {} });
+
+  const menuButton = host.querySelector<HTMLButtonElement>(".permission-allow-menu-button")!;
+  menuButton.click();
+  assert.equal(menuButton.getAttribute("aria-expanded"), "true");
+  const sessionButton = host.querySelector<HTMLButtonElement>(".permission-allow-menu__item")!;
+  assert.match(sessionButton.textContent ?? "", /trong phiên/i);
+  sessionButton.click();
+  assert.deepEqual(allow.calls, [["always"]]);
+});

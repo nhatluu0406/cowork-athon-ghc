@@ -2,8 +2,8 @@
  * Focused, fail-safe permission decision card.
  *
  * This component only renders a real pending request. It never fabricates a diff, never exposes a
- * runtime id, and never turns dismissal into approval. The current POC intentionally supports
- * only "allow once"; broader permission policies remain a later product slice.
+ * runtime id, and never turns dismissal into approval. It supports a one-shot approval and an
+ * explicit session-scoped approval; the latter is never selected implicitly.
  */
 
 import type { PendingPermissionView } from "./service-client.js";
@@ -123,15 +123,39 @@ export function openPermissionModal(
   diff.hidden = true;
 
   const trust = el("p", "permission-trust");
-  trust.append(createProductIcon("permission"), document.createTextNode(" Chỉ áp dụng cho lần này. Bạn luôn có thể từ chối."));
+  trust.append(
+    createProductIcon("permission"),
+    document.createTextNode(" Chọn một lần hoặc cho phép thao tác tương tự trong phiên hiện tại."),
+  );
 
   const actions = el("footer", "permission-actions");
   const denyBtn = el("button", "permission-deny", "Từ chối") as HTMLButtonElement;
   denyBtn.type = "button";
-  const allowBtn = el("button", "permission-allow") as HTMLButtonElement;
+
+  const allowGroup = el("div", "permission-allow-group");
+  const allowBtn = el("button", "permission-allow permission-allow--primary") as HTMLButtonElement;
   allowBtn.type = "button";
   allowBtn.append(createProductIcon("permission"), document.createTextNode("Cho phép một lần"));
-  actions.append(denyBtn, allowBtn);
+  const allowMenuBtn = el("button", "permission-allow-menu-button") as HTMLButtonElement;
+  allowMenuBtn.type = "button";
+  allowMenuBtn.setAttribute("aria-label", "Thêm lựa chọn cho phép");
+  allowMenuBtn.setAttribute("aria-haspopup", "menu");
+  allowMenuBtn.setAttribute("aria-expanded", "false");
+  allowMenuBtn.append(createProductIcon("expand", "Mở lựa chọn"));
+
+  const allowMenu = el("div", "permission-allow-menu");
+  allowMenu.hidden = true;
+  allowMenu.setAttribute("role", "menu");
+  const allowAlwaysBtn = el("button", "permission-allow-menu__item") as HTMLButtonElement;
+  allowAlwaysBtn.type = "button";
+  allowAlwaysBtn.setAttribute("role", "menuitem");
+  allowAlwaysBtn.append(
+    el("span", "permission-allow-menu__title", "Cho phép trong phiên"),
+    el("span", "permission-allow-menu__description", "Không hỏi lại với thao tác tương tự cho tới khi phiên kết thúc."),
+  );
+  allowMenu.append(allowAlwaysBtn);
+  allowGroup.append(allowBtn, allowMenuBtn, allowMenu);
+  actions.append(denyBtn, allowGroup);
 
   dialog.append(header, queue, summary, diff, trust, actions);
   backdrop.append(dialog);
@@ -143,6 +167,10 @@ export function openPermissionModal(
     submitted = true;
     denyBtn.disabled = true;
     allowBtn.disabled = true;
+    allowMenuBtn.disabled = true;
+    allowAlwaysBtn.disabled = true;
+    allowMenu.hidden = true;
+    allowMenuBtn.setAttribute("aria-expanded", "false");
     allowBtn.classList.add("is-pending");
     allowBtn.replaceChildren(el("span", "permission-spinner"), document.createTextNode("Đang gửi…"));
   };
@@ -155,10 +183,17 @@ export function openPermissionModal(
     if (previouslyFocused && typeof previouslyFocused.focus === "function") previouslyFocused.focus();
   };
 
-  const allow = (): void => {
+  const allow = (scope: PermissionScope = "once"): void => {
     if (closed || submitted) return;
     setSubmitting();
-    callbacks.onAllow("once");
+    callbacks.onAllow(scope);
+  };
+
+  const setAllowMenuOpen = (open: boolean): void => {
+    if (submitted) return;
+    allowMenu.hidden = !open;
+    allowMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) allowAlwaysBtn.focus();
   };
   const deny = (): void => {
     if (closed || submitted) return;
@@ -170,7 +205,12 @@ export function openPermissionModal(
     if (closed) return;
     if (event.key === "Escape") {
       event.preventDefault();
-      deny();
+      if (!allowMenu.hidden) {
+        setAllowMenuOpen(false);
+        allowMenuBtn.focus();
+      } else {
+        deny();
+      }
       return;
     }
     if (event.key !== "Tab") return;
@@ -190,7 +230,12 @@ export function openPermissionModal(
   }
 
   denyBtn.addEventListener("click", deny);
-  allowBtn.addEventListener("click", allow);
+  allowBtn.addEventListener("click", () => allow("once"));
+  allowMenuBtn.addEventListener("click", () => setAllowMenuOpen(allowMenu.hidden));
+  allowAlwaysBtn.addEventListener("click", () => allow("always"));
+  dialog.addEventListener("pointerdown", (event) => {
+    if (!allowGroup.contains(event.target as Node)) setAllowMenuOpen(false);
+  });
   backdrop.addEventListener("click", (event) => {
     if (event.target === backdrop) deny();
   });

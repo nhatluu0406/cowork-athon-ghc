@@ -388,3 +388,48 @@ test("queue indicator (L5) — shows a truthful count for >1 pending; absent for
   const queueAfter = container.querySelector<HTMLElement>(".permission-queue");
   assert.equal(queueAfter?.hidden, true, "queue indicator hidden for a single pending request");
 });
+
+
+test("workspace-auto mode allows a standard request without opening the modal", async () => {
+  const decisions: DecidePermissionInput[] = [];
+  let listCount = 0;
+  const container = host();
+  const ctrl = createPermissionController({
+    container,
+    getMode: () => "workspace_auto",
+    client: {
+      listPendingPermissions: async () => (listCount++ === 0 ? [PENDING] : []),
+      decidePermission: async (input) => {
+        decisions.push(input);
+        return { status: "resolved", decision: "allow", approvalLevel: "standard", scope: "once" };
+      },
+    },
+  });
+
+  await ctrl.refresh();
+  await flush();
+  assert.deepEqual(decisions, [{ requestId: "req-42", decision: "allow", scope: "once" }]);
+  assert.equal(container.querySelector(".permission-backdrop"), null);
+});
+
+test("read-only mode denies a mutation request without opening the modal", async () => {
+  const decisions: DecidePermissionInput[] = [];
+  let listCount = 0;
+  const container = host();
+  const ctrl = createPermissionController({
+    container,
+    getMode: () => "read_only",
+    client: {
+      listPendingPermissions: async () => (listCount++ === 0 ? [PENDING] : []),
+      decidePermission: async (input) => {
+        decisions.push(input);
+        return { status: "resolved", decision: "deny", approvalLevel: "standard" };
+      },
+    },
+  });
+
+  await ctrl.refresh();
+  await flush();
+  assert.deepEqual(decisions, [{ requestId: "req-42", decision: "deny" }]);
+  assert.equal(container.querySelector(".permission-backdrop"), null);
+});
