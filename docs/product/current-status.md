@@ -19,13 +19,15 @@ and the current working tree instead.
 | Rejected production port | `794cb00` on `feature/ui-shell-v3-production` — PO rejected visual acceptance because packaged UI still looked like the old shell |
 | Alignment branch | `fix/ui-shell-v3-production-alignment` |
 | V3 shell in packaged renderer | **Aligned** — V3 frame/component composition replaces the legacy shell composition; `app-shell.ts` remains orchestration/state wiring |
-| Commercial UI Product Owner visual acceptance | **Pending** — awaiting review of `reports/ui-shell-v3-production-r2/` |
+| Major V3 composition | **Approved** — Product Owner accepted the replacement composition after R2 evidence |
+| Product chrome / UX completion pass | **Applied** — global Settings restored, native Windows controls retained, provider status semantics clarified, rail/tooltips/composer/discoverability polished |
+| Commercial UI Product Owner visual acceptance | **Pending** — awaiting review of `reports/ui-shell-v3-production-r3/` |
 | D1–D4 merge | **Not started** — integration surfaces remain `awaiting_integration` |
-| Multi-Provider Profiles | **Not implemented** — read-only `ConversationProviderControl` boundary only |
+| Multi-Provider Profiles | **Not implemented** — provider/model control opens existing Settings; no multi-profile dropdown registry |
 | File Work Review | **PARTIAL PASS** (unchanged) |
 | Full external integration regression | **Deferred** to integration milestone |
 
-Production evidence: `reports/ui-shell-v3-production-r2/` (12 PNGs + structural state JSON). Regenerate:
+Production evidence: `reports/ui-shell-v3-production-r3/` (product chrome/UX screenshots + structural state JSON). R2 remains historical alignment evidence. Regenerate:
 
 ```powershell
 scripts\build.bat

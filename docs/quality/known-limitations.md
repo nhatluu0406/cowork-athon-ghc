@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # Known limitations
@@ -64,9 +64,14 @@ updated_at: "2026-07-12"
 - `Tệp đã đọc` trong activity **không** còn gộp attachment context — attachment hiển thị riêng `Đã đưa tệp vào ngữ cảnh`; runtime tool read hiển thị `Đã đọc tệp`.
 - Web support vẫn `DEFERRED`.
 
-## UX
+## UI Shell V3 / UX
 
-- GUI hiện là usable POC quality.
-- Chưa claim parity với Claude Cowork hoặc OpenWork.
-- Local service và provider status hiển thị tách biệt; missing credential chặn send trước runtime.
-- Một số empty/error/loading states cần polish trước release candidate.
+- UI Shell V3 major composition is Product Owner approved, but final packaged visual acceptance is still **pending** review of `reports/ui-shell-v3-production-r3/`.
+- Windows controls use Electron native titlebar overlay. Cowork GHC intentionally does not draw custom minimize/maximize/close controls; this preserves native close behavior, double-click maximize/restore, Snap Layout, and high-DPI behavior.
+- Global Settings access is restored from the topbar and provider/status affordances; it opens the existing production Settings modal, not a parallel modal.
+- Provider/model control is a production status/settings entry point only. **Multi-Provider Profiles are not implemented**; there is no real multi-profile dropdown registry yet.
+- Provider status now names the subject (`DeepSeek · Chưa kiểm tra`, `DeepSeek · Kết nối thất bại`, `Provider · Chưa cấu hình`) and should not rely on color alone.
+- Conversation draft UX prevents creating additional blank active drafts and marks drafts as `Nháp`, but AI title generation is not implemented.
+- D1–D4 integration surfaces remain passive `awaiting_integration` slots with no mock integration data.
+- File Work Review remains **PARTIAL PASS**.
+- GUI remains POC quality until PO accepts the R3 packaged screenshots and a later release-candidate run covers the full packaged live journey.
