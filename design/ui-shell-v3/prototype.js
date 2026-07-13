@@ -1,6 +1,6 @@
 /**
- * Cowork GHC UI Shell V3 R2 — design prototype only.
- * Visibility invariants + screenshot validation harness.
+ * Cowork GHC UI Shell V3 R3 — design prototype only.
+ * Work modes, Knowledge surface, provider/skills controls, visibility harness.
  */
 
 const ICONS = {
@@ -8,11 +8,9 @@ const ICONS = {
   dispatch: '<rect x="4" y="5" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/><path d="M10 8h4M10 17h4"/>',
   gateway: '<path d="M4 7h16M4 17h16"/><path d="M8 7v10M16 7v10M7 12h10"/>',
   knowledge: '<path d="M6 5h9a3 3 0 0 1 3 3v11H8a2 2 0 0 1-2-2V5Z"/><path d="M9 8h6M9 12h5"/>',
-  "knowledge-graph": '<circle cx="6" cy="7" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="12" cy="17" r="2"/><path d="M8 8l3 7M16 8l-3 7"/>',
   microsoft: '<rect x="5" y="5" width="6" height="6"/><rect x="13" y="5" width="6" height="6"/><rect x="5" y="13" width="6" height="6"/><rect x="13" y="13" width="6" height="6"/>',
   code: '<path d="M9 7 5 12l4 5M15 7l4 5-4 5"/><path d="M13 5l-2 14"/>',
   "square-pen": '<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 1.414 0l1.586 1.586a1 1 0 0 1 0 1.414L12 14.414 9.586 12z"/>',
-  "play-circle": '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l6-3.5z"/>',
   "panel-left-close": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m14 10-2 2 2 2"/>',
   "panel-left-open": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m12 10 2 2-2 2"/>',
   "panel-right-open": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/><path d="m11 10 2 2-2 2"/>',
@@ -30,11 +28,10 @@ const ICONS = {
 };
 
 const SURFACES = [
-  { id: "cowork", label: "Cowork", icon: "cowork", view: "cowork" },
+  { id: "cowork", label: "Cowork", icon: "cowork", view: "work" },
   { id: "dispatch", label: "Dispatch", icon: "dispatch", awaiting: "D1", view: "integration" },
   { id: "gateway", label: "Gateway", icon: "gateway", awaiting: "D4", view: "integration" },
-  { id: "knowledge", label: "Knowledge", icon: "knowledge", awaiting: "D3", view: "integration" },
-  { id: "knowledge-graph", label: "Knowledge Graph", icon: "knowledge-graph", awaiting: "D3", view: "integration" },
+  { id: "knowledge", label: "Knowledge", icon: "knowledge", awaiting: "D3", view: "knowledge" },
   { id: "microsoft", label: "Microsoft 365", icon: "microsoft", awaiting: "D2", view: "integration" },
   { id: "code", label: "Code", icon: "code", awaiting: "planned", view: "integration" },
 ];
@@ -54,59 +51,71 @@ const FILE_TREE = [
 ];
 
 const FILE_CONTENT = {
-  "src/README.md": "# README (prototype fixture)\n\nShell V3 R2: visibility invariants enforced.\n\nKhông phải production build.",
+  "src/README.md": "# README (prototype fixture)\n\nShell V3 R3: Cowork/Workspace work modes.\n\nKhông phải production build.",
+  "docs/integration-readiness.md": "# Integration readiness\n\nFixture preview only.",
 };
 
 const TRANSCRIPT = [
   { role: "Bạn", user: true, text: "Tóm tắt checklist intake cho team D4." },
   { role: "Cowork", user: false, text: "Checklist gồm: track ID, commit hash, contract API, credential model, feature flag OFF, demo journey không backend thật." },
-  { role: "Bạn", user: true, text: "Nhắc lại ranh giới keyring và permission." },
-  { role: "Cowork", user: false, text: "Keyring chỉ ở service; permission modal không bypass bởi child task hay connector." },
+  { role: "Bạn", user: true, text: "Mở file README trong workspace." },
+  {
+    role: "Cowork",
+    user: false,
+    text: 'Đã tạo bản nháp tại <button type="button" class="file-link" data-file-path="src/README.md" data-file-name="README.md">src/README.md</button>.',
+    html: true,
+  },
 ];
 
 const INTEGRATION_COPY = {
   dispatch: { title: "Dispatch", dep: "D1", copy: "Fan-out agent sẽ xuất hiện sau khi track D1 được tích hợp." },
   gateway: { title: "Gateway", dep: "D4", copy: "Gateway đa profile và failover sẽ kết nối sau intake D4." },
-  knowledge: { title: "Knowledge", dep: "D3", copy: "RAG và retrieval có provenance sẽ bật khi backend D3 sẵn sàng." },
-  "knowledge-graph": { title: "Knowledge Graph", dep: "D3", copy: "Graph explorer chỉ hiển thị dữ liệu thật sau tích hợp D3." },
   microsoft: { title: "Microsoft 365", dep: "D2", copy: "Graph connector sẽ thay thế trạng thái chờ này." },
   code: { title: "Code", dep: "planned", copy: "Surface Code được lên kế hoạch; chưa có backend." },
 };
 
 const STATES = [
-  { id: "cowork-active", label: "Cowork active (DeepSeek)" },
-  { id: "sidebar-cowork", label: "Sidebar Cowork tab" },
-  { id: "sidebar-workspace", label: "Sidebar Workspace tab" },
-  { id: "file-document", label: "File document tab" },
-  { id: "cowork-inspector-open", label: "Inspector open" },
-  { id: "gateway", label: "Gateway awaiting D4" },
-  { id: "knowledge-graph", label: "Knowledge Graph awaiting D3" },
+  { id: "cowork-active", label: "Cowork active" },
+  { id: "cowork-inspector-open", label: "Cowork inspector" },
+  { id: "workspace-empty", label: "Workspace empty" },
+  { id: "workspace-file", label: "Workspace file" },
+  { id: "workspace-file-review", label: "Workspace + File Review" },
+  { id: "knowledge-no-graph", label: "Knowledge (no graph)" },
+  { id: "knowledge-base", label: "Knowledge base tab" },
+  { id: "knowledge-graph", label: "Knowledge graph tab" },
+  { id: "gateway", label: "Gateway" },
   { id: "provider-missing", label: "Provider missing" },
+  { id: "provider-failed", label: "Provider failed" },
   { id: "waiting-permission", label: "Waiting permission" },
+  { id: "cowork-900", label: "Cowork 900px" },
+  { id: "workspace-900", label: "Workspace 900px" },
 ];
 
 const SEQUENTIAL_TRANSITION_STATES = [
-  "file-document",
+  "workspace-file",
   "gateway",
   "cowork-active",
   "provider-missing",
   "knowledge-graph",
 ];
 
-const COWORK_CONVERSATION_STATES = new Set([
+const WORK_SURFACE = "cowork";
+const COWORK_STATES = new Set([
   "cowork-active",
-  "sidebar-cowork",
   "cowork-inspector-open",
   "provider-missing",
+  "provider-failed",
   "waiting-permission",
+  "cowork-900",
 ]);
-
-const INTEGRATION_STATES = new Set(["gateway", "knowledge-graph", "dispatch", "knowledge", "microsoft", "code"]);
+const WORKSPACE_STATES = new Set(["workspace-empty", "workspace-file", "workspace-file-review", "workspace-900"]);
+const KNOWLEDGE_STATES = new Set(["knowledge-no-graph", "knowledge-base", "knowledge-graph"]);
+const INTEGRATION_STATES = new Set(["gateway", "dispatch", "microsoft", "code"]);
 
 const appState = {
-  surface: "cowork",
-  sidebarTab: "cowork",
-  activeDoc: "conversation",
+  surface: WORK_SURFACE,
+  workMode: "cowork",
+  activeFile: null,
   openFiles: [],
   inspectorOpen: false,
   inspectorTab: "plan",
@@ -114,6 +123,10 @@ const appState = {
   drawer: "",
   provider: "configured",
   runtime: "idle",
+  knowledgeTab: "base",
+  d3GraphCapability: false,
+  skillsCount: 1,
+  skillsPopoverOpen: false,
 };
 
 let focusTrapHandler = null;
@@ -128,6 +141,7 @@ function mountIcons(root = document) {
 
 function isNarrow() { return window.innerWidth <= 900; }
 function isInspectorOverlay() { return window.innerWidth <= 1366; }
+function onWorkSurface() { return appState.surface === WORK_SURFACE; }
 
 function isElementVisible(el) {
   if (!el || el.hidden) return false;
@@ -138,165 +152,166 @@ function isElementVisible(el) {
 }
 
 function visibleViews() {
-  return [...document.querySelectorAll(".view")]
-    .filter(isElementVisible)
-    .map((el) => el.dataset.view);
+  return [...document.querySelectorAll(".view")].filter(isElementVisible).map((el) => el.dataset.view);
 }
 
 function visibleSidebarPanels() {
-  return [...document.querySelectorAll(".sidebar__panel")]
-    .filter(isElementVisible)
-    .map((el) => el.dataset.sidebarTab);
+  return [...document.querySelectorAll(".sidebar__panel")].filter(isElementVisible).map((el) => el.dataset.workMode);
 }
 
-function visibleDocPanels() {
-  const panels = [];
-  if (isElementVisible(document.getElementById("doc-conversation"))) panels.push("conversation");
-  if (isElementVisible(document.getElementById("doc-file"))) panels.push("file");
-  return panels;
+function visibleDocTabLabels() {
+  return [...document.querySelectorAll(".doc-tab")].filter(isElementVisible).map((el) => el.textContent?.trim() ?? "");
 }
 
-function isSidebarVisible() {
-  const sidebar = document.getElementById("sidebar");
-  return isElementVisible(sidebar);
-}
-
-function isInspectorVisible() {
-  const inspector = document.getElementById("inspector");
-  return isElementVisible(inspector);
-}
-
-function hasHorizontalOverflow() {
-  return document.documentElement.scrollWidth > document.documentElement.clientWidth + 1;
-}
+function isSidebarVisible() { return isElementVisible(document.getElementById("sidebar")); }
+function isInspectorVisible() { return isElementVisible(document.getElementById("inspector")); }
+function hasHorizontalOverflow() { return document.documentElement.scrollWidth > document.documentElement.clientWidth + 1; }
 
 function collectVisualState(stateId = document.getElementById("app").dataset.state) {
   return {
     state: stateId,
+    workMode: appState.workMode,
     visibleViews: visibleViews(),
     visibleSidebarPanels: visibleSidebarPanels(),
-    visibleDocPanels: visibleDocPanels(),
+    visibleDocTabLabels: visibleDocTabLabels(),
     sidebarVisible: isSidebarVisible(),
     inspectorVisible: isInspectorVisible(),
     horizontalOverflow: hasHorizontalOverflow(),
     surface: appState.surface,
-    sidebarTab: appState.sidebarTab,
-    activeDoc: appState.activeDoc,
+    activeFile: appState.activeFile,
     openFiles: [...appState.openFiles],
     inspectorOpen: appState.inspectorOpen,
     provider: appState.provider,
     runtime: appState.runtime,
+    knowledgeTab: appState.knowledgeTab,
+    d3GraphCapability: appState.d3GraphCapability,
   };
 }
 
-function fail(errors, message) {
-  errors.push(message);
-}
+function fail(errors, message) { errors.push(message); }
 
-function assertCoworkConversation(errors, snapshot, expectInspector = false) {
-  if (snapshot.visibleViews.length !== 1) fail(errors, `expected 1 visible .view, got ${snapshot.visibleViews.length}: ${snapshot.visibleViews.join(", ")}`);
-  else if (snapshot.visibleViews[0] !== "cowork") fail(errors, `expected visible view cowork, got ${snapshot.visibleViews[0]}`);
-  if (snapshot.visibleSidebarPanels.length !== 1) fail(errors, `expected 1 visible sidebar panel, got ${snapshot.visibleSidebarPanels.length}`);
-  if (snapshot.visibleDocPanels.length !== 1) fail(errors, `expected 1 visible doc panel, got ${snapshot.visibleDocPanels.length}: ${snapshot.visibleDocPanels.join(", ")}`);
-  else if (snapshot.visibleDocPanels[0] !== "conversation") fail(errors, `expected conversation doc panel, got ${snapshot.visibleDocPanels[0]}`);
-  if (isElementVisible(document.querySelector('.view[data-view="integration"]'))) fail(errors, "integration view must be hidden");
-  if (isElementVisible(document.getElementById("doc-file"))) fail(errors, "file document must be hidden");
+function assertCoworkMode(errors) {
+  if (appState.workMode !== "cowork") fail(errors, "work mode must be cowork");
+  if (!isElementVisible(document.querySelector('.view[data-view="cowork"]'))) fail(errors, "cowork main must be visible");
+  if (isElementVisible(document.querySelector('.view[data-view="workspace"]'))) fail(errors, "workspace main must be hidden");
+  if (!isElementVisible(document.getElementById("conv-list"))) fail(errors, "conversation list must be visible");
   if (!isElementVisible(document.getElementById("transcript"))) fail(errors, "transcript must be visible");
   if (!isElementVisible(document.querySelector(".composer"))) fail(errors, "composer must be visible");
-  if (expectInspector) {
-    if (!snapshot.inspectorVisible) fail(errors, "inspector must be visible");
-  } else if (snapshot.inspectorVisible) {
-    fail(errors, "inspector must be hidden");
+  if (isElementVisible(document.getElementById("doc-tabs"))) fail(errors, "file tabs must be hidden in cowork mode");
+  if (isElementVisible(document.getElementById("workspace-empty"))) fail(errors, "workspace empty must be hidden");
+  if (isElementVisible(document.getElementById("doc-file"))) fail(errors, "file preview must be hidden in cowork mode");
+  for (const label of visibleDocTabLabels()) {
+    if (label.includes("Cuộc trò chuyện")) fail(errors, "no Cuộc trò chuyện document tab");
   }
 }
 
-function assertFileDocument(errors, snapshot) {
-  if (snapshot.visibleViews.length !== 1 || snapshot.visibleViews[0] !== "cowork") fail(errors, "file document requires single cowork view");
-  if (snapshot.visibleDocPanels.length !== 1 || snapshot.visibleDocPanels[0] !== "file") {
-    fail(errors, `expected file doc panel only, got ${snapshot.visibleDocPanels.join(", ")}`);
-  }
-  if (isElementVisible(document.getElementById("doc-conversation"))) fail(errors, "conversation panel must be hidden");
+function assertWorkspaceMode(errors) {
+  if (appState.workMode !== "workspace") fail(errors, "work mode must be workspace");
+  if (!isElementVisible(document.querySelector('.view[data-view="workspace"]'))) fail(errors, "workspace main must be visible");
+  if (isElementVisible(document.querySelector('.view[data-view="cowork"]'))) fail(errors, "cowork main must be hidden");
+  if (!isElementVisible(document.getElementById("file-tree"))) fail(errors, "file tree must be visible");
+  if (isElementVisible(document.getElementById("conv-list"))) fail(errors, "conversation list must be hidden");
   if (isElementVisible(document.getElementById("transcript"))) fail(errors, "transcript must be hidden");
   if (isElementVisible(document.querySelector(".composer"))) fail(errors, "composer must be hidden");
-  if (isElementVisible(document.getElementById("banner-permission"))) fail(errors, "permission banner must be hidden in file document");
-  if (isElementVisible(document.getElementById("banner-recovery"))) fail(errors, "recovery banner must be hidden in file document");
+  if (isElementVisible(document.getElementById("banner-permission"))) fail(errors, "permission banner must be hidden in workspace");
+  for (const label of visibleDocTabLabels()) {
+    if (label.includes("Cuộc trò chuyện")) fail(errors, "workspace tabs must not include Cuộc trò chuyện");
+  }
 }
 
-function assertIntegration(errors, snapshot) {
-  if (snapshot.visibleViews.length !== 1 || snapshot.visibleViews[0] !== "integration") {
-    fail(errors, `expected integration view only, got ${snapshot.visibleViews.join(", ")}`);
+function assertKnowledge(errors) {
+  if (visibleViews().length !== 1 || visibleViews()[0] !== "knowledge") {
+    fail(errors, `expected knowledge view only, got ${visibleViews().join(", ")}`);
   }
-  if (snapshot.sidebarVisible) fail(errors, "sidebar must be hidden on integration surface");
-  if (snapshot.visibleSidebarPanels.length) fail(errors, "no sidebar panel may be visible on integration surface");
-  if (snapshot.visibleDocPanels.length) fail(errors, "no doc panel may be visible on integration surface");
-  if (isElementVisible(document.querySelector(".view[data-view='cowork']"))) fail(errors, "cowork view must be hidden");
-  if (isElementVisible(document.getElementById("doc-tabs"))) fail(errors, "document tabs must be hidden");
-  if (isElementVisible(document.querySelector(".conv-header"))) fail(errors, "conversation header must be hidden");
-  if (isElementVisible(document.getElementById("banner-permission"))) fail(errors, "permission banner must be hidden");
-  if (isElementVisible(document.getElementById("banner-recovery"))) fail(errors, "recovery banner must be hidden");
-  if (isElementVisible(document.querySelector(".composer"))) fail(errors, "composer must be hidden");
-  if (snapshot.inspectorVisible) fail(errors, "inspector must be hidden on integration surface");
+  if (document.querySelector('.rail__btn[aria-current="page"]')?.getAttribute("aria-label")?.includes("Knowledge Graph")) {
+    fail(errors, "no separate Knowledge Graph rail item");
+  }
+  if (!isElementVisible(document.getElementById("k-tab-base"))) fail(errors, "Kho tri thức tab must be visible");
+  if (isElementVisible(document.getElementById("conv-list"))) fail(errors, "no Cowork sidebar on knowledge");
+  if (isElementVisible(document.querySelector(".composer"))) fail(errors, "no composer on knowledge");
+  if (isInspectorVisible()) fail(errors, "no Cowork inspector on knowledge");
 }
 
-function assertSidebarTab(errors, snapshot, tab) {
-  if (snapshot.visibleSidebarPanels.length !== 1 || snapshot.visibleSidebarPanels[0] !== tab) {
-    fail(errors, `expected sidebar panel ${tab}, got ${snapshot.visibleSidebarPanels.join(", ")}`);
+function assertIntegration(errors) {
+  if (visibleViews().length !== 1 || visibleViews()[0] !== "integration") {
+    fail(errors, `expected integration view only, got ${visibleViews().join(", ")}`);
   }
-  const other = tab === "cowork" ? "workspace" : "cowork";
-  const otherPanel = document.querySelector(`.sidebar__panel[data-sidebar-tab="${other}"]`);
-  if (isElementVisible(otherPanel)) fail(errors, `${other} sidebar panel must be hidden when ${tab} is active`);
+  if (isSidebarVisible()) fail(errors, "sidebar must be hidden");
+  if (isInspectorVisible()) fail(errors, "inspector must be hidden");
+  if (isElementVisible(document.querySelector('.view[data-view="cowork"]'))) fail(errors, "cowork view hidden");
+  if (isElementVisible(document.querySelector('.view[data-view="workspace"]'))) fail(errors, "workspace view hidden");
+}
+
+function assertProvider(errors, stateId) {
+  const selector = document.getElementById("provider-select");
+  const dot = document.getElementById("status-provider-dot");
+  if (stateId === "provider-missing") {
+    if (!selector.hidden && !selector.disabled) fail(errors, "provider selector must be hidden/disabled when missing");
+    if (!dot.classList.contains("status-dot--warn")) fail(errors, "bottom status must be amber when missing");
+  } else if (stateId === "provider-failed") {
+    if (!dot.classList.contains("status-dot--danger")) fail(errors, "bottom status must be red when failed");
+    if (!isElementVisible(document.getElementById("provider-select-fail"))) fail(errors, "failed provider needs explicit text");
+  } else if (COWORK_STATES.has(stateId) && appState.provider === "configured") {
+    if (!isElementVisible(selector)) fail(errors, "provider selector visible when configured");
+    if (!dot.classList.contains("status-dot--ok")) fail(errors, "bottom status green when configured");
+  }
 }
 
 function assertVisualState(stateId) {
   const snapshot = collectVisualState(stateId);
   const errors = [];
 
-  if (INTEGRATION_STATES.has(stateId)) {
-    assertIntegration(errors, snapshot);
-  } else if (stateId === "file-document") {
-    assertFileDocument(errors, snapshot);
-    assertSidebarTab(errors, snapshot, "workspace");
-  } else if (stateId === "sidebar-workspace") {
-    assertCoworkConversation(errors, snapshot, false);
-    assertSidebarTab(errors, snapshot, "workspace");
-  } else if (stateId === "sidebar-cowork" || COWORK_CONVERSATION_STATES.has(stateId)) {
-    assertCoworkConversation(errors, snapshot, stateId === "cowork-inspector-open");
-    if (stateId === "sidebar-cowork") assertSidebarTab(errors, snapshot, "cowork");
-  }
-
-  if (stateId === "provider-missing" && appState.provider !== "missing") {
-    fail(errors, "provider fixture must be missing");
-  }
-  if (stateId === "waiting-permission" && appState.runtime !== "permission") {
-    fail(errors, "runtime fixture must be permission");
-  }
-  if (stateId === "waiting-permission" && !isElementVisible(document.getElementById("banner-permission"))) {
-    fail(errors, "permission banner must be visible");
-  }
-  if (stateId === "provider-missing" && isElementVisible(document.getElementById("banner-recovery"))) {
-    fail(errors, "recovery banner must not show for missing provider");
-  }
-
-  if (isNarrow()) {
-    if (appState.drawer === "sidebar" && appState.drawer === "inspector") {
-      fail(errors, "only one drawer may be open at 900px");
+  if (COWORK_STATES.has(stateId)) {
+    assertCoworkMode(errors);
+    if (stateId === "cowork-inspector-open" && !snapshot.inspectorVisible) fail(errors, "inspector must be open");
+    else if (stateId !== "cowork-inspector-open" && snapshot.inspectorVisible) fail(errors, "inspector must be closed");
+  } else if (WORKSPACE_STATES.has(stateId)) {
+    assertWorkspaceMode(errors);
+    if (stateId === "workspace-empty" && appState.activeFile) fail(errors, "workspace-empty must have no active file");
+    if ((stateId === "workspace-file" || stateId === "workspace-file-review") && !appState.activeFile) {
+      fail(errors, "workspace file state needs active file");
     }
-    if (hasHorizontalOverflow()) fail(errors, "horizontal overflow at narrow viewport");
+    if (stateId === "workspace-file-review" && !snapshot.inspectorVisible) fail(errors, "file review needs inspector");
+  } else if (KNOWLEDGE_STATES.has(stateId)) {
+    assertKnowledge(errors);
+    if (stateId === "knowledge-no-graph" && isElementVisible(document.getElementById("k-tab-graph"))) {
+      fail(errors, "Đồ thị tab must be hidden without capability");
+    }
+    if ((stateId === "knowledge-graph" || stateId === "knowledge-base") && !appState.d3GraphCapability && stateId === "knowledge-graph") {
+      fail(errors, "graph tab requires D3 capability");
+    }
+    if (stateId === "knowledge-graph" && appState.knowledgeTab !== "graph") fail(errors, "knowledge-graph state needs graph tab");
+  } else if (INTEGRATION_STATES.has(stateId)) {
+    assertIntegration(errors);
   }
+
+  if (stateId === "waiting-permission") {
+    if (!isElementVisible(document.getElementById("banner-permission"))) fail(errors, "permission banner visible");
+  }
+  if (["provider-missing", "provider-failed", ...COWORK_STATES].includes(stateId)) {
+    assertProvider(errors, stateId);
+  }
+  if (isNarrow() && hasHorizontalOverflow()) fail(errors, "horizontal overflow at narrow viewport");
 
   return { ...snapshot, passed: errors.length === 0, errors };
 }
 
 async function waitForStableFrames(count = 2) {
-  for (let i = 0; i < count; i += 1) {
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-  }
+  for (let i = 0; i < count; i += 1) await new Promise((r) => requestAnimationFrame(r));
 }
 
 async function applyStateAndSettle(stateId) {
   applyState(stateId);
   await waitForStableFrames(2);
   return assertVisualState(stateId);
+}
+
+function assertClickFromChat() {
+  const errors = [];
+  assertWorkspaceMode(errors);
+  if (appState.activeFile !== "src/README.md") fail(errors, "click-from-chat must open src/README.md");
+  if (!appState.openFiles.some((f) => f.path === "src/README.md")) fail(errors, "README tab must be open");
+  return { passed: errors.length === 0, errors };
 }
 
 function runSequentialTransitionTest() {
@@ -311,37 +326,38 @@ function runSequentialTransitionTest() {
 }
 
 function resetApplicationState() {
-  appState.surface = "cowork";
-  appState.sidebarTab = "cowork";
-  appState.activeDoc = "conversation";
-  appState.openFiles = [];
-  appState.inspectorOpen = false;
-  appState.inspectorTab = "plan";
-  appState.sidebarHidden = false;
-  appState.drawer = "";
-  appState.provider = "configured";
-  appState.runtime = "idle";
+  Object.assign(appState, {
+    surface: WORK_SURFACE,
+    workMode: "cowork",
+    activeFile: null,
+    openFiles: [],
+    inspectorOpen: false,
+    inspectorTab: "plan",
+    sidebarHidden: false,
+    drawer: "",
+    provider: "configured",
+    runtime: "idle",
+    knowledgeTab: "base",
+    d3GraphCapability: false,
+    skillsCount: 1,
+    skillsPopoverOpen: false,
+  });
 
   document.documentElement.style.width = "";
-  document.documentElement.style.removeProperty("width");
   document.body.style.width = "";
-  document.body.style.removeProperty("width");
-
   document.getElementById("banner-permission").hidden = true;
   document.getElementById("banner-recovery").hidden = true;
-  document.getElementById("topbar-context").hidden = true;
-  document.getElementById("topbar-context").textContent = "";
   document.getElementById("drawer-scrim").hidden = true;
-
-  document.getElementById("main").scrollTop = 0;
-  const transcript = document.getElementById("transcript");
-  if (transcript) transcript.scrollTop = 0;
+  document.getElementById("skills-popover").hidden = true;
+  document.getElementById("provider-select-fail").hidden = true;
+  document.getElementById("provider-select").hidden = false;
+  document.getElementById("provider-select").disabled = false;
 
   releaseFocusTrap();
   selectInspectorTab("plan");
-  setSidebarTab("cowork");
-  setActiveDoc("conversation");
-  renderDocTabs();
+  setWorkMode("cowork");
+  renderFileTabs();
+  updateWorkspaceMain();
 }
 
 function renderRail() {
@@ -361,16 +377,34 @@ function renderRail() {
   }
 }
 
-function setSidebarTab(tab) {
-  appState.sidebarTab = tab;
+function setWorkMode(mode) {
+  appState.workMode = mode;
+  document.getElementById("app").dataset.workMode = mode;
   for (const btn of document.querySelectorAll(".sidebar-tabs__btn")) {
-    const active = btn.dataset.sidebarTab === tab;
+    const active = btn.dataset.workMode === mode;
     btn.classList.toggle("sidebar-tabs__btn--active", active);
     btn.setAttribute("aria-selected", active ? "true" : "false");
   }
   for (const panel of document.querySelectorAll(".sidebar__panel")) {
-    panel.hidden = panel.dataset.sidebarTab !== tab;
+    panel.hidden = panel.dataset.workMode !== mode;
   }
+  document.querySelector('.view[data-view="cowork"]').hidden = mode !== "cowork";
+  document.querySelector('.view[data-view="workspace"]').hidden = mode !== "workspace";
+  updateWorkspaceMain();
+  updateInspectorTabsForMode();
+  syncChrome();
+}
+
+function updateInspectorTabsForMode() {
+  const plan = document.querySelector('.inspector__tab[data-tab="plan"]');
+  const activity = document.querySelector('.inspector__tab[data-tab="activity"]');
+  const files = document.querySelector('.inspector__tab[data-tab="files"]');
+  const review = document.querySelector('.inspector__tab[data-tab="review"]');
+  const inWorkspace = onWorkSurface() && appState.workMode === "workspace";
+  plan.hidden = inWorkspace;
+  activity.hidden = inWorkspace;
+  files.hidden = false;
+  review.hidden = false;
 }
 
 function renderConversations() {
@@ -388,7 +422,7 @@ function renderConversations() {
   mountIcons(list);
 }
 
-function renderTree(activePath = "src/README.md") {
+function renderTree(activePath = null) {
   const tree = document.getElementById("file-tree");
   tree.replaceChildren();
   for (const row of FILE_TREE) {
@@ -397,32 +431,29 @@ function renderTree(activePath = "src/README.md") {
     div.style.paddingLeft = `${8 + row.depth * 14}px`;
     div.innerHTML = `<span class="tree__indent"></span>
       <span class="icon icon--muted" data-icon="${row.type === "folder" ? "folder" : "file"}"></span><span>${row.name}</span>`;
-    if (row.type === "file") div.addEventListener("click", () => openFileDocument(row.path, row.name));
+    if (row.type === "file") div.addEventListener("click", () => openFileInWorkspace(row.path, row.name));
     tree.append(div);
   }
   mountIcons(tree);
 }
 
-function renderDocTabs() {
+function renderFileTabs() {
   const host = document.getElementById("doc-tabs");
   host.replaceChildren();
-  const convTab = document.createElement("button");
-  convTab.type = "button";
-  convTab.className = `doc-tab${appState.activeDoc === "conversation" ? " doc-tab--active" : ""}`;
-  convTab.setAttribute("role", "tab");
-  convTab.setAttribute("aria-selected", appState.activeDoc === "conversation" ? "true" : "false");
-  convTab.textContent = "Cuộc trò chuyện";
-  convTab.addEventListener("click", () => setActiveDoc("conversation"));
-  host.append(convTab);
+  if (!appState.openFiles.length) {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
   for (const f of appState.openFiles) {
     const tab = document.createElement("button");
     tab.type = "button";
-    tab.className = `doc-tab${appState.activeDoc === f.path ? " doc-tab--active" : ""}`;
+    tab.className = `doc-tab${appState.activeFile === f.path ? " doc-tab--active" : ""}`;
     tab.setAttribute("role", "tab");
-    tab.setAttribute("aria-selected", appState.activeDoc === f.path ? "true" : "false");
+    tab.setAttribute("aria-selected", appState.activeFile === f.path ? "true" : "false");
     tab.innerHTML = `<span>${f.name}</span><span class="doc-tab__close icon" data-icon="close" role="button" aria-label="Đóng ${f.name}"></span>`;
-    tab.querySelector(".doc-tab__close").addEventListener("click", (e) => { e.stopPropagation(); closeFileDocument(f.path); });
-    tab.addEventListener("click", () => setActiveDoc(f.path));
+    tab.querySelector(".doc-tab__close").addEventListener("click", (e) => { e.stopPropagation(); closeFile(f.path); });
+    tab.addEventListener("click", () => selectFile(f.path));
     host.append(tab);
   }
   mountIcons(host);
@@ -431,36 +462,45 @@ function renderDocTabs() {
 function updateFileBreadcrumb(docId) {
   const parts = docId.split("/");
   const name = parts.pop() ?? docId;
-  const prefix = parts.length ? `${parts.join(" / ")} / ${name}` : name;
-  document.getElementById("file-breadcrumb-path").textContent = prefix;
+  document.getElementById("file-breadcrumb-path").textContent = parts.length ? `${parts.join(" / ")} / ${name}` : name;
 }
 
-function setActiveDoc(docId) {
-  appState.activeDoc = docId;
-  const isConv = docId === "conversation";
-  document.getElementById("doc-conversation").hidden = !isConv;
-  document.getElementById("doc-file").hidden = isConv;
-  document.getElementById("topbar-context").hidden = true;
-  document.getElementById("topbar-context").textContent = "";
-  renderDocTabs();
-  if (!isConv) {
-    document.getElementById("file-body").textContent = FILE_CONTENT[docId] ?? "(prototype fixture)";
-    updateFileBreadcrumb(docId);
-    selectInspectorTab("files");
+function updateWorkspaceMain() {
+  const hasFile = Boolean(appState.activeFile);
+  document.getElementById("workspace-empty").hidden = hasFile;
+  document.getElementById("doc-file").hidden = !hasFile;
+  renderFileTabs();
+  if (hasFile) {
+    document.getElementById("file-body").textContent = FILE_CONTENT[appState.activeFile] ?? "(prototype fixture)";
+    updateFileBreadcrumb(appState.activeFile);
   }
 }
 
-function openFileDocument(path, name) {
-  if (!appState.openFiles.some((f) => f.path === path)) appState.openFiles.push({ path, name });
-  setActiveDoc(path);
+function selectFile(path) {
+  appState.activeFile = path;
+  updateWorkspaceMain();
   renderTree(path);
 }
 
-function closeFileDocument(path) {
+function openFileInWorkspace(path, name) {
+  if (!appState.openFiles.some((f) => f.path === path)) appState.openFiles.push({ path, name });
+  setWorkMode("workspace");
+  selectFile(path);
+  selectInspectorTab("files");
+}
+
+function openFileFromChat(path, name) {
+  activateSurface(WORK_SURFACE);
+  openFileInWorkspace(path, name);
+}
+
+function closeFile(path) {
   appState.openFiles = appState.openFiles.filter((f) => f.path !== path);
-  if (appState.activeDoc === path) setActiveDoc("conversation");
-  else renderDocTabs();
-  renderTree(appState.openFiles.at(-1)?.path);
+  if (appState.activeFile === path) {
+    appState.activeFile = appState.openFiles.at(-1)?.path ?? null;
+  }
+  updateWorkspaceMain();
+  renderTree(appState.activeFile);
 }
 
 function renderTranscript() {
@@ -469,15 +509,23 @@ function renderTranscript() {
   for (const m of TRANSCRIPT) {
     const div = document.createElement("div");
     div.className = `msg${m.user ? " msg--user" : ""}`;
-    div.innerHTML = `<div class="msg__role">${m.role}</div><div class="msg__body">${m.text}</div>`;
+    if (m.html) {
+      div.innerHTML = `<div class="msg__role">${m.role}</div><div class="msg__body">${m.text}</div>`;
+    } else {
+      div.innerHTML = `<div class="msg__role">${m.role}</div><div class="msg__body">${m.text}</div>`;
+    }
     inner.append(div);
   }
+  inner.querySelectorAll(".file-link").forEach((btn) => {
+    btn.addEventListener("click", () => openFileFromChat(btn.dataset.filePath, btn.dataset.fileName));
+  });
   document.getElementById("transcript").replaceChildren(inner);
 }
 
 function selectInspectorTab(tab) {
   appState.inspectorTab = tab;
   for (const btn of document.querySelectorAll(".inspector__tab")) {
+    if (btn.hidden) continue;
     const active = btn.dataset.tab === tab;
     btn.classList.toggle("inspector__tab--active", active);
     btn.setAttribute("aria-selected", active ? "true" : "false");
@@ -497,13 +545,12 @@ function selectInspectorTab(tab) {
     }
     panel.append(ol);
   } else if (tab === "activity") {
-    panel.innerHTML = `<p class="inspector-panel__line"><strong>Soạn prototype V3 R2</strong> — visibility fix</p>
-      <p class="inspector-panel__line"><strong>Chờ merge D4</strong> — đang chờ</p>`;
+    panel.innerHTML = `<p class="inspector-panel__line"><strong>Prototype V3 R3</strong> — work modes</p>`;
   } else if (tab === "files") {
-    const pth = appState.activeDoc !== "conversation" ? appState.activeDoc : "docs/integration/external-systems-integration-readiness.md";
+    const pth = appState.activeFile ?? "docs/integration/external-systems-integration-readiness.md";
     panel.innerHTML = `<p class="inspector-panel__line"><code>${pth}</code></p>`;
   } else {
-    const pth = appState.activeDoc !== "conversation" ? appState.activeDoc : "design/ui-shell-v3/styles.css";
+    const pth = appState.activeFile ?? "design/ui-shell-v3/styles.css";
     panel.innerHTML = `<p class="inspector-panel__line"><strong>${pth}</strong><br>Prototype fixture — bounded diff khi có backend.</p>`;
   }
   body.append(panel);
@@ -520,52 +567,122 @@ function renderIntegration(surfaceId) {
   mountIcons(host);
 }
 
-function setMainView(view, surfaceId = "cowork") {
-  const coworkView = document.querySelector('.view[data-view="cowork"]');
-  const integrationView = document.querySelector('.view[data-view="integration"]');
+function renderKnowledgeBody() {
+  const host = document.getElementById("knowledge-body");
+  if (appState.knowledgeTab === "graph") {
+    host.innerHTML = `<div class="knowledge-empty">
+      <h2 class="knowledge-empty__title">Đồ thị tri thức</h2>
+      <p class="knowledge-empty__copy">Graph explorer chỉ hiển thị dữ liệu thật sau tích hợp D3.</p>
+      <span class="integration-empty__badge">Chờ tích hợp D3</span>
+    </div>`;
+  } else {
+    host.innerHTML = `<div class="knowledge-empty">
+      <h2 class="knowledge-empty__title">Kho tri thức</h2>
+      <p class="knowledge-empty__copy">RAG và retrieval có provenance sẽ bật khi backend D3 sẵn sàng.</p>
+      <span class="integration-empty__badge">Chờ tích hợp D3</span>
+    </div>`;
+  }
+}
+
+function setKnowledgeTab(tab) {
+  appState.knowledgeTab = tab;
+  for (const btn of document.querySelectorAll(".knowledge-tabs__btn")) {
+    const active = btn.dataset.knowledgeTab === tab;
+    btn.classList.toggle("knowledge-tabs__btn--active", active);
+    btn.setAttribute("aria-selected", active ? "true" : "false");
+  }
+  renderKnowledgeBody();
+}
+
+function updateKnowledgeTabs() {
+  const graphTab = document.getElementById("k-tab-graph");
+  graphTab.hidden = !appState.d3GraphCapability;
+  if (!appState.d3GraphCapability && appState.knowledgeTab === "graph") {
+    setKnowledgeTab("base");
+  }
+}
+
+function setSurfaceView(view, surfaceId = WORK_SURFACE) {
+  const views = {
+    cowork: document.querySelector('.view[data-view="cowork"]'),
+    workspace: document.querySelector('.view[data-view="workspace"]'),
+    knowledge: document.querySelector('.view[data-view="knowledge"]'),
+    integration: document.querySelector('.view[data-view="integration"]'),
+  };
   const shell = document.getElementById("shell");
   const sidebar = document.getElementById("sidebar");
-  const inspector = document.getElementById("inspector");
   const btnInspector = document.getElementById("btn-inspector");
 
-  coworkView.hidden = view !== "cowork";
-  integrationView.hidden = view !== "integration";
+  views.knowledge.hidden = true;
+  views.integration.hidden = true;
 
-  if (view === "integration") {
+  if (view === "work") {
+    shell.classList.remove("shell--integration");
+    sidebar.hidden = false;
+    btnInspector.hidden = false;
+    setWorkMode(appState.workMode);
+  } else if (view === "knowledge") {
     shell.classList.add("shell--integration");
     sidebar.hidden = true;
     btnInspector.hidden = true;
     appState.inspectorOpen = false;
     appState.drawer = "";
-    renderIntegration(surfaceId);
+    views.cowork.hidden = true;
+    views.workspace.hidden = true;
+    views.knowledge.hidden = false;
+    updateKnowledgeTabs();
+    setKnowledgeTab(appState.knowledgeTab);
   } else {
-    shell.classList.remove("shell--integration");
-    sidebar.hidden = false;
-    btnInspector.hidden = false;
+    shell.classList.add("shell--integration");
+    sidebar.hidden = true;
+    btnInspector.hidden = true;
+    appState.inspectorOpen = false;
+    appState.drawer = "";
+    views.cowork.hidden = true;
+    views.workspace.hidden = true;
+    views.integration.hidden = false;
+    renderIntegration(surfaceId);
   }
   syncChrome();
 }
 
+function updateComposerProvider() {
+  const selector = document.getElementById("provider-select");
+  const dot = document.getElementById("provider-select-dot");
+  const fail = document.getElementById("provider-select-fail");
+  selector.hidden = appState.provider === "missing";
+  selector.disabled = appState.provider === "missing";
+  fail.hidden = appState.provider !== "failed";
+  dot.className = "status-dot " + (appState.provider === "failed" ? "status-dot--danger" : "status-dot--ok");
+}
+
 function updateStatusBar() {
   const providerBtn = document.getElementById("status-provider");
-  const runtimeEl = document.getElementById("status-runtime");
-  providerBtn.classList.remove("statusbar__item--warn", "statusbar__item--pulse");
+  const dot = document.getElementById("status-provider-dot");
+  const value = document.getElementById("status-provider-value");
+  providerBtn.classList.remove("statusbar__item--warn", "statusbar__item--pulse", "statusbar__item--danger");
+
   if (appState.provider === "missing") {
-    providerBtn.querySelector(".statusbar__value").textContent = "Provider · Chưa cấu hình";
+    value.textContent = "Provider · Chưa cấu hình";
     providerBtn.dataset.tooltip = "Provider: Chưa cấu hình — nhấn để mở cài đặt";
-    providerBtn.querySelector(".status-dot").className = "status-dot status-dot--warn";
+    dot.className = "status-dot status-dot--warn";
     providerBtn.classList.add("statusbar__item--warn", "statusbar__item--pulse");
+  } else if (appState.provider === "failed") {
+    value.textContent = "DeepSeek · Kết nối thất bại";
+    providerBtn.dataset.tooltip = "Provider: Kết nối thất bại";
+    dot.className = "status-dot status-dot--danger";
+    providerBtn.classList.add("statusbar__item--danger");
   } else {
-    providerBtn.querySelector(".statusbar__value").textContent = "DeepSeek · Sẵn sàng";
+    value.textContent = "DeepSeek · Sẵn sàng";
     providerBtn.dataset.tooltip = "DeepSeek: Sẵn sàng";
-    providerBtn.querySelector(".status-dot").className = "status-dot status-dot--ok";
+    dot.className = "status-dot status-dot--ok";
   }
+
+  const runtimeEl = document.getElementById("status-runtime");
   const rtMap = { idle: "Nhàn rỗi", starting: "Đang khởi động", running: "Đang chạy", permission: "Chờ quyền", error: "Lỗi" };
   const rt = rtMap[appState.runtime] ?? "Nhàn rỗi";
   runtimeEl.querySelector(".statusbar__value").textContent = `Runtime · ${rt}`;
-  runtimeEl.dataset.tooltip = `OpenCode runtime: ${rt.toLowerCase()}`;
-  const dot = runtimeEl.querySelector(".status-dot");
-  dot.className = "status-dot" + (appState.runtime === "permission" ? " status-dot--warn" : appState.runtime === "running" ? " status-dot--ok" : " status-dot--idle");
+  updateComposerProvider();
 }
 
 function closeDrawer() {
@@ -606,30 +723,30 @@ function syncChrome() {
   const app = document.getElementById("app");
   const narrow = isNarrow();
   const overlayInspector = isInspectorOverlay();
-  const onCowork = appState.surface === "cowork";
+  const work = onWorkSurface();
 
   app.dataset.surface = appState.surface;
+  app.dataset.workMode = appState.workMode;
   app.dataset.sidebarHidden = appState.sidebarHidden ? "true" : "false";
   app.dataset.inspectorOpen = appState.inspectorOpen ? "true" : "false";
   app.dataset.drawer = appState.drawer;
-
   document.getElementById("drawer-scrim").hidden = !(narrow && appState.drawer);
 
   const sidebar = document.getElementById("sidebar");
   const inspector = document.getElementById("inspector");
-  sidebar.classList.toggle("sidebar--drawer", narrow && onCowork);
-  inspector.classList.toggle("inspector--drawer", overlayInspector && onCowork);
+  sidebar.classList.toggle("sidebar--drawer", narrow && work);
+  inspector.classList.toggle("inspector--drawer", overlayInspector && work);
 
   let inspectorShown = false;
-  if (onCowork) {
+  if (work) {
     if (narrow) inspectorShown = appState.drawer === "inspector";
     else inspectorShown = appState.inspectorOpen;
   }
   inspector.hidden = !inspectorShown;
 
-  if (!onCowork) {
-    inspector.classList.remove("inspector--open");
+  if (!work) {
     sidebar.classList.remove("sidebar--open");
+    inspector.classList.remove("inspector--open");
     releaseFocusTrap();
   } else if (narrow) {
     sidebar.classList.toggle("sidebar--open", appState.drawer === "sidebar");
@@ -648,14 +765,17 @@ function syncChrome() {
   btnSidebar.setAttribute("aria-label", btnSidebar.dataset.tooltip);
   btnSidebar.querySelector("[data-icon]").dataset.icon = showOpen ? "panel-left-open" : "panel-left-close";
   mountIcons(btnSidebar);
-  btnSidebar.hidden = !onCowork;
+  btnSidebar.hidden = !work;
 
   const btnInspector = document.getElementById("btn-inspector");
-  if (onCowork) {
+  if (work) {
+    btnInspector.hidden = false;
     btnInspector.dataset.tooltip = appState.inspectorOpen ? "Đóng inspector" : "Mở inspector";
     btnInspector.setAttribute("aria-label", btnInspector.dataset.tooltip);
     btnInspector.querySelector("[data-icon]").dataset.icon = appState.inspectorOpen ? "panel-right-close" : "panel-right-open";
     mountIcons(btnInspector);
+  } else {
+    btnInspector.hidden = true;
   }
 }
 
@@ -663,42 +783,30 @@ function activateSurface(surfaceId) {
   appState.surface = surfaceId;
   const surface = SURFACES.find((s) => s.id === surfaceId) ?? SURFACES[0];
   renderRail();
-  setMainView(surface.view, surface.id);
-  if (surface.view === "cowork") {
-    setSidebarTab(appState.sidebarTab);
-    renderDocTabs();
-    setActiveDoc(appState.activeDoc);
+  setSurfaceView(surface.view, surface.id);
+  if (surface.view === "work") {
     applyFixtureFlags();
   } else {
-    appState.drawer = "";
-    appState.sidebarHidden = true;
-    appState.inspectorOpen = false;
-    appState.openFiles = [];
-    appState.activeDoc = "conversation";
     document.getElementById("banner-permission").hidden = true;
     document.getElementById("banner-recovery").hidden = true;
-    document.getElementById("doc-conversation").hidden = true;
-    document.getElementById("doc-file").hidden = true;
   }
-  syncChrome();
   updateStatusBar();
 }
 
 function applyFixtureFlags() {
-  if (appState.surface !== "cowork" || appState.activeDoc !== "conversation") {
+  if (!onWorkSurface() || appState.workMode !== "cowork") {
     document.getElementById("banner-permission").hidden = true;
     document.getElementById("banner-recovery").hidden = true;
     updateStatusBar();
     return;
   }
   document.getElementById("banner-permission").hidden = appState.runtime !== "permission";
-  document.getElementById("banner-recovery").hidden = appState.provider !== "failed";
+  document.getElementById("banner-recovery").hidden = appState.provider !== "failed" || appState.provider === "missing";
   updateStatusBar();
 }
 
 function applyState(stateId) {
   resetApplicationState();
-
   document.getElementById("proto-state-label").textContent = stateId;
   document.getElementById("app").dataset.state = stateId;
   const url = new URL(window.location.href);
@@ -707,60 +815,87 @@ function applyState(stateId) {
 
   switch (stateId) {
     case "cowork-active":
-      activateSurface("cowork");
-      break;
-    case "sidebar-cowork":
-      activateSurface("cowork");
-      setSidebarTab("cowork");
-      break;
-    case "sidebar-workspace":
-      activateSurface("cowork");
-      setSidebarTab("workspace");
-      renderTree();
-      break;
-    case "file-document":
-      activateSurface("cowork");
-      setSidebarTab("workspace");
-      openFileDocument("src/README.md", "README.md");
-      selectInspectorTab("review");
+    case "cowork-900":
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
       break;
     case "cowork-inspector-open":
-      activateSurface("cowork");
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
       appState.inspectorOpen = true;
       if (isNarrow()) appState.drawer = "inspector";
       syncChrome();
       selectInspectorTab("activity");
       break;
+    case "workspace-empty":
+    case "workspace-900":
+      activateSurface(WORK_SURFACE);
+      setWorkMode("workspace");
+      break;
+    case "workspace-file":
+      activateSurface(WORK_SURFACE);
+      openFileInWorkspace("src/README.md", "README.md");
+      break;
+    case "workspace-file-review":
+      activateSurface(WORK_SURFACE);
+      openFileInWorkspace("src/README.md", "README.md");
+      appState.inspectorOpen = true;
+      if (isNarrow()) appState.drawer = "inspector";
+      syncChrome();
+      selectInspectorTab("review");
+      break;
+    case "knowledge-no-graph":
+      appState.d3GraphCapability = false;
+      activateSurface("knowledge");
+      setKnowledgeTab("base");
+      break;
+    case "knowledge-base":
+      appState.d3GraphCapability = true;
+      activateSurface("knowledge");
+      setKnowledgeTab("base");
+      break;
+    case "knowledge-graph":
+      appState.d3GraphCapability = true;
+      activateSurface("knowledge");
+      setKnowledgeTab("graph");
+      break;
     case "gateway":
       activateSurface("gateway");
       break;
-    case "knowledge-graph":
-      activateSurface("knowledge-graph");
-      break;
     case "provider-missing":
-      activateSurface("cowork");
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
       appState.provider = "missing";
       applyFixtureFlags();
       break;
+    case "provider-failed":
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
+      appState.provider = "failed";
+      applyFixtureFlags();
+      break;
     case "waiting-permission":
-      activateSurface("cowork");
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
       appState.runtime = "permission";
       applyFixtureFlags();
       break;
     default:
-      activateSurface("cowork");
+      activateSurface(WORK_SURFACE);
+      setWorkMode("cowork");
   }
+  updateStatusBar();
 }
 
 function bindEvents() {
   document.getElementById("btn-sidebar").addEventListener("click", () => {
-    if (appState.surface !== "cowork") return;
+    if (!onWorkSurface()) return;
     if (isNarrow()) { openDrawer(appState.drawer === "sidebar" ? "" : "sidebar"); return; }
     appState.sidebarHidden = !appState.sidebarHidden;
     syncChrome();
   });
   document.getElementById("btn-inspector").addEventListener("click", () => {
-    if (appState.surface !== "cowork") return;
+    if (!onWorkSurface()) return;
     if (isNarrow() || isInspectorOverlay()) { openDrawer(appState.drawer === "inspector" ? "" : "inspector"); return; }
     appState.inspectorOpen = !appState.inspectorOpen;
     syncChrome();
@@ -771,8 +906,22 @@ function bindEvents() {
     syncChrome();
   });
   document.getElementById("drawer-scrim").addEventListener("click", closeDrawer);
-  document.getElementById("tab-cowork").addEventListener("click", () => setSidebarTab("cowork"));
-  document.getElementById("tab-workspace").addEventListener("click", () => { setSidebarTab("workspace"); renderTree(); });
+  document.getElementById("tab-cowork").addEventListener("click", () => {
+    activateSurface(WORK_SURFACE);
+    setWorkMode("cowork");
+  });
+  document.getElementById("tab-workspace").addEventListener("click", () => {
+    activateSurface(WORK_SURFACE);
+    setWorkMode("workspace");
+    renderTree(appState.activeFile);
+  });
+  document.getElementById("btn-skills").addEventListener("click", () => {
+    const pop = document.getElementById("skills-popover");
+    appState.skillsPopoverOpen = !appState.skillsPopoverOpen;
+    pop.hidden = !appState.skillsPopoverOpen;
+  });
+  document.getElementById("k-tab-base").addEventListener("click", () => setKnowledgeTab("base"));
+  document.getElementById("k-tab-graph").addEventListener("click", () => setKnowledgeTab("graph"));
   for (const tab of document.querySelectorAll(".inspector__tab")) {
     tab.addEventListener("click", () => selectInspectorTab(tab.dataset.tab));
   }
@@ -785,7 +934,7 @@ function init() {
   renderConversations();
   renderTree();
   renderTranscript();
-  renderDocTabs();
+  updateInspectorTabsForMode();
   selectInspectorTab("plan");
   bindEvents();
   const host = document.getElementById("state-buttons");
@@ -808,10 +957,12 @@ window.__cghcV3Prototype = {
   assertVisualState,
   collectVisualState,
   runSequentialTransitionTest,
+  assertClickFromChat,
+  openFileFromChat,
   STATES,
   activateSurface,
-  setSidebarTab,
-  openFileDocument,
+  setWorkMode,
+  openFileInWorkspace,
   isElementVisible,
   visibleViews,
 };
