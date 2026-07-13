@@ -22,7 +22,6 @@ export function renderIntegrationSurface(container: HTMLElement, surface: Produc
     mount.dataset["integrationSurface"] = surface.id;
   }
 
-  const card = el("section", "integration-empty");
   const statusLabel =
     adapter?.statusLabel ??
     (surface.availability === "planned"
@@ -32,29 +31,22 @@ export function renderIntegrationSurface(container: HTMLElement, surface: Produc
         : "Chưa khả dụng");
   const description = adapter?.description ?? surface.description;
 
+  const card = el("section", "integration-empty");
   const iconWrap = el("div", "integration-empty__icon");
   iconWrap.append(icon(surface.icon, surface.label));
   card.append(
     iconWrap,
-    el("p", "integration-empty__eyebrow", statusLabel),
     el("h1", "integration-empty__title", surface.label),
-    el("p", "integration-empty__copy", description),
     el("span", "integration-empty__badge", statusLabel),
+    el("p", "integration-empty__copy", description),
   );
+
   if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
     card.append(
       el(
         "p",
         "integration-empty__note",
-        `Không hiển thị dữ liệu giả cho ${surface.dependency}; surface này chỉ xác nhận điều hướng và mount boundary cho team tích hợp.`,
-      ),
-    );
-  } else if (surface.availability === "planned") {
-    card.append(
-      el(
-        "p",
-        "integration-empty__note",
-        "Surface Code được lên kế hoạch; không có metric hay bản ghi mẫu trong bản build hiện tại.",
+        `Mount point ${surface.dependency} đã sẵn sàng; không hiển thị dữ liệu giả trước khi team tích hợp bàn giao.`,
       ),
     );
   }
