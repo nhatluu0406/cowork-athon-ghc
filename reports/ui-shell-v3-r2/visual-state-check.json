@@ -1,0 +1,195 @@
+{
+  "generatedAt": "2026-07-13T00:41:36.465Z",
+  "results": [
+    {
+      "state": "cowork-active",
+      "file": "cowork-1920.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "cowork-active",
+      "file": "cowork-1366.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "cowork-active",
+      "file": "cowork-900.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "sidebar-cowork",
+      "file": "sidebar-cowork.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "sidebar-workspace",
+      "file": "sidebar-workspace.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "workspace"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "file-document",
+      "file": "file-document.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "workspace"
+      ],
+      "visibleDocPanels": [
+        "file"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "cowork-inspector-open",
+      "file": "inspector-open.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": true,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "gateway",
+      "file": "gateway.png",
+      "visibleViews": [
+        "integration"
+      ],
+      "visibleSidebarPanels": [],
+      "visibleDocPanels": [],
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "knowledge-graph",
+      "file": "knowledge-graph.png",
+      "visibleViews": [
+        "integration"
+      ],
+      "visibleSidebarPanels": [],
+      "visibleDocPanels": [],
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "provider-missing",
+      "file": "provider-missing.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "state": "waiting-permission",
+      "file": "waiting-permission.png",
+      "visibleViews": [
+        "cowork"
+      ],
+      "visibleSidebarPanels": [
+        "cowork"
+      ],
+      "visibleDocPanels": [
+        "conversation"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    }
+  ]
+}
