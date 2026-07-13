@@ -24,7 +24,8 @@ export function parseUnifiedDiff(unified: string): readonly DiffLine[] {
   let oldN = 0;
   let newN = 0;
   let inHunk = false;
-  for (const raw of unified.split("\n")) {
+  for (const rawLine of unified.split("\n")) {
+    const raw = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
     const hunk = HUNK_HEADER.exec(raw);
     if (hunk !== null) {
       oldN = Number(hunk[1]);
