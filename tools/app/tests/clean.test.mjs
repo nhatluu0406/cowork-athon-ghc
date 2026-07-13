@@ -10,8 +10,7 @@ import {
 } from '../clean.mjs';
 
 const ROOT = resolve('clean-fixture-root'); // absolute, but never touched on disk
-const PRESERVE = ['.git', 'docs', '.agent-workflow', '.claude', 'CLAUDE.md', 'AGENTS.md',
-  '.loop-engineer/state', '.loop-engineer/checkpoints', '.loop-engineer/source', 'scripts', 'tools'];
+const PRESERVE = ['.git', 'docs', '.claude', 'CLAUDE.md', 'AGENTS.md', 'scripts', 'tools'];
 
 // A well-formed manifest whose cleanable entries are all safe relative paths.
 function goodManifest() {
@@ -68,7 +67,7 @@ test('assessCleanTarget allows genuine generated paths, refuses preserved paths'
   // preserve overlap (self, descendant, ancestor) is refused:
   assert.equal(assessCleanTarget('.git', PRESERVE).kind, 'preserve');
   assert.equal(assessCleanTarget('docs/sub', PRESERVE).kind, 'preserve');
-  assert.equal(assessCleanTarget('.loop-engineer', PRESERVE).kind, 'preserve'); // ancestor of preserved state
+  assert.equal(assessCleanTarget('.claude', PRESERVE).kind, 'preserve'); // ancestor of preserved path
 });
 
 test('resolveCleanTargets excludes preserve-overlapping paths from delete list', () => {
@@ -245,7 +244,7 @@ test('cleanCommand reports DELETE_FAILED when an rm throws', () => {
 test('preserve overlap folds case on Windows so a case-variant of a protected path is refused', () => {
   if (process.platform === 'win32') {
     // On the case-INSENSITIVE target fs these name the SAME real dir/file as the protected set.
-    for (const variant of ['Docs', '.GIT', 'CLAUDE.MD', '.Agent-Workflow', '.loop-engineer/Source', 'DOCS/sub']) {
+    for (const variant of ['Docs', '.GIT', 'CLAUDE.MD', '.Claude', 'DOCS/sub']) {
       assert.equal(assessCleanTarget(variant, PRESERVE).kind, 'preserve', `${variant} must be preserved`);
     }
   } else {

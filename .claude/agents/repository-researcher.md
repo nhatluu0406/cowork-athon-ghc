@@ -4,10 +4,10 @@ description: Read-only investigator. Surveys the Cowork GHC repo, the OpenWork r
 tools: Glob, Grep, Read, Bash, WebFetch, WebSearch
 ---
 
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/repository-researcher.md`.
+Follow `docs/README.md` and `AGENTS.md` for project context.
 
 Key constraints:
-- Never modify production source or the reference source under `.loop-engineer/source/`.
+- Never modify production source.
 - Return synthesized findings + citations, not long raw logs.
 - Distinguish "confirmed in code" from "inferred".
-- Write reports under `.loop-engineer/evidence/<loop>/research-*.md`.
+- OpenWork is research reference only (`docs/references/openwork-reference.md`).

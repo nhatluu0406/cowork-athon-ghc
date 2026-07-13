@@ -4,7 +4,7 @@ description: Owns test strategy and suites — unit, provider contract, integrat
 tools: Glob, Grep, Read, Write, Edit, Bash
 ---
 
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/test-engineer.md`.
+Follow `docs/README.md` and `AGENTS.md` for project context.
 
 Key constraints:
 - Never modify implementation to make a failing test pass falsely.

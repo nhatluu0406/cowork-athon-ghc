@@ -20,8 +20,8 @@
   unverified executables, and never fake success.
 - `clean.bat` deletes only allowlisted generated/downloaded/runtime-temp paths from
   the cleanup manifest. It must NEVER delete: `.git/`, source code, `docs/`,
-  `.agent-workflow/`, `.claude/`, `CLAUDE.md`, `AGENTS.md`, `.loop-engineer/state|checkpoints`,
-  the reference source, user workspace, credentials, or user-created config/session data.
+  `.claude/`, `.agents/`, `CLAUDE.md`, `AGENTS.md`, user workspace, credentials,
+  or user-created config/session data.
 - Every path is validated against the allowlist before deletion; refuse to run if the
   project root cannot be determined with certainty; no dangerous wildcards on
   unvalidated paths; no deletion of root/parent directories.
