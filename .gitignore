@@ -9,8 +9,13 @@ node_modules/
 **/node_modules/
 .pnp
 .pnp.js
+<<<<<<< HEAD
 app/backend/bin/
 app/llm-svc/target/
+=======
+backend/bin/
+llm-svc/target/
+>>>>>>> 2590b7e0b80e9e34eabc6e081142ee4d50ca0eb0
 
 # --- Build / compile output ---
 dist/
