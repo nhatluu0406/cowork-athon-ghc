@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   createSurfaceRegistry,
   visibleProductSurfaces,
+  PRODUCT_SURFACES,
   type ProductSurfaceId,
 } from "../src/surface-registry.js";
 import type {
@@ -40,7 +41,7 @@ test("production default exposes product rail surfaces with honest availability"
     ["gateway", "awaiting_integration"],
     ["knowledge", "awaiting_integration"],
     ["microsoft", "awaiting_integration"],
-    ["code", "planned"],
+    ["code", "available"],
   ]);
 });
 
@@ -82,4 +83,17 @@ test("D1-D4 integration slots are passive UI contracts", () => {
   assert.equal(microsoft.connectionState, "disconnected");
   assert.equal(knowledge.indexState, "not_indexed");
   assert.equal(gateway.health, "unknown");
+});
+
+test("code surface is available as Claude Code", () => {
+  const code = PRODUCT_SURFACES.find((s) => s.id === "code");
+  assert.equal(code?.availability, "available");
+  assert.equal(code?.label, "Claude Code");
+  assert.equal(code?.component, "ClaudeCodeSurface");
+});
+
+test("microsoft surface keeps awaiting_integration with its own view component", () => {
+  const ms = PRODUCT_SURFACES.find((s) => s.id === "microsoft");
+  assert.equal(ms?.availability, "awaiting_integration");
+  assert.equal(ms?.component, "MicrosoftSurfaceView");
 });
