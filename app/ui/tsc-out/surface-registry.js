@@ -71,8 +71,8 @@ export function visibleProductSurfaces(surfaces) {
     return surfaces.filter((surface) => surface.availability !== "hidden");
 }
 export const PRODUCT_SURFACES = createSurfaceRegistry();
-/** D3 graph tab is capability-gated; false until D3 integration merges. */
+/** V3 shows the graph tab as an internal Knowledge placeholder; D3 data remains unintegrated. */
 export function hasKnowledgeGraphCapability(_env = {}) {
-    return false;
+    return true;
 }
 //# sourceMappingURL=surface-registry.js.map
