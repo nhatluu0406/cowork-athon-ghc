@@ -141,12 +141,12 @@ export function mountSkillsSettingsPanel(
   function renderList(): void {
     list.replaceChildren();
     const visible = filteredSkills();
-    if (!skills.some((skill) => skill.source === "user_local")) {
+    if (skills.length === 0 && query.trim().length === 0) {
       list.append(
         el(
           "p",
           "skills-settings__empty",
-          "Chưa có Skill người dùng. Nhấn Tạo Skill để bắt đầu.",
+          "Chưa có Skill. Nhấn Tạo Skill để bắt đầu.",
         ),
       );
     }
@@ -182,7 +182,7 @@ export function mountSkillsSettingsPanel(
 
   function renderEditorEmpty(): void {
     editor.replaceChildren(
-      el("p", "skills-settings__placeholder", "Chọn một Skill hoặc tạo Skill mới."),
+      el("p", "skills-settings__placeholder", "Chọn một Skill để xem chi tiết, hoặc tạo Skill mới."),
     );
   }
 

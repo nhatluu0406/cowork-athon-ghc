@@ -48,9 +48,12 @@ export function mountWorkspaceCompanionPane(
   const pathLabel = el("span", "workspace-companion-pane__path", "Xem trước tệp");
   pathWrap.append(pathLabel);
   const statusBadge = el("span", "workspace-companion-pane__status", "Chưa chọn tệp");
-  const saveButton = el("button", "workspace-companion-pane__save", "Lưu") as HTMLButtonElement;
+  const saveButton = el("button", "workspace-companion-pane__save") as HTMLButtonElement;
   saveButton.type = "button";
   saveButton.hidden = true;
+  saveButton.dataset["tooltip"] = "Lưu tệp";
+  saveButton.setAttribute("aria-label", "Lưu tệp");
+  saveButton.append(icon("save", "Lưu tệp"));
   toolbar.append(pathWrap, statusBadge, saveButton);
 
   const body = el("div", "workspace-companion-pane__body");
