@@ -105,6 +105,7 @@ import { renderConversationProviderControl } from "./ui-shell/conversation-provi
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
+import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 
@@ -148,11 +149,30 @@ interface AppState {
   knowledgeTab: KnowledgeTab;
   serviceLabel: string;
   serviceOk: boolean;
+  permissionMode: PermissionMode;
 }
 
 type AppDom = AppFrameDom;
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
+const PERMISSION_MODE_STORAGE_KEY = "cowork-ghc.permission-mode";
+
+function readPermissionMode(): PermissionMode {
+  try {
+    const value = window.localStorage.getItem(PERMISSION_MODE_STORAGE_KEY);
+    return value === "workspace_auto" || value === "read_only" ? value : "ask";
+  } catch {
+    return "ask";
+  }
+}
+
+function storePermissionMode(mode: PermissionMode): void {
+  try {
+    window.localStorage.setItem(PERMISSION_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Local storage may be unavailable in hardened verification contexts; keep the in-memory mode.
+  }
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -277,19 +297,23 @@ function appendMessage(
   const p = document.createElement("p");
   p.textContent = text;
   textBox.append(p);
+  body.append(textBox);
+
+  const meta = el("div", "msg__meta");
   if (attachments !== undefined && attachments.length > 0) {
-    textBox.append(renderAttachmentMetaList(attachments));
+    meta.append(renderAttachmentMetaList(attachments));
   }
   if (skills !== undefined && skills.length > 0) {
     const skillWrap = el("div", "msg__skills");
     for (const skill of skills) {
-      const chip = el("span", "skill-use-chip", `Skill: ${skill.name} · v${skill.version}`);
-      chip.title = `${skill.source} · ${skill.contentHash}`;
+      const chip = el("span", "skill-use-chip", `${skill.name} · v${skill.version}`);
+      chip.dataset["tooltip"] = `Kỹ năng · ${skill.source}`;
+      chip.setAttribute("aria-label", `Kỹ năng ${skill.name}, phiên bản ${skill.version}`);
       skillWrap.append(chip);
     }
-    textBox.append(skillWrap);
+    meta.append(skillWrap);
   }
-  body.append(textBox);
+  if (meta.childElementCount > 0) body.append(meta);
   row.append(body);
   dom.transcriptInner.insertBefore(row, dom.thinking);
   dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
@@ -1564,7 +1588,15 @@ export function mountCoworkApp(root: HTMLElement): void {
     knowledgeTab: "base",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
+    permissionMode: readPermissionMode(),
   };
+
+  dom.permissionModeControl.setMode(state.permissionMode);
+  dom.permissionModeControl.root.addEventListener("permission-mode-change", (event) => {
+    const next = (event as CustomEvent<PermissionMode>).detail;
+    state.permissionMode = next;
+    storePermissionMode(next);
+  });
 
   const handlers = {
     onSelect: (id: string) => {
@@ -1721,6 +1753,7 @@ export function mountCoworkApp(root: HTMLElement): void {
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
               void capturePermissionBeforeSnapshot(state, request);

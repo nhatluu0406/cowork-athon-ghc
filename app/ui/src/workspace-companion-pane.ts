@@ -3,7 +3,7 @@
  */
 
 import type { ServiceClient } from "./service-client.js";
-import { el } from "./ui-shell/dom-utils.js";
+import { el, icon } from "./ui-shell/dom-utils.js";
 
 export type WorkspaceFileContentView = Awaited<ReturnType<ServiceClient["readWorkspaceFileContent"]>>;
 
@@ -43,19 +43,33 @@ export function mountWorkspaceCompanionPane(
 
   const root = el("div", "workspace-companion-pane");
   const toolbar = el("div", "workspace-companion-pane__toolbar");
-  const pathLabel = el("span", "workspace-companion-pane__path");
-  const statusBadge = el("span", "workspace-companion-pane__status");
-  statusBadge.hidden = true;
+  const pathWrap = el("div", "workspace-companion-pane__path-wrap");
+  pathWrap.append(icon("file", "Tệp đang mở"));
+  const pathLabel = el("span", "workspace-companion-pane__path", "Xem trước tệp");
+  pathWrap.append(pathLabel);
+  const statusBadge = el("span", "workspace-companion-pane__status", "Chưa chọn tệp");
   const saveButton = el("button", "workspace-companion-pane__save", "Lưu") as HTMLButtonElement;
   saveButton.type = "button";
   saveButton.hidden = true;
-  toolbar.append(pathLabel, statusBadge, saveButton);
+  toolbar.append(pathWrap, statusBadge, saveButton);
 
   const body = el("div", "workspace-companion-pane__body");
   const empty = el("div", "workspace-companion-pane__empty");
+  const emptyIcon = el("div", "workspace-companion-pane__empty-icon");
+  emptyIcon.append(icon("workspace", "Workspace"));
+  const formats = el("div", "workspace-companion-pane__formats");
+  for (const format of ["TXT", "MD", "DOCX", "PDF", "Ảnh", "XLSX"]) {
+    formats.append(el("span", "workspace-companion-pane__format", format));
+  }
   empty.append(
-    el("h2", "workspace-companion-pane__empty-title", "Chọn một tệp"),
-    el("p", "workspace-companion-pane__empty-copy", "Duyệt workspace ở sidebar trái để xem trước hoặc chỉnh sửa."),
+    emptyIcon,
+    el("h2", "workspace-companion-pane__empty-title", "Mở một tệp để bắt đầu"),
+    el(
+      "p",
+      "workspace-companion-pane__empty-copy",
+      "Chọn tệp ở sidebar để xem trước tại đây, rồi thảo luận hoặc yêu cầu Agent chỉnh sửa ở panel Cowork bên cạnh.",
+    ),
+    formats,
   );
   body.append(empty);
   root.append(toolbar, body);
@@ -148,6 +162,7 @@ export function mountWorkspaceCompanionPane(
     saveButton.disabled = true;
     revokeBlob();
     pathLabel.textContent = file.relativePath;
+    statusBadge.hidden = true;
     pathLabel.title = file.relativePath;
 
     if (file.kind === "missing") {
