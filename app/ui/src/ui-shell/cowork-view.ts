@@ -1,4 +1,5 @@
 import { createConversationProviderControl, type ConversationProviderControl } from "./conversation-provider-control.js";
+import { createPermissionModeControl, type PermissionModeControl } from "./permission-mode-control.js";
 import { el, icon } from "./dom-utils.js";
 
 export interface CoworkViewDom {
@@ -23,6 +24,7 @@ export interface CoworkViewDom {
   readonly sendButton: HTMLButtonElement;
   readonly cancelButton: HTMLButtonElement;
   readonly providerControl: ConversationProviderControl;
+  readonly permissionModeControl: PermissionModeControl;
   readonly skillsButton: HTMLButtonElement;
 }
 
@@ -42,7 +44,7 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
   continuationBanner.append(el("span", "continuation-banner__text", "Lịch sử đã lưu. Bật tiếp nối khi bạn muốn gửi lượt mới."));
   const continuationButton = el("button", "icon-btn icon-btn--sm continuation-banner__button") as HTMLButtonElement;
   continuationButton.type = "button";
-  continuationButton.title = "Tiếp tục cuộc trò chuyện";
+  continuationButton.dataset["tooltip"] = "Tiếp tục cuộc trò chuyện";
   continuationButton.setAttribute("aria-label", "Tiếp tục cuộc trò chuyện");
   continuationButton.append(icon("conversation", "Tiếp tục"));
   continuationBanner.append(continuationButton);
@@ -85,15 +87,16 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
   const composerBar = el("div", "composer__bar");
   const attachButton = el("button", "icon-btn icon-btn--sm attach-btn") as HTMLButtonElement;
   attachButton.type = "button";
-  attachButton.title = "Đính kèm tệp";
   attachButton.dataset["tooltip"] = "Đính kèm tệp";
   attachButton.setAttribute("aria-label", "Đính kèm tệp");
   attachButton.append(icon("attachment", "Đính kèm"));
 
+  const permissionModeControl = createPermissionModeControl();
+
   const skillsButton = el("button", "skills-btn composer-skills-btn") as HTMLButtonElement;
   skillsButton.type = "button";
   skillsButton.textContent = "Kỹ năng: 0";
-  skillsButton.title = "Kỹ năng";
+  skillsButton.dataset["tooltip"] = "Quản lý kỹ năng cho lượt chat";
   skillsButton.setAttribute("aria-label", "Mở Kỹ năng");
 
   const providerControl = createConversationProviderControl();
@@ -104,12 +107,11 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
 
   const sendButton = el("button", "icon-btn icon-btn--sm icon-btn--accent send-btn") as HTMLButtonElement;
   sendButton.type = "button";
-  sendButton.title = "Gửi";
   sendButton.dataset["tooltip"] = "Gửi";
   sendButton.setAttribute("aria-label", "Gửi");
   sendButton.append(icon("paper-plane", "Gửi"));
 
-  composerBar.append(attachButton, skillsButton, providerControl.root, el("span", "composer__spacer"), cancelButton, sendButton);
+  composerBar.append(attachButton, permissionModeControl.root, skillsButton, providerControl.root, el("span", "composer__spacer"), cancelButton, sendButton);
   composerBox.append(composerInput, attachmentChips, composerPreflight, composerBar);
   const composerHint = el("div", "composer__hint", "Enter để gửi, Shift+Enter xuống dòng");
   composer.append(composerBox, composerHint);
@@ -138,6 +140,7 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
     sendButton,
     cancelButton,
     providerControl,
+    permissionModeControl,
     skillsButton,
   };
 }

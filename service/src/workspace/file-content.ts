@@ -3,8 +3,8 @@
  * All paths are workspace-relative and confined via WorkspaceGuard.
  */
 
-import { readFile, stat, writeFile } from "node:fs/promises";
-import { extname } from "node:path";
+import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, extname, join } from "node:path";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import { createWorkspaceGuard } from "./guard.js";
@@ -64,6 +64,20 @@ function normalizeExt(relativePath: string): string {
   return extname(relativePath).toLowerCase();
 }
 
+async function atomicWriteFile(path: string, data: string | Buffer): Promise<void> {
+  const temp = join(
+    dirname(path),
+    `.cowork-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.tmp`,
+  );
+  try {
+    await writeFile(temp, data);
+    await rename(temp, path);
+  } catch (error) {
+    await rm(temp, { force: true }).catch(() => undefined);
+    throw error;
+  }
+}
+
 async function resolveFile(
   workspaceRoot: string,
   relativePath: string,
@@ -108,7 +122,7 @@ export async function readWorkspaceFileContent(
     return {
       relativePath,
       kind: "text",
-      editable: true,
+      editable: !truncated,
       content: slice.toString("utf8"),
       truncated,
       sizeBytes,
@@ -152,12 +166,12 @@ export async function readWorkspaceFileContent(
       return { relativePath, kind: "unsupported", editable: false, truncated: true, sizeBytes };
     }
     const buf = await readFile(realPath);
-    const result = await mammoth.convertToHtml({ buffer: buf });
+    const result = await mammoth.extractRawText({ buffer: buf });
     return {
       relativePath,
       kind: "docx",
       editable: false,
-      html: result.value,
+      content: result.value,
       truncated: false,
       sizeBytes,
     };
@@ -178,7 +192,7 @@ export async function readWorkspaceFileContent(
     return {
       relativePath,
       kind: "spreadsheet",
-      editable: true,
+      editable: false,
       sheets,
       truncated: false,
       sizeBytes,
@@ -201,25 +215,15 @@ export async function writeWorkspaceFileContent(
     if (Buffer.byteLength(content, "utf8") > TEXT_EDIT_MAX_BYTES) {
       throw new Error("Nội dung vượt giới hạn 512 KiB.");
     }
-    await writeFile(realPath, content, "utf8");
+    await atomicWriteFile(realPath, content);
     const info = await stat(realPath);
     return { relativePath, sizeBytes: info.size };
   }
 
   if (input.kind === "spreadsheet") {
-    if (!SPREADSHEET_EXTENSIONS.has(ext)) throw new Error("Chỉ hỗ trợ lưu .xlsx.");
-    const sheets = input.sheets ?? [];
-    const workbook = XLSX.utils.book_new();
-    for (const sheet of sheets) {
-      const ws = XLSX.utils.aoa_to_sheet(sheet.rows.map((row) => [...row]));
-      XLSX.utils.book_append_sheet(workbook, ws, sheet.name.slice(0, 31) || "Sheet1");
-    }
-    if (workbook.SheetNames.length === 0) {
-      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([[""]]), "Sheet1");
-    }
-    const out = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
-    await writeFile(realPath, out);
-    return { relativePath, sizeBytes: out.length };
+    throw new Error(
+      "Chỉnh sửa XLSX tạm thời bị vô hiệu hóa để tránh mất công thức, định dạng hoặc sheet khác.",
+    );
   }
 
   throw new Error("Loại ghi không được hỗ trợ.");

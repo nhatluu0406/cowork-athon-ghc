@@ -56,6 +56,7 @@ import {
   type SettingsView,
 } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
+import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
@@ -64,6 +65,12 @@ import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import {
+  detectFileActionIntent,
+  hasVerifiedFileAction,
+  markFileActionUnverified,
+  type FileActionIntent,
+} from "./file-action-integrity.js";
 import {
   createPendingAttachmentId,
   totalValidBytes,
@@ -98,6 +105,7 @@ import { renderConversationProviderControl } from "./ui-shell/conversation-provi
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
+import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 
@@ -130,6 +138,8 @@ interface AppState {
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
+  currentFileActionIntent: FileActionIntent | null;
+  fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
   continuationUnlocked: boolean;
   localServiceReady: boolean;
@@ -139,11 +149,30 @@ interface AppState {
   knowledgeTab: KnowledgeTab;
   serviceLabel: string;
   serviceOk: boolean;
+  permissionMode: PermissionMode;
 }
 
 type AppDom = AppFrameDom;
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
+const PERMISSION_MODE_STORAGE_KEY = "cowork-ghc.permission-mode";
+
+function readPermissionMode(): PermissionMode {
+  try {
+    const value = window.localStorage.getItem(PERMISSION_MODE_STORAGE_KEY);
+    return value === "workspace_auto" || value === "read_only" ? value : "ask";
+  } catch {
+    return "ask";
+  }
+}
+
+function storePermissionMode(mode: PermissionMode): void {
+  try {
+    window.localStorage.setItem(PERMISSION_MODE_STORAGE_KEY, mode);
+  } catch {
+    // Local storage may be unavailable in hardened verification contexts; keep the in-memory mode.
+  }
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -268,19 +297,23 @@ function appendMessage(
   const p = document.createElement("p");
   p.textContent = text;
   textBox.append(p);
+  body.append(textBox);
+
+  const meta = el("div", "msg__meta");
   if (attachments !== undefined && attachments.length > 0) {
-    textBox.append(renderAttachmentMetaList(attachments));
+    meta.append(renderAttachmentMetaList(attachments));
   }
   if (skills !== undefined && skills.length > 0) {
     const skillWrap = el("div", "msg__skills");
     for (const skill of skills) {
-      const chip = el("span", "skill-use-chip", `Skill: ${skill.name} · v${skill.version}`);
-      chip.title = `${skill.source} · ${skill.contentHash}`;
+      const chip = el("span", "skill-use-chip", `${skill.name} · v${skill.version}`);
+      chip.dataset["tooltip"] = `Kỹ năng · ${skill.source}`;
+      chip.setAttribute("aria-label", `Kỹ năng ${skill.name}, phiên bản ${skill.version}`);
       skillWrap.append(chip);
     }
-    textBox.append(skillWrap);
+    meta.append(skillWrap);
   }
-  body.append(textBox);
+  if (meta.childElementCount > 0) body.append(meta);
   row.append(body);
   dom.transcriptInner.insertBefore(row, dom.thinking);
   dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
@@ -829,6 +862,7 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
   try {
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
+    applyThemePreference(state.settings.general.theme);
   } catch {
     state.settings = null;
   }
@@ -915,6 +949,12 @@ function startStreamWatchdog(
   }, STREAM_POLL_INTERVAL_MS);
 }
 
+async function settleFileVerificationTasks(state: AppState): Promise<void> {
+  const tasks = [...state.fileVerificationTasks];
+  if (tasks.length === 0) return;
+  await Promise.allSettled(tasks);
+}
+
 async function finalizeConversationTurn(
   state: AppState,
   dom: AppDom,
@@ -957,6 +997,15 @@ async function finalizeConversationTurn(
     resolved = { text, outcome: "failed" };
   }
 
+  await settleFileVerificationTasks(state);
+  if (
+    terminal === "completed" &&
+    state.currentFileActionIntent !== null &&
+    !hasVerifiedFileAction(state.fileReviews, sessionId, state.currentFileActionIntent)
+  ) {
+    resolved = { ...resolved, text: markFileActionUnverified(resolved.text) };
+  }
+
   state.lastView = view;
   state.assistantText = resolved.text;
   const displayText = sanitizeAssistantForDisplay(resolved.text);
@@ -978,6 +1027,8 @@ async function finalizeConversationTurn(
   await state.conv.completeRuntimeTurn(sessionId, turnStatus);
   await persistActivity(state);
   state.finalizingTurn = false;
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.continuationUnlocked = true;
   renderState(dom, state, handlers);
 }
@@ -1012,7 +1063,15 @@ function bindEvStream(
         void captureBeforeOnToolStart(state, event);
       }
       if (event.kind === "file_mutation") {
-        void finalizeFileMutationReview(state, event, sessionId, dom, workspaceCompanionHandle);
+        const task = finalizeFileMutationReview(
+          state,
+          event,
+          sessionId,
+          dom,
+          workspaceCompanionHandle,
+        );
+        state.fileVerificationTasks.add(task);
+        void task.finally(() => state.fileVerificationTasks.delete(task));
       }
     },
     onView: (view) => {
@@ -1125,6 +1184,8 @@ async function switchConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
   await state.conv.select(id);
   state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
@@ -1173,6 +1234,8 @@ async function newConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.currentFileActionIntent = null;
+  state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
 
   const model = state.settings?.defaultModel;
@@ -1372,6 +1435,8 @@ async function sendPrompt(
   );
 
   resetLiveActivity(state);
+  state.currentFileActionIntent = detectFileActionIntent(prompt);
+  state.fileVerificationTasks.clear();
   const includedMetadata = dispatchPlan.includedMetadata;
   appendMessage(
     dom,
@@ -1413,6 +1478,8 @@ async function sendPrompt(
         enabledSkills,
       );
       if (!retryPlan.ok) {
+        state.currentFileActionIntent = null;
+        state.fileVerificationTasks.clear();
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", retryPlan.message);
         renderState(dom, state, handlers);
@@ -1420,10 +1487,14 @@ async function sendPrompt(
       }
       const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
       if (!second.accepted) {
+        state.currentFileActionIntent = null;
+        state.fileVerificationTasks.clear();
         await state.conv.setRuntimePhase("failed");
         appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
       }
     } else {
+      state.currentFileActionIntent = null;
+      state.fileVerificationTasks.clear();
       await state.conv.setRuntimePhase("failed");
       appendMessage(
         dom,
@@ -1506,6 +1577,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
+    currentFileActionIntent: null,
+    fileVerificationTasks: new Set(),
     pendingAttachments: [],
     continuationUnlocked: true,
     localServiceReady: false,
@@ -1515,7 +1588,15 @@ export function mountCoworkApp(root: HTMLElement): void {
     knowledgeTab: "base",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
+    permissionMode: readPermissionMode(),
   };
+
+  dom.permissionModeControl.setMode(state.permissionMode);
+  dom.permissionModeControl.root.addEventListener("permission-mode-change", (event) => {
+    const next = (event as CustomEvent<PermissionMode>).detail;
+    state.permissionMode = next;
+    storePermissionMode(next);
+  });
 
   const handlers = {
     onSelect: (id: string) => {
@@ -1672,6 +1753,7 @@ export function mountCoworkApp(root: HTMLElement): void {
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
               void capturePermissionBeforeSnapshot(state, request);
