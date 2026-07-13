@@ -41,6 +41,7 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   list: "allow",
   glob: "allow",
   grep: "allow",
+  delete: "ask",
   bash: "deny",
   webfetch: "deny",
   websearch: "deny",
@@ -103,6 +104,16 @@ export function buildOpencodeConfig(config: OpencodeProviderConfig): Record<stri
   return {
     $schema: "https://opencode.ai/config.json",
     ...(config.permission ? { permission: config.permission } : {}),
+    tools: {
+      patch: true,
+    },
+    agent: {
+      build: {
+        tools: {
+          patch: true,
+        },
+      },
+    },
     provider: { [config.providerId]: provider },
   };
 }

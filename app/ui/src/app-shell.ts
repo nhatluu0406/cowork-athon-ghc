@@ -517,7 +517,14 @@ async function capturePermissionBeforeSnapshot(
   }
 }
 
-const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit", "patch", "multiedit", "delete"]);
+const FILE_MUTATION_TOOL_NAMES = new Set([
+  "write",
+  "edit",
+  "patch",
+  "apply_patch",
+  "multiedit",
+  "delete",
+]);
 
 async function captureBeforeOnToolStart(
   state: AppState,
@@ -583,9 +590,12 @@ async function finalizeFileMutationReview(
     let after: FileSnapshotCapture | undefined;
     for (let attempt = 0; attempt < 6; attempt += 1) {
       after = await state.client.captureFileReviewSnapshot(relativePath);
-      if (after.exists && (after.kind !== "text" || after.content !== undefined || after.contentRedacted)) {
-        break;
-      }
+      const deleteReady = event.operation === "delete" && !after.exists;
+      const mutateReady =
+        event.operation !== "delete" &&
+        after.exists &&
+        (after.kind !== "text" || after.content !== undefined || after.contentRedacted);
+      if (deleteReady || mutateReady) break;
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
     if (after === undefined) return;
@@ -1728,7 +1738,6 @@ export function mountCoworkApp(root: HTMLElement): void {
                   );
             if (review !== undefined) {
               showFileReview(dom.activityPanel, review);
-              openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
               return;
             }
             openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
