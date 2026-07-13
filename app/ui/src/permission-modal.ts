@@ -60,6 +60,7 @@ const ACTION_LABEL: Record<PermissionActionKind, string> = {
   file_delete: "Xoá tệp",
   file_move: "Di chuyển tệp",
   command_exec: "Chạy lệnh",
+  ms365_write: "Tải lên SharePoint",
 };
 
 const APPROVAL_LABEL: Record<"standard" | "elevated", string> = {
