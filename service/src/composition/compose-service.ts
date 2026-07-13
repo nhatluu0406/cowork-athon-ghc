@@ -69,6 +69,22 @@ import {
 } from "./tier2-seams.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
+import { createWorkspaceLocalFileReader } from "./ms365-file-reader.js";
+import {
+  createHttpGraphClient,
+  createManualTokenProvider,
+  createMs365Connector,
+  createMs365Router,
+  createSharePointService,
+  isMs365Enabled,
+} from "../ms365/index.js";
+
+/**
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
+ * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
+ * summary, upload). No extra scope is requested.
+ */
+const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
@@ -191,6 +207,37 @@ export async function createCoworkService(
     stateFilePath: options.skillsStateFilePath ?? DEFAULT_SKILLS_STATE_PATH,
   });
 
+  // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
+  // reads the SAME `process.env` the rest of this module treats as the environment source
+  // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
+  // directly, e.g. `readE2eMockLlmBaseUrl` above). With the var unset, `ms365Router` is
+  // `undefined` and NOTHING below is constructed or mounted — the baseline is byte-for-byte
+  // unaffected. The SAME `ssrf` policy instance built above (line ~105) is reused here; no
+  // second SsrfPolicy is created.
+  const ms365Router = isMs365Enabled(process.env)
+    ? (() => {
+        const ms365Manual = createManualTokenProvider({ credentials: credentialService });
+        const ms365Connector = createMs365Connector({
+          manual: ms365Manual,
+          makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
+        });
+        const sharepoint = createSharePointService({
+          connector: ms365Connector,
+          files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
+        });
+        return createMs365Router({
+          connector: ms365Connector,
+          scopes: MS365_SCOPES,
+          tools: {
+            sharepoint,
+            connectionState: () => ms365Connector.connectionState(),
+            gate: permissionGate,
+            now,
+          },
+        });
+      })()
+    : undefined;
+
   const routers = [
     createWorkspaceRouter({
       recent: recentWorkspaces,
@@ -227,6 +274,7 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(ms365Router !== undefined ? [ms365Router] : []),
   ];
 
   const deps: CoworkServiceDeps = {
