@@ -2,12 +2,14 @@
  * Per-profile connection tester — isolated probe results by profile id.
  */
 
-import type { TestResult } from "@cowork-ghc/contracts";
+import type { ProviderError, TestResult } from "@cowork-ghc/contracts";
 import type { CredentialService } from "../credential/index.js";
 import {
+  CrossHostRedirectError,
   createHttpConnector,
   createProviderPort,
   createSsrfPolicy,
+  SsrfBlockedError,
   type DnsResolver,
   type ProviderPort,
 } from "../provider/index.js";
@@ -27,6 +29,30 @@ export interface ProviderConnectionTesterOptions {
   readonly dnsResolver: DnsResolver;
   readonly now?: () => string;
   readonly e2eMockLlmBaseUrl?: string;
+}
+
+const ENDPOINT_POLICY_ERROR: ProviderError = {
+  kind: "unavailable",
+  message: "The provider endpoint is invalid or not allowed by the connection policy.",
+  retryable: false,
+  recovery: "Check the base URL and test again.",
+};
+
+const REDIRECT_POLICY_ERROR: ProviderError = {
+  kind: "unavailable",
+  message: "The provider redirected the connection to an endpoint that is not allowed.",
+  retryable: false,
+  recovery: "Check the base URL or provider configuration and test again.",
+};
+
+function recoverableProfileTestResult(error: unknown): TestResult | undefined {
+  if (error instanceof SsrfBlockedError) {
+    return { ok: false, error: ENDPOINT_POLICY_ERROR };
+  }
+  if (error instanceof CrossHostRedirectError) {
+    return { ok: false, error: REDIRECT_POLICY_ERROR };
+  }
+  return undefined;
 }
 
 export function createProviderConnectionTester(
@@ -86,27 +112,37 @@ export function createProviderConnectionTester(
 
   return {
     async testProfile(profile) {
-      if (profile.credentialRef === undefined) {
-        const state: ProfileConnectionTestState = {
+      function record(result: TestResult): TestResult {
+        results.set(profile.id, {
           profileId: profile.id,
           testedAt: clock(),
+          ok: result.ok,
+          ...(result.ok || result.error?.message === undefined
+            ? {}
+            : { errorMessage: result.error.message }),
+        });
+        return result;
+      }
+
+      if (profile.credentialRef === undefined) {
+        return record({
           ok: false,
-          errorMessage: "Credential is not configured for this profile.",
-        };
-        results.set(profile.id, state);
-        return { ok: false, error: { kind: "auth_invalid", message: "Credential is not configured for this profile.", retryable: false, recovery: "Configure API key." } };
+          error: {
+            kind: "auth_invalid",
+            message: "Credential is not configured for this profile.",
+            retryable: false,
+            recovery: "Configure API key.",
+          },
+        });
       }
       const port = portForProfile(profile);
-      const result = await port.testConnection(CUSTOM_OPENAI_COMPAT_ID);
-      results.set(profile.id, {
-        profileId: profile.id,
-        testedAt: clock(),
-        ok: result.ok,
-        ...(result.ok || result.error?.message === undefined
-          ? {}
-          : { errorMessage: result.error.message }),
-      });
-      return result;
+      try {
+        return record(await port.testConnection(CUSTOM_OPENAI_COMPAT_ID));
+      } catch (error) {
+        const recoverable = recoverableProfileTestResult(error);
+        if (recoverable !== undefined) return record(recoverable);
+        throw error;
+      }
     },
 
     lastResultFor(profileId) {
