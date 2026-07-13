@@ -140,12 +140,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     root,
     shellFrame,
     drawerScrim,
-    serviceStatus: statusBar.service,
-    providerStatus: statusBar.provider,
-    serviceDetail: statusBar.service,
+    serviceStatus: statusBar.serviceLabel,
+    providerStatus: statusBar.providerLabel,
+    serviceDetail: statusBar.serviceLabel,
     statusBar,
     workspaceLabel: sidebar.workspaceLabel,
-    modelLabel: statusBar.provider,
+    modelLabel: statusBar.providerLabel,
     sessionSearch: sidebar.sessionSearch,
     sessionList: sidebar.sessionList,
     chatTitle: cowork.chatTitle,
@@ -361,22 +361,18 @@ function createSettingsSurface(): {
   root.setAttribute("aria-label", "Cài đặt");
 
   const header = el("div", "settings-surface__header");
-  const titleBlock = el("div", "settings-surface__header-text");
-  titleBlock.append(
-    el("p", "settings-surface__eyebrow", "Cowork GHC"),
-    el("h1", "settings-surface__title", "Cài đặt"),
-  );
-  const actions = el("div", "settings-surface__actions");
-  const backButton = el("button", "settings-surface__back", "Trở về") as HTMLButtonElement;
+  const backButton = el("button", "icon-btn settings-surface__back") as HTMLButtonElement;
   backButton.type = "button";
+  backButton.dataset["tooltip"] = "Quay lại";
+  backButton.setAttribute("aria-label", "Quay lại");
+  backButton.append(icon("arrow-left", "Quay lại"));
+  const titleBlock = el("div", "settings-surface__header-text");
+  titleBlock.append(el("h1", "settings-surface__title", "Cài đặt"));
   const closeButton = el("button", "icon-btn settings-surface__close") as HTMLButtonElement;
   closeButton.type = "button";
-  closeButton.dataset["tooltip"] = "Đóng cài đặt";
-  closeButton.dataset["tooltip"] = "Đóng cài đặt";
+  closeButton.hidden = true;
   closeButton.setAttribute("aria-label", "Đóng cài đặt");
-  closeButton.append(icon("panel-right-close", "Đóng cài đặt"));
-  actions.append(backButton, closeButton);
-  header.append(titleBlock, actions);
+  header.append(backButton, titleBlock);
 
   const layout = el("div", "settings-surface__layout");
   const nav = el("nav", "settings-surface__nav");

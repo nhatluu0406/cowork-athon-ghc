@@ -52,6 +52,29 @@ test("localServiceStatus distinguishes local service phases", () => {
   assert.match(down.label, /Local service: Không khả dụng/);
 });
 
+test("providerStatus treats an untested active profile as warning, not healthy", () => {
+  const settings: SettingsView = {
+    ...baseSettings(),
+    providerProfiles: [
+      {
+        id: "deepseek-main",
+        displayName: "DeepSeek",
+        providerType: "deepseek",
+        baseUrl: "https://api.deepseek.com/v1",
+        modelId: "deepseek-chat",
+        createdAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+        credentialConfigured: true,
+        isActive: true,
+      },
+    ],
+    activeProfileId: "deepseek-main",
+  };
+  const copy = providerStatus(settings, "unknown");
+  assert.equal(copy.label, "DeepSeek · Chưa kiểm tra");
+  assert.equal(copy.ok, false);
+});
+
 test("providerStatus reports missing credential separately from local service", () => {
   const settings = baseSettings();
   const noCred: SettingsView = {

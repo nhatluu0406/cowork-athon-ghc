@@ -3,6 +3,7 @@
  */
 
 import type { TestResult } from "@cowork-ghc/contracts";
+import { createProductIcon } from "./product-icons.js";
 import type {
   ProviderProfileType,
   ProviderProfileView,
@@ -43,6 +44,10 @@ function el<K extends keyof HTMLElementTagNameMap>(
   node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+}
+
+function icon(name: Parameters<typeof createProductIcon>[0], label?: string): SVGSVGElement {
+  return createProductIcon(name, label);
 }
 
 function userFacingProviderError(error?: { message?: string } | string): string {
@@ -101,8 +106,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const formView = el("div", "provider-profiles__form-view");
   formView.hidden = true;
   const formTitle = el("h3", "provider-profiles__form-title");
-  const backBtn = el("button", "provider-profiles__back", "← Danh sách") as HTMLButtonElement;
+  const backBtn = el("button", "provider-profiles__back") as HTMLButtonElement;
   backBtn.type = "button";
+  backBtn.dataset["tooltip"] = "Quay lại danh sách";
+  backBtn.setAttribute("aria-label", "Quay lại danh sách");
+  backBtn.append(icon("arrow-left", "Quay lại"), el("span", "provider-profiles__back-label", "Danh sách"));
 
   const nameLabel = el("label", "llm-field", "Tên hiển thị");
   const nameInput = document.createElement("input");
@@ -144,7 +152,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   deleteCredBtn.type = "button";
   const testBtn = el("button", "llm-test-connection", "Kiểm tra kết nối") as HTMLButtonElement;
   testBtn.type = "button";
-  const setActiveBtn = el("button", "provider-profiles__set-active", "Đặt làm active") as HTMLButtonElement;
+  const setActiveBtn = el("button", "provider-profiles__set-active", "Đặt làm mặc định") as HTMLButtonElement;
   setActiveBtn.type = "button";
   const deleteBtn = el("button", "provider-profiles__delete", "Xoá hồ sơ") as HTMLButtonElement;
   deleteBtn.type = "button";
@@ -276,7 +284,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       const name = el("span", "provider-profiles__item-name", profile.displayName);
       if (profile.isActive) {
         name.append(document.createTextNode(" "));
-        const badge = el("span", "provider-profiles__active-badge", "Đang dùng");
+        const badge = el("span", "provider-profiles__active-badge", "Mặc định");
         name.append(badge);
       }
       const meta = el(
@@ -285,8 +293,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
         `${profile.modelId} · ${profile.credentialConfigured ? "Đã cấu hình" : "Chưa cấu hình"}`,
       );
       head.append(name, meta);
-      const editButton = el("button", "provider-profiles__edit", "Sửa") as HTMLButtonElement;
+      const editButton = el("button", "provider-profiles__edit") as HTMLButtonElement;
       editButton.type = "button";
+      editButton.dataset["tooltip"] = "Sửa kết nối";
+      editButton.setAttribute("aria-label", `Sửa kết nối ${profile.displayName}`);
+      editButton.append(icon("pencil", "Sửa"));
       editButton.addEventListener("click", () => showForm("edit", profile));
       item.append(head, editButton);
       list.append(item);
