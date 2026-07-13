@@ -464,6 +464,24 @@ export interface ServiceClient {
   setSkillEnabled(id: string, enabled: boolean): Promise<SkillView>;
   enabledSkillSnapshots(): Promise<readonly EnabledSkillSnapshot[]>;
   previewSkill(id: string): Promise<{ readonly content: string; readonly truncated: boolean }>;
+  readSkillContent(id: string): Promise<string>;
+  createSkill(input: {
+    readonly id?: string;
+    readonly name: string;
+    readonly description: string;
+    readonly version: string;
+    readonly body: string;
+  }): Promise<SkillView>;
+  updateSkill(
+    id: string,
+    input: {
+      readonly name: string;
+      readonly description: string;
+      readonly version: string;
+      readonly body: string;
+    },
+  ): Promise<SkillView>;
+  deleteSkill(id: string): Promise<void>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -809,6 +827,21 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       (await call<{ preview: { readonly content: string; readonly truncated: boolean } }>(
         `/v1/skills/${encodeURIComponent(id)}/preview`,
       )).preview,
+    readSkillContent: async (id) =>
+      (await call<{ content: string }>(`/v1/skills/${encodeURIComponent(id)}/content`)).content,
+    createSkill: async (input) =>
+      (await call<{ skill: SkillView }>("/v1/skills", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })).skill,
+    updateSkill: async (id, input) =>
+      (await call<{ skill: SkillView }>(`/v1/skills/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      })).skill,
+    deleteSkill: async (id) => {
+      await call<{ ok: boolean }>(`/v1/skills/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
 
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {

@@ -375,6 +375,141 @@ textarea,
   max-width: 620px;
 }
 
+.skills-settings__title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.skills-settings__intro,
+.skills-settings__status,
+.skills-settings__meta,
+.skills-settings__note,
+.skills-settings__placeholder,
+.skills-settings__empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.skills-settings__toolbar {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.skills-settings__search {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.skills-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 420px;
+}
+
+.skills-settings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  max-height: 520px;
+  padding-right: 4px;
+}
+
+.skills-settings__item {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.skills-settings__item--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.skills-settings__item-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.skills-settings__item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.skills-settings__editor {
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+.skills-settings__field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.skills-settings__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.skills-settings__input,
+.skills-settings__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--paper);
+  font: inherit;
+}
+
+.skills-settings__textarea {
+  resize: vertical;
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.45;
+}
+
+.skills-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.skills-settings__delete {
+  color: var(--danger, #dc2626);
+}
+
+.skills-settings__error {
+  color: var(--danger, #dc2626);
+  font-size: 13px;
+}
+
+@media (max-width: 1366px) {
+  .skills-settings__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skills-settings__list {
+    max-height: 220px;
+  }
+}
+
 /* ── Inspector: docked column on desktop, flex column full height ── */
 .inspector-shell {
   grid-area: inspector;
@@ -612,7 +747,7 @@ textarea,
   }
 
   .settings-surface__nav {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     border-right: 0;
     border-bottom: 1px solid var(--line-soft);
   }
