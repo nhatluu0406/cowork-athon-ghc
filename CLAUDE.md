@@ -4,10 +4,11 @@ Cowork GHC is a Windows desktop AI cowork product. The active baseline is the pa
 
 ## Read First
 
-1. `docs/product/current-status.md`
-2. `docs/product/productization-roadmap.md`
-3. The relevant architecture or quality document
-4. The current Git diff
+1. `docs/README.md`
+2. `docs/product/current-status.md`
+3. `docs/product/roadmap.md`
+4. The relevant architecture or quality document
+5. The current Git diff
 
 ## Default Process
 
@@ -24,17 +25,11 @@ Read current status
 → commit
 ```
 
-No fan-out for routine work. Use focused tests. Use packaged verification for user-facing acceptance.
-Commit at meaningful product-slice boundaries.
+No fan-out for routine work. Use `scripts\verify-fast.bat` before commit when touching product code.
+Use packaged verification for user-facing acceptance. Commit at meaningful product-slice boundaries.
 
 Independent review is required only for credential/security changes, runtime/process changes,
 release-critical packaged changes, or large architecture changes.
-
-## Loop Engineer
-
-`.loop-engineer/` is `MAINTENANCE_ONLY`: provenance, evidence, and optional verification tooling.
-Do not start the old Loop Engineer workflow unless explicitly requested.
-Do not start `L7` automatically.
 
 Web / Next.js remains `DEFERRED`.
 
