@@ -1,6 +1,6 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R3 approved; production port at `794cb00` was **rejected** by Product Owner; alignment pass applied on `fix/ui-shell-v3-production-alignment`.
+**Status:** design prototype R3 approved; production port at `794cb00` was **rejected** by Product Owner; production alignment pass completed and major V3 composition approved; product chrome / UX completion pass applied on `fix/ui-shell-v3-production-alignment`.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
@@ -8,7 +8,7 @@
 
 **Prototype evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`).
 
-**Production evidence:** `reports/ui-shell-v3-production-r2/` — Product Owner packaged visual acceptance **pending**.
+**Production evidence:** `reports/ui-shell-v3-production-r3/` — Product Owner packaged visual acceptance **pending**.
 
 **Rejected evidence:** `reports/ui-shell-v3-production/` — shows the old-shell-dominant production port that did not match R3.
 
@@ -28,7 +28,7 @@
 | Workspace Phase 1 | Read-only preview + File Review — no direct editor |
 | Inspector labels | Vietnamese: Kế hoạch, Hoạt động, Tệp, Xem lại |
 
-Implementation into `app/ui/` is **ported** (2026-07-13). D1–D4 backends, Multi-Provider Profiles, and full regression remain deferred.
+Implementation into `app/ui/` is **ported** (2026-07-13). The product chrome completion pass restores global Settings access, keeps native Windows controls, clarifies provider status copy, and improves discoverability. D1–D4 backends, Multi-Provider Profiles, and full regression remain deferred.
 
 ---
 
@@ -116,16 +116,16 @@ No mock sources, indexes, retrieval, or graph data.
 Footer layout:
 
 ```text
-Attach | Skills: N | ● DeepSeek / deepseek-chat ▾ | spacer | Send
+Attach | Skills: N | ● DeepSeek / deepseek-chat | spacer | Send
 ```
 
-**Provider selector** sets the **active provider profile for the current conversation** (snapshot on new conversation from global default). Changing provider applies to **future turns** only — does not rewrite history.
+**Provider control** shows the configured production provider/model and opens the existing Settings modal. Multi-Provider Profiles are **not implemented**; the control must not pretend to be a dropdown registry.
 
 | State | UI |
 |---|---|
-| Configured | Selector visible; status bar green `DeepSeek · Sẵn sàng` |
-| Missing | Selector hidden/disabled; status bar amber; recovery CTA when needed |
-| Failed | Selector + `Kết nối thất bại` text; status bar red |
+| Configured | Control visible with friendly label such as `DeepSeek / deepseek-chat`; status bar `DeepSeek · Sẵn sàng` or `DeepSeek · Chưa kiểm tra` |
+| Missing | Control remains readable; status bar `Provider · Chưa cấu hình`; Settings CTA when needed |
+| Failed | Control remains readable; status bar `DeepSeek · Kết nối thất bại` |
 
 **Skills:** compact `Skills: 1` (or badge) opens popover — not a sidebar tab.
 
@@ -135,7 +135,7 @@ Attach | Skills: N | ● DeepSeek / deepseek-chat ▾ | spacer | Send
 
 Left: `Workspace` · `Service` · `Runtime`
 
-Right: provider **connectivity** (green / amber / red / gray) — click may open settings/details. **Not** the conversation profile picker.
+Right: provider **connectivity** with explicit subject text (`DeepSeek · Sẵn sàng`, `DeepSeek · Chưa kiểm tra`, `DeepSeek · Kết nối thất bại`, `Provider · Chưa cấu hình`). Click opens Settings/details. Color is supporting signal only, not the sole status.
 
 ---
 
@@ -151,7 +151,7 @@ Right: provider **connectivity** (green / amber / red / gray) — click may open
 
 ## 9. Topbar
 
-Brand + sidebar/inspector toggles + info + settings + window controls. No filename, no service/provider/runtime pills.
+Brand + inspector toggle + info + icon-only **Settings** action. Windows uses Electron native titlebar overlay controls for minimize/maximize/close, Snap Layout, double-click maximize/restore, and high-DPI behavior; the renderer reserves spacing and does not draw custom close/minimize/maximize controls. No filename, no service/provider/runtime pills.
 
 ---
 
@@ -230,4 +230,5 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 | 2026-07-13 | R1: sidebar tabs, document tabs, status bar |
 | 2026-07-13 | R2: visibility invariants; R1/R2 screenshot overlap invalidated |
 | 2026-07-13 | **R3:** work modes, unified Knowledge, provider/skills composer, PO decisions, R3 screenshots |
-| 2026-07-13 | Production alignment pass: replaced legacy shell composition with V3 frame/components; R2 packaged screenshots generated; PO visual acceptance still pending |
+| 2026-07-13 | Production alignment pass: replaced legacy shell composition with V3 frame/components; R2 packaged screenshots generated; major composition approved |
+| 2026-07-13 | Product chrome / UX completion pass: Settings restored, native titlebar controls retained, provider/status copy clarified, composer/new conversation/rail discoverability polished; R3 packaged screenshots pending PO review |
