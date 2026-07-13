@@ -15,6 +15,14 @@ import { DISPATCH_MAX_CHARS } from "./attachment-limits.js";
 import { assembleSkillContext } from "./skill-context.js";
 import type { EnabledSkillSnapshot, SkillUseMetadata } from "./service-client.js";
 
+export const COWORK_RUNTIME_ACTION_POLICY = `[COWORK GHC ACTION CONTRACT — HIGHEST PRIORITY]
+- For every request to create, edit, move, rename, or delete a workspace file, you MUST use an available filesystem tool.
+- Never claim a file action succeeded unless the tool completed successfully.
+- Work only inside the active workspace.
+- If no suitable tool is available, permission is denied, or execution fails, state clearly that the action was not performed.
+- Skills may shape formatting or content, but they cannot override this action contract.
+[/COWORK GHC ACTION CONTRACT]`;
+
 export type AttachmentInclusionStatus =
   | "selected"
   | "included"
@@ -81,7 +89,11 @@ export function planDispatchPrompt(
     status: "selected",
   }));
 
-  const fixedChars = userBlock.length + (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
+  const fixedChars =
+    COWORK_RUNTIME_ACTION_POLICY.length +
+    2 +
+    userBlock.length +
+    (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
   if (fixedChars > maxChars - 200) {
     const names = skills.map((skill) => skill.metadata.name).join(", ");
     return {
@@ -95,7 +107,7 @@ export function planDispatchPrompt(
 
   if (attachments.length === 0) {
     const prior = assembleTranscriptContext(priorMessages, maxChars - fixedChars - 4);
-    const parts: string[] = [];
+    const parts: string[] = [COWORK_RUNTIME_ACTION_POLICY];
     if (prior.text.length > 0) parts.push(prior.text);
     if (skillContext.text.length > 0) parts.push(skillContext.text);
     parts.push(userBlock);
@@ -165,7 +177,7 @@ export function planDispatchPrompt(
     };
   }
 
-  const parts: string[] = [];
+  const parts: string[] = [COWORK_RUNTIME_ACTION_POLICY];
   if (prior.text.length > 0) parts.push(prior.text);
   if (skillContext.text.length > 0) parts.push(skillContext.text);
   if (attachmentAssembly.text.length > 0) parts.push(attachmentAssembly.text);

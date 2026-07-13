@@ -11,17 +11,19 @@ import { createConversationManager, formatConversationMeta, needsContinuation, }
 import { createReadinessController } from "./readiness-controller.js";
 import { assessSendPreflight, buildReadinessInput, localServiceStatus, providerModelLabel, providerStatus, shouldShowContinuationBanner, } from "./provider-readiness.js";
 import { startEvStream } from "./ev-stream-client.js";
-import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
+import { mountProviderProfilesPanel } from "./provider-profiles-panel.js";
 import { createPermissionController } from "./permission-controller.js";
 import { createServiceClient, ServiceClientError, } from "./service-client.js";
 import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
+import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import { detectFileActionIntent, hasVerifiedFileAction, markFileActionUnverified, } from "./file-action-integrity.js";
 import { createPendingAttachmentId, totalValidBytes, } from "./attachment-pending.js";
 import { resolveFinalAssistantText, runtimePhaseForCompleted, shouldPollSessionView, STREAM_POLL_INTERVAL_MS, STREAM_STALL_AFTER_ACTIVITY_MS, STREAM_WATCHDOG_MS, mapTerminalToRuntimePhase, } from "./session-finalization.js";
 import { createProductIcon } from "./product-icons.js";
@@ -29,9 +31,11 @@ import { PRODUCT_SURFACES, hasKnowledgeGraphCapability } from "./surface-registr
 import { createAppFrame } from "./ui-shell/create-app-frame.js";
 import { applyShellLayoutClasses, applyWorkMode, shellLayoutModeForSurface, } from "./ui-shell/shell-layout.js";
 import { renderKnowledgeTab, setKnowledgeGraphCapability, } from "./ui-shell/knowledge-view.js";
+import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
-import { openWorkspaceFileInView } from "./ui-shell/workspace-view.js";
+import { mountWorkspaceCompanionPane } from "./workspace-companion-pane.js";
+let workspaceCompanionHandle = null;
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -42,23 +46,6 @@ function el(tag, className, text) {
 }
 function icon(name, label) {
     return createProductIcon(name, label);
-}
-function renderIntegrationSurface(container, surface) {
-    container.replaceChildren();
-    const card = el("section", "integration-empty");
-    const eyebrow = surface.availability === "planned"
-        ? "Planned"
-        : surface.dependency !== undefined
-            ? `Chờ tích hợp ${surface.dependency}`
-            : "Chưa khả dụng";
-    const iconWrap = el("div", "integration-empty__icon");
-    iconWrap.append(icon(surface.icon, surface.label));
-    card.append(iconWrap, el("p", "integration-empty__eyebrow", eyebrow), el("h1", "integration-empty__title", surface.label));
-    card.append(el("p", "integration-empty__copy", surface.description));
-    if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
-        card.append(el("p", "integration-empty__note", `Không hiển thị dữ liệu giả cho ${surface.dependency}; surface này chỉ xác nhận điều hướng và contract UI.`));
-    }
-    container.append(card);
 }
 function surfaceById(id) {
     return PRODUCT_SURFACES.find((surface) => surface.id === id) ?? PRODUCT_SURFACES[0];
@@ -353,7 +340,14 @@ async function capturePermissionBeforeSnapshot(state, request) {
         // best effort
     }
 }
-const FILE_MUTATION_TOOL_NAMES = new Set(["write", "edit", "patch", "multiedit", "delete"]);
+const FILE_MUTATION_TOOL_NAMES = new Set([
+    "write",
+    "edit",
+    "patch",
+    "apply_patch",
+    "multiedit",
+    "delete",
+]);
 async function captureBeforeOnToolStart(state, event) {
     if (state.client === null || state.activeWorkspace === null)
         return;
@@ -386,7 +380,7 @@ async function captureBeforeOnToolStart(state, event) {
         // best effort
     }
 }
-async function finalizeFileMutationReview(state, event, sessionId, dom) {
+async function finalizeFileMutationReview(state, event, sessionId, dom, workspaceCompanion) {
     if (state.client === null)
         return;
     const relativePath = toRelativePath(event.path, state.activeWorkspace);
@@ -413,9 +407,12 @@ async function finalizeFileMutationReview(state, event, sessionId, dom) {
         let after;
         for (let attempt = 0; attempt < 6; attempt += 1) {
             after = await state.client.captureFileReviewSnapshot(relativePath);
-            if (after.exists && (after.kind !== "text" || after.content !== undefined || after.contentRedacted)) {
+            const deleteReady = event.operation === "delete" && !after.exists;
+            const mutateReady = event.operation !== "delete" &&
+                after.exists &&
+                (after.kind !== "text" || after.content !== undefined || after.contentRedacted);
+            if (deleteReady || mutateReady)
                 break;
-            }
             await new Promise((resolve) => setTimeout(resolve, 250));
         }
         if (after === undefined)
@@ -435,6 +432,10 @@ async function finalizeFileMutationReview(state, event, sessionId, dom) {
         state.fileReviews = [...state.fileReviews, review];
         refreshActivityUi(state, dom);
         void persistActivity(state);
+        const openPath = workspaceCompanion?.getOpenPath() ?? null;
+        if (openPath !== null && openPath === relativePath && event.operation !== "delete") {
+            workspaceCompanion?.showAgentUpdated();
+        }
     }
     catch {
         // best effort
@@ -520,8 +521,9 @@ function renderState(dom, state, handlers) {
     applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
     dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
     dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
-    dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
+    dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
     dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
+    dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
     dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
     dom.integrationSurface.hidden = settingsOpen || isCoworkSurface || isKnowledgeSurface;
     if (isKnowledgeSurface) {
@@ -577,7 +579,7 @@ function renderState(dom, state, handlers) {
     const composerText = textFromComposer(dom.composerInput);
     renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
     renderCoworkEmptyState(dom, state, sendPreflight);
-    dom.composer.hidden = !isCoworkSurface || state.workMode !== "cowork";
+    dom.composer.hidden = settingsOpen || !isCoworkSurface;
     dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
     dom.composer.classList.toggle("is-locked", locked);
     dom.composerInput.contentEditable = locked ? "false" : "true";
@@ -598,7 +600,7 @@ function renderState(dom, state, handlers) {
     dom.cancelButton.disabled = phase !== "running";
     dom.newConversationButton.disabled =
         phase === "starting" || phase === "running" || state.activeWorkspace === null;
-    if (isCoworkSurface && state.workMode === "cowork") {
+    if (isCoworkSurface && (state.workMode === "cowork" || state.workMode === "workspace")) {
         renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
     }
     renderPendingAttachmentChips(dom, state.pendingAttachments, (id) => {
@@ -691,6 +693,12 @@ function startStreamWatchdog(state, dom, sessionId, handlers) {
         })();
     }, STREAM_POLL_INTERVAL_MS);
 }
+async function settleFileVerificationTasks(state) {
+    const tasks = [...state.fileVerificationTasks];
+    if (tasks.length === 0)
+        return;
+    await Promise.allSettled(tasks);
+}
 async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
     if (view.terminal === null || state.finalizingTurn)
         return;
@@ -729,6 +737,12 @@ async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
             "Có lỗi xảy ra trong phiên.";
         resolved = { text, outcome: "failed" };
     }
+    await settleFileVerificationTasks(state);
+    if (terminal === "completed" &&
+        state.currentFileActionIntent !== null &&
+        !hasVerifiedFileAction(state.fileReviews, sessionId, state.currentFileActionIntent)) {
+        resolved = { ...resolved, text: markFileActionUnverified(resolved.text) };
+    }
     state.lastView = view;
     state.assistantText = resolved.text;
     const displayText = sanitizeAssistantForDisplay(resolved.text);
@@ -747,6 +761,8 @@ async function finalizeConversationTurn(state, dom, view, handlers, sessionId) {
     await state.conv.completeRuntimeTurn(sessionId, turnStatus);
     await persistActivity(state);
     state.finalizingTurn = false;
+    state.currentFileActionIntent = null;
+    state.fileVerificationTasks.clear();
     state.continuationUnlocked = true;
     renderState(dom, state, handlers);
 }
@@ -776,7 +792,9 @@ function bindEvStream(state, dom, handlers, sessionId) {
                 void captureBeforeOnToolStart(state, event);
             }
             if (event.kind === "file_mutation") {
-                void finalizeFileMutationReview(state, event, sessionId, dom);
+                const task = finalizeFileMutationReview(state, event, sessionId, dom, workspaceCompanionHandle);
+                state.fileVerificationTasks.add(task);
+                void task.finally(() => state.fileVerificationTasks.delete(task));
             }
         },
         onView: (view) => {
@@ -872,6 +890,8 @@ async function switchConversation(state, dom, handlers, id) {
     stopStream(state);
     state.activeAssistant = null;
     state.assistantText = "";
+    state.currentFileActionIntent = null;
+    state.fileVerificationTasks.clear();
     state.lastView = initialSessionView("");
     await state.conv.select(id);
     state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
@@ -913,9 +933,21 @@ async function newConversation(state, dom, handlers) {
     stopStream(state);
     state.activeAssistant = null;
     state.assistantText = "";
+    state.currentFileActionIntent = null;
+    state.fileVerificationTasks.clear();
     state.lastView = initialSessionView("");
     const model = state.settings?.defaultModel;
-    await state.conv.createNew(state.activeWorkspace, model?.providerID, model?.modelID);
+    const activeProfile = state.settings?.providerProfiles?.find((p) => p.isActive);
+    const providerSnapshot = activeProfile !== undefined
+        ? {
+            profileId: activeProfile.id,
+            displayName: activeProfile.displayName,
+            providerType: activeProfile.providerType,
+            modelId: activeProfile.modelId,
+            baseUrl: activeProfile.baseUrl,
+        }
+        : undefined;
+    await state.conv.createNew(state.activeWorkspace, model?.providerID, model?.modelID, providerSnapshot);
     clearTranscript(dom);
     setComposerText(dom.composerInput, "");
     resetLiveActivity(state);
@@ -1066,6 +1098,8 @@ async function sendPrompt(state, dom, readiness, handlers) {
         return;
     const { runtimeSessionId } = await ensureRuntimeSession(state, dom, readiness, handlers);
     resetLiveActivity(state);
+    state.currentFileActionIntent = detectFileActionIntent(prompt);
+    state.fileVerificationTasks.clear();
     const includedMetadata = dispatchPlan.includedMetadata;
     appendMessage(dom, "user", prompt, false, includedMetadata.length > 0 ? includedMetadata : undefined, dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined);
     state.activeAssistant = appendMessage(dom, "assistant", "");
@@ -1088,6 +1122,8 @@ async function sendPrompt(state, dom, readiness, handlers) {
             const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
             const retryPlan = planDispatchPrompt(retry.contextMessages, snapshots, prompt, undefined, enabledSkills);
             if (!retryPlan.ok) {
+                state.currentFileActionIntent = null;
+                state.fileVerificationTasks.clear();
                 await state.conv.setRuntimePhase("failed");
                 appendMessage(dom, "assistant", retryPlan.message);
                 renderState(dom, state, handlers);
@@ -1095,11 +1131,15 @@ async function sendPrompt(state, dom, readiness, handlers) {
             }
             const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
             if (!second.accepted) {
+                state.currentFileActionIntent = null;
+                state.fileVerificationTasks.clear();
                 await state.conv.setRuntimePhase("failed");
                 appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
             }
         }
         else {
+            state.currentFileActionIntent = null;
+            state.fileVerificationTasks.clear();
             await state.conv.setRuntimePhase("failed");
             appendMessage(dom, "assistant", result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.");
         }
@@ -1128,14 +1168,13 @@ async function cancelRun(state, dom, handlers) {
     state.lastView = { ...state.lastView, status: "cancelled", terminal: "cancelled" };
     renderState(dom, state, handlers);
 }
-function openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath) {
+function openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanion, relativePath) {
     if (state.activeSurface !== "cowork")
         return;
     state.workMode = "workspace";
     workspaceNavigator?.selectPath(relativePath);
-    const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
     if (state.client !== null) {
-        void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+        void workspaceCompanion?.open(relativePath);
     }
     renderState(dom, state, handlers);
 }
@@ -1165,6 +1204,8 @@ export function mountCoworkApp(root) {
         streamWatchdog: null,
         lastStreamActivityAt: 0,
         finalizingTurn: false,
+        currentFileActionIntent: null,
+        fileVerificationTasks: new Set(),
         pendingAttachments: [],
         continuationUnlocked: true,
         localServiceReady: false,
@@ -1290,27 +1331,31 @@ export function mountCoworkApp(root) {
                         client: dynamicClient,
                         getWorkspaceRoot: () => state.activeWorkspace,
                         onFileSelected: (relativePath) => {
-                            if (state.client === null)
-                                return;
-                            const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
-                            void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+                            state.workMode = "workspace";
+                            void workspaceCompanionHandle?.open(relativePath);
+                            renderState(dom, state, handlers);
                         },
                     });
-                    mountLlmSettingsPanel(dom.settingsProviderBody, {
+                    workspaceCompanionHandle = mountWorkspaceCompanionPane(dom.workspaceView.companionSlot, dynamicClient);
+                    mountProviderProfilesPanel(dom.settingsProviderBody, {
                         client: dynamicClient,
-                        getBootstrap: () => getShellBridge().getBootstrap(),
                         onSettingsUpdated: (view) => {
                             state.settings = view;
                             state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
                             void workspaceNavigator?.refresh();
                             renderState(dom, state, handlers);
                         },
-                        onConnectionTestResult: (ok) => {
+                        onConnectionTestResult: (_profileId, ok) => {
                             state.connectionTestState = ok ? "ok" : "failed";
                             renderState(dom, state, handlers);
                         },
                     });
                     mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
+                    mountSkillsSettingsPanel(dom.settingsSkillsBody, dynamicClient, (skills) => {
+                        const enabled = skills.filter((skill) => skill.status === "enabled").length;
+                        dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
+                        dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+                    });
                     mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
                         const enabled = skills.filter((skill) => skill.status === "enabled").length;
                         dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
@@ -1384,10 +1429,9 @@ export function mountCoworkApp(root) {
                             : state.fileReviews.find((r) => r.relativePath === relativePath && r.operation === operation);
                         if (review !== undefined) {
                             showFileReview(dom.activityPanel, review);
-                            openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
                             return;
                         }
-                        openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
+                        openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanionHandle, relativePath);
                         void showFilePreview(dom.activityPanel, state.client, change);
                     });
                 }

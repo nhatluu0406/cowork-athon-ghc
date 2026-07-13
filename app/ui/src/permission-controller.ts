@@ -49,7 +49,7 @@ export interface PermissionControllerDeps {
   readonly client: Pick<ServiceClient, "listPendingPermissions" | "decidePermission">;
   /** Where the modal + status note mount (usually the app root). */
   readonly container: HTMLElement;
-  /** Poll cadence for `start()`; defaults to 2s. Tests drive `refresh()` directly instead. */
+  /** Poll cadence for `start()`; defaults to 500ms while the app is active. */
   readonly pollIntervalMs?: number;
   /** Timer seam; defaults to host `setInterval`/`clearInterval`. Tests inject a fake. */
   readonly timer?: PermissionControllerTimer;
@@ -83,7 +83,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): H
 export function createPermissionController(
   deps: PermissionControllerDeps,
 ): PermissionControllerHandle {
-  const intervalMs = deps.pollIntervalMs ?? 2000;
+  const intervalMs = deps.pollIntervalMs ?? 500;
   const setIntervalFn = deps.timer?.setInterval.bind(deps.timer) ?? ((h: () => void, ms: number) => setInterval(h, ms));
   const clearIntervalFn =
     deps.timer?.clearInterval.bind(deps.timer) ??
@@ -111,6 +111,7 @@ export function createPermissionController(
   // The last failed-decision error, kept so a re-opened modal for the SAME request still shows
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
+  let consecutivePollFailures = 0;
 
   const setNote = (text: string): void => {
     note.textContent = text;
@@ -203,8 +204,13 @@ export function createPermissionController(
     let pending: readonly PendingPermissionView[];
     try {
       pending = await deps.client.listPendingPermissions();
+      consecutivePollFailures = 0;
     } catch {
-      // A transient poll failure must not fabricate or drop state; keep the current modal.
+      // Keep any current modal, but do not hide a broken permission transport indefinitely.
+      consecutivePollFailures += 1;
+      if (consecutivePollFailures >= 3) {
+        setNote("Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.");
+      }
       return;
     }
     const head = pending[0];

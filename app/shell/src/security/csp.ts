@@ -31,7 +31,7 @@ export const RENDERER_CSP = [
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
   "object-src 'none'",
   "base-uri 'none'",
-  "frame-src 'none'",
+  "frame-src blob:",
   "frame-ancestors 'none'",
   "form-action 'none'",
 ].join("; ");

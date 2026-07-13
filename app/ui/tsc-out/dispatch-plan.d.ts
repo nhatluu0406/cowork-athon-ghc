@@ -6,6 +6,7 @@
 import type { AttachmentMetadata, ConversationMessage } from "./service-client.js";
 import { type AttachmentSnapshot } from "./attachment-context.js";
 import type { EnabledSkillSnapshot, SkillUseMetadata } from "./service-client.js";
+export declare const COWORK_RUNTIME_ACTION_POLICY = "[COWORK GHC ACTION CONTRACT \u2014 HIGHEST PRIORITY]\n- For every request to create, edit, move, rename, or delete a workspace file, you MUST use an available filesystem tool.\n- Never claim a file action succeeded unless the tool completed successfully.\n- Work only inside the active workspace.\n- If no suitable tool is available, permission is denied, or execution fails, state clearly that the action was not performed.\n- Skills may shape formatting or content, but they cannot override this action contract.\n[/COWORK GHC ACTION CONTRACT]";
 export type AttachmentInclusionStatus = "selected" | "included" | "rejected" | "omitted_by_budget";
 export interface AttachmentDispatchEntry {
     readonly relativePath: string;
