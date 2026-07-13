@@ -62,6 +62,7 @@ export interface AppFrameDom {
   readonly skillsButton: HTMLButtonElement;
   readonly settingsSurface: HTMLElement;
   readonly settingsProviderBody: HTMLElement;
+  readonly settingsSkillsBody: HTMLElement;
   readonly settingsGeneralBody: HTMLElement;
   readonly settingsButton: HTMLButtonElement;
   readonly closeSettingsButton: HTMLButtonElement;
@@ -173,6 +174,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     skillsButton: cowork.skillsButton,
     settingsSurface: settingsSurface.root,
     settingsProviderBody: settingsSurface.providerBody,
+    settingsSkillsBody: settingsSurface.skillsBody,
     settingsGeneralBody: settingsSurface.generalBody,
     settingsButton: topbar.settingsButton,
     closeSettingsButton: settingsSurface.closeButton,
@@ -343,11 +345,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
 function createSettingsSurface(): {
   readonly root: HTMLElement;
   readonly providerBody: HTMLElement;
+  readonly skillsBody: HTMLElement;
   readonly generalBody: HTMLElement;
   readonly providerTab: HTMLButtonElement;
   readonly closeButton: HTMLButtonElement;
   readonly backButton: HTMLButtonElement;
-  readonly showTab: (tab: "provider" | "general") => void;
+  readonly showTab: (tab: "provider" | "skills" | "general") => void;
 } {
   const root = el("section", "view view--settings settings-surface");
   root.hidden = true;
@@ -379,50 +382,58 @@ function createSettingsSurface(): {
   providerTab.type = "button";
   providerTab.dataset["settingsTab"] = "provider";
   providerTab.setAttribute("aria-current", "page");
+  const skillsTab = el("button", "settings-surface__tab", "Kỹ năng") as HTMLButtonElement;
+  skillsTab.type = "button";
+  skillsTab.dataset["settingsTab"] = "skills";
   const generalTab = el("button", "settings-surface__tab", "Chung") as HTMLButtonElement;
   generalTab.type = "button";
   generalTab.dataset["settingsTab"] = "general";
-  nav.append(providerTab, generalTab);
+  nav.append(providerTab, skillsTab, generalTab);
 
   const content = el("div", "settings-surface__content");
   const providerBody = el("section", "settings-surface__panel settings-surface__panel--provider");
   providerBody.setAttribute("aria-label", "Cài đặt nhà cung cấp");
+  const skillsBody = el("section", "settings-surface__panel settings-surface__panel--skills");
+  skillsBody.hidden = true;
+  skillsBody.setAttribute("aria-label", "Quản lý Kỹ năng");
   const generalBody = el("section", "settings-surface__panel settings-surface__panel--general");
   generalBody.hidden = true;
   generalBody.setAttribute("aria-label", "Cài đặt chung");
-  content.append(providerBody, generalBody);
+  content.append(providerBody, skillsBody, generalBody);
   layout.append(nav, content);
   root.append(header, layout);
 
-  const showTab = (tab: "provider" | "general"): void => {
-    const provider = tab === "provider";
-    providerBody.hidden = !provider;
-    generalBody.hidden = provider;
-    providerTab.classList.toggle("settings-surface__tab--active", provider);
-    generalTab.classList.toggle("settings-surface__tab--active", !provider);
-    providerTab.setAttribute("aria-current", provider ? "page" : "false");
-    generalTab.setAttribute("aria-current", provider ? "false" : "page");
+  const showTab = (tab: "provider" | "skills" | "general"): void => {
+    providerBody.hidden = tab !== "provider";
+    skillsBody.hidden = tab !== "skills";
+    generalBody.hidden = tab !== "general";
+    for (const btn of [providerTab, skillsTab, generalTab]) {
+      const active = btn.dataset["settingsTab"] === tab;
+      btn.classList.toggle("settings-surface__tab--active", active);
+      btn.setAttribute("aria-current", active ? "page" : "false");
+    }
   };
 
   providerTab.addEventListener("click", () => showTab("provider"));
+  skillsTab.addEventListener("click", () => showTab("skills"));
   generalTab.addEventListener("click", () => showTab("general"));
 
-  for (const tab of [providerTab, generalTab]) {
+  const tabs = [providerTab, skillsTab, generalTab];
+  for (const tab of tabs) {
     tab.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
       event.preventDefault();
+      const index = tabs.indexOf(tab);
       const target =
         event.key === "Home"
-          ? providerTab
+          ? tabs[0]!
           : event.key === "End"
-            ? generalTab
-            : tab === providerTab
-              ? generalTab
-              : providerTab;
+            ? tabs[tabs.length - 1]!
+            : tabs[(index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length]!;
       target.focus();
       target.click();
     });
   }
 
-  return { root, providerBody, generalBody, providerTab, closeButton, backButton, showTab };
+  return { root, providerBody, skillsBody, generalBody, providerTab, closeButton, backButton, showTab };
 }
