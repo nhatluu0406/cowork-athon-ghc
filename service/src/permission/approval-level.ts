@@ -33,6 +33,8 @@ export function classifyApprovalLevel(kind: PermissionActionKind): ApprovalLevel
     case "file_delete":
     case "command_exec":
     case "file_move":
+    case "ms365_write":
+      // ms365_write — bounded external mutation (SharePoint upload); treat as elevated.
       return "elevated";
     case "file_create":
     case "file_edit":
