@@ -22,7 +22,8 @@ export type PermissionActionKind =
   | "file_edit"
   | "file_delete"
   | "file_move"
-  | "command_exec";
+  | "command_exec"
+  | "ms365_write";
 
 /** What the user is being asked to Allow or Deny (P2 describes action + target). */
 export interface PermissionAction {
