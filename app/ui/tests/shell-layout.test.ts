@@ -2,7 +2,7 @@ import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createAppFrame } from "../src/ui-shell/create-app-frame.js";
-import { applyShellLayoutClasses } from "../src/ui-shell/shell-layout.js";
+import { applyShellLayoutClasses, applyWorkMode } from "../src/ui-shell/shell-layout.js";
 
 function withViewport(width: number, run: () => void): void {
   const original = window.matchMedia;
@@ -66,4 +66,24 @@ test("inspector is docked on desktop and only uses scrim as a narrow drawer", ()
     assert.equal(frame.shellFrame.classList.contains("inspector-drawer-open"), false);
     assert.equal(frame.drawerScrim.hidden, true);
   });
+});
+
+
+test("Workspace mode keeps Cowork visible as a companion panel", () => {
+  const root = document.createElement("main");
+  const frame = createAppFrame(root);
+
+  applyWorkMode(
+    frame.shellFrame,
+    frame.sidebar,
+    frame.coworkView,
+    frame.workspaceView.root,
+    frame.coworkSidebarPanel,
+    frame.workspaceSidebarPanel,
+    "workspace",
+  );
+
+  assert.equal(frame.workspaceView.root.hidden, false);
+  assert.equal(frame.coworkView.hidden, false);
+  assert.equal(frame.coworkView.classList.contains("cowork-view--companion"), false);
 });

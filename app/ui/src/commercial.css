@@ -1895,3 +1895,909 @@ button {
   .skills-settings__list { min-height: 220px; max-height: 300px; }
   .permission-allow-group { min-width: 0; }
 }
+
+/* ───────────────────── Commercial UI V3 closure ───────────────────── */
+
+/* Remove decorative availability dots; rail state is communicated by tooltip + active surface. */
+.product-rail__item--awaiting_integration::after,
+.product-rail__item--planned::after {
+  display: none !important;
+}
+
+/* Conversation title lives in the sidebar. Reclaim the tall document-style header. */
+.view--cowork > .conv-header {
+  display: none !important;
+}
+
+.view--cowork .transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+.transcript__inner {
+  width: min(100%, 1040px);
+  padding: 28px 34px 172px;
+}
+
+.empty-state {
+  max-width: 540px;
+  margin: clamp(54px, 12vh, 126px) auto 0;
+  padding: 30px 34px;
+  border-radius: 22px;
+}
+
+.empty-state__title {
+  font-size: 22px;
+}
+
+/* History continuation is transparent; never reserve a persistent banner row. */
+.continuation-banner {
+  display: none !important;
+}
+
+/* Messages: assistant prose is native to the canvas; user content is a calm, flexible bubble. */
+.msg {
+  display: flex !important;
+  width: 100%;
+  max-width: none;
+  margin: 0 0 22px;
+}
+
+.msg__body {
+  min-width: 0;
+}
+
+.msg--assistant {
+  justify-content: flex-start;
+}
+
+.msg--assistant .msg__body {
+  width: min(820px, 92%);
+  max-width: min(820px, 92%);
+}
+
+.msg--assistant .msg__text {
+  padding: 4px 0;
+  border: 0;
+  background: transparent !important;
+  color: var(--cghc-text-primary) !important;
+  box-shadow: none;
+}
+
+.msg--user {
+  justify-content: flex-end;
+}
+
+.msg--user .msg__body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  width: auto;
+  min-width: 0;
+  max-width: min(720px, 76%);
+  margin-left: auto;
+}
+
+.msg--user .msg__name {
+  display: none;
+}
+
+.msg--user .msg__text {
+  display: block;
+  width: auto;
+  min-width: min(168px, 100%);
+  max-width: 100%;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--cghc-accent) 24%, var(--cghc-border));
+  border-radius: 17px 17px 5px 17px;
+  background: color-mix(in srgb, var(--cghc-accent-soft) 64%, var(--cghc-surface-elevated)) !important;
+  color: var(--cghc-text-primary) !important;
+  box-shadow: var(--cghc-shadow-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+
+.msg__text {
+  font-size: 15px;
+  line-height: 1.62;
+}
+
+.msg__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 7px;
+}
+
+.msg--user .msg__meta {
+  justify-content: flex-end;
+}
+
+.skill-use-chip,
+.attachment-chip--historical {
+  min-height: 24px;
+  padding: 3px 8px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+  font-size: 11px;
+}
+
+/* Composer + policy menu */
+.composer {
+  padding: 0 28px 14px;
+}
+
+.composer__box {
+  width: min(100%, 1000px);
+  min-height: 104px;
+  overflow: visible;
+  border-color: var(--cghc-border-strong);
+  border-radius: 22px;
+}
+
+.composer__input {
+  min-height: 54px;
+  padding: 16px 17px 7px;
+}
+
+.composer__bar {
+  min-height: 46px;
+  padding: 6px 10px 8px 11px;
+}
+
+.composer__hint {
+  width: min(100%, 1000px);
+  margin: 7px auto 0;
+  padding-inline: 3px;
+  text-align: left;
+}
+
+.permission-mode-control__menu {
+  position: fixed !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 260;
+  max-width: calc(100vw - 24px);
+  border-radius: 14px;
+}
+
+.permission-mode-control__option {
+  min-height: 58px;
+}
+
+.permission-mode-control__button[data-mode="ask"] {
+  color: var(--cghc-text-secondary);
+}
+
+/* Conversation history: compact actions appear on hover/focus, no hidden context-menu workflow. */
+.history-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.history-item__select {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 10px 8px 10px 11px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.history-item__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+  opacity: 0;
+  transform: translateX(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.history-item:hover .history-item__actions,
+.history-item:focus-within .history-item__actions {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.history-item__action {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+}
+
+.history-item__action:hover,
+.history-item__action:focus-visible {
+  background: var(--cghc-surface-hover);
+  color: var(--cghc-text-primary);
+}
+
+.history-item__action--delete:hover,
+.history-item__action--delete.is-confirming {
+  background: color-mix(in srgb, var(--cghc-error) 12%, transparent);
+  color: var(--cghc-error);
+}
+
+.history-item__action .product-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.history-item__rename-input {
+  width: 100%;
+  min-width: 0;
+  height: 27px;
+  padding: 0 7px;
+  border: 1px solid var(--cghc-accent);
+  border-radius: 7px;
+  background: var(--cghc-surface-elevated);
+  color: var(--cghc-text-primary);
+  font: inherit;
+}
+
+.history-item--renaming .history-item__badge,
+.history-item--renaming .history-item__actions {
+  display: none;
+}
+
+/* Inspector belongs to Cowork only. */
+.inspector-shell--surface-hidden {
+  display: none !important;
+}
+
+/* Integration surfaces own the full main area and center against the actual viewport. */
+.integration-surface {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+}
+
+.integration-surface__mount {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  place-items: center;
+  padding: 40px;
+}
+
+.integration-empty {
+  width: min(520px, 100%);
+  max-width: 520px;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.integration-empty__title,
+.integration-empty__copy,
+.integration-empty__note {
+  margin: 0;
+}
+
+.integration-empty__badge {
+  margin: 0;
+}
+
+.integration-empty__copy {
+  max-width: 480px;
+  line-height: 1.6;
+}
+
+.integration-empty__note {
+  max-width: 480px;
+  color: var(--cghc-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* Workspace sidebar follows an IDE interaction model: compact header actions + dense tree. */
+.workspace-identity-slot {
+  display: none !important;
+}
+
+.workspace-nav--full {
+  padding: 0 10px 10px;
+  gap: 7px;
+}
+
+.workspace-nav__header {
+  min-height: 36px;
+  padding-inline: 3px;
+}
+
+.workspace-nav__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.workspace-nav__choose,
+.workspace-nav__refresh {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+}
+
+.workspace-nav__choose:hover,
+.workspace-nav__refresh:hover {
+  border-color: var(--cghc-border-subtle);
+  background: var(--cghc-surface-hover);
+  color: var(--cghc-text-primary);
+}
+
+.workspace-nav__root {
+  padding: 0 3px;
+  color: var(--cghc-text-muted);
+  font-size: 11px;
+}
+
+.workspace-nav__filter {
+  min-height: 34px;
+  border-radius: 9px;
+}
+
+.workspace-filter-segments {
+  max-height: 34px;
+  border-radius: 9px;
+}
+
+.workspace-tree__row {
+  min-height: 29px;
+  border-radius: 6px;
+  padding-right: 6px;
+}
+
+.workspace-tree__row--selected {
+  background: color-mix(in srgb, var(--cghc-info) 13%, var(--cghc-surface-muted));
+  color: var(--cghc-text-primary);
+}
+
+.workspace-companion-pane__toolbar {
+  min-height: 46px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--cghc-border-subtle);
+}
+
+.workspace-companion-pane__body {
+  display: block;
+  padding: 14px;
+  background: var(--cghc-bg) !important;
+}
+
+.workspace-companion-pane__editor,
+.workspace-companion-pane__docx,
+.workspace-companion-pane__grid,
+.workspace-companion-pane__pdf,
+.workspace-companion-pane__image {
+  width: 100%;
+  min-height: 100%;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+  color: var(--cghc-text-primary);
+  box-shadow: none;
+}
+
+.workspace-companion-pane__editor {
+  padding: 18px 20px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.workspace-companion-pane__empty {
+  display: grid;
+  place-items: center;
+  max-width: 520px;
+  min-height: 260px;
+  margin: clamp(52px, 10vh, 112px) auto 0;
+  border: 1px dashed var(--cghc-border-strong);
+  background: transparent;
+  box-shadow: none;
+}
+
+.workspace-companion-pane__empty-icon,
+.workspace-companion-pane__formats {
+  display: none;
+}
+
+/* Settings: compact toolbar, one scroll owner, no repeated hero titles. */
+.settings-surface {
+  overflow: hidden;
+}
+
+.settings-surface__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  min-height: 58px;
+  height: 58px;
+  padding: 0 18px;
+}
+
+.settings-surface__back {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+}
+
+.settings-surface__back:hover {
+  border-color: var(--cghc-border-subtle);
+  background: var(--cghc-surface-hover);
+}
+
+.settings-surface__title {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.settings-surface__layout {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.settings-surface__nav {
+  padding: 16px 12px;
+}
+
+.settings-surface__content {
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.settings-surface__panel {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  min-height: 0;
+  padding: 28px clamp(28px, 6vw, 72px);
+  overflow: auto;
+}
+
+.settings-surface__panel--skills,
+.settings-surface__panel--general {
+  overflow: hidden;
+}
+
+.settings-surface__panel > * {
+  width: min(100%, 1080px);
+  margin-inline: auto;
+}
+
+/* General settings cards and segmented theme selector. */
+.settings-view--general,
+.settings-general {
+  height: 100%;
+  min-height: 0;
+}
+
+.settings-general {
+  display: grid;
+  align-content: start;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.settings-card {
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 16px;
+  background: var(--cghc-surface-elevated);
+  box-shadow: var(--cghc-shadow-sm);
+  overflow: hidden;
+}
+
+.settings-card__header {
+  padding: 17px 18px 13px;
+  border-bottom: 1px solid var(--cghc-border-subtle);
+}
+
+.settings-card__title,
+.settings-card__copy {
+  margin: 0;
+}
+
+.settings-card__title {
+  color: var(--cghc-text-primary);
+  font-size: 15px;
+}
+
+.settings-card__copy {
+  margin-top: 4px;
+  color: var(--cghc-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.settings-card__body {
+  display: grid;
+  gap: 9px;
+  padding: 14px 16px 16px;
+}
+
+.settings-theme-segments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 12px;
+  background: var(--cghc-surface-muted);
+}
+
+.settings-theme-segment {
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+  font-weight: 600;
+}
+
+.settings-theme-segment.is-active {
+  background: var(--cghc-surface-elevated);
+  color: var(--cghc-text-primary);
+  box-shadow: var(--cghc-shadow-sm);
+}
+
+.settings-switch-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 60px;
+  padding: 10px 4px;
+  color: var(--cghc-text-primary);
+}
+
+.settings-switch-row + .settings-switch-row {
+  border-top: 1px solid var(--cghc-border-subtle);
+}
+
+.settings-switch-row__copy,
+.settings-switch-row__title,
+.settings-switch-row__description {
+  display: block;
+}
+
+.settings-switch-row__title {
+  font-weight: 600;
+}
+
+.settings-switch-row__description {
+  margin-top: 3px;
+  color: var(--cghc-text-muted);
+  font-size: 11px;
+}
+
+.settings-switch-row__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.settings-switch-row__visual {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 23px;
+  border-radius: 999px;
+  background: var(--cghc-surface-hover);
+  box-shadow: inset 0 0 0 1px var(--cghc-border-strong);
+  transition: background 140ms ease;
+}
+
+.settings-switch-row__visual::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 17px;
+  height: 17px;
+  border-radius: 999px;
+  background: var(--cghc-surface-solid);
+  box-shadow: var(--cghc-shadow-sm);
+  transition: transform 140ms ease;
+}
+
+.settings-switch-row__input:checked + .settings-switch-row__visual {
+  background: var(--cghc-accent);
+  box-shadow: none;
+}
+
+.settings-switch-row__input:checked + .settings-switch-row__visual::after {
+  transform: translateX(17px);
+}
+
+.settings-status {
+  position: fixed;
+  right: 18px;
+  bottom: calc(var(--statusbar-h) + 14px);
+  z-index: 80;
+  margin: 0;
+  padding: 8px 11px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+  box-shadow: var(--cghc-shadow-md);
+  color: var(--cghc-text-secondary);
+  font-size: 12px;
+}
+
+/* Skills owns the remaining settings height; only list/editor scroll internally. */
+.settings-surface__panel--skills > .skills-settings,
+.settings-surface__panel--skills {
+  height: 100%;
+  min-height: 0;
+}
+
+.settings-surface__panel--skills {
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-surface__panel--skills > * {
+  min-height: 0;
+}
+
+.skills-settings__layout {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.skills-settings__list,
+.skills-settings__editor {
+  min-height: 0;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+}
+
+.skills-settings__empty {
+  margin: 8px;
+}
+
+.skills-settings__placeholder {
+  min-height: 100%;
+}
+
+/* Status bar: one quiet workspace anchor and three semantic health segments. */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: var(--statusbar-h);
+  padding: 0 8px;
+}
+
+.status-bar__left,
+.status-bar__right {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 3px;
+}
+
+.status-bar__right {
+  margin-left: auto;
+}
+
+.status-bar__segment {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  min-height: 20px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.status-bar__segment .product-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.status-bar__workspace {
+  max-width: min(320px, 42vw);
+}
+
+.status-bar__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar__provider:hover {
+  background: var(--cghc-surface-hover);
+  color: var(--cghc-text-primary);
+}
+
+.status-bar__segment.is-running {
+  color: var(--cghc-info);
+}
+
+/* Compact tooltips and scrollbars. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  background: color-mix(in srgb, var(--cghc-text-muted) 34%, transparent);
+  background-clip: padding-box;
+}
+
+@media (max-width: 1100px) {
+  .settings-general {
+    grid-template-columns: 1fr;
+  }
+
+  .msg--user .msg__body {
+    max-width: 84%;
+  }
+}
+
+@media (max-width: 900px) {
+  .transcript__inner {
+    padding: 20px 16px 160px;
+  }
+
+  .composer {
+    padding-inline: 14px;
+  }
+
+  .msg--user .msg__body {
+    max-width: 92%;
+  }
+
+  .settings-surface__panel {
+    padding: 20px 16px;
+  }
+
+  .settings-general {
+    grid-template-columns: 1fr;
+  }
+}
+
+.provider-profiles__edit {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+}
+
+.provider-profiles__edit:hover {
+  background: var(--cghc-surface-hover);
+  color: var(--cghc-text-primary);
+}
+
+.provider-profiles__edit .product-icon,
+.provider-profiles__back .product-icon,
+.workspace-companion-pane__save .product-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.provider-profiles__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.workspace-companion-pane__save {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 8px;
+}
+
+/* Workspace Companion keeps a focused Cowork chat column beside the editor. */
+.cowork-view--companion {
+  min-width: 0;
+  border-left-color: var(--cghc-border-subtle);
+  background: var(--cghc-surface);
+}
+
+.cowork-view--companion .transcript__inner {
+  width: 100%;
+  padding: 18px 16px 142px;
+}
+
+.cowork-view--companion .empty-state {
+  max-width: 320px;
+  margin: 42px auto 0;
+  padding: 22px 18px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.cowork-view--companion .empty-state__title {
+  font-size: 17px;
+}
+
+.cowork-view--companion .empty-state__copy {
+  font-size: 12px;
+}
+
+.cowork-view--companion .composer {
+  padding: 0 12px 12px;
+}
+
+.cowork-view--companion .composer__box {
+  min-height: 92px;
+  border-radius: 16px;
+}
+
+.cowork-view--companion .composer__input {
+  min-height: 46px;
+  padding: 13px 13px 5px;
+}
+
+.cowork-view--companion .composer__bar {
+  min-height: 40px;
+  padding-inline: 8px;
+}
+
+.cowork-view--companion .provider-control__label,
+.cowork-view--companion .skills-trigger__label {
+  max-width: 116px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1100px), (max-height: 720px) {
+  .settings-surface__panel--general {
+    overflow: auto;
+  }
+}

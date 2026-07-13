@@ -19,24 +19,18 @@ export function createTopbar(): TopbarDom {
   const trailing = el("div", "topbar__trailing no-drag");
   const inspectorToggle = el("button", "icon-btn topbar__inspector-toggle") as HTMLButtonElement;
   inspectorToggle.type = "button";
-  inspectorToggle.dataset["tooltip"] = "Mở inspector";
-  inspectorToggle.setAttribute("aria-label", "Mở inspector");
+  inspectorToggle.dataset["tooltip"] = "Mở Inspector";
+  inspectorToggle.setAttribute("aria-label", "Mở Inspector");
   inspectorToggle.setAttribute("aria-expanded", "false");
-  inspectorToggle.append(icon("panel-right-open", "Mở inspector"));
-
-  const infoButton = el("button", "icon-btn topbar__info") as HTMLButtonElement;
-  infoButton.type = "button";
-  infoButton.dataset["tooltip"] = "Thông tin";
-  infoButton.setAttribute("aria-label", "Thông tin");
-  infoButton.append(icon("activity", "Thông tin"));
+  inspectorToggle.append(icon("panel-right-open", "Mở Inspector"));
 
   const settingsButton = el("button", "icon-btn topbar__settings") as HTMLButtonElement;
   settingsButton.type = "button";
   settingsButton.dataset["tooltip"] = "Cài đặt";
   settingsButton.setAttribute("aria-label", "Cài đặt");
-  settingsButton.append(icon("settings", "Cài đặt"));
+  settingsButton.append(icon("sliders", "Cài đặt"));
 
-  trailing.append(inspectorToggle, infoButton, settingsButton);
+  trailing.append(inspectorToggle, settingsButton);
   root.append(leading, trailing);
 
   return { root, settingsButton, inspectorToggle };
