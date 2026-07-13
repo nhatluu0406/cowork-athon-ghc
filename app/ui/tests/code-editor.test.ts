@@ -98,3 +98,22 @@ test("plain file tab shows read-only pill and close fires handler", () => {
   dom.tabBar.querySelector<HTMLButtonElement>(".code-tab__close")?.click();
   assert.equal(closed, open.key);
 });
+
+test("plain file preview loads once per active key, not on every re-render", () => {
+  const dom = createCodeEditor();
+  let loadCount = 0;
+  const openA: OpenCodeFile = { key: fileTabKey("file", "README.md"), relativePath: "README.md", kind: "file" };
+  const openB: OpenCodeFile = { key: fileTabKey("file", "package.json"), relativePath: "package.json", kind: "file" };
+  const handlers = { ...NO_HANDLERS, onLoadFile: () => { loadCount += 1; } };
+
+  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openA.key, reviews: [] }, handlers);
+  assert.equal(loadCount, 1);
+
+  // Re-render with the same active key (simulates a streaming tick) must not refetch.
+  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openA.key, reviews: [] }, handlers);
+  assert.equal(loadCount, 1);
+
+  // Switching the active key must trigger a fresh load.
+  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openB.key, reviews: [] }, handlers);
+  assert.equal(loadCount, 2);
+});
