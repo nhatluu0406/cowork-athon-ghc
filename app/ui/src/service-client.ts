@@ -371,7 +371,7 @@ export interface ServiceClient {
     profileId: string,
     input: { readonly displayName?: string; readonly baseUrl?: string; readonly modelId?: string },
   ): Promise<ProviderProfileRecord>;
-  deleteProviderProfile(profileId: string, forceUnconfigured?: boolean): Promise<void>;
+  deleteProviderProfile(profileId: string): Promise<void>;
   setActiveProviderProfile(profileId: string): Promise<SettingsView>;
   storeProfileCredential(profileId: string, secret: string): Promise<SettingsView>;
   removeProfileCredential(profileId: string): Promise<SettingsView>;
@@ -573,10 +573,10 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         method: "PUT",
         body: JSON.stringify(input),
       })).profile,
-    deleteProviderProfile: async (profileId, forceUnconfigured = false) => {
+    deleteProviderProfile: async (profileId) => {
       await call<{ deleted: boolean }>(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
         method: "DELETE",
-        body: JSON.stringify({ forceUnconfigured }),
+        body: "{}",
       });
     },
     setActiveProviderProfile: async (profileId) => {
