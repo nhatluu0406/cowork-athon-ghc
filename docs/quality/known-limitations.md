@@ -52,6 +52,13 @@ updated_at: "2026-07-13"
 - Raw file content và envelope nội bộ (`<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>`) không persist trong transcript.
 - Không claim bảo vệ tuyệt đối trước prompt injection trong file đính kèm — chỉ envelope untrusted + yêu cầu user hiện tại được ưu tiên.
 
+## Multi-Provider Profiles (Phase 1)
+
+- Phase 1 covers application-layer profiles only — **no** D4 Gateway routing, failover, round-robin, key pool, or cost routing.
+- In-conversation provider switch UI is **not** implemented; existing conversations keep their snapshot.
+- Model list for custom profiles is manual (no auto-discovery API).
+- DeepSeek preset uses fixed model options; other endpoints may not support `/models` probe uniformly.
+
 ## Tính năng chưa có
 
 - Skills Phase 1 chỉ là local instruction context (`SKILL.md`): built-in + app-managed
@@ -69,7 +76,7 @@ updated_at: "2026-07-13"
 - UI Shell V3 commercial visual baseline is **PASS** for the refreshed packaged evidence in `reports/ui-shell-v3-commercial-readiness/`; Product Owner sign-off is still pending review of that evidence.
 - Windows controls use Electron native titlebar overlay. Cowork GHC intentionally does not draw custom minimize/maximize/close controls; this preserves native close behavior, double-click maximize/restore, Snap Layout, and high-DPI behavior.
 - Global Settings access is restored from the topbar and provider/status affordances; it opens the existing production Settings behavior as a full-screen V3 application surface with `Nhà cung cấp` and `Chung` navigation, not a parallel modal.
-- Provider/model control is a production status/settings entry point only. **Multi-Provider Profiles are not implemented**; there is no real multi-profile dropdown registry yet.
+- Provider/model control opens Settings. **Multi-Provider Profiles Phase 1** is implemented in the provider section (list/add/edit/delete/test/set active); D4 Gateway routing/failover/key pool is not merged.
 - Provider status now names the subject (`DeepSeek · Chưa kiểm tra`, `DeepSeek · Sẵn sàng`, `DeepSeek · Kết nối thất bại`, `Provider · Chưa cấu hình`) and should not rely on color alone. `Chưa kiểm tra` is not a healthy/green state.
 - Inspector overlay placement was re-verified in packaged evidence; it starts below the topbar and ends above the status bar.
 - Conversation draft UX prevents creating additional blank active drafts and marks drafts as `Nháp`, but AI title generation is not implemented.

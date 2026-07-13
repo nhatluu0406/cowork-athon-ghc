@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # Kế hoạch sản phẩm Cowork GHC

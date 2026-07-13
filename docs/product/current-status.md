@@ -11,6 +11,21 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
 
+## Multi-Provider Profiles Phase 1 (2026-07-13)
+
+| Item | Status |
+|---|---|
+| Branch | `feature/multi-provider-profiles` |
+| Application-layer profiles | **Implemented** — DeepSeek preset + custom OpenAI-compatible |
+| Active profile switch | **No restart** — runtime bridge syncs next turn |
+| Conversation snapshot | **Implemented** on new conversation create |
+| Legacy migration | **Idempotent** — existing DeepSeek config → default profile |
+| D4 Gateway | **Not merged** — no routing/failover/key pool |
+| File Work Review | **PARTIAL PASS** (unchanged) |
+| UI visual debt | **Deferred** — Settings provider section only |
+
+Evidence: `reports/multi-provider-profiles-phase1/`
+
 ## UI Shell V3 commercial readiness remediation (2026-07-13)
 
 | Item | Status |
@@ -24,7 +39,7 @@ and the current working tree instead.
 | UI Shell V3 commercial visual baseline | **PASS** |
 | Product Owner visual acceptance | **Pending sign-off** - ready for PO visual review of the refreshed commercial-readiness screenshots |
 | D1-D4 merge | **Not started** — integration surfaces remain passive slots |
-| Multi-Provider Profiles | **Not implemented** |
+| Multi-Provider Profiles | **Phase 1 implemented** — application-layer profiles; D4 Gateway not merged |
 | File Work Review | **PARTIAL PASS** (unchanged) |
 | Full L9 / RC | **Not complete** |
 
@@ -311,8 +326,8 @@ Packaged journeys C–L need a verification redesign split (live-agent vs determ
 Next implementation action:
 
 ```text
-Receive D1–D4 intake reports per docs/integration/external-systems-integration-readiness.md.
-Do not merge until matrix row is filled and track acceptance gates pass.
+Product Owner acceptance for Multi-Provider Profiles Phase 1 on feature/multi-provider-profiles.
+D1–D4 intake remains the next external integration milestone.
 ```
 
 ## Useful Verification Commands

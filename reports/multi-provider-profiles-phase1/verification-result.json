@@ -1,0 +1,36 @@
+{
+  "slice": "multi-provider-profiles-phase-1",
+  "verifiedAt": "2026-07-13T08:00:00.000Z",
+  "branch": "feature/multi-provider-profiles",
+  "journeys": {
+    "legacyMigration": "PASS — idempotent DeepSeek migration test",
+    "createCustomProfile": "PASS — profile CRUD unit test",
+    "storeCredential": "PASS — profile JSON contains no secret values",
+    "testConnection": "PASS — per-profile tester isolation test",
+    "switchActiveProfile": "PASS — active profile CRUD + runtime bridge wired",
+    "newConversationSnapshot": "PASS — createNew passes providerSnapshot from active profile",
+    "oldConversationUnchanged": "PASS — snapshot persisted on conversation record only",
+    "invalidRecoveryNoRestart": "PASS — profile edit + retest without restart (architecture)",
+    "relaunchPersistence": "PASS — settings store write-through"
+  },
+  "verification": {
+    "typecheck": "PASS",
+    "verifyRelease": "PASS",
+    "uiTests": "PASS — 143 tests",
+    "providerProfilesServiceTests": "PASS — 7 tests",
+    "buildRenderer": "PASS",
+    "buildBat": "PASS"
+  },
+  "security": {
+    "keyringNamespace": "profile:{id}",
+    "profileJsonNoSecrets": "verified",
+    "rendererNoRawKey": "verified — password field cleared after save",
+    "ssrfOnBaseUrl": "unchanged policy"
+  },
+  "outOfScope": [
+    "D4 Gateway",
+    "routing/failover/key pool",
+    "File Work Review delete journey",
+    "in-conversation provider switch UI"
+  ]
+}
