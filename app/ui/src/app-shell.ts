@@ -88,11 +88,11 @@ import {
   shellLayoutModeForSurface,
   type WorkMode,
 } from "./ui-shell/shell-layout.js";
-import {
-  renderKnowledgeTab,
+import { renderKnowledgeTab,
   setKnowledgeGraphCapability,
   type KnowledgeTab,
 } from "./ui-shell/knowledge-view.js";
+import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
@@ -157,31 +157,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function icon(name: Parameters<typeof createProductIcon>[0], label?: string): SVGSVGElement {
   return createProductIcon(name, label);
-}
-
-function renderIntegrationSurface(container: HTMLElement, surface: ProductSurfaceDefinition): void {
-  container.replaceChildren();
-  const card = el("section", "integration-empty");
-  const eyebrow =
-    surface.availability === "planned"
-      ? "Planned"
-      : surface.dependency !== undefined
-        ? `Chờ tích hợp ${surface.dependency}`
-        : "Chưa khả dụng";
-  const iconWrap = el("div", "integration-empty__icon");
-  iconWrap.append(icon(surface.icon, surface.label));
-  card.append(iconWrap, el("p", "integration-empty__eyebrow", eyebrow), el("h1", "integration-empty__title", surface.label));
-  card.append(el("p", "integration-empty__copy", surface.description));
-  if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
-    card.append(
-      el(
-        "p",
-        "integration-empty__note",
-        `Không hiển thị dữ liệu giả cho ${surface.dependency}; surface này chỉ xác nhận điều hướng và contract UI.`,
-      ),
-    );
-  }
-  container.append(card);
 }
 
 function surfaceById(id: ProductSurfaceId): ProductSurfaceDefinition {
