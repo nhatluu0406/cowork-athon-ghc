@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-13T04:19:23.520Z",
+  "generatedAt": "2026-07-13T11:24:32.201Z",
   "structural": [
     {
       "label": "provider-missing",
@@ -160,9 +160,9 @@
       "surface": "cowork",
       "workMode": "cowork",
       "activeViews": [
-        "cowork"
+        "settings"
       ],
-      "settingsOpen": false,
+      "settingsOpen": true,
       "sidebarVisible": false,
       "inspectorVisible": false,
       "shellRoots": 1,
@@ -182,9 +182,9 @@
       "surface": "cowork",
       "workMode": "cowork",
       "activeViews": [
-        "cowork"
+        "settings"
       ],
-      "settingsOpen": false,
+      "settingsOpen": true,
       "sidebarVisible": false,
       "inspectorVisible": false,
       "shellRoots": 1,
@@ -284,6 +284,26 @@
       "settingsButton": true,
       "providerStatusButton": true,
       "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "microsoft-assistant",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "microsoft-connect",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "code-session",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "code-onboarding",
       "passed": true,
       "errors": []
     }
