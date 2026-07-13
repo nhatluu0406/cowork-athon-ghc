@@ -41,7 +41,7 @@ export function createMainWindow(loadUrl: string = APP_INDEX_URL): BrowserWindow
         ? {
             color: "#FFFFFF",
             symbolColor: "#1F2933",
-            height: 56,
+            height: 44,
           }
         : false,
     webPreferences: buildMainWindowWebPreferences(PRELOAD_PATH),

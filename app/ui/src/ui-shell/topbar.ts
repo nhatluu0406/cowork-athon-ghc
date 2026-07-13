@@ -1,4 +1,4 @@
-import { appendIconLabel, el, icon } from "./dom-utils.js";
+import { el, icon } from "./dom-utils.js";
 
 export interface TopbarDom {
   readonly root: HTMLElement;
@@ -20,27 +20,26 @@ export function createTopbar(): TopbarDom {
   const inspectorToggle = el("button", "icon-btn topbar__inspector-toggle") as HTMLButtonElement;
   inspectorToggle.type = "button";
   inspectorToggle.title = "Mở inspector";
+  inspectorToggle.dataset["tooltip"] = "Mở inspector";
   inspectorToggle.setAttribute("aria-label", "Mở inspector");
   inspectorToggle.setAttribute("aria-expanded", "false");
-  inspectorToggle.append(icon("panel", "Mở inspector"));
+  inspectorToggle.append(icon("panel-right-open", "Mở inspector"));
 
   const infoButton = el("button", "icon-btn topbar__info") as HTMLButtonElement;
   infoButton.type = "button";
   infoButton.title = "Thông tin";
+  infoButton.dataset["tooltip"] = "Thông tin";
   infoButton.setAttribute("aria-label", "Thông tin");
   infoButton.append(icon("activity", "Thông tin"));
 
   const settingsButton = el("button", "icon-btn topbar__settings") as HTMLButtonElement;
   settingsButton.type = "button";
-  settingsButton.title = "Cài đặt";
-  settingsButton.setAttribute("aria-label", "Mở cài đặt");
-  settingsButton.append(icon("settings", "Cài đặt"));
+  settingsButton.title = "Settings";
+  settingsButton.dataset["tooltip"] = "Settings";
+  settingsButton.setAttribute("aria-label", "Settings");
+  settingsButton.append(icon("settings", "Settings"));
 
-  const windowControls = el("div", "window-controls");
-  windowControls.setAttribute("aria-hidden", "true");
-  windowControls.append(el("span", "win-btn"), el("span", "win-btn"), el("span", "win-btn win-btn--close"));
-
-  trailing.append(inspectorToggle, infoButton, settingsButton, windowControls);
+  trailing.append(inspectorToggle, infoButton, settingsButton);
   root.append(leading, trailing);
 
   return { root, settingsButton, inspectorToggle };

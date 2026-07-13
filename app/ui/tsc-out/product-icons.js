@@ -28,6 +28,10 @@ const PATHS = Object.freeze({
     settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z", "M4 12h3M17 12h3M12 4v3M12 17v3M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 6.3l-2.1 2.1M8.4 15.6l-2.1 2.1"],
     activity: ["M5 12h3l2-5 4 10 2-5h3"],
     panel: ["M4 5h16v14H4V5Z", "M14 5v14"],
+    "panel-right-open": ["M4 5h16v14H4V5Z", "M14 5v14", "M10 9l3 3-3 3"],
+    "panel-right-close": ["M4 5h16v14H4V5Z", "M14 5v14", "M12 9l-3 3 3 3"],
+    "paper-plane": ["M4 12 20 5l-7 15-2-6-7-2Z", "M11 14l9-9"],
+    "square-pen": ["M5 5h10v4M5 5v14h14V9", "M10 14l7-7 2 2-7 7h-2v-2Z"],
     expand: ["M9 6l6 6-6 6"],
     collapse: ["M6 9l6 6 6-6"],
 });

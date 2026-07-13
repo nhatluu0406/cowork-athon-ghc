@@ -6,7 +6,7 @@ export interface StatusBarDom {
     readonly workspace: HTMLElement;
     readonly service: HTMLElement;
     readonly runtime: HTMLElement;
-    readonly provider: HTMLElement;
+    readonly provider: HTMLButtonElement;
 }
 export declare function createStatusBar(): StatusBarDom;
 export declare function renderStatusBar(dom: StatusBarDom, input: {

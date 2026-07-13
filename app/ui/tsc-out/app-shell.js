@@ -9,7 +9,7 @@ import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, 
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
-import { assessSendPreflight, buildReadinessInput, localServiceStatus, providerStatus, shouldShowContinuationBanner, } from "./provider-readiness.js";
+import { assessSendPreflight, buildReadinessInput, localServiceStatus, providerModelLabel, providerStatus, shouldShowContinuationBanner, } from "./provider-readiness.js";
 import { closeModalWithFocus, createModalKeyHandler, openModalWithFocus, } from "./modal-focus.js";
 import { startEvStream } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
@@ -87,6 +87,34 @@ function renderComposerPreflight(dom, preflight, hasPrompt) {
         return;
     dom.composerPreflightMessage.textContent = preflight.message;
     dom.composerPreflightCta.hidden = !preflight.showSettingsCta;
+}
+function renderCoworkEmptyState(dom, state, preflight) {
+    const title = dom.emptyState.querySelector(".empty-state__title");
+    const copy = dom.emptyState.querySelector(".empty-state__copy");
+    if (state.activeWorkspace === null) {
+        if (title !== null)
+            title.textContent = "Chọn workspace để bắt đầu";
+        if (copy !== null)
+            copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
+        dom.emptyStateCta.hidden = true;
+        return;
+    }
+    if (preflight.blockKind === "provider_missing" ||
+        preflight.blockKind === "model_missing" ||
+        preflight.blockKind === "credential_missing" ||
+        preflight.blockKind === "base_url_invalid") {
+        if (title !== null)
+            title.textContent = "Cấu hình provider để bắt đầu";
+        if (copy !== null)
+            copy.textContent = preflight.message;
+        dom.emptyStateCta.hidden = false;
+        return;
+    }
+    if (title !== null)
+        title.textContent = "Bạn muốn Cowork GHC làm gì?";
+    if (copy !== null)
+        copy.textContent = "Gửi yêu cầu đầu tiên để bắt đầu phiên làm việc với workspace hiện tại.";
+    dom.emptyStateCta.hidden = true;
 }
 function createDynamicClient(state) {
     return new Proxy({}, {
@@ -233,6 +261,14 @@ function renderSessionList(dom, state, onSelect, onRename, onDelete) {
         dom.sessionList.append(el("p", "sidebar__empty", searchQuery.length > 0 ? "Không tìm thấy cuộc trò chuyện." : "Chưa có cuộc trò chuyện."));
         return;
     }
+    const draftOrdinals = new Map();
+    let draftCount = 0;
+    for (const summary of summaries) {
+        if (summary.status === "draft" && summary.messageCount === 0) {
+            draftCount += 1;
+            draftOrdinals.set(summary.id, draftCount);
+        }
+    }
     for (const summary of summaries) {
         const item = el("button", "history-item");
         if (summary.id === activeConversationId)
@@ -245,8 +281,16 @@ function renderSessionList(dom, state, onSelect, onRename, onDelete) {
             item.classList.add("history-item--historical");
         item.type = "button";
         item.dataset["status"] = summary.status;
-        item.append(el("span", "history-item__title", summary.title));
+        const titleRow = el("span", "history-item__title-row");
+        const title = summary.status === "draft" && summary.messageCount === 0 && (draftOrdinals.get(summary.id) ?? 0) > 1
+            ? `${summary.title} (${draftOrdinals.get(summary.id)})`
+            : summary.title;
+        titleRow.append(el("span", "history-item__title", title));
+        if (summary.status === "draft")
+            titleRow.append(el("span", "history-item__badge", "Nháp"));
+        item.append(titleRow);
         item.append(el("span", "history-item__meta", formatConversationMeta(summary)));
+        item.title = summary.title;
         item.addEventListener("click", () => onSelect(summary.id));
         item.addEventListener("contextmenu", (event) => {
             event.preventDefault();
@@ -489,13 +533,11 @@ function renderState(dom, state, handlers) {
     dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
     dom.workspaceLabel.title = state.activeWorkspace ?? "";
     const providerCopy = providerStatus(state.settings, state.connectionTestState);
-    const modelLabel = state.settings?.defaultModel !== null && state.settings?.defaultModel !== undefined
-        ? `${state.settings.defaultModel.providerID} / ${state.settings.defaultModel.modelID}`
-        : "Chưa cấu hình";
+    const displayModelLabel = providerModelLabel(state.settings);
     renderConversationProviderControl(dom.providerControl, {
         visible: isCoworkSurface && state.workMode === "cowork",
-        interactive: false,
-        label: modelLabel,
+        interactive: true,
+        label: displayModelLabel,
         status: providerCopy.ok ? (state.connectionTestState === "failed" ? "danger" : "ok") : "warn",
         failed: state.connectionTestState === "failed",
     });
@@ -530,6 +572,7 @@ function renderState(dom, state, handlers) {
     const sendPreflight = assessSendPreflight(readinessInput);
     const composerText = textFromComposer(dom.composerInput);
     renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+    renderCoworkEmptyState(dom, state, sendPreflight);
     dom.composer.hidden = !isCoworkSurface || state.workMode !== "cowork";
     dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
     dom.composer.classList.toggle("is-locked", locked);
@@ -841,6 +884,22 @@ async function newConversation(state, dom, handlers) {
     if (state.activeWorkspace === null)
         throw new Error("Chọn workspace trước.");
     const unsent = textFromComposer(dom.composerInput);
+    const activeRecord = state.conv.state.activeRecord;
+    if (unsent.length === 0 && activeRecord?.status === "draft" && activeRecord.messageCount === 0) {
+        clearTranscript(dom);
+        setComposerText(dom.composerInput, "");
+        renderState(dom, state, handlers);
+        dom.composerInput.focus();
+        return;
+    }
+    const reusableDraft = state.conv.state.summaries.find((summary) => summary.id !== state.conv.state.activeConversationId &&
+        summary.status === "draft" &&
+        summary.messageCount === 0 &&
+        summary.workspacePath === state.activeWorkspace);
+    if (unsent.length === 0 && reusableDraft !== undefined) {
+        await switchConversation(state, dom, handlers, reusableDraft.id);
+        return;
+    }
     if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
         const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
         if (!ok)

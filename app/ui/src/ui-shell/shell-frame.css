@@ -9,7 +9,7 @@
 
 :root {
   --topbar-h: 44px;
-  --statusbar-h: 28px;
+  --statusbar-h: 24px;
   --rail-w: 50px;
   --sidebar-w: 280px;
   --panel-w: 352px;
@@ -50,7 +50,7 @@
   align-items: center;
   justify-content: space-between;
   height: var(--topbar-h);
-  padding: 0 12px;
+  padding: 0 0 0 12px;
   border-bottom: 1px solid var(--line-soft);
   background: var(--surface);
   -webkit-app-region: drag;
@@ -80,6 +80,11 @@
   white-space: nowrap;
 }
 
+.topbar__trailing {
+  gap: 6px;
+  padding-right: 138px;
+}
+
 .no-drag,
 button,
 input,
@@ -87,23 +92,6 @@ select,
 textarea,
 [contenteditable="true"] {
   -webkit-app-region: no-drag;
-}
-
-.window-controls {
-  display: flex;
-  gap: 6px;
-  margin-left: 8px;
-}
-
-.win-btn {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--line-warm);
-}
-
-.win-btn--close {
-  background: #f4b4a8;
 }
 
 .shell-frame {
@@ -181,21 +169,60 @@ textarea,
   color: var(--accent);
 }
 
-.product-rail__item--awaiting_integration::after,
-.product-rail__item--planned::after {
-  content: "";
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-muted);
-}
-
 .product-rail__sidebar-toggle {
   margin-top: auto;
   display: none;
+}
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after,
+[data-tooltip].is-tooltip-visible::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  z-index: 50;
+  min-width: 168px;
+  max-width: min(280px, calc(100vw - 24px));
+  padding: 6px 8px;
+  border: 1px solid var(--line-warm);
+  border-radius: 6px;
+  background: var(--text-strong);
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: normal;
+  pointer-events: none;
+}
+
+.product-rail [data-tooltip]:hover::after,
+.product-rail [data-tooltip]:focus-visible::after,
+.product-rail [data-tooltip].is-tooltip-visible::after {
+  left: calc(var(--rail-w) + 6px);
+  top: max(8px, min(var(--tooltip-y, 80px), calc(100vh - 48px)));
+}
+
+.topbar [data-tooltip]:hover::after,
+.topbar [data-tooltip]:focus-visible::after,
+.topbar [data-tooltip].is-tooltip-visible::after {
+  right: 140px;
+  top: 38px;
+}
+
+.composer [data-tooltip]:hover::after,
+.composer [data-tooltip]:focus-visible::after,
+.composer [data-tooltip].is-tooltip-visible::after {
+  right: 24px;
+  bottom: calc(var(--statusbar-h) + 86px);
+}
+
+.statusbar [data-tooltip]:hover::after,
+.statusbar [data-tooltip]:focus-visible::after,
+.statusbar [data-tooltip].is-tooltip-visible::after {
+  right: 12px;
+  bottom: calc(var(--statusbar-h) + 6px);
 }
 
 .contextual-sidebar {

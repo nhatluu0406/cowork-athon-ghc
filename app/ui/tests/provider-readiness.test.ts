@@ -10,6 +10,7 @@ import {
   buildReadinessInput,
   isBaseUrlLocallyValid,
   localServiceStatus,
+  providerModelLabel,
   providerStatus,
   shouldShowContinuationBanner,
 } from "../src/provider-readiness.js";
@@ -58,7 +59,8 @@ test("providerStatus reports missing credential separately from local service", 
     providers: [{ providerId: "custom-openai-compat", hasCredential: false }],
   };
   const copy = providerStatus(noCred);
-  assert.match(copy.label, /Provider: Chưa cấu hình/);
+  assert.equal(copy.label, "DeepSeek · Chưa cấu hình");
+  assert.equal(providerModelLabel(noCred), "DeepSeek / deepseek-chat");
 });
 
 test("assessSendPreflight blocks missing credential before runtime", () => {

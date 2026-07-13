@@ -10,7 +10,7 @@ import type { ProductSurfaceId } from "../surface-registry.js";
 import { closeModalWithFocus, createModalKeyHandler, openModalWithFocus } from "../modal-focus.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
 import { createCoworkView } from "./cowork-view.js";
-import { el } from "./dom-utils.js";
+import { el, icon } from "./dom-utils.js";
 import { createInspectorShell } from "./inspector.js";
 import { createIntegrationView } from "./integration-view.js";
 import { createKnowledgeView, type KnowledgeViewDom } from "./knowledge-view.js";
@@ -45,6 +45,7 @@ export interface AppFrameDom {
   readonly continuationButton: HTMLButtonElement;
   readonly transcriptInner: HTMLElement;
   readonly emptyState: HTMLElement;
+  readonly emptyStateCta: HTMLButtonElement;
   readonly thinking: HTMLElement;
   readonly composer: HTMLElement;
   readonly composerInput: HTMLElement;
@@ -175,6 +176,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     continuationButton: cowork.continuationButton,
     transcriptInner: cowork.transcriptInner,
     emptyState: cowork.emptyState,
+    emptyStateCta: cowork.emptyStateCta,
     thinking: cowork.thinking,
     composer: cowork.composer,
     composerInput: cowork.composerInput,
@@ -231,8 +233,10 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   dom.openSettings = openSettings;
 
   topbar.settingsButton.addEventListener("click", openSettings);
+  statusBar.provider.addEventListener("click", openSettings);
   cowork.providerControl.root.addEventListener("click", openSettings);
   cowork.composerPreflightCta.addEventListener("click", openSettings);
+  cowork.emptyStateCta.addEventListener("click", openSettings);
   closeSettings.addEventListener("click", () => {
     closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
     settingsOpener = null;
@@ -257,8 +261,18 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     setRightPanelCollapsed(inspector.root, activityPanel.toggle, collapsed);
     inspector.root.hidden = collapsed;
     topbar.inspectorToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    const inspectorLabel = collapsed ? "Mở inspector" : "Đóng inspector";
+    topbar.inspectorToggle.title = inspectorLabel;
+    topbar.inspectorToggle.dataset["tooltip"] = inspectorLabel;
+    topbar.inspectorToggle.setAttribute("aria-label", inspectorLabel);
+    topbar.inspectorToggle.replaceChildren(
+      icon(collapsed ? "panel-right-open" : "panel-right-close", inspectorLabel),
+    );
     topbar.inspectorToggle.title = collapsed ? "Mở inspector" : "Đóng inspector";
     topbar.inspectorToggle.setAttribute("aria-label", topbar.inspectorToggle.title);
+    topbar.inspectorToggle.title = inspectorLabel;
+    topbar.inspectorToggle.dataset["tooltip"] = inspectorLabel;
+    topbar.inspectorToggle.setAttribute("aria-label", inspectorLabel);
     shellFrame.classList.toggle("inspector-drawer-open", !collapsed && window.matchMedia("(max-width: 1366px)").matches);
     drawerScrim.hidden = collapsed || !window.matchMedia("(max-width: 1366px)").matches;
   };
@@ -276,6 +290,29 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   topbar.inspectorToggle.addEventListener("click", () => {
     applyRightPanelCollapsed(!inspector.root.hidden);
   });
+
+  const workModeTabs = [sidebar.workModeCoworkTab, sidebar.workModeWorkspaceTab] as const;
+  for (const tab of workModeTabs) {
+    tab.addEventListener("keydown", (event) => {
+      const current = workModeTabs.indexOf(tab);
+      const nextIndex =
+        event.key === "ArrowRight"
+          ? (current + 1) % workModeTabs.length
+          : event.key === "ArrowLeft"
+            ? (current + workModeTabs.length - 1) % workModeTabs.length
+            : event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? workModeTabs.length - 1
+                : -1;
+      if (nextIndex < 0) return;
+      const nextTab = workModeTabs[nextIndex];
+      if (nextTab === undefined) return;
+      event.preventDefault();
+      nextTab.focus();
+      nextTab.click();
+    });
+  }
 
   activityPanel.toggle.addEventListener("click", () => {
     applyRightPanelCollapsed(true);
