@@ -30,7 +30,6 @@ cd llm-svc
 cargo build --release
 ./target/release/llm-svc
 
-# Frontend at http://localhost:3000
 # Backend API at http://localhost:8080
 # gRPC (llm-svc) at localhost:9090
 ```
