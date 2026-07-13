@@ -6,10 +6,10 @@
  */
 import { type ActivityPanelDom } from "../activity-panel.js";
 import type { ProductSurfaceId } from "../surface-registry.js";
+import type { ConversationProviderControl } from "./conversation-provider-control.js";
 import { type KnowledgeViewDom } from "./knowledge-view.js";
 import { type StatusBarDom } from "./status-bar.js";
 import { type WorkspaceViewDom } from "./workspace-view.js";
-import type { ConversationProviderControl } from "./conversation-provider-control.js";
 export interface AppFrameDom {
     readonly root: HTMLElement;
     readonly shellFrame: HTMLElement;
@@ -48,13 +48,12 @@ export interface AppFrameDom {
     readonly newConversationButton: HTMLButtonElement;
     readonly providerControl: ConversationProviderControl;
     readonly skillsButton: HTMLButtonElement;
-    readonly settingsModal: HTMLElement;
-    readonly settingsPanel: HTMLElement;
-    readonly settingsBody: HTMLElement;
+    readonly settingsSurface: HTMLElement;
+    readonly settingsProviderBody: HTMLElement;
+    readonly settingsGeneralBody: HTMLElement;
     readonly settingsButton: HTMLButtonElement;
     readonly closeSettingsButton: HTMLButtonElement;
     settingsOpener: HTMLElement | null;
-    readonly modalKeyHandler: (event: KeyboardEvent) => void;
     readonly activityPanel: ActivityPanelDom;
     readonly executionStatus: HTMLElement;
     readonly permissionSummary: HTMLElement;
@@ -75,6 +74,7 @@ export interface AppFrameDom {
     readonly rightPanelTopbarToggle: HTMLButtonElement;
     readonly sidebarRailToggle: HTMLButtonElement;
     openSettings: () => void;
+    closeSettings: () => void;
     applySidebarCollapsed: (collapsed: boolean) => void;
     applyRightPanelCollapsed: (collapsed: boolean) => void;
 }

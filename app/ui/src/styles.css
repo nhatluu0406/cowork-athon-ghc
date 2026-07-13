@@ -1279,53 +1279,6 @@ button:disabled {
   font-size: 12px;
 }
 
-.modal {
-  position: fixed;
-  inset: 0;
-  z-index: 20;
-  display: grid;
-  place-items: center;
-  background: rgba(13, 17, 23, 0.34);
-}
-
-.modal[hidden] {
-  display: none;
-}
-
-.modal__panel {
-  width: min(760px, calc(100vw - 40px));
-  max-height: min(760px, calc(100vh - 40px));
-  overflow: auto;
-  border: 1px solid var(--line-warm);
-  border-radius: 22px;
-  background: var(--surface);
-  box-shadow: 0 24px 80px rgba(13, 17, 23, 0.22);
-}
-
-.modal__header {
-  position: sticky;
-  top: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--line-soft);
-  background: var(--surface);
-}
-
-.modal__title {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 18px;
-}
-
-.modal__body {
-  display: grid;
-  gap: 16px;
-  padding: 18px;
-}
-
 .llm-settings,
 .settings-view {
   padding: 14px;
@@ -1635,8 +1588,7 @@ body {
 
 strong,
 .sidebar-brand__name,
-.chat-header__title,
-.modal__title {
+.chat-header__title {
   font-weight: 600;
 }
 

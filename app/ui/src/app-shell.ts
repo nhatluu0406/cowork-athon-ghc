@@ -45,11 +45,6 @@ import {
   shouldShowContinuationBanner,
   type ConnectionTestState,
 } from "./provider-readiness.js";
-import {
-  closeModalWithFocus,
-  createModalKeyHandler,
-  openModalWithFocus,
-} from "./modal-focus.js";
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
 import { mountLlmSettingsPanel } from "./llm-settings-panel.js";
 import { createPermissionController } from "./permission-controller.js";
@@ -712,6 +707,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const inspectorOpen = !dom.rightPanel.hidden;
   const isCoworkSurface = state.activeSurface === "cowork";
   const isKnowledgeSurface = state.activeSurface === "knowledge";
+  const settingsOpen = !dom.settingsSurface.hidden;
 
   for (const [id, button] of dom.surfaceButtons) {
     button.setAttribute("aria-current", id === state.activeSurface ? "page" : "false");
@@ -724,11 +720,11 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     window.matchMedia("(max-width: 1366px)").matches && inspectorOpen,
   );
 
-  dom.sidebar.hidden = layoutMode !== "work";
-  dom.coworkView.hidden = !isCoworkSurface || state.workMode !== "cowork";
-  dom.workspaceView.root.hidden = !isCoworkSurface || state.workMode !== "workspace";
-  dom.knowledgeView.root.hidden = !isKnowledgeSurface;
-  dom.integrationSurface.hidden = isCoworkSurface || isKnowledgeSurface;
+  dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
+  dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
+  dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
+  dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
+  dom.integrationSurface.hidden = settingsOpen || isCoworkSurface || isKnowledgeSurface;
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
@@ -758,7 +754,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     visible: isCoworkSurface && state.workMode === "cowork",
     interactive: true,
     label: displayModelLabel,
-    status: providerCopy.ok ? (state.connectionTestState === "failed" ? "danger" : "ok") : "warn",
+    status: providerCopy.ok ? "ok" : state.connectionTestState === "failed" ? "danger" : "warn",
     failed: state.connectionTestState === "failed",
   });
 
@@ -1544,6 +1540,7 @@ export function mountCoworkApp(root: HTMLElement): void {
 
   for (const [id, button] of dom.surfaceButtons) {
     button.addEventListener("click", () => {
+      dom.closeSettings();
       state.activeSurface = id;
       if (id === "cowork") {
         state.workMode = "cowork";
@@ -1639,7 +1636,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
             },
           });
-          mountLlmSettingsPanel(dom.settingsBody, {
+          mountLlmSettingsPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             getBootstrap: () => getShellBridge().getBootstrap(),
             onSettingsUpdated: (view) => {
@@ -1653,11 +1650,11 @@ export function mountCoworkApp(root: HTMLElement): void {
               renderState(dom, state, handlers);
             },
           });
-          mountSettingsView(dom.settingsBody, { client: dynamicClient });
+          mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
           mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
             const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            dom.skillsButton.textContent = `Skills: ${enabled}`;
-            dom.skillsButton.setAttribute("aria-label", `Mở Skills, ${enabled} đang bật`);
+            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
+            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
           });
           const permissions = createPermissionController({
             client: dynamicClient,
