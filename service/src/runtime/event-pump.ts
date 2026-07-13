@@ -49,9 +49,10 @@ export interface EventPumpOptions {
   readonly onDiagnostic?: (message: string) => void;
   /**
    * Optional hook invoked for every decoded frame BEFORE session demux (e.g. permission bridge).
-   * Must not throw — failures are reported via {@link onDiagnostic} when provided.
+   * When the hook returns a value, it replaces the frame passed to the mapper. Must not throw —
+   * failures are reported via {@link onDiagnostic} when provided.
    */
-  readonly onFrame?: (frame: { type: string }) => void | Promise<void>;
+  readonly onFrame?: (frame: { type: string }) => void | Promise<void | unknown>;
 }
 
 export interface EventPump {
@@ -100,7 +101,7 @@ export function createEventPump(options: EventPumpOptions): EventPump {
   }
 
   /** Split complete SSE blocks out of the rolling buffer; return the trailing partial. */
-  function drain(buffer: string): string {
+  async function drain(buffer: string): Promise<string> {
     const normalized = buffer.replace(/\r\n/g, "\n");
     const blocks = normalized.split("\n\n");
     const remainder = blocks.pop() ?? "";
@@ -109,13 +110,17 @@ export function createEventPump(options: EventPumpOptions): EventPump {
       if (trimmed.length === 0) continue;
       const frame = decodeSseFrame(trimmed);
       if (frame !== null) {
-        const hook = options.onFrame?.(frame);
-        if (hook !== undefined) {
-          void hook.catch((err: unknown) => {
-            diagnostic(`onFrame hook error: ${errText(err)}`);
-          });
+        let frameToDispatch = frame;
+        try {
+          const hook = options.onFrame?.(frame);
+          if (hook !== undefined) {
+            const result = await hook;
+            if (result !== undefined) frameToDispatch = result as { type: string };
+          }
+        } catch (err) {
+          diagnostic(`onFrame hook error: ${errText(err)}`);
         }
-        dispatch(frame);
+        dispatch(frameToDispatch);
       }
     }
     return remainder;
@@ -134,7 +139,7 @@ export function createEventPump(options: EventPumpOptions): EventPump {
     let buffer = "";
     for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
       buffer += decoder.decode(chunk, { stream: true });
-      buffer = drain(buffer);
+      buffer = await drain(buffer);
     }
   }
 

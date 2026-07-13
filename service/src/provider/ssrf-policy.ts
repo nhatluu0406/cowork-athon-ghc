@@ -71,6 +71,11 @@ export interface SsrfPolicyOptions {
    * never sourced from a request body. Everything else stays blocked. Defaults to `false`.
    */
   readonly loopbackEscape?: boolean;
+  /**
+   * Packaged-verifier-only exact mock LLM base URL (`http://127.0.0.1:.../v1`). When the
+   * candidate URL matches exactly, loopback `http` is allowed. Never set from request bodies.
+   */
+  readonly e2eMockLlmBaseUrl?: string;
 }
 
 export interface SsrfPolicy {
@@ -98,6 +103,7 @@ function bareHost(hostname: string): string {
 
 export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
   const loopbackEscape = options.loopbackEscape === true;
+  const e2eMockLlmBaseUrl = options.e2eMockLlmBaseUrl?.trim().replace(/\/+$/u, "");
 
   async function addressesFor(host: string): Promise<readonly ResolvedAddress[]> {
     const family = net.isIP(host);
@@ -118,6 +124,20 @@ export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
   async function evaluate(rawUrl: string): Promise<SsrfDecision> {
     const url = parseUrl(rawUrl);
     if (url === null) return { allowed: false, reason: "invalid_url", detail: rawUrl };
+
+    const normalized = url.href.replace(/\/+$/u, "");
+    if (
+      e2eMockLlmBaseUrl !== undefined &&
+      e2eMockLlmBaseUrl.length > 0 &&
+      normalized === e2eMockLlmBaseUrl &&
+      url.protocol === "http:" &&
+      url.hostname === "127.0.0.1"
+    ) {
+      return {
+        allowed: true,
+        target: { url, resolved: [{ address: "127.0.0.1", family: 4 }] },
+      };
+    }
 
     const isHttps = url.protocol === "https:";
     const isHttp = url.protocol === "http:";

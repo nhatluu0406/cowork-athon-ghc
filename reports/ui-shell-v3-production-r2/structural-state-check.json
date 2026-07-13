@@ -1,0 +1,209 @@
+{
+  "generatedAt": "2026-07-13T02:12:39.165Z",
+  "structural": [
+    {
+      "label": "cowork-1920",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-1366",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-900",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-inspector",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": false,
+      "inspectorVisible": true,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "workspace-empty",
+      "surface": "cowork",
+      "workMode": "workspace",
+      "activeViews": [
+        "workspace"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "workspace-file",
+      "surface": "cowork",
+      "workMode": "workspace",
+      "activeViews": [
+        "workspace"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "workspace-900",
+      "surface": "cowork",
+      "workMode": "workspace",
+      "activeViews": [
+        "workspace"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "knowledge-base",
+      "surface": "knowledge",
+      "workMode": "workspace",
+      "activeViews": [
+        "knowledge"
+      ],
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "knowledge-graph",
+      "surface": "knowledge",
+      "workMode": "workspace",
+      "activeViews": [
+        "knowledge"
+      ],
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "gateway",
+      "surface": "gateway",
+      "workMode": "workspace",
+      "activeViews": [
+        "integration"
+      ],
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "provider-missing",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "permission",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "sidebarVisible": true,
+      "inspectorVisible": true,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "passed": true,
+      "errors": []
+    }
+  ]
+}

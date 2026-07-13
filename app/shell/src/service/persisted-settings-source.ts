@@ -21,7 +21,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { credential, diagnostics } from "@cowork-ghc/service";
+import { credential, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
 
 import type { LiveLaunchConfig, LiveLaunchSource } from "./live-launch-resolver.js";
@@ -96,13 +96,15 @@ export function createPersistedSettingsSource(
       : await credential.createKeyringStore();
     const credentialService = credential.createCredentialService({ store });
 
+    const e2eMockBaseUrl = readE2eMockLlmBaseUrl();
+
     return {
       workspaceRoot: workspace.rootPath,
       credentialService,
       provider: {
         kind: "custom",
         providerId: provider.providerId,
-        baseUrl: provider.baseUrl,
+        baseUrl: e2eMockBaseUrl ?? provider.baseUrl,
         model: model.modelID,
         envVar: provider.envVar,
         credentialRef: provider.credentialRef,

@@ -23,9 +23,11 @@ import { nodeExistenceProbe } from "./probe.js";
 import type { RecentExistenceProbe, RecentWorkspaces, RecentWorkspaceView } from "./recent.js";
 import { readWorkspaceFilePreview } from "./file-preview.js";
 import { readWorkspaceAttachment } from "./attachment-read.js";
+import { listWorkspaceChildren } from "./list.js";
 
 export const WORKSPACE_GRANT_PATH = "/v1/workspace/grant";
 export const WORKSPACE_RECENT_PATH = "/v1/workspace/recent";
+export const WORKSPACE_LIST_PATH = "/v1/workspace/list";
 export const WORKSPACE_FILE_PREVIEW_PATH = "/v1/workspace/file-preview";
 export const WORKSPACE_ATTACHMENT_READ_PATH = "/v1/workspace/attachment-read";
 
@@ -100,6 +102,31 @@ export function createWorkspaceRouter(options: WorkspaceRouterOptions): Boundary
         handler: async (): Promise<RouteResult<{ recent: readonly RecentWorkspaceView[] }>> => {
           const list = await recent.listWithAvailability(existsProbe);
           return { status: 200, data: { recent: list } };
+        },
+      },
+      {
+        method: "GET",
+        path: WORKSPACE_LIST_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const relativePath = ctx.url.searchParams.get("path")?.trim() ?? "";
+          const limitRaw = ctx.url.searchParams.get("limit");
+          if (relativePath.includes("..") || relativePath.startsWith("/") || /^[a-zA-Z]:/u.test(relativePath)) {
+            throw new WorkspaceRequestError("path must be workspace-relative.");
+          }
+          const root = options.activeWorkspaceRoot?.();
+          if (root === undefined) {
+            return { status: 404, data: { error: "no_active_workspace" } };
+          }
+          try {
+            const tree = await listWorkspaceChildren(root, {
+              relativePath,
+              ...(limitRaw === null ? {} : { limit: Number(limitRaw) }),
+            });
+            return { status: 200, data: { tree } };
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Không đọc được workspace.";
+            return { status: 400, data: { error: "list_failed", message } };
+          }
         },
       },
       {

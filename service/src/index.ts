@@ -162,3 +162,10 @@ export {
   RuntimeIdentityCaptureError,
   RuntimeAlreadyStartedError,
 } from "./runtime/index.js";
+
+export {
+  readE2eMockLlmBaseUrl,
+  isE2eMockLlmUrl,
+  assertLoopbackMockBaseUrl,
+  E2E_MOCK_LLM_ENV_KEY,
+} from "./provider/e2e-mock-llm.js";

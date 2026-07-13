@@ -71,6 +71,25 @@ export interface RecentWorkspaceView {
   readonly available: boolean;
 }
 
+export type WorkspaceEntryKind = "file" | "folder";
+
+export interface WorkspaceListEntry {
+  readonly name: string;
+  readonly relativePath: string;
+  readonly kind: WorkspaceEntryKind;
+  readonly extension?: string;
+  readonly sizeBytes?: number;
+  readonly modifiedTime?: string;
+}
+
+export interface WorkspaceListResult {
+  readonly rootName: string;
+  readonly parentPath: string;
+  readonly entries: readonly WorkspaceListEntry[];
+  readonly truncated: boolean;
+  readonly limit: number;
+}
+
 /** UI theme preference mirrored from the service (CGHC-022). */
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -279,6 +298,8 @@ export interface ServiceClient {
   grantWorkspace(rootPath: string): Promise<WorkspaceGrantResult>;
   /** List recent workspaces, each with a server-probed `available` flag. */
   recentWorkspaces(): Promise<readonly RecentWorkspaceView[]>;
+  /** List direct children of the active workspace or a loaded child folder. */
+  listWorkspaceChildren(relativePath?: string, limit?: number): Promise<WorkspaceListResult>;
   /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
   getSettings(): Promise<SettingsView>;
   /** List provider descriptors exposed by the service (provider-neutral). */
@@ -425,6 +446,12 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       }),
     recentWorkspaces: async () =>
       (await call<{ recent: readonly RecentWorkspaceView[] }>("/v1/workspace/recent")).recent,
+    listWorkspaceChildren: async (relativePath = "", limit = 200) => {
+      const query = new URLSearchParams();
+      if (relativePath.trim().length > 0) query.set("path", relativePath);
+      query.set("limit", String(limit));
+      return (await call<{ tree: WorkspaceListResult }>(`/v1/workspace/list?${query.toString()}`)).tree;
+    },
 
     getSettings: async () => (await call<{ settings: SettingsView }>("/v1/settings")).settings,
     listProviders: async () =>

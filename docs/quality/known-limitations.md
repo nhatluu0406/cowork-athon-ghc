@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # Known limitations
@@ -14,6 +14,8 @@ updated_at: "2026-07-12"
 - **File review (slice mới)**: before/after snapshot + unified diff bounded (64KB snapshot, 32KB diff, 500 dòng);
   persist trên activity conversation; secret-like path redact; hash mismatch banner khi file disk đã đổi sau turn.
   Không có open-file shell bridge (chỉ copy path); không universal Preview tab; không direct editor.
+  **Packaged live**: Journey A (create) và B (modify) PASS; Journey C (delete) chưa chứng minh vì live model không
+  gọi delete tool ổn định — chưa kết luận product delete-path lỗi.
 - Attachment context (`Đã đưa tệp vào ngữ cảnh`) tách khỏi runtime read (`Đã đọc tệp`) trong activity panel.
 - Activity lịch sử không replay animation live khi mở lại conversation.
 - OpenCode `permission.asked` / `permission.replied` không map sang timeline — quyền qua API Cowork + modal.
@@ -35,6 +37,8 @@ updated_at: "2026-07-12"
 
 - Full L9 / release-candidate verification PASS is incomplete. Partial packaged evidence exists, but the latest interactive UX pass did not complete live streaming/tool/file/permission/cancel/provider-recovery/native-picker journeys in one release-candidate run.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
+- **File Work Review packaged**: PARTIAL PASS — live Journey A–B PASS; Journey C blocked by nondeterministic model/tool selection; D–L not completed in latest run.
+- **Open verification decision**: Live LLM behavior must not be the sole mechanism used to verify deterministic delete/deny/redaction/persistence File Review semantics. A deterministic packaged product-path suite is still required.
 
 ## Attachments (Phase 1 + honesty)
 
@@ -60,9 +64,14 @@ updated_at: "2026-07-12"
 - `Tệp đã đọc` trong activity **không** còn gộp attachment context — attachment hiển thị riêng `Đã đưa tệp vào ngữ cảnh`; runtime tool read hiển thị `Đã đọc tệp`.
 - Web support vẫn `DEFERRED`.
 
-## UX
+## UI Shell V3 / UX
 
-- GUI hiện là usable POC quality.
-- Chưa claim parity với Claude Cowork hoặc OpenWork.
-- Local service và provider status hiển thị tách biệt; missing credential chặn send trước runtime.
-- Một số empty/error/loading states cần polish trước release candidate.
+- UI Shell V3 major composition is Product Owner approved, but final packaged visual acceptance is still **pending** review of `reports/ui-shell-v3-production-r3/` and `reports/ui-shell-v3-commercial-readiness/`.
+- Windows controls use Electron native titlebar overlay. Cowork GHC intentionally does not draw custom minimize/maximize/close controls; this preserves native close behavior, double-click maximize/restore, Snap Layout, and high-DPI behavior.
+- Global Settings access is restored from the topbar and provider/status affordances; it opens the existing production Settings behavior as a full-screen V3 application surface with `Nhà cung cấp` and `Chung` navigation, not a parallel modal.
+- Provider/model control is a production status/settings entry point only. **Multi-Provider Profiles are not implemented**; there is no real multi-profile dropdown registry yet.
+- Provider status now names the subject (`DeepSeek · Chưa kiểm tra`, `DeepSeek · Sẵn sàng`, `DeepSeek · Kết nối thất bại`, `Provider · Chưa cấu hình`) and should not rely on color alone. `Chưa kiểm tra` is not a healthy/green state.
+- Conversation draft UX prevents creating additional blank active drafts and marks drafts as `Nháp`, but AI title generation is not implemented.
+- D1–D4 integration surfaces remain passive `awaiting_integration` slots with no mock integration data.
+- File Work Review remains **PARTIAL PASS**.
+- GUI remains POC quality until PO accepts the R3 packaged screenshots and a later release-candidate run covers the full packaged live journey.

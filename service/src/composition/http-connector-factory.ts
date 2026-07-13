@@ -15,6 +15,7 @@ import {
   createSsrfPolicy,
   providerEnvSpec,
   isCustomEndpoint,
+  readE2eMockLlmBaseUrl,
   type DnsResolver,
   type ProviderConnector,
   type ProviderPort,
@@ -34,7 +35,11 @@ export function createHttpConnectorBundle(
   settingsStore: SettingsStore,
   dnsResolver: DnsResolver,
 ): HttpConnectorBundle {
-  const ssrf = createSsrfPolicy({ resolver: dnsResolver });
+  const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  const ssrf = createSsrfPolicy({
+    resolver: dnsResolver,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
   let activeModelFor: () => ModelRef | undefined = () => undefined;
   let port!: ProviderPort;
   const connector = createHttpConnector({

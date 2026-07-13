@@ -16,7 +16,7 @@
  * response; it is never logged or written to disk here.
  */
 
-import { app, BrowserWindow, protocol, session } from "electron";
+import { app, BrowserWindow, Menu, protocol, session } from "electron";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -287,6 +287,7 @@ void runShellLifecycle({
     }
     installAppProtocol(protocol, RENDERER_DIR);
     installCsp(session.defaultSession);
+    Menu.setApplicationMenu(null);
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
     // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
     // now re-resolves the persisted config). Stop+start are each idempotent + own the child.

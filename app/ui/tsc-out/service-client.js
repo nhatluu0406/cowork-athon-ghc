@@ -51,6 +51,13 @@ export function createServiceClient(baseUrl, clientToken) {
             body: JSON.stringify({ rootPath }),
         }),
         recentWorkspaces: async () => (await call("/v1/workspace/recent")).recent,
+        listWorkspaceChildren: async (relativePath = "", limit = 200) => {
+            const query = new URLSearchParams();
+            if (relativePath.trim().length > 0)
+                query.set("path", relativePath);
+            query.set("limit", String(limit));
+            return (await call(`/v1/workspace/list?${query.toString()}`)).tree;
+        },
         getSettings: async () => (await call("/v1/settings")).settings,
         listProviders: async () => (await call("/v1/providers")).providers,
         storeProviderCredential: async (providerId, secret) => {

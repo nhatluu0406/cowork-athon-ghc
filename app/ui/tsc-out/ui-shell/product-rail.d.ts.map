@@ -1,0 +1,1 @@
+{"version":3,"file":"product-rail.d.ts","sourceRoot":"","sources":["../../src/ui-shell/product-rail.ts"],"names":[],"mappings":"AAAA,OAAO,EAA2E,KAAK,gBAAgB,EAAE,MAAM,wBAAwB,CAAC;AAGxI,MAAM,WAAW,cAAc;IAC7B,QAAQ,CAAC,IAAI,EAAE,WAAW,CAAC;IAC3B,QAAQ,CAAC,aAAa,EAAE,iBAAiB,CAAC;IAC1C,QAAQ,CAAC,cAAc,EAAE,GAAG,CAAC,gBAAgB,EAAE,iBAAiB,CAAC,CAAC;CACnE;AAED,wBAAgB,iBAAiB,IAAI,cAAc,CA6BlD"}

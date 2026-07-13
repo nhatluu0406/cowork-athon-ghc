@@ -41,6 +41,7 @@ import { createCoworkService } from "./compose-service.js";
 import type { CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createWorkspaceGuard, grantWorkspace } from "../workspace/index.js";
 import { createPermissionBridge } from "../runtime/permission-bridge.js";
+import { normalizeOpencodeFramePaths } from "../runtime/opencode-frame-paths.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -125,6 +126,12 @@ export async function startLiveCoworkService(
   const permissionProxy = composed.deps.buildToolPermissionProxy(createWorkspaceGuard(workspaceGrant));
   const permissionBridge = createPermissionBridge({ proxy: permissionProxy, workspaceRoot: workspaceId });
 
+  async function preprocessFrame(frame: { type: string }): Promise<unknown> {
+    const normalized = await normalizeOpencodeFramePaths(frame, workspaceId);
+    await permissionBridge.handleFrame(normalized);
+    return normalized;
+  }
+
   // The live `/event` → hub pump. It feeds each raw child frame into the session's hub run
   // (the hub owns the single mapper/fold/coalesce/fan-out), so the SSE route has frames to stream.
   const pump: EventPump = createEventPump({
@@ -134,7 +141,7 @@ export async function startLiveCoworkService(
       open: (sessionId) => composed.deps.streamHub.open(sessionId),
     },
     redactError: composed.deps.redactError,
-    onFrame: (frame) => permissionBridge.handleFrame(frame),
+    onFrame: preprocessFrame,
     ...(options.fetch !== undefined ? { fetch: options.fetch } : {}),
   });
 

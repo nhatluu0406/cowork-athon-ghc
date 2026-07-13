@@ -26,6 +26,10 @@ export {
 } from "./path-safety.js";
 export { realPathInsideRoot, realpathAllowingMissing } from "./realpath.js";
 export {
+  resolveWorkspaceRelativePath,
+  type ResolveWorkspaceRelativeResult,
+} from "./resolve-relative.js";
+export {
   validateWorkspaceSelection,
   nodeFsProbe,
   type WorkspaceValidation,
@@ -46,7 +50,14 @@ export {
   createWorkspaceRouter,
   WorkspaceRequestError,
   WORKSPACE_GRANT_PATH,
+  WORKSPACE_LIST_PATH,
   WORKSPACE_RECENT_PATH,
   type WorkspaceGrantResponse,
   type WorkspaceRouterOptions,
 } from "./router.js";
+export {
+  listWorkspaceChildren,
+  type WorkspaceListEntry,
+  type WorkspaceListOptions,
+  type WorkspaceListResult,
+} from "./list.js";
