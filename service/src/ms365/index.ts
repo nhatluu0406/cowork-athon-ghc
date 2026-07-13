@@ -66,3 +66,14 @@ export {
   MS365_VIEW_PATH,
   type Ms365RouterDeps,
 } from "./ms365-tool-router.js";
+
+/**
+ * Feature-flag gate for the whole MS365 unit (Task 11). OFF (`false`) unless the env var is
+ * EXACTLY `"1"` or `"true"` — every other value, including `undefined`, `"0"`, `"false"`, or
+ * any other string, is OFF. This is the ONLY switch the composition root reads to decide
+ * whether to construct the connector and mount {@link createMs365Router}; default-OFF keeps
+ * the baseline service byte-for-byte unaffected when the var is unset.
+ */
+export function isMs365Enabled(env: Record<string, string | undefined>): boolean {
+  return env.CGHC_MS365_ENABLED === "1" || env.CGHC_MS365_ENABLED === "true";
+}
