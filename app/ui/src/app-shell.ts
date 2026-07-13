@@ -59,6 +59,11 @@ import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
+import type { MicrosoftIntegrationView } from "./integration-slots.js";
+import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
+import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
+import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
+import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
@@ -98,6 +103,13 @@ import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { openWorkspaceFileInView } from "./ui-shell/workspace-view.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 
+const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
+  connectionState: "disconnected",
+  services: [],
+  scopes: [],
+  actionHistory: [],
+});
+
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
   readonly contextMessages: readonly ConversationRecord["messages"][number][];
@@ -136,6 +148,8 @@ interface AppState {
   knowledgeTab: KnowledgeTab;
   serviceLabel: string;
   serviceOk: boolean;
+  codeOpenFiles: OpenCodeFile[];
+  codeActiveKey: string | null;
 }
 
 type AppDom = AppFrameDom;
@@ -180,6 +194,66 @@ function renderIntegrationSurface(container: HTMLElement, surface: ProductSurfac
     );
   }
   container.append(card);
+}
+
+function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  const record = state.conv.state.activeRecord;
+  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  const reviews = state.fileReviews;
+  const workspaceName =
+    state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
+  renderClaudeCodeSurface(
+    dom.codeView,
+    {
+      workspaceName,
+      reviews,
+      openFiles: state.codeOpenFiles,
+      activeKey: state.codeActiveKey,
+      sessionTitle: record?.title ?? null,
+      messages: record?.messages ?? [],
+      phase: state.conv.state.runtimePhase,
+      composerDisabled: !preflight.canSend || isComposerLocked(state),
+      composerDisabledReason: preflight.canSend ? null : preflight.message,
+    },
+    {
+      onSelectTab: (key) => {
+        state.codeActiveKey = key;
+        renderState(dom, state, handlers);
+      },
+      onCloseTab: (key) => {
+        state.codeOpenFiles = state.codeOpenFiles.filter((f) => f.key !== key);
+        if (state.codeActiveKey === key) state.codeActiveKey = state.codeOpenFiles[0]?.key ?? null;
+        renderState(dom, state, handlers);
+      },
+      onOpenReview: (review) => {
+        const key = fileTabKey("review", review.relativePath);
+        if (!state.codeOpenFiles.some((f) => f.key === key)) {
+          state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath: review.relativePath, kind: "review", reviewId: review.id }];
+        }
+        state.codeActiveKey = key;
+        renderState(dom, state, handlers);
+      },
+      onLoadFile: (relativePath, body) => {
+        void loadCodePreview(state, relativePath, body);
+      },
+    },
+  );
+}
+
+async function loadCodePreview(state: AppState, relativePath: string, body: HTMLElement): Promise<void> {
+  if (state.client === null) {
+    body.textContent = "Service chưa sẵn sàng.";
+    return;
+  }
+  try {
+    const result = await state.client.previewWorkspaceFile(relativePath);
+    if (result.kind === "binary") { body.textContent = "Chưa hỗ trợ xem trước loại tệp này."; return; }
+    if (result.kind === "missing") { body.textContent = "Không tìm thấy tệp trong workspace."; return; }
+    const suffix = result.truncated ? "\n\n[Đã cắt bớt — tệp lớn hơn giới hạn xem trước 64 KiB]" : "";
+    body.textContent = `${result.content ?? ""}${suffix}`;
+  } catch (error) {
+    body.textContent = safeError(error);
+  }
 }
 
 function surfaceById(id: ProductSurfaceId): ProductSurfaceDefinition {
@@ -707,6 +781,8 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const inspectorOpen = !dom.rightPanel.hidden;
   const isCoworkSurface = state.activeSurface === "cowork";
   const isKnowledgeSurface = state.activeSurface === "knowledge";
+  const isMicrosoftSurface = state.activeSurface === "microsoft";
+  const isCodeSurface = state.activeSurface === "code";
   const settingsOpen = !dom.settingsSurface.hidden;
 
   for (const [id, button] of dom.surfaceButtons) {
@@ -724,11 +800,18 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
   dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
-  dom.integrationSurface.hidden = settingsOpen || isCoworkSurface || isKnowledgeSurface;
+  dom.integrationSurface.hidden =
+    settingsOpen || isCoworkSurface || isKnowledgeSurface || isMicrosoftSurface || isCodeSurface;
+  dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
+  dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+  } else if (isMicrosoftSurface) {
+    renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
+  } else if (isCodeSurface) {
+    renderCodeSurface(dom, state, handlers);
   } else if (!isCoworkSurface) {
     renderIntegrationSurface(dom.integrationSurface, activeSurface);
   }
@@ -966,6 +1049,7 @@ async function finalizeConversationTurn(
   state.assistantText = resolved.text;
   const displayText = sanitizeAssistantForDisplay(resolved.text);
   updateAssistantBubble(state, displayText);
+  setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
 
   const phase =
@@ -982,6 +1066,7 @@ async function finalizeConversationTurn(
         : "errored";
   await state.conv.completeRuntimeTurn(sessionId, turnStatus);
   await persistActivity(state);
+  setClaudePanelStreaming(dom.codeView.panel, "", false);
   state.finalizingTurn = false;
   state.continuationUnlocked = true;
   renderState(dom, state, handlers);
@@ -1026,6 +1111,7 @@ function bindEvStream(
       state.lastView = view;
       state.assistantText = view.text;
       updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
+      setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
       refreshActivityUi(state, dom);
       if (view.terminal !== null) {
         void finalizeConversationTurn(state, dom, view, handlers, sessionId);
@@ -1508,6 +1594,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     knowledgeTab: "base",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
+    codeOpenFiles: [],
+    codeActiveKey: null,
   };
 
   const handlers = {
@@ -1634,6 +1722,18 @@ export function mountCoworkApp(root: HTMLElement): void {
               if (state.client === null) return;
               const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
               void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+            },
+          });
+          mountWorkspaceNavigator(dom.codeView.explorer.treeSlot, {
+            client: dynamicClient,
+            getWorkspaceRoot: () => state.activeWorkspace,
+            onFileSelected: (relativePath) => {
+              const key = fileTabKey("file", relativePath);
+              if (!state.codeOpenFiles.some((f) => f.key === key)) {
+                state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath, kind: "file" }];
+              }
+              state.codeActiveKey = key;
+              renderState(dom, state, handlers);
             },
           });
           mountLlmSettingsPanel(dom.settingsProviderBody, {
@@ -1772,6 +1872,11 @@ export function mountCoworkApp(root: HTMLElement): void {
       void state.conv.setSearch(dom.sessionSearch.value).then(() => renderState(dom, state, handlers));
     }, 200);
   });
+
+  dom.onCodePanelSend = (text: string): void => {
+    setComposerText(dom.composerInput, text);
+    void sendPrompt(state, dom, readiness, handlers);
+  };
 
   dom.sendButton.addEventListener("click", () => {
     void sendPrompt(state, dom, readiness, handlers).catch((error) => {
