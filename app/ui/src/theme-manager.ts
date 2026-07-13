@@ -1,3 +1,4 @@
+import { getShellBridge } from "./bridge.js";
 import type { ThemePreference } from "./service-client.js";
 
 let media: MediaQueryList | null = null;
@@ -13,6 +14,9 @@ function commitTheme(preference: ThemePreference): void {
   const theme = resolvedTheme(preference);
   document.documentElement.dataset["theme"] = theme;
   document.documentElement.style.colorScheme = theme;
+  void Promise.resolve()
+    .then(() => getShellBridge().setWindowTheme(theme))
+    .catch(() => undefined);
 }
 
 /** Apply a persisted theme and keep system mode live when the OS appearance changes. */

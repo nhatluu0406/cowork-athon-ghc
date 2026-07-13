@@ -8,7 +8,7 @@
  * reaches business logic only through the loopback service (ADR 0003).
  */
 
-import { BrowserWindow } from "electron";
+import { BrowserWindow, nativeTheme } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,11 +39,12 @@ export function createMainWindow(loadUrl: string = APP_INDEX_URL): BrowserWindow
     titleBarOverlay:
       process.platform === "win32"
         ? {
-            color: "#FFFFFF",
-            symbolColor: "#1F2933",
+            color: nativeTheme.shouldUseDarkColors ? "#181B1E" : "#FFFFFF",
+            symbolColor: nativeTheme.shouldUseDarkColors ? "#F4F6F8" : "#1F2933",
             height: 44,
           }
         : false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? "#111315" : "#F5F6F8",
     webPreferences: buildMainWindowWebPreferences(PRELOAD_PATH),
   });
 
