@@ -8,9 +8,10 @@ Canonical source of truth remains the Cowork GHC Git HEAD and product docs.
 
 The PDF proposes a light, airy redesign for a Cowork desktop shell. It presents three main Cowork shell directions (`1a Airy`, `1b Rail`, `1c Zen`) and additional capability screens for Cowork, Code, Structure/RAG, Microsoft 365, and Settings.
 
-The strongest direction for Cowork GHC is now hybrid `1a Airy + 1b rail`, adopted for
-the commercial UI foundation: 56px product rail, contextual conversation/workspace
-sidebar, main chat workspace, and right information panel. It gives the main conversation
+The strongest direction for Cowork GHC is hybrid `1a Airy + 1b rail`, **ported as UI Shell V3**
+(2026-07-13) in `app/ui/src/ui-shell/`: 56px product rail, Cowork/Workspace work modes,
+main workspace, optional inspector, bottom status bar. Product Owner packaged visual
+acceptance remains pending (`reports/ui-shell-v3-production/`). It gives the main conversation
 enough room while making D1-D4 integration surfaces visible without pretending they are
 implemented. `1c Zen` remains useful as focus-mode or empty-state inspiration, but it
 hides too much operational status to be the primary shell for a packaged agent product.

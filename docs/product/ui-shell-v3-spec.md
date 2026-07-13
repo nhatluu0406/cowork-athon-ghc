@@ -1,12 +1,14 @@
 # Cowork GHC UI Shell V3 — Design Specification
 
-**Status:** design prototype R3 — **not** implemented product capability.
+**Status:** design prototype R3 approved; **production port applied** on `feature/ui-shell-v3-production`.
 
 **Prototype path:** `design/ui-shell-v3/` (`index.html`, `styles.css`, `prototype.js`)
 
-**Production code:** unchanged (`app/ui/`, Electron shell, service/runtime).
+**Production code:** `app/ui/src/ui-shell/` + orchestration in `app/ui/src/app-shell.ts`.
 
-**Screenshot evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`). R1/R2 retained for history only.
+**Prototype evidence:** `reports/ui-shell-v3-r3/` (+ `visual-state-check.json`).
+
+**Production evidence:** `reports/ui-shell-v3-production/` — Product Owner packaged visual acceptance **pending**.
 
 ---
 
@@ -24,7 +26,7 @@
 | Workspace Phase 1 | Read-only preview + File Review — no direct editor |
 | Inspector labels | Vietnamese: Kế hoạch, Hoạt động, Tệp, Xem lại |
 
-Implementation into `app/ui/` is **not** approved by this document.
+Implementation into `app/ui/` is **ported** (2026-07-13). D1–D4 backends, Multi-Provider Profiles, and full regression remain deferred.
 
 ---
 
@@ -203,7 +205,7 @@ Regenerate: `node design/ui-shell-v3/capture-screenshots.mjs`
 
 `reports/ui-shell-v3-r3/` — 15 PNGs + `visual-state-check.json`:
 
-`cowork-1920`, `cowork-1366`, `cowork-900`, `cowork-inspector`, `workspace-empty`, `workspace-file`, `workspace-file-review`, `workspace-900`, `knowledge-no-graph`, `knowledge-base`, `knowledge-graph`, `gateway`, `provider-missing`, `provider-failed`, `waiting-permission`.
+`cowork-1920`, `cowork-1366`, `cowork-900`, `cowork-inspector`, `workspace-empty`, `workspace-file` (redacted from R3 — sensitive content), `workspace-file-review`, `workspace-900`, `knowledge-no-graph`, `knowledge-base`, `knowledge-graph`, `gateway`, `provider-missing`, `provider-failed`, `waiting-permission`.
 
 ---
 
