@@ -29,6 +29,22 @@ test("ignores headers, handles multiple hunks and no-newline marker", () => {
   assert.deepEqual(lines[2], { type: "ctx", oldN: 20, newN: 21, text: "z" });
 });
 
+test("strips trailing CR from CRLF input", () => {
+  const lines = parseUnifiedDiff("@@ -1,1 +1,1 @@\r\n-old\r\n+new");
+  assert.deepEqual(lines[0], { type: "del", oldN: 1, newN: null, text: "old" });
+  assert.deepEqual(lines[1], { type: "add", oldN: null, newN: 1, text: "new" });
+});
+
+test("returns empty array for empty input", () => {
+  assert.deepEqual(parseUnifiedDiff(""), []);
+});
+
+test("parses last content line without trailing newline", () => {
+  const lines = parseUnifiedDiff("@@ -1,1 +1,2 @@\n const a = 1;\n+const b = 2;");
+  assert.equal(lines.length, 2);
+  assert.deepEqual(lines[1], { type: "add", oldN: null, newN: 2, text: "const b = 2;" });
+});
+
 test("diffStats counts adds/dels and tolerates undefined", () => {
   assert.deepEqual(diffStats(SAMPLE), { adds: 2, dels: 1 });
   assert.deepEqual(diffStats(undefined), { adds: 0, dels: 0 });
