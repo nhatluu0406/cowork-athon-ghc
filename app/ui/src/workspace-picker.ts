@@ -35,6 +35,10 @@ export interface WorkspacePickerDeps {
   readonly onDeactivated?: () => void;
 }
 
+export interface WorkspacePickerHandle {
+  choose(): Promise<void>;
+}
+
 type Status =
   | { readonly kind: "idle" }
   | { readonly kind: "busy" }
@@ -54,7 +58,7 @@ function el<K extends keyof HTMLElementTagNameMap>(
 }
 
 /** Mount the workspace picker into `container` and load the recent list. */
-export function mountWorkspacePicker(container: HTMLElement, deps: WorkspacePickerDeps): void {
+export function mountWorkspacePicker(container: HTMLElement, deps: WorkspacePickerDeps): WorkspacePickerHandle {
   const section = el("section", "workspace-picker");
   section.setAttribute("aria-label", "Workspace");
 
@@ -221,4 +225,6 @@ export function mountWorkspacePicker(container: HTMLElement, deps: WorkspacePick
     await restorePersisted();
     await refreshRecent();
   })();
+
+  return { choose };
 }

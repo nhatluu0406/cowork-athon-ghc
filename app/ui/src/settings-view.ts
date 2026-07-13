@@ -1,25 +1,9 @@
 /**
- * Settings view (CGHC-022 SD1/SD4/LOW-1) — renderer side.
- *
- * A thin CLIENT of the loopback service with NO business logic: it renders whatever the
- * service returns and calls typed client methods to persist edits. The service owns the
- * settings store, validation, redaction, and the credential HANDLE — the renderer never
- * touches the filesystem or the credential store and never holds key bytes.
- *
- * It shows: general settings (theme + verbose logging + telemetry), each provider's
- * credential-binding STATUS (hasCredential + the non-secret account label — never a key)
- * and base_url, the persisted default-model preference, and a control to clear the current
- * session's model override so it reverts to the default (LOW-1).
- *
- * DOM is built with `textContent` only (no HTML parsing); controls are keyboard-reachable
- * and labelled; no secret is ever written into the DOM.
+ * General settings surface. The service remains the source of truth; the renderer only presents
+ * typed preferences and sends narrow update requests.
  */
 
-import type {
-  ServiceClient,
-  SettingsView,
-  ThemePreference,
-} from "./service-client.js";
+import type { ServiceClient, SettingsView, ThemePreference } from "./service-client.js";
 import { applyThemePreference } from "./theme-manager.js";
 
 export interface SettingsViewDeps {
@@ -39,82 +23,117 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
 
-/** Mount the settings view into `container`. Returns nothing; it manages its own state. */
+function themeLabel(theme: ThemePreference): string {
+  return theme === "system" ? "Theo hệ thống" : theme === "light" ? "Sáng" : "Tối";
+}
+
 export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps): void {
-  const section = el("section", "settings-view");
-  section.setAttribute("aria-label", "Cài đặt");
+  const section = el("section", "settings-view settings-view--general");
+  section.setAttribute("aria-label", "Cài đặt chung");
 
   const status = el("p", "settings-status");
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
+  status.hidden = true;
 
   const generalBox = el("div", "settings-general");
-  section.append(el("h2", "settings-title", "Cài đặt chung"), status, generalBox);
-  container.append(section);
+  section.append(generalBox, status);
+  container.replaceChildren(section);
 
   const setStatus = (text: string): void => {
     status.textContent = text;
+    status.hidden = text.length === 0;
   };
 
-  // A single guarded runner: every edit goes through the service, never local business logic.
   const run = async (label: string, action: () => Promise<SettingsView>): Promise<void> => {
     setStatus(`${label}…`);
     try {
       const next = await action();
       render(next);
       applyThemePreference(next.general.theme);
-      setStatus("Đã lưu.");
+      setStatus("Đã lưu");
+      window.setTimeout(() => setStatus(""), 1800);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không lưu được cài đặt.";
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : "Không lưu được cài đặt.");
     }
   };
 
-  function renderGeneral(view: SettingsView): void {
-    generalBox.replaceChildren(el("h3", "settings-subtitle", "Chung"));
-
-    const themeLabel = el("label", "settings-field", "Giao diện");
-    const themeSelect = document.createElement("select");
-    themeSelect.className = "settings-theme";
-    for (const theme of THEMES) {
-      const opt = document.createElement("option");
-      opt.value = theme;
-      opt.textContent = theme === "system" ? "Theo hệ thống" : theme === "light" ? "Sáng" : "Tối";
-      if (view.general.theme === theme) opt.selected = true;
-      themeSelect.append(opt);
-    }
-    themeSelect.addEventListener("change", () => {
-      void run("Đang lưu giao diện", () =>
-        deps.client.updateGeneral({ theme: themeSelect.value as ThemePreference }),
-      );
-    });
-    themeLabel.append(themeSelect);
-
-    const verbose = toggle("Ghi log chi tiết", view.general.verboseLogging, (checked) =>
-      run("Đang lưu log", () => deps.client.updateGeneral({ verboseLogging: checked })),
-    );
-    const telemetry = toggle("Bật telemetry cục bộ", view.general.telemetryEnabled, (checked) =>
-      run("Đang lưu telemetry", () => deps.client.updateGeneral({ telemetryEnabled: checked })),
-    );
-
-    generalBox.append(themeLabel, verbose, telemetry);
+  function settingSection(title: string, copy: string): { root: HTMLElement; body: HTMLElement } {
+    const root = el("section", "settings-card");
+    const header = el("div", "settings-card__header");
+    header.append(el("h2", "settings-card__title", title), el("p", "settings-card__copy", copy));
+    const body = el("div", "settings-card__body");
+    root.append(header, body);
+    return { root, body };
   }
 
-  function toggle(label: string, checked: boolean, onChange: (checked: boolean) => Promise<void>): HTMLElement {
-    const wrap = el("label", "settings-toggle", label);
+  function switchRow(
+    title: string,
+    copy: string,
+    checked: boolean,
+    onChange: (checked: boolean) => Promise<void>,
+  ): HTMLElement {
+    const row = el("label", "settings-switch-row");
+    const text = el("span", "settings-switch-row__copy");
+    text.append(el("span", "settings-switch-row__title", title), el("span", "settings-switch-row__description", copy));
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = checked;
+    input.className = "settings-switch-row__input";
+    const visual = el("span", "settings-switch-row__visual");
+    visual.setAttribute("aria-hidden", "true");
     input.addEventListener("change", () => void onChange(input.checked));
-    wrap.prepend(input);
-    return wrap;
+    row.append(text, input, visual);
+    return row;
   }
 
   function render(view: SettingsView): void {
-    renderGeneral(view);
+    generalBox.replaceChildren();
+
+    const appearance = settingSection(
+      "Giao diện",
+      "Chọn giao diện sáng, tối hoặc tự động theo Windows.",
+    );
+    const themeGroup = el("div", "settings-theme-segments");
+    themeGroup.setAttribute("role", "radiogroup");
+    themeGroup.setAttribute("aria-label", "Giao diện");
+    for (const theme of THEMES) {
+      const button = el("button", "settings-theme-segment", themeLabel(theme)) as HTMLButtonElement;
+      button.type = "button";
+      button.setAttribute("role", "radio");
+      const active = view.general.theme === theme;
+      button.setAttribute("aria-checked", active ? "true" : "false");
+      button.classList.toggle("is-active", active);
+      button.addEventListener("click", () => {
+        void run("Đang đổi giao diện", () => deps.client.updateGeneral({ theme }));
+      });
+      themeGroup.append(button);
+    }
+    appearance.body.append(themeGroup);
+
+    const diagnostics = settingSection(
+      "Chẩn đoán",
+      "Các tuỳ chọn hỗ trợ debug cục bộ. Không cần bật trong sử dụng thông thường.",
+    );
+    diagnostics.body.append(
+      switchRow(
+        "Ghi log chi tiết",
+        "Ghi thêm dữ liệu kỹ thuật vào log cục bộ.",
+        view.general.verboseLogging,
+        (checked) => run("Đang lưu log", () => deps.client.updateGeneral({ verboseLogging: checked })),
+      ),
+      switchRow(
+        "Telemetry cục bộ",
+        "Thu thập số liệu vận hành trên máy; không gửi ra ngoài.",
+        view.general.telemetryEnabled,
+        (checked) => run("Đang lưu telemetry", () => deps.client.updateGeneral({ telemetryEnabled: checked })),
+      ),
+    );
+
+    generalBox.append(appearance.root, diagnostics.root);
   }
 
-  async function load(): Promise<void> {
+  void (async () => {
     setStatus("Đang tải cài đặt…");
     try {
       const view = await deps.client.getSettings();
@@ -124,7 +143,5 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Không tải được cài đặt.");
     }
-  }
-
-  void load();
+  })();
 }
