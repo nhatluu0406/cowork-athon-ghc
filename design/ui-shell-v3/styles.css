@@ -632,23 +632,141 @@ input {
 .composer__bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3) var(--space-3);
 }
 
-.composer__spacer {
+.provider-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.provider-select__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-select__caret {
+  font-size: 10px;
+  opacity: 0.7;
+}
+
+.provider-select__fail {
+  width: 100%;
+  margin: 0;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+.skills-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.skills-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.skills-popover {
+  position: absolute;
+  bottom: calc(var(--statusbar-h) + 80px);
+  left: calc(var(--rail-w) + var(--sidebar-w) + var(--space-5));
+  z-index: 50;
+  min-width: 180px;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow-drawer);
+}
+
+.skills-popover__title {
+  margin: 0 0 var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skills-popover__list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.file-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.workspace-empty {
   flex: 1;
+  display: grid;
+  place-content: center;
+  padding: var(--space-6);
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.workspace-empty__text {
+  margin: 0 0 var(--space-2);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.workspace-empty__hint {
+  margin: 0;
+  font-size: 14px;
 }
 
 .file-preview {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-3) var(--space-5) var(--space-5);
+}
+
+.file-preview__inner {
+  max-width: 1160px;
+  margin: 0 auto;
 }
 
 .file-preview__body {
-  max-width: 900px;
   margin: 0;
   padding: var(--space-4);
   border: 1px solid var(--border);
@@ -1126,6 +1244,93 @@ input {
 
 .drawer-scrim[hidden] {
   display: none !important;
+}
+
+.statusbar__item--danger .statusbar__value {
+  color: var(--danger);
+}
+
+/* R3: Knowledge surface */
+.knowledge-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.knowledge-header__title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.knowledge-tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.knowledge-tabs__btn {
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.knowledge-tabs__btn--active {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.knowledge-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.knowledge-empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.knowledge-empty__title {
+  margin: 0 0 var(--space-2);
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.knowledge-empty__copy {
+  max-width: 420px;
+  margin: 0 auto var(--space-3);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.view--knowledge {
+  flex: 1;
+  min-height: 0;
+}
+
+.composer__spacer {
+  flex: 1;
+  min-width: 8px;
 }
 
 /* Responsive: inspector overlay */

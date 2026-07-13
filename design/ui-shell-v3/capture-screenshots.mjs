@@ -1,30 +1,34 @@
 /**
- * Capture UI Shell V3 R2 design prototype screenshots.
+ * Capture UI Shell V3 R3 design prototype screenshots.
  * Runs visibility assertions before each capture; fails on invariant violation.
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const HTML = join(HERE, "index.html");
-const OUT = join(REPO, "reports", "ui-shell-v3-r2");
+const OUT = join(REPO, "reports", "ui-shell-v3-r3");
 const CHECK_JSON = join(OUT, "visual-state-check.json");
 
 const SHOTS = [
   { file: "cowork-1920.png", state: "cowork-active", width: 1920, height: 1080 },
   { file: "cowork-1366.png", state: "cowork-active", width: 1366, height: 768 },
-  { file: "cowork-900.png", state: "cowork-active", width: 900, height: 768 },
-  { file: "sidebar-cowork.png", state: "sidebar-cowork", width: 1920, height: 1080 },
-  { file: "sidebar-workspace.png", state: "sidebar-workspace", width: 1920, height: 1080 },
-  { file: "file-document.png", state: "file-document", width: 1920, height: 1080 },
-  { file: "inspector-open.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
-  { file: "gateway.png", state: "gateway", width: 1366, height: 768 },
+  { file: "cowork-900.png", state: "cowork-900", width: 900, height: 768 },
+  { file: "cowork-inspector.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
+  { file: "workspace-empty.png", state: "workspace-empty", width: 1920, height: 1080 },
+  { file: "workspace-file.png", state: "workspace-file", width: 1920, height: 1080 },
+  { file: "workspace-file-review.png", state: "workspace-file-review", width: 1920, height: 1080 },
+  { file: "workspace-900.png", state: "workspace-900", width: 900, height: 768 },
+  { file: "knowledge-no-graph.png", state: "knowledge-no-graph", width: 1366, height: 768 },
+  { file: "knowledge-base.png", state: "knowledge-base", width: 1366, height: 768 },
   { file: "knowledge-graph.png", state: "knowledge-graph", width: 1366, height: 768 },
+  { file: "gateway.png", state: "gateway", width: 1366, height: 768 },
   { file: "provider-missing.png", state: "provider-missing", width: 1920, height: 1080 },
+  { file: "provider-failed.png", state: "provider-failed", width: 1920, height: 1080 },
   { file: "waiting-permission.png", state: "waiting-permission", width: 1920, height: 1080 },
 ];
 
@@ -64,7 +68,6 @@ async function settle(page, state) {
   const browser = await chromium.launch();
   const results = [];
 
-  // Sequential transition test in isolated context
   {
     const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     const page = await ctx.newPage();
@@ -78,7 +81,23 @@ async function settle(page, state) {
     await ctx.close();
   }
 
-  // Harness must fail when two views are forced visible
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const page = await ctx.newPage();
+    await page.goto(base);
+    await page.waitForFunction(() => window.__cghcV3Prototype);
+    await settle(page, 'cowork-active');
+    const click = await page.evaluate(() => {
+      window.__cghcV3Prototype.openFileFromChat('src/README.md', 'README.md');
+      return window.__cghcV3Prototype.assertClickFromChat();
+    });
+    if (!click.passed) {
+      console.error('click-from-chat failed', click.errors.join('; '));
+      process.exit(1);
+    }
+    await ctx.close();
+  }
+
   {
     const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
     const page = await ctx.newPage();
@@ -86,11 +105,11 @@ async function settle(page, state) {
     await page.waitForFunction(() => window.__cghcV3Prototype);
     await settle(page, 'cowork-active');
     const broken = await page.evaluate(() => {
-      document.querySelector('.view[data-view="integration"]').hidden = false;
+      document.querySelector('.view[data-view="workspace"]').hidden = false;
       return window.__cghcV3Prototype.assertVisualState('cowork-active');
     });
     if (broken.passed) {
-      console.error('expected assertion failure when two views visible');
+      console.error('expected assertion failure when cowork+workspace both visible');
       process.exit(1);
     }
     await ctx.close();
@@ -103,12 +122,13 @@ async function settle(page, state) {
     await page.waitForFunction(() => window.__cghcV3Prototype);
 
     const check = await settle(page, s.state);
-  const record = {
+    const record = {
       state: s.state,
       file: s.file,
+      workMode: check.workMode,
       visibleViews: check.visibleViews,
       visibleSidebarPanels: check.visibleSidebarPanels,
-      visibleDocPanels: check.visibleDocPanels,
+      visibleDocTabLabels: check.visibleDocTabLabels,
       sidebarVisible: check.sidebarVisible,
       inspectorVisible: check.inspectorVisible,
       horizontalOverflow: check.horizontalOverflow,
