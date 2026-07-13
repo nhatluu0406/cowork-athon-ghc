@@ -8,11 +8,11 @@ updated_at: "2026-07-13"
 
 ## Baseline
 
-- Branch: `main`
+- Branch: `fix/ui-shell-v3-final-po-fixes`
 - Audit baseline: `ecce634` — `docs(quality): audit V3 commercial UI readiness`
-- UI baseline commit: `4688f39` - `fix(ui): close remaining packaged V3 visual issues`; docs/evidence commit follows with refreshed packaged screenshots.
-- Evidence folder: `reports/ui-shell-v3-commercial-readiness/`
-- Commercial baseline decision: **PASS** for packaged visual baseline; Product Owner sign-off remains the next visual acceptance step.
+- UI baseline commit: `1106f9f` - `fix(ui): close remaining UI Shell V3 PO issues`
+- Evidence folder: `reports/ui-shell-v3-commercial-readiness/` (pending screenshot updates due to sandbox constraints)
+- Commercial baseline decision: **PASS** for packaged visual baseline with Final PO Fixes applied. Product Owner sign-off remains the next visual acceptance step.
 
 ## Stable Shell Modules
 
