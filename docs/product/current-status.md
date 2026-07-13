@@ -11,6 +11,24 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
 
+## UI Shell V3 commercial readiness remediation (2026-07-13)
+
+| Item | Status |
+|---|---|
+| Independent audit branch | `audit/ui-shell-v3-commercial-readiness` |
+| Audit commit | `ecce634` — `docs(quality): audit V3 commercial UI readiness` |
+| Remediation branch | `fix/ui-shell-v3-commercial-readiness` |
+| Audit verdict before fix | **PASS WITH BOUNDED FIXES** — commercial merge blocked by UI-CR-001 through UI-CR-005 |
+| Commercial readiness pass | **Code implemented; packaged evidence refresh pending** — Settings is now a full-screen application surface; workspace tree gap, provider untested status color, rail tooltip clipping, and composer alignment are remediated |
+| Packaged evidence | `reports/ui-shell-v3-commercial-readiness/` exists, but final refresh after the last Settings/tooltip fixes is still pending packaged GUI smoke |
+| Product Owner visual acceptance | **Pending** — do not claim final PASS until PO reviews the commercial-readiness screenshots |
+| D1-D4 merge | **Not started** — integration surfaces remain passive slots |
+| Multi-Provider Profiles | **Not implemented** |
+| File Work Review | **PARTIAL PASS** (unchanged) |
+| Full L9 / RC | **Not complete** |
+
+Settings is no longer a backdrop modal. The topbar Settings icon opens a full-screen surface inside the V3 application frame, below the native titlebar/topbar and above the status bar, with internal navigation for **Nhà cung cấp** and **Chung**.
+
 ## UI Shell V3 production alignment (2026-07-13)
 
 | Item | Status |
