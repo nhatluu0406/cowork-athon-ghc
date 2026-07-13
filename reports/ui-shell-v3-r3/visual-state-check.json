@@ -89,6 +89,8 @@
     {
       "state": "workspace-file",
       "file": "workspace-file.png",
+      "redacted": true,
+      "reason": "Removed before commit — screenshot contained sensitive content",
       "workMode": "workspace",
       "visibleViews": [
         "workspace"
