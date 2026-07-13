@@ -106,3 +106,44 @@ test("non-permission frames are ignored", async () => {
     rmSync(fx.dir, { recursive: true, force: true });
   }
 });
+
+
+test("dedupe state resets after permission.replied and session idle", async () => {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), "cghc-perm-reset-")));
+  const calls: unknown[] = [];
+  const bridge = createPermissionBridge({
+    proxy: {
+      handle: async (event: unknown) => {
+        calls.push(event);
+        return { outcome: "submitted", requestId: "perm-reset", actionKind: "file_create" };
+      },
+    } as never,
+    workspaceRoot: dir,
+  });
+  const frame = {
+    type: "permission.asked",
+    properties: {
+      id: "perm-reset",
+      sessionID: "sess-reset",
+      permission: "edit",
+      tool: "write",
+      metadata: { filepath: join(dir, "reset.txt") },
+    },
+  };
+
+  try {
+    await bridge.handleFrame(frame);
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 1, "duplicate frame in the same pending request is ignored");
+
+    await bridge.handleFrame({ type: "permission.replied", properties: { id: "perm-reset" } });
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 2, "a replied permission id can be observed again");
+
+    await bridge.handleFrame({ type: "session.idle", properties: { sessionID: "sess-reset" } });
+    await bridge.handleFrame(frame);
+    assert.equal(calls.length, 3, "session terminal state clears transient dedupe state");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
