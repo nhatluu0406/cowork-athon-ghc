@@ -37,7 +37,7 @@ updated_at: "2026-07-13"
 
 - Full L9 / release-candidate verification PASS is incomplete. Partial packaged evidence exists, but the latest interactive UX pass did not complete live streaming/tool/file/permission/cancel/provider-recovery/native-picker journeys in one release-candidate run.
 - Packaged live deny→next-turn recovery trong **cùng** conversation: **PASS** — `multi-turn-tool-packaged.mjs`.
-- **File Work Review packaged**: PARTIAL PASS — live Journey A–B PASS; Journey C blocked by nondeterministic model/tool selection; D–L not completed in latest run.
+- **File Work Review packaged**: PARTIAL PASS — live Journey A–B PASS (`reports/file-work-review-completion/`); Journey C **blocked** on OpenCode v1.17.11 (no `patch`/`delete` in LLM tool schema); D–L not completed in latest deterministic run.
 - **Open verification decision**: Live LLM behavior must not be the sole mechanism used to verify deterministic delete/deny/redaction/persistence File Review semantics. A deterministic packaged product-path suite is still required.
 
 ## Attachments (Phase 1 + honesty)
