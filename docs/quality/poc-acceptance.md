@@ -47,7 +47,7 @@ Tài liệu này tóm tắt acceptance đã quan sát cho packaged POC. Chi ti�
 | Attachment dispatch honesty + secret-file safety | PASS | `attachment-honesty-packaged.mjs` journeys A–J; `dispatch-plan.test.ts`, `attachment-secret-policy.test.ts` |
 | Provider readiness + functional UX preflight | PASS | `provider-readiness-packaged.mjs` journeys A–J; `provider-readiness.test.ts`, service `assessProviderReadiness` |
 | Skills Foundation Phase 1 | PASS | `skills-foundation-packaged.mjs` A–J; discovery, invalid state, use/disable, relaunch, provenance, budget, permission isolation |
-| File Work Review | PARTIAL | Live Journey A–B PASS (`file-review-packaged.mjs`); Journey C blocked by nondeterministic model/tool selection; D–L not completed; unit/router tests PASS |
+| File Work Review | PARTIAL | Live Journey A–B PASS (`file-review-packaged.mjs --mode live`); Journey C blocked on OpenCode v1.17.11 tool surface; D–L incomplete; unit/part-mapper/delete UI tests PASS |
 
 ## Regression không-live
 
