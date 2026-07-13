@@ -4,10 +4,11 @@ Cowork GHC is a Windows desktop AI cowork product. The packaged POC baseline is 
 
 ## Read First
 
-1. `docs/product/current-status.md`
-2. `docs/product/productization-roadmap.md`
-3. The relevant file in `docs/architecture/` or `docs/quality/`
-4. The current Git diff: `git status --short` and `git diff`
+1. `docs/README.md` — canonical reading order
+2. `docs/product/current-status.md`
+3. `docs/product/roadmap.md`
+4. The relevant file in `docs/architecture/` or `docs/quality/`
+5. The current Git diff: `git status --short` and `git diff`
 
 ## Working Mode
 
@@ -19,13 +20,13 @@ Cowork GHC is a Windows desktop AI cowork product. The packaged POC baseline is 
 - Independent review is required only for credential/security changes, runtime/process changes,
   release-critical packaged changes, or large architecture changes.
 
-## Loop Engineer Status
+## Demo readiness
 
-`.loop-engineer/` is now `MAINTENANCE_ONLY`: historical state, evidence, and optional verification tooling.
-Do not start the old Loop Engineer workflow unless the product owner explicitly asks for it.
-`node tools/loop-engineer/cli.mjs verify` may still be used as a lightweight state check.
+- Primary demo journey: `docs/demo/demo-guide.md` and `docs/quality/demo-acceptance.md`.
+- Fast pre-commit checks: `scripts\verify-fast.bat`.
+- Demo state reset: `scripts\demo-reset.bat` (keeps keyring credentials).
 
-Do not start `L7` automatically. Web / Next.js remains `DEFERRED`.
+Web / Next.js remains `DEFERRED`.
 
 ## Safety
 
