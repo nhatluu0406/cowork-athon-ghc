@@ -384,10 +384,15 @@ function renderTranscriptFromRecord(dom: AppDom, record: ConversationRecord | nu
   if (record === null || record.messages.length === 0) return;
   dom.emptyState.hidden = true;
   for (const message of record.messages) {
+    // Fix #7: sanitize assistant text before display to prevent legacy context
+    // envelope artifacts (e.g., "[Ngữ cảnh cuộc trò chuyện trước ...]") from leaking into UI.
+    const displayText = message.role === "assistant"
+      ? sanitizeAssistantForDisplay(message.text)
+      : message.text;
     appendMessage(
       dom,
       message.role,
-      message.text,
+      displayText,
       true,
       message.attachments,
       message.skills,
@@ -1597,15 +1602,12 @@ export function mountCoworkApp(root: HTMLElement): void {
         void refreshSettings(state, dom, handlers);
         void state.conv.refreshList().then(async () => {
           if (!conversationRestored && state.conv.state.activeConversationId === null) {
-            const lastId = await state.client!.getLastActiveConversationId();
-            const pick = lastId ?? state.conv.state.summaries[0]?.id ?? null;
-            if (pick !== null) {
-              await state.conv.select(pick);
-              state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
-              loadActivityFromRecord(state, state.conv.state.activeRecord);
-              renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
-              restoreComposerDraft(state, dom, pick);
-            }
+            // PO fix #6: start with a clean new-chat slate.
+            // History is loaded into the sidebar list but no conversation is auto-opened.
+            // User must click a history item to load it. continuationBanner must not appear on startup.
+            // We do NOT call state.conv.select() here; leave activeConversationId null so
+            // the composer starts fresh. A persisted conversation is created only when the
+            // first message is sent (conversation-controller handles that path).
             conversationRestored = true;
           }
           renderState(dom, state, handlers);

@@ -197,8 +197,8 @@
 .workspace-nav--full {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 6px;
   padding: 0 12px 12px;
 }
@@ -275,6 +275,7 @@
 }
 
 .workspace-nav__body {
+  flex: 1;
   min-height: 0;
   overflow: auto;
   margin-top: 0;
@@ -372,11 +373,12 @@
 .msg {
   display: grid;
   gap: 4px;
-  max-width: min(720px, 100%);
+  max-width: min(800px, 100%);
 }
 
 .msg--user {
   justify-self: end;
+  max-width: min(640px, 88%);
 }
 
 .msg__avatar {
@@ -393,22 +395,22 @@
   text-align: right;
 }
 
+/* Assistant messages: no card background — plain text on paper */
 .msg__text {
-  padding: 12px 14px;
-  border: 1px solid var(--line-warm);
-  border-radius: 12px;
-  background: var(--surface);
   color: var(--text-strong);
   font-size: 15px;
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
-  box-shadow: none;
 }
 
+/* User bubble: distinct card */
 .msg--user .msg__text {
-  border-color: #f0c9ad;
+  padding: 10px 14px;
+  border: 1px solid #f0c9ad;
+  border-radius: 12px;
   background: #fffdfb;
+  box-shadow: none;
 }
 
 .empty-state {
