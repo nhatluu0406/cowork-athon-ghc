@@ -169,3 +169,16 @@ export {
   assertLoopbackMockBaseUrl,
   E2E_MOCK_LLM_ENV_KEY,
 } from "./provider/e2e-mock-llm.js";
+
+export {
+  createProviderProfileStore,
+  createProviderConnectionTester,
+  createProfileRuntimeBridge,
+  createProviderProfileRouter,
+  migrateLegacySettingsToProfiles,
+  resolveRuntimeProviderConfig,
+  conversationSnapshotFallback,
+  type ProviderProfile,
+  type ProviderProfileView,
+  type ProviderProfileStore,
+} from "./provider-profiles/index.js";

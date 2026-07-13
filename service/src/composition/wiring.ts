@@ -53,6 +53,7 @@ export function wrapSettingsStoreWithSsrf(base: SettingsStore, port: ProviderPor
     loadSource: () => base.loadSource(),
     recoveryReason: () => base.recoveryReason(),
     reset: () => base.reset(),
+    applyDocument: (next) => base.applyDocument(next),
   };
 }
 
