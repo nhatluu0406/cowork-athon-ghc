@@ -24,6 +24,8 @@ import type {
   ActiveWorkspace,
   CoworkSettings,
   GeneralSettings,
+  ModelPreference,
+  PersistedProviderProfile,
   ProviderSettingsEntry,
 } from "./settings-types.js";
 import {
@@ -77,6 +79,8 @@ export interface SettingsStore {
   recoveryReason(): SettingsRecoveryReason | undefined;
   /** SD5: reset every value to the safe default and persist. */
   reset(): Promise<void>;
+  /** Atomic document replace (profiles migration / bulk profile writes). */
+  applyDocument(next: CoworkSettings): Promise<void>;
 }
 
 function upsertProvider(
@@ -209,6 +213,10 @@ class SettingsStoreImpl implements SettingsStore {
   async reset(): Promise<void> {
     const { settings } = recoverSettings(undefined);
     await this.persist(settings);
+  }
+
+  async applyDocument(next: CoworkSettings): Promise<void> {
+    await this.persist(next);
   }
 }
 

@@ -11,6 +11,7 @@ interface WorkspaceNavigatorOptions {
   readonly client: ServiceClient;
   readonly getWorkspaceRoot: () => string | null;
   readonly onFileSelected: (relativePath: string) => void;
+  readonly onChooseWorkspace?: () => void;
 }
 
 interface TreeNode {
@@ -96,12 +97,20 @@ export function mountWorkspaceNavigator(
   const header = el("div", "workspace-nav__header");
   const title = el("div", "workspace-nav__title");
   title.append(icon("workspace"), el("span", "icon-label", "Workspace"));
+  const headerActions = el("div", "workspace-nav__actions");
+  const chooseButton = el("button", "workspace-nav__choose") as HTMLButtonElement;
+  chooseButton.type = "button";
+  chooseButton.dataset["tooltip"] = "Mở thư mục workspace";
+  chooseButton.setAttribute("aria-label", "Mở thư mục workspace");
+  chooseButton.append(icon("folder-open", "Mở thư mục workspace"));
+  chooseButton.addEventListener("click", () => options.onChooseWorkspace?.());
   const refreshButton = el("button", "workspace-nav__refresh") as HTMLButtonElement;
   refreshButton.type = "button";
-  refreshButton.title = "Làm mới workspace";
+  refreshButton.dataset["tooltip"] = "Làm mới workspace";
   refreshButton.setAttribute("aria-label", "Làm mới workspace");
   refreshButton.append(icon("refresh", "Làm mới"));
-  header.append(title, refreshButton);
+  headerActions.append(chooseButton, refreshButton);
+  header.append(title, headerActions);
 
   const rootLabel = el("div", "workspace-nav__root", "Chưa chọn workspace");
   const search = el("input", "workspace-nav__filter") as HTMLInputElement;

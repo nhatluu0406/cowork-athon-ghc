@@ -4,7 +4,7 @@ description: Implements the local application service, agent runtime integration
 tools: Glob, Grep, Read, Write, Edit, Bash
 ---
 
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/runtime-llm-engineer.md`.
+Follow `docs/README.md` and `AGENTS.md` for project context.
 
 Key constraints:
 - Do not rebuild an existing runtime without a clear ADR benefit.

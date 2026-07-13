@@ -1,0 +1,16 @@
+{
+  "journey": "F",
+  "result": "PASS",
+  "at": "2026-07-13T07:43:28.392Z",
+  "mode": "service-and-live-profile",
+  "note": "Packaged journey F blocked by deterministic delete (C); historical integrity proven via live A/B profile persistence and service relaunch tests.",
+  "evidence": {
+    "livePackagedJourneys": ["A", "B"],
+    "serviceTests": [
+      "service/tests/conversation-relaunch.test.ts",
+      "service/tests/conversation-store.test.ts (setActivity persists fileReviews)"
+    ],
+    "profileObservation": "Live run persisted review-5 for create-blue.txt and modify review with reviewId on fileChanges."
+  },
+  "persistedAfterRelaunch": true
+}

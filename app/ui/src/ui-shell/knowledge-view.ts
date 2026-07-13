@@ -1,3 +1,4 @@
+import { getIntegrationSurfaceAdapter } from "../integration-surface-adapters.js";
 import type { ProductSurfaceDefinition } from "../surface-registry.js";
 import { el, icon } from "./dom-utils.js";
 
@@ -12,6 +13,9 @@ export interface KnowledgeViewDom {
 export function createKnowledgeView(): KnowledgeViewDom {
   const root = el("section", "view view--knowledge knowledge-view");
   root.dataset["view"] = "knowledge";
+  root.id = getIntegrationSurfaceAdapter("knowledge")!.mountId;
+  root.dataset["integrationComponent"] = "KnowledgeIntegrationSlot";
+  root.dataset["integrationSurface"] = "knowledge";
   root.hidden = true;
   const header = el("header", "knowledge-header");
   header.append(el("h1", "knowledge-header__title", "Knowledge"));

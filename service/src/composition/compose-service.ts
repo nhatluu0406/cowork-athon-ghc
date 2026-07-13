@@ -35,6 +35,13 @@ import {
   readE2eMockLlmBaseUrl,
 } from "../provider/index.js";
 import {
+  createProviderConnectionTester,
+  createProviderProfileRouter,
+  createProviderProfileStore,
+  createProfileRuntimeBridge,
+  migrateLegacySettingsToProfiles,
+} from "../provider-profiles/index.js";
+import {
   createRecentWorkspaces,
   createWorkspaceRouter,
   nodeExistenceProbe,
@@ -114,7 +121,17 @@ export async function createCoworkService(
 
   // --- Settings store (persistent SD1 source of truth), loaded through the fs seam. ---
   const settingsFs = options.settingsFs ?? createNodeSettingsFs(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
-  const baseSettingsStore = await openSettingsStore({ fs: settingsFs });
+  let baseSettingsStore = await openSettingsStore({ fs: settingsFs });
+
+  const migration = await migrateLegacySettingsToProfiles(
+    baseSettingsStore.snapshot(),
+    credentialStore,
+  );
+  if (migration.migrated || migration.credentialRemapped) {
+    await baseSettingsStore.applyDocument(migration.settings);
+  }
+
+  const providerProfileStore = createProviderProfileStore({ store: baseSettingsStore, now });
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
@@ -141,6 +158,20 @@ export async function createCoworkService(
     httpBundle.bindActiveModelResolver(() => modelConfig.activeModelFor() ?? undefined);
   }
   await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
+
+  const profileRuntimeBridge = createProfileRuntimeBridge({
+    profiles: providerProfileStore,
+    port: providerPort,
+    modelConfig,
+  });
+  await profileRuntimeBridge.syncActiveProfile();
+
+  const profileConnectionTester = createProviderConnectionTester({
+    credentials: credentialService,
+    dnsResolver,
+    now,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
 
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,
   // and (2) mirrors default-model / credential-ref writes into the in-memory runtime resolver so
@@ -251,8 +282,20 @@ export async function createCoworkService(
     createCredentialRouter(credentialService, {
       allowEnvImport: options.allowEnvCredentialImport === true,
     }),
-    createSettingsRouter(settingsStore, modelPort),
+    createSettingsRouter(settingsStore, modelPort, providerProfileStore),
     createProviderRouter(providerPort, modelConfig),
+    createProviderProfileRouter({
+      profiles: providerProfileStore,
+      tester: profileConnectionTester,
+      runtimeBridge: profileRuntimeBridge,
+      bindCredentialRef: async (_profileId, ref) => {
+        // Credential value is stored via /v1/credentials before binding.
+        void ref;
+      },
+      removeCredential: async (_profileId, account) => {
+        await credentialStore.delete(account);
+      },
+    }),
     createPermissionRouter(permissionGate),
     createEvStreamRouter(streamHub),
     createSessionStreamRouter(streamHub),
@@ -260,7 +303,7 @@ export async function createCoworkService(
     // not-attached SendPrompt so it compiles + errors truthfully without a child; live fills it.
     createSessionRouter(sessionService, options.sendPrompt ?? notAttachedSendPrompt(), {
       assertCreatePrerequisites: (input) => {
-        const result = assessProviderReadiness(settingsStore, input.model);
+        const result = assessProviderReadiness(settingsStore, providerProfileStore, input.model);
         if (!result.ok) {
           throw new SessionRequestError(result.message);
         }
@@ -283,6 +326,8 @@ export async function createCoworkService(
     providerPort,
     modelConfig,
     settingsStore,
+    providerProfileStore,
+    profileRuntimeBridge,
     recentWorkspaces,
     permissionGate,
     permissionAudit,

@@ -1363,6 +1363,66 @@ button:disabled {
   color: var(--danger);
 }
 
+.provider-profiles__list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.provider-profiles__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-warm);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.provider-profiles__item-head {
+  display: grid;
+  gap: 4px;
+}
+
+.provider-profiles__item-name {
+  font-weight: 600;
+}
+
+.provider-profiles__active-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.provider-profiles__item-meta,
+.provider-profiles__test-status {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.provider-profiles__add-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.provider-profiles__form-view {
+  display: grid;
+  gap: 10px;
+}
+
+.provider-profiles__back {
+  justify-self: start;
+}
+
 .permission-backdrop {
   position: fixed;
   inset: 0;
@@ -1990,6 +2050,10 @@ textarea,
   display: grid;
   place-items: center;
   padding: 32px;
+}
+
+.integration-surface__mount {
+  width: min(720px, 100%);
 }
 
 .integration-empty {

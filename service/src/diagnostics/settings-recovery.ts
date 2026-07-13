@@ -25,6 +25,7 @@ import {
   type GeneralSettings,
   type ModelPreference,
   type ProviderSettingsEntry,
+  type PersistedProviderProfile,
   type ThemePreference,
 } from "./settings-types.js";
 
@@ -123,6 +124,44 @@ function coerceModelPreference(raw: unknown): ModelPreference {
   return model === undefined ? {} : { default: model };
 }
 
+function coerceProviderProfile(raw: unknown): PersistedProviderProfile | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (typeof raw.id !== "string" || raw.id.length === 0) return undefined;
+  if (typeof raw.displayName !== "string" || raw.displayName.length === 0) return undefined;
+  if (raw.providerType !== "deepseek" && raw.providerType !== "custom-openai-compat") return undefined;
+  if (typeof raw.baseUrl !== "string" || raw.baseUrl.length === 0) return undefined;
+  if (typeof raw.modelId !== "string" || raw.modelId.length === 0) return undefined;
+  if (typeof raw.envVar !== "string" || raw.envVar.length === 0) return undefined;
+  if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") return undefined;
+  const credentialRef = coerceCredentialRef(raw.credentialRef);
+  const presetId = typeof raw.presetId === "string" ? raw.presetId : undefined;
+  return {
+    id: raw.id,
+    displayName: raw.displayName,
+    providerType: raw.providerType,
+    baseUrl: raw.baseUrl,
+    modelId: raw.modelId,
+    envVar: raw.envVar,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    ...(credentialRef !== undefined ? { credentialRef } : {}),
+    ...(presetId !== undefined ? { presetId } : {}),
+  };
+}
+
+function coerceProviderProfiles(raw: unknown): readonly PersistedProviderProfile[] {
+  if (!Array.isArray(raw)) return [];
+  const out: PersistedProviderProfile[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    const entry = coerceProviderProfile(item);
+    if (entry === undefined || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    out.push(entry);
+  }
+  return out;
+}
+
 /**
  * Migrate + coerce a parsed object into a valid, current-version document. Missing or
  * absent-version files are treated as legacy and upgraded. Field coercion is conservative
@@ -132,11 +171,20 @@ function migrate(raw: Record<string, unknown>): CoworkSettings {
   // Version is advisory: even an unknown/newer version is coerced down to the known shape,
   // so a forward-incompatible file degrades gracefully instead of crashing.
   const activeWorkspace = coerceActiveWorkspace(raw.activeWorkspace);
+  const providerProfiles = coerceProviderProfiles(raw.providerProfiles);
+  const activeProfileId =
+    typeof raw.activeProfileId === "string" && raw.activeProfileId.length > 0
+      ? raw.activeProfileId
+      : undefined;
+  const providerProfilesMigrated = raw.providerProfilesMigrated === true;
   return {
     version: SETTINGS_SCHEMA_VERSION,
     general: coerceGeneral(raw.general),
     providers: coerceProviders(raw.providers),
     modelPreference: coerceModelPreference(raw.modelPreference),
+    ...(providerProfiles.length > 0 ? { providerProfiles } : { providerProfiles: [] }),
+    ...(activeProfileId !== undefined ? { activeProfileId } : {}),
+    ...(providerProfilesMigrated ? { providerProfilesMigrated: true } : {}),
     ...(activeWorkspace !== undefined ? { activeWorkspace } : {}),
   };
 }

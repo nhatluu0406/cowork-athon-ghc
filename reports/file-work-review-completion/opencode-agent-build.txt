@@ -1,0 +1,21 @@
+﻿{
+  "pin": "v1.17.11",
+  "agent": "build",
+  "deleteToolInLlmSchema": false,
+  "patchToolInLlmSchema": false,
+  "requestedToolNamesOnDeleteTurn": [
+    "edit",
+    "glob",
+    "grep",
+    "question",
+    "read",
+    "skill",
+    "task",
+    "todowrite",
+    "write"
+  ],
+  "opencodeConfigTools": {
+    "patch": true
+  },
+  "note": "Even with tools.patch and agent.build.tools.patch enabled in opencode.json, OpenCode 1.17.11 does not expose patch/apply_patch to the LLM tool list. Delete must use apply_patch Delete File markers when the runtime exposes patch."
+}

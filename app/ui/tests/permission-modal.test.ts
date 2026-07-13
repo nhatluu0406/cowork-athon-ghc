@@ -70,7 +70,7 @@ test("P4 — elevated approval is visually marked distinctly", () => {
   openPermissionModal(host, ELEVATED, { onAllow: () => {}, onDeny: () => {} });
   const approval = host.querySelector<HTMLElement>(".permission-approval");
   assert.equal(approval?.dataset["level"], "elevated");
-  assert.match(approval?.textContent ?? "", /nâng cao/i);
+  assert.match(approval?.textContent ?? "", /(nâng cao|tác động cao)/i);
 });
 
 test("F5 — diff slot is present but hidden (never fabricated when no diff content)", () => {
@@ -117,18 +117,6 @@ test("Allow — click posts intent with the DEFAULT scope 'once'", () => {
   openPermissionModal(host, STANDARD, { onAllow: allow.fn as never, onDeny: () => {} });
   host.querySelector<HTMLButtonElement>(".permission-allow")!.click();
   assert.deepEqual(allow.calls, [["once"]], "onAllow invoked with default scope once");
-});
-
-test("Allow — choosing 'always' reports that scope", () => {
-  const host = mountHost();
-  const allow = spy();
-  openPermissionModal(host, STANDARD, { onAllow: allow.fn as never, onDeny: () => {} });
-  const always = Array.from(host.querySelectorAll<HTMLInputElement>(".permission-scope-input")).find(
-    (i) => i.value === "always",
-  );
-  always!.checked = true;
-  host.querySelector<HTMLButtonElement>(".permission-allow")!.click();
-  assert.deepEqual(allow.calls, [["always"]]);
 });
 
 test("Deny — click reports a deny, never an allow", () => {
@@ -228,4 +216,19 @@ test("honesty — no secret/token string appears in the DOM after render", () =>
   const text = host.textContent ?? "";
   // The projection carries no secret; assert none of the usual secret markers leaked.
   assert.doesNotMatch(text, /Bearer|authorization|token|sk-/i);
+});
+
+
+test("Allow menu exposes an explicit session-scoped choice", () => {
+  const host = mountHost();
+  const allow = spy();
+  openPermissionModal(host, STANDARD, { onAllow: allow.fn as never, onDeny: () => {} });
+
+  const menuButton = host.querySelector<HTMLButtonElement>(".permission-allow-menu-button")!;
+  menuButton.click();
+  assert.equal(menuButton.getAttribute("aria-expanded"), "true");
+  const sessionButton = host.querySelector<HTMLButtonElement>(".permission-allow-menu__item")!;
+  assert.match(sessionButton.textContent ?? "", /trong phiên/i);
+  sessionButton.click();
+  assert.deepEqual(allow.calls, [["always"]]);
 });
