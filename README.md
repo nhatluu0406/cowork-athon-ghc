@@ -21,7 +21,7 @@ An intelligent enterprise knowledge graph system that ingests data from Microsof
 docker-compose up -d
 
 # Build and run backend
-cd backend
+cd app/backend
 go build -o bin/m365-knowledge-graph ./cmd
 ./bin/m365-knowledge-graph
 

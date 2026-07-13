@@ -8,7 +8,7 @@
 
 **Task ID**: T###  
 **Task Description**: [Copy from tasks.md]  
-**Implementation Path**: backend/internal/module/feature.go (or applicable path)  
+**Implementation Path**: app/backend/internal/module/feature.go (or applicable path)  
 **Phase**: [Phase 1/2/3/etc. from tasks.md]
 
 ---
@@ -23,7 +23,7 @@
 
 #### Path Validation
 - [ ] File exists at the path specified in task description
-- [ ] File is in the correct directory structure (backend/internal/module/ or backend/pkg/)
+- [ ] File is in the correct directory structure (app/backend/internal/module/ or app/backend/pkg/)
 - [ ] No other implementation stub files in unexpected locations
 
 **Path verified**: `git ls-files | grep -E "<path>"` shows:
@@ -44,7 +44,7 @@ Search the implementation file for stub patterns. **All of the following must be
 
 **Verification command**:
 ```bash
-grep -nE "panic\(.*TODO|return nil.*TODO|stub implementation|// placeholder" backend/internal/module/feature.go
+grep -nE "panic\(.*TODO|return nil.*TODO|stub implementation|// placeholder" app/backend/internal/module/feature.go
 ```
 
 **Output** (paste result; if empty, no stubs found ✅):
@@ -61,7 +61,7 @@ grep -nE "panic\(.*TODO|return nil.*TODO|stub implementation|// placeholder" bac
 
 **Verification commands**:
 ```bash
-cd backend
+cd app/backend
 go fmt ./internal/module/
 go vet ./internal/module/...
 go mod tidy
@@ -100,13 +100,13 @@ go mod tidy
 The code must be reachable from the app's entry point. Trace the call path:
 
 - **For API Handlers**: Code is called by a registered HTTP route
-  - [ ] Route registered in `backend/internal/api/router.go`
+  - [ ] Route registered in `app/backend/internal/api/router.go`
   - [ ] Handler function signature is `func(w http.ResponseWriter, r *http.Request) error`
   - [ ] Router call path: `main()` → `router.Setup()` → handler
   
   **Verification**: Search router.go for the route:
   ```bash
-  grep -n "POST /api/module\|GET /api/module" backend/internal/api/router.go
+  grep -n "POST /api/module\|GET /api/module" app/backend/internal/api/router.go
   ```
   
   **Output** (paste matching line):
@@ -120,7 +120,7 @@ The code must be reachable from the app's entry point. Trace the call path:
   
   **Verification**: Search for function name in handlers:
   ```bash
-  grep -r "feature.Do\|feature.Create" backend/internal/api/
+  grep -r "feature.Do\|feature.Create" app/backend/internal/api/
   ```
   
   **Output** (paste matching lines):
@@ -134,7 +134,7 @@ The code must be reachable from the app's entry point. Trace the call path:
   
   **Verification**:
   ```bash
-  grep -r "module.Middleware\|package.Function" backend/
+  grep -r "module.Middleware\|package.Function" app/backend/
   ```
   
   **Output** (paste matching lines):
@@ -144,15 +144,15 @@ The code must be reachable from the app's entry point. Trace the call path:
 
 #### Test Existence
 
-- [ ] Test file(s) exist: `backend/tests/unit/module/feature_test.go` or `backend/internal/module/feature_test.go`
-- [ ] Test file is committed and trackable: `git log --oneline backend/tests/unit/module/feature_test.go | head -1`
+- [ ] Test file(s) exist: `app/backend/tests/unit/module/feature_test.go` or `app/backend/internal/module/feature_test.go`
+- [ ] Test file is committed and trackable: `git log --oneline app/backend/tests/unit/module/feature_test.go | head -1`
 - [ ] Tests import the package under test
 - [ ] At least 2 test functions exist (happy path + error case)
 
 **Verification**:
 ```bash
-ls -la backend/tests/unit/module/feature_test.go
-grep -c "^func Test" backend/tests/unit/module/feature_test.go
+ls -la app/backend/tests/unit/module/feature_test.go
+grep -c "^func Test" app/backend/tests/unit/module/feature_test.go
 ```
 
 **Output** (paste results):

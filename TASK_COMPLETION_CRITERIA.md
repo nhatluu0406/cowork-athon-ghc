@@ -62,9 +62,9 @@ A task is **complete and verified** only when **ALL** of the following are true:
 
 ### Test File Naming
 
-- Backend unit tests: `backend/tests/unit/<module>/<feature>_test.go`
-- Backend integration tests: `backend/tests/integration/<module>/<feature>_test.go`
-- Internal-scope tests: `backend/internal/<module>/<feature>_test.go` (for non-exported types)
+- Backend unit tests: `app/backend/tests/unit/<module>/<feature>_test.go`
+- Backend integration tests: `app/backend/tests/integration/<module>/<feature>_test.go`
+- Internal-scope tests: `app/backend/internal/<module>/<feature>_test.go` (for non-exported types)
 
 ### Test Structure
 
@@ -162,7 +162,7 @@ To ensure 100% accuracy and catch issues like stub code marked complete, every t
   - Document the call path in the audit
 - [ ] **Test existence**: Find the `_test.go` file(s) for this task
   - Verify at least one test imports and exercises the feature
-  - Verify test file is in the correct directory (backend/tests/unit/ or backend/tests/integration/)
+  - Verify test file is in the correct directory (app/backend/tests/unit/ or app/backend/tests/integration/)
 - [ ] **Test pass**: Run the isolated test suite for this feature:
   ```bash
   go test ./<module>/... -v --count=1 -race
@@ -193,11 +193,11 @@ To ensure 100% accuracy and catch issues like stub code marked complete, every t
 ### Mark Complete in tasks.md
 
 ```markdown
-- [X] T042 Implement feature in backend/internal/feature/feature.go
+- [X] T042 Implement feature in app/backend/internal/feature/feature.go
   **Audits**:
   - ✅ Audit 1 (Implementation): Reviewer name, 2026-07-12, AUDIT_T042_reviewer1_20260712.md
   - ✅ Audit 2 (Integration): Reviewer name, 2026-07-12, AUDIT_T042_reviewer2_20260712.md
-  - ✅ Tests: `go test ./backend/tests/unit/feature/... -v` PASS (3/3)
+  - ✅ Tests: `go test ./app/backend/tests/unit/feature/... -v` PASS (3/3)
 ```
 
 ### Task Is Incomplete If
@@ -221,7 +221,7 @@ Create a file for each audit: `AUDIT_<TASK_ID>_<PHASE>_<REVIEWER>_<DATE>.md`
 ```markdown
 # Audit Report: Task T042
 
-**Task**: T042 — Implement feature in backend/internal/feature/feature.go  
+**Task**: T042 — Implement feature in app/backend/internal/feature/feature.go  
 **Phase**: Audit 1 (Implementation Review)  
 **Reviewer**: DungPham (or delegation name)  
 **Date**: 2026-07-12  
@@ -229,7 +229,7 @@ Create a file for each audit: `AUDIT_<TASK_ID>_<PHASE>_<REVIEWER>_<DATE>.md`
 
 ## Checklist
 
-- [X] Path validation: backend/internal/feature/feature.go exists
+- [X] Path validation: app/backend/internal/feature/feature.go exists
 - [X] Non-stub validation: No panic/TODO/stub patterns found
 - [X] Style & linting: go fmt & go vet pass
 - [X] Dependency check: All imports real, no circular deps
