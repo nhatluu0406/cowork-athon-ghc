@@ -51,6 +51,9 @@ function userFacingProviderError(error?: { message?: string } | string): string 
   return "Kiểm tra kết nối thất bại.";
 }
 
+const ONLY_PROFILE_DELETE_MESSAGE = "Bạn cần tạo một profile khác trước khi xóa profile này.";
+const ACTIVE_PROFILE_DELETE_MESSAGE = "Hãy đặt một profile khác làm active trước khi xóa profile này.";
+
 export function mountProviderProfilesPanel(container: HTMLElement, deps: ProviderProfilesPanelDeps): void {
   const root = el("section", "provider-profiles llm-settings");
   root.setAttribute("aria-label", "Hồ sơ nhà cung cấp");
@@ -104,6 +107,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   const credStatus = el("p", "llm-credential-status");
   const testStatus = el("p", "provider-profiles__test-status");
+  const deleteStatus = el("p", "provider-profiles__delete-status");
 
   const saveBtn = el("button", "llm-save-credential", "Lưu") as HTMLButtonElement;
   saveBtn.type = "button";
@@ -120,7 +124,18 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   const actions = el("div", "llm-actions");
   actions.append(backBtn, saveBtn, saveCredBtn, deleteCredBtn, testBtn, setActiveBtn, deleteBtn);
-  formView.append(formTitle, nameLabel, modelLabel, modelCustomLabel, baseUrlLabel, credLabel, credStatus, testStatus, actions);
+  formView.append(
+    formTitle,
+    nameLabel,
+    modelLabel,
+    modelCustomLabel,
+    baseUrlLabel,
+    credLabel,
+    credStatus,
+    testStatus,
+    deleteStatus,
+    actions,
+  );
 
   root.append(title, status, listView, formView);
   container.replaceChildren(root);
@@ -183,6 +198,13 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       deleteCredBtn.disabled = !profile.credentialConfigured;
       setActiveBtn.hidden = profile.isActive;
       deleteBtn.hidden = false;
+      deleteBtn.disabled = profiles.length <= 1 || profile.isActive;
+      deleteStatus.textContent =
+        profiles.length <= 1
+          ? ONLY_PROFILE_DELETE_MESSAGE
+          : profile.isActive
+            ? ACTIVE_PROFILE_DELETE_MESSAGE
+            : "";
       const ts = testState.get(profile.id) ?? "unknown";
       testStatus.textContent =
         ts === "testing"
@@ -204,6 +226,8 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       deleteCredBtn.disabled = true;
       setActiveBtn.hidden = true;
       deleteBtn.hidden = true;
+      deleteBtn.disabled = true;
+      deleteStatus.textContent = "";
       testStatus.textContent = "Chưa kiểm tra.";
     }
   };
@@ -376,17 +400,20 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     if (editingId === null) return;
     const profile = currentProfile();
     if (profile === undefined) return;
-    const force = profiles.length === 1;
-    const ok = force
-      ? window.confirm("Đây là hồ sơ duy nhất. Xoá sẽ chuyển sang trạng thái chưa cấu hình. Tiếp tục?")
-      : profile.isActive
-        ? window.confirm("Hồ sơ đang active. Xoá sẽ chuyển active sang hồ sơ khác. Tiếp tục?")
-        : window.confirm(`Xoá hồ sơ "${profile.displayName}"?`);
+    if (profiles.length <= 1) {
+      setStatus(ONLY_PROFILE_DELETE_MESSAGE, "err");
+      return;
+    }
+    if (profile.isActive) {
+      setStatus(ACTIVE_PROFILE_DELETE_MESSAGE, "err");
+      return;
+    }
+    const ok = window.confirm(`Xoá hồ sơ "${profile.displayName}"?`);
     if (!ok) return;
     void (async () => {
       setStatus("Đang xoá…");
       try {
-        await deps.client.deleteProviderProfile(editingId!, force);
+        await deps.client.deleteProviderProfile(editingId!);
         await refresh();
         showList();
         setStatus("Đã xoá hồ sơ.");

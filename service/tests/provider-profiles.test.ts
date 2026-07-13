@@ -134,6 +134,116 @@ test("provider profile CRUD and active profile selection", async () => {
   assert.equal(profiles.list().length, 1);
 });
 
+test("provider profile delete rejects only or active profile and preserves state", async () => {
+  const { store } = await openTestStore();
+  const profiles = createProviderProfileStore({ store, now: () => "2026-07-13T00:00:00.000Z" });
+  const a = await profiles.create({ displayName: "DeepSeek", providerType: "deepseek", presetId: "deepseek" });
+  await profiles.setCredentialRef(a.id, credentialRef(credentialAccountForProfile(a.id)));
+
+  await assert.rejects(
+    () => profiles.delete(a.id),
+    /Bạn cần tạo một profile khác trước khi xóa profile này\./,
+  );
+  assert.equal(profiles.activeProfileId(), a.id);
+  assert.equal(profiles.get(a.id)?.credentialRef?.account, credentialAccountForProfile(a.id));
+
+  const b = await profiles.create({
+    displayName: "Local",
+    providerType: "custom-openai-compat",
+    baseUrl: "https://api.example.com/v1",
+    modelId: "gpt-test",
+  });
+
+  await assert.rejects(
+    () => profiles.delete(a.id),
+    /Hãy đặt một profile khác làm active trước khi xóa profile này\./,
+  );
+  assert.equal(profiles.activeProfileId(), a.id);
+
+  await profiles.setActive(b.id);
+  await profiles.delete(a.id);
+  assert.equal(profiles.list().length, 1);
+  assert.equal(profiles.activeProfileId(), b.id);
+  assert.equal(profiles.get(a.id), undefined);
+});
+
+test("profile delete route enforces last and active profile rules before credential removal", async () => {
+  const { store } = await openTestStore();
+  const credentialStore = createMemoryStore();
+  const profiles = createProviderProfileStore({ store, now: () => "2026-07-13T00:00:00.000Z" });
+  const a = await profiles.create({ displayName: "DeepSeek", providerType: "deepseek", presetId: "deepseek" });
+  const accountA = credentialAccountForProfile(a.id);
+  await credentialStore.set(accountA, "redacted-test-delete-a");
+  await profiles.setCredentialRef(a.id, credentialRef(accountA));
+
+  let syncCount = 0;
+  const removedAccounts: string[] = [];
+  const token = "profile-delete-token-123456789012345";
+  const service = createService({ clientToken: token });
+  service.mount(createProviderProfileRouter({
+    profiles,
+    tester: {
+      testProfile: async () => ({ ok: false, error: { kind: "unavailable", message: "unused" } }),
+      lastResultFor: () => undefined,
+    },
+    runtimeBridge: { syncActiveProfile: async () => { syncCount += 1; } },
+    bindCredentialRef: async () => {},
+    removeCredential: async (_profileId, account) => {
+      removedAccounts.push(account);
+      await credentialStore.delete(account);
+    },
+  }));
+  const address = await service.start();
+  try {
+    const onlyRes = await fetch(`http://${address.host}:${address.port}/v1/provider-profiles/${a.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ forceUnconfigured: true }),
+    });
+    const onlyBody = await onlyRes.json() as { ok: boolean; error?: { message: string } };
+    assert.equal(onlyRes.status, 400);
+    assert.equal(onlyBody.ok, false);
+    assert.equal(onlyBody.error?.message, "Bạn cần tạo một profile khác trước khi xóa profile này.");
+    assert.equal(await credentialStore.get(accountA), "redacted-test-delete-a");
+    assert.equal(profiles.activeProfileId(), a.id);
+    assert.deepEqual(removedAccounts, []);
+    assert.equal(syncCount, 0);
+
+    const b = await profiles.create({
+      displayName: "Local",
+      providerType: "custom-openai-compat",
+      baseUrl: "https://api.example.com/v1",
+      modelId: "gpt-test",
+    });
+    const accountB = credentialAccountForProfile(b.id);
+    await credentialStore.set(accountB, "redacted-test-delete-b");
+    await profiles.setCredentialRef(b.id, credentialRef(accountB));
+
+    const activeRes = await fetch(`http://${address.host}:${address.port}/v1/provider-profiles/${a.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(activeRes.status, 400);
+    assert.equal(await credentialStore.get(accountA), "redacted-test-delete-a");
+    assert.equal(profiles.activeProfileId(), a.id);
+    assert.equal(syncCount, 0);
+
+    await profiles.setActive(a.id);
+    const nonActiveRes = await fetch(`http://${address.host}:${address.port}/v1/provider-profiles/${b.id}`, {
+      method: "DELETE",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(nonActiveRes.status, 200);
+    assert.equal(await credentialStore.get(accountB), null);
+    assert.equal(profiles.get(b.id), undefined);
+    assert.equal(profiles.activeProfileId(), a.id);
+    assert.deepEqual(removedAccounts, [accountB]);
+    assert.equal(syncCount, 1);
+  } finally {
+    await service.stop();
+  }
+});
+
 test("connection test state is isolated per profile id", async () => {
   const credentialStore = createMemoryStore();
   const credentialService = createCredentialService({

@@ -69,7 +69,7 @@ export interface ProviderProfileStore {
   activeProfileId(): string | undefined;
   create(input: CreateProviderProfileInput): Promise<ProviderProfile>;
   update(id: string, input: UpdateProviderProfileInput): Promise<ProviderProfile>;
-  delete(id: string, options?: { readonly forceUnconfigured?: boolean }): Promise<void>;
+  delete(id: string): Promise<void>;
   setActive(id: string): Promise<ProviderProfile>;
   clearActive(): Promise<void>;
   setCredentialRef(id: string, ref: CredentialRef): Promise<ProviderProfile>;
@@ -217,26 +217,23 @@ export function createProviderProfileStore(options: ProviderProfileStoreOptions)
       return toProfile(next);
     },
 
-    async delete(id, deleteOptions) {
+    async delete(id) {
       assertValidProfileId(id);
       const profiles = readProfiles(store.snapshot());
-      if (profiles.length <= 1 && deleteOptions?.forceUnconfigured !== true) {
+      if (profiles.length <= 1) {
         throw new ProviderProfileStoreError(
-          "Cannot delete the only profile. Add another profile or confirm unconfigured state.",
+          "Bạn cần tạo một profile khác trước khi xóa profile này.",
         );
       }
       const activeId = readActiveId(store.snapshot());
-      const remaining = profiles.filter((p) => p.id !== id);
-      if (remaining.length === 0) {
-        await writeProfiles([], undefined, undefined);
-        return;
-      }
-      let nextActive = activeId;
       if (activeId === id) {
-        nextActive = remaining[0]!.id;
+        throw new ProviderProfileStoreError(
+          "Hãy đặt một profile khác làm active trước khi xóa profile này.",
+        );
       }
-      const syncLegacy = nextActive !== undefined ? remaining.find((p) => p.id === nextActive) : undefined;
-      await writeProfiles(remaining, nextActive, syncLegacy);
+      const remaining = profiles.filter((p) => p.id !== id);
+      const syncLegacy = activeId !== undefined ? remaining.find((p) => p.id === activeId) : undefined;
+      await writeProfiles(remaining, activeId, syncLegacy);
     },
 
     async setActive(id) {
