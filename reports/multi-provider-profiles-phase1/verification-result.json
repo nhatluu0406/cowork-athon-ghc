@@ -1,0 +1,98 @@
+{
+  "slice": "multi-provider-profiles-phase-1",
+  "verifiedAt": "2026-07-13T09:40:00.000Z",
+  "branch": "feature/multi-provider-profiles",
+  "headBeforeFix": "8375707",
+  "headAfterFix": "2b06052",
+  "acceptanceDecision": "PARTIAL PASS",
+  "fixCommit": {
+    "sha": "2b06052",
+    "message": "fix(provider): return recoverable profile connection test failures"
+  },
+  "originalBlocker": {
+    "step": "3. Test isolation - invalid base URL recovery",
+    "observedBeforeFix": "After updating the custom profile baseUrl to http://127.0.0.1:1/v1, POST /v1/provider-profiles/{id}/test-connection returned internal: Internal boundary error.",
+    "rootCause": "ProviderConnectionTester configured the profile endpoint inside testConnection. Expected SSRF/base URL policy errors from port.configureEndpoint escaped the tester and were converted by the generic HTTP boundary mapper into a 500 internal envelope.",
+    "fix": "ProviderConnectionTester now maps only expected profile connection-test policy failures, including SsrfBlockedError and cross-host redirect policy rejection, into the existing non-secret TestResult failure response. Unexpected credential/storage/programming errors still reject."
+  },
+  "preflight": {
+    "branch": "feature/multi-provider-profiles",
+    "headBeforeFix": "8375707",
+    "workingTreeBefore": "only reports/multi-provider-profiles-phase1/verification-result.json modified",
+    "mainIsAncestorBeforeFix": true,
+    "containsRequiredCommits": [
+      "88f0a0c",
+      "f5ed130",
+      "7b15a41",
+      "f079bcd",
+      "8375707"
+    ],
+    "ancestry": "linear"
+  },
+  "packagedJourney": {
+    "app": "dist-app/win-unpacked/Cowork GHC.exe",
+    "mode": "packaged Electron with isolated user-data-dir, pre-seeded legacy DeepSeek settings, Windows keyring, and existing loopback mock OpenAI-compatible gateway",
+    "result": "PARTIAL PASS",
+    "passed": [
+      "Existing DeepSeek configuration migrated to exactly one migrated DeepSeek profile.",
+      "Relaunch did not create a duplicate migrated profile.",
+      "Legacy credential was remapped to keyring account profile:migrated-deepseek and remained configured.",
+      "Custom OpenAI-compatible profile existed with friendly display name, mock loopback base URL, custom model ID, and profile:{id} credential handle.",
+      "Settings UI showed the custom profile friendly label; custom-openai-compat was not the primary user-facing label.",
+      "Invalid profile endpoint http://127.0.0.1:1/v1 displayed a recoverable failed TestResult in Settings UI, not an internal boundary error.",
+      "Settings remained usable after the failed test.",
+      "Correcting the endpoint to the existing mock gateway and testing again succeeded without restarting the app.",
+      "The custom profile failure did not appear as the DeepSeek profile test result.",
+      "Custom profile was set active and packaged live service started with the active profile.",
+      "A mock-compatible runtime turn through the live packaged service used model mock-local-model-phase1.",
+      "Conversation 1 retained the custom provider/model snapshot after active profile switched to DeepSeek.",
+      "Conversation 2 was created with the DeepSeek provider/model snapshot.",
+      "Relaunch preserved both profiles, active DeepSeek, configured credential handles, and conversation snapshots.",
+      "Deleting the non-active custom profile removed its keyring credential and did not delete historical conversation snapshot metadata."
+    ],
+    "runtimeNote": "The successful runtime proof used the packaged app's live authenticated service boundary after shell connectLive. A separate composer UI send attempt did not emit a mock gateway request before timeout, so full composer-path acceptance is not claimed.",
+    "failedTestRecovery": {
+      "invalidEndpointResult": "The provider endpoint is invalid or not allowed by the connection policy.",
+      "successfulRetestResult": "Kết nối thành công."
+    },
+    "newBlocker": {
+      "step": "7. Delete behavior - active or only remaining profile",
+      "observed": "After deleting the non-active custom profile, DELETE /v1/provider-profiles/migrated-deepseek with forceUnconfigured true did not leave the app in the expected unconfigured state.",
+      "expected": "Deleting the only remaining active profile after confirmation should clear profiles and activeProfileId or otherwise return the designed unconfigured behavior.",
+      "smallestRequiredFix": "When ProviderProfileStore writes an empty profile set with undefined activeProfileId, clear the persisted activeProfileId instead of preserving the previous value from the settings snapshot; then verify active/only-profile delete through packaged UI/API."
+    },
+    "screenshots": []
+  },
+  "verification": {
+    "typecheck": "PASS - npm run typecheck",
+    "focusedProviderProfileTests": "PASS - service/tests/provider-profiles.test.ts, 11 tests",
+    "focusedProviderServiceTests": "PASS - provider profile/http/route/SSRF/error/readiness/router suite, 94 tests",
+    "uiTests": "NOT RERUN - renderer was not changed in the fix commit; previous phase run was PASS",
+    "verifyRelease": "PASS - npm run verify:release",
+    "buildRenderer": "PASS - npm run build:renderer",
+    "buildBat": "PASS - scripts\\\\build.bat after approved Electron cache access",
+    "stopBat": "PASS - scripts\\\\stop.bat, nothing tracked/running",
+    "orphanProcessCheck": "PASS - no Cowork GHC.exe or opencode.exe tasks",
+    "gitDiffCheck": "PASS - only Git LF/CRLF normalization warnings"
+  },
+  "security": {
+    "profileJsonNoSecrets": "PASS - isolated settings JSON contained credential handles only, no fake key markers",
+    "rendererNoRawKey": "PASS - renderer-visible text/state did not include fake key markers",
+    "keyringNamespace": "PASS - migrated DeepSeek used profile:migrated-deepseek; custom used profile:{profileId}",
+    "logsNoAuthorizationOrKey": "PASS - isolated lifecycle/startup logs did not contain Authorization or fake key markers",
+    "profileIdsValidated": "PASS - focused tests and packaged profile ID shape check",
+    "ssrfBaseUrlValidation": "PASS for original blocker - invalid loopback endpoint returned safe failed TestResult in packaged Settings UI"
+  },
+  "outOfScope": [
+    "D4 Gateway",
+    "routing/failover/key pool",
+    "File Work Review delete journey",
+    "OpenCode delete support",
+    "in-conversation provider switching"
+  ],
+  "merge": {
+    "performed": false,
+    "reason": "Packaged acceptance is PARTIAL PASS, not PASS. New blocker remains in active/only-profile delete behavior."
+  },
+  "push": "not pushed"
+}

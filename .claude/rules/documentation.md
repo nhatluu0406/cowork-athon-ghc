@@ -5,9 +5,8 @@
 - **Next.js / web application is `DEFERRED`** (ADR `docs/architecture/decisions/0007-web-application-deferral.md`).
   Do NOT install Next.js, create `apps/web`, add an active web loop, or build web-only
   auth/cloud/deployment/companion services. Do not slow the desktop POC for web feature parity, and do
-  not assume a full web app is certainly needed. Web activates only after the desktop POC reaches L9
-  `PASS` or on explicit product-owner request. Future web loops `W0`–`W6` are a deferred proposal only
-  and must never make `/loop-engineer all` auto-run a web phase.
+  and must not assume a full web app is certainly needed. Web activates only after desktop
+  release-candidate acceptance or on explicit product-owner request.
 
 ## Language policy
 
@@ -26,8 +25,7 @@ MCP, API, event, state, cache, gateway, retry, failover, load balancing) when tr
 clarity; give a short Vietnamese gloss at first use when helpful.
 
 ### Machine/agent-facing files stay English (not translated)
-`CLAUDE.md`, `AGENTS.md`, `.agent-workflow/**`, `.claude/**`, `tools/loop-engineer/**`,
-`.loop-engineer/state/*.yaml`, JSON Schema, source code, test code, config files. Rationale: better
+`CLAUDE.md`, `AGENTS.md`, `.claude/**`, `tools/app/**`, JSON Schema, source code, test code, config files. Rationale: better
 compatibility with Claude Code / Codex / other coding agents, fewer command mistranslations, reusable
 roles/workflows, checkable schema/automation. `STATUS.md`, `TASKS.md`, and product-owner reports use
 Vietnamese when it does not affect machine state. YAML/JSON remain the machine-readable source of truth.
@@ -44,10 +42,7 @@ Vietnamese when it does not affect machine state. YAML/JSON remain the machine-r
 
 ## Translating existing English docs
 - Do NOT mass-translate `docs/` mechanically, and never let translation stall desktop implementation.
-- Inventory first: `.loop-engineer/reports/docs-language-audit.md` classifies each doc
-  (`CANONICAL_CRITICAL` / `CANONICAL_SUPPORTING` / `REFERENCE_ONLY` / `GENERATED_REPORT` /
-  `OBSOLETE_OR_DUPLICATE`). Prioritize before L6: scope, acceptance, architecture design, key ADRs,
-  master plan, security model, test strategy.
+- Prioritize canonical docs listed in `docs/README.md` before large translation passes.
 - Do NOT translate: upstream reference kept for reference (`docs/references/openwork-requirements-and-basic-design.md`),
   license text, source-pinned content, generated API docs with no value from translation, code samples,
   commands, schemas.

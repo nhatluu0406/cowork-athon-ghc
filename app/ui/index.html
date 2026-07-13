@@ -9,7 +9,7 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cowork GHC</title>
@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="./src/ui-shell/context-sidebar.css" />
     <link rel="stylesheet" href="./src/ui-shell/microsoft/microsoft.css" />
     <link rel="stylesheet" href="./src/ui-shell/code/code.css" />
+    <link rel="stylesheet" href="./src/commercial.css" />
   </head>
   <body>
     <main id="app" aria-live="polite"></main>

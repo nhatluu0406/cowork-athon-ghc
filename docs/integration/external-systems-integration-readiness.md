@@ -13,8 +13,8 @@ decisions.
 Related docs:
 
 - [Current Status](../product/current-status.md)
-- [Cowork GHC Product Plan](../product/cowork-ghc-product-plan.md) — §12 external tracks
-- [Recovery and Modernization Plan](../product/cowork-ghc-recovery-and-modernization-plan.md) — §5 merge order
+- [Product Plan](../product/product-plan.md)
+- [Roadmap](../product/roadmap.md)
 - [POC Acceptance](../quality/poc-acceptance.md)
 - [Known Limitations](../quality/known-limitations.md)
 
@@ -39,15 +39,29 @@ Related docs:
 | Attachment Honesty | **PASS** | |
 | File Work Review | **PARTIAL PASS** | Live Journey A–B PASS; Journey C blocked; D–L incomplete |
 | Commercial UI Product Owner acceptance | **Pending** | V3 production shell ported; packaged screenshots in `reports/ui-shell-v3-production/` await PO review |
-| D1–D4 external tracks | **Not merged** | UI surfaces are `awaiting_integration` registry slots only |
+| D1–D4 external tracks | **UI restored, backends not merged** | Product rail + placeholder surfaces with stable mount IDs (`d1-dispatch-root`, etc.); no fake data |
 | Full L9 / release-candidate regression | **Incomplete** | Deferred to combined integration milestone |
 | Architecture refactor (`app-shell.ts`, snapshot/watchdog → service) | **Deferred** | After combined external integration merge |
 
 ```text
 File Work Review: PARTIAL PASS
-Commercial UI acceptance: FAIL
-D1–D4: not merged
+Commercial UI acceptance: Pending PO
+D1–D4 backends: not merged (UI intake surfaces restored on product rail)
 ```
+
+### UI intake surfaces (2026-07-13)
+
+Product rail exposes Cowork, Dispatch, Gateway, Knowledge, Microsoft 365, and Code. Cowork and Workspace remain work modes inside the Cowork surface — Workspace is **not** a rail item.
+
+| Track | Mount ID | Component slot | Placeholder status |
+|---|---|---|---|
+| D1 | `d1-dispatch-root` | `DispatchIntegrationSlot` | Chờ tích hợp D1 |
+| D2 | `d2-microsoft-root` | `MicrosoftIntegrationSlot` | Chờ tích hợp D2 |
+| D3 | `d3-knowledge-root` | `KnowledgeIntegrationSlot` | Chờ tích hợp D3 |
+| D4 | `d4-gateway-root` | `GatewayIntegrationSlot` | Chờ tích hợp D4 |
+| Code | `code-surface-root` | `CodeIntegrationSlot` | Đã lên kế hoạch |
+
+Registry: `app/ui/src/integration-surface-adapters.ts`. Teams replace placeholder content inside the mount node without changing shell navigation.
 
 ---
 

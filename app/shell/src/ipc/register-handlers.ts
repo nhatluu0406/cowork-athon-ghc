@@ -13,6 +13,7 @@ import type {
   PickedWorkspaceFile,
   PickedWorkspaceFolder,
   RendererBootstrap,
+  WindowTheme,
 } from "@cowork-ghc/contracts";
 
 import { IpcChannel } from "./channels.js";
@@ -72,6 +73,21 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     await restartService();
     return { restarted: true };
   });
+
+  ipcMain.handle(
+    IpcChannel.SetWindowTheme,
+    (event: IpcMainInvokeEvent, theme: WindowTheme): void => {
+      if (theme !== "light" && theme !== "dark") return;
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner || process.platform !== "win32") return;
+      owner.setTitleBarOverlay({
+        color: theme === "dark" ? "#181B1E" : "#FFFFFF",
+        symbolColor: theme === "dark" ? "#F4F6F8" : "#1F2933",
+        height: 44,
+      });
+      owner.setBackgroundColor(theme === "dark" ? "#111315" : "#F5F6F8");
+    },
+  );
 
   ipcMain.handle(
     IpcChannel.PickWorkspaceFolder,

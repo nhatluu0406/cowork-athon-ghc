@@ -15,6 +15,7 @@ import type { ModelRef } from "@cowork-ghc/contracts";
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import type { SettingsStore } from "./settings-store.js";
 import type { GeneralSettings } from "./settings-types.js";
+import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import {
   SettingsRequestError,
   asRecord,
@@ -56,9 +57,11 @@ export interface SettingsView {
   }[];
   readonly defaultModel: ModelRef | null;
   readonly activeWorkspace: { readonly rootPath: string } | null;
+  readonly providerProfiles?: readonly import("../provider-profiles/types.js").ProviderProfileView[];
+  readonly activeProfileId?: string | null;
 }
 
-function toView(store: SettingsStore): SettingsView {
+function toView(store: SettingsStore, profiles?: ProviderProfileStore): SettingsView {
   const providers = store.listProviderSettings().map((p) => ({
     providerId: p.providerId,
     hasCredential: p.credentialRef !== undefined,
@@ -71,11 +74,21 @@ function toView(store: SettingsStore): SettingsView {
     providers,
     defaultModel: store.defaultModel() ?? null,
     activeWorkspace: store.activeWorkspace() ?? null,
+    ...(profiles !== undefined
+      ? {
+          providerProfiles: profiles.listViews(),
+          activeProfileId: profiles.activeProfileId() ?? null,
+        }
+      : {}),
   };
 }
 
 /** Build the settings router. The orchestrator mounts it via `service.mount` (later task). */
-export function createSettingsRouter(store: SettingsStore, models: SettingsModelPort): BoundaryRouter {
+export function createSettingsRouter(
+  store: SettingsStore,
+  models: SettingsModelPort,
+  profiles?: ProviderProfileStore,
+): BoundaryRouter {
   return {
     name: "settings",
     routes: [
@@ -84,7 +97,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
         path: SETTINGS_PATH,
         handler: (): RouteResult<{ settings: SettingsView }> => ({
           status: 200,
-          data: { settings: toView(store) },
+          data: { settings: toView(store, profiles) },
         }),
       },
       {
@@ -92,7 +105,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
         path: SETTINGS_GENERAL_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult<{ settings: SettingsView }>> => {
           await store.updateGeneral(parseGeneralPatch(asRecord(ctx.body)));
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -101,7 +114,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
         handler: async (ctx: RouteContext): Promise<RouteResult<{ settings: SettingsView }>> => {
           const record = asRecord(ctx.body);
           await store.setProviderCredentialRef(requireProviderId(record), parseCredentialRef(record));
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -109,7 +122,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
         path: SETTINGS_CREDENTIAL_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult<{ settings: SettingsView }>> => {
           await store.removeProviderCredentialRef(requireProviderId(asRecord(ctx.body)));
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -119,7 +132,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
           const record = asRecord(ctx.body);
           const baseUrl = requireNonEmptyString(record.baseUrl, "baseUrl");
           await store.setProviderBaseUrl(requireProviderId(record), baseUrl);
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -129,7 +142,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
           const record = asRecord(ctx.body);
           const envVar = requireNonEmptyString(record.envVar, "envVar");
           await store.setProviderEnvVar(requireProviderId(record), envVar);
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -139,7 +152,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
           const record = asRecord(ctx.body);
           const model = record.model === null ? undefined : parseModelRef(record.model);
           await store.setDefaultModel(model);
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
       {
@@ -162,7 +175,7 @@ export function createSettingsRouter(store: SettingsStore, models: SettingsModel
           const record = asRecord(ctx.body);
           const rootPath = requireNonEmptyString(record.rootPath, "rootPath");
           await store.setActiveWorkspace(rootPath);
-          return { status: 200, data: { settings: toView(store) } };
+          return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },
     ],

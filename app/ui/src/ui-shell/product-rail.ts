@@ -17,9 +17,9 @@ export function createProductRail(): ProductRailDom {
     const item = el("button", `product-rail__item product-rail__item--${surface.availability}`) as HTMLButtonElement;
     item.type = "button";
     item.dataset["surfaceId"] = surface.id;
-    item.title = railTooltip(surface);
-    item.dataset["tooltip"] = item.title;
-    item.setAttribute("aria-label", item.title);
+    const tooltip = railTooltip(surface);
+    item.dataset["tooltip"] = tooltip;
+    item.setAttribute("aria-label", tooltip);
     item.setAttribute("aria-current", surface.id === "cowork" ? "page" : "false");
     item.append(icon(surface.icon, surface.label));
     nav.append(item);
@@ -28,7 +28,6 @@ export function createProductRail(): ProductRailDom {
 
   const sidebarToggle = el("button", "product-rail__sidebar-toggle") as HTMLButtonElement;
   sidebarToggle.type = "button";
-  sidebarToggle.title = "Mở sidebar";
   sidebarToggle.dataset["tooltip"] = "Mở sidebar";
   sidebarToggle.setAttribute("aria-label", "Mở sidebar");
   sidebarToggle.setAttribute("aria-expanded", "false");

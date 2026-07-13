@@ -121,10 +121,12 @@ export class OpencodeSupervisor implements RuntimeHealth {
       mkdirSync(launch.dataHome, { recursive: true });
       mkdirSync(launch.configDir, { recursive: true });
 
-      if (spec.providerConfig) {
-        const forbidden = injections.find((i) => i.envVar === spec.providerConfig?.envVar)?.value;
-        writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden);
-      }
+      // Always write a project config. Built-in providers still need Cowork's explicit file-edit
+      // permission policy; relying on OpenCode defaults can silently bypass the product gate.
+      const forbidden = spec.providerConfig
+        ? injections.find((i) => i.envVar === spec.providerConfig?.envVar)?.value
+        : undefined;
+      writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden);
 
       const child = this.spawner.spawn(launch.command, launch.args, {
         cwd: launch.cwd,
