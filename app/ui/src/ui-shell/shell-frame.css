@@ -1,39 +1,119 @@
 /**
- * V3 shell frame layout — grid columns, no-sidebar integration surfaces, responsive drawers.
+ * UI Shell V3 production frame.
+ * Owns the application composition: topbar, rail, contextual sidebar, main, inspector, status bar.
  */
 
 [hidden] {
   display: none !important;
 }
 
+:root {
+  --topbar-h: 44px;
+  --statusbar-h: 28px;
+  --rail-w: 50px;
+  --sidebar-w: 280px;
+  --panel-w: 352px;
+  --chat-max: 860px;
+  --paper: #f7f8fa;
+  --paper-deep: #f1f3f6;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f6;
+  --line-warm: #e2e6ec;
+  --line-soft: #eceff3;
+  --text-strong: #1a2332;
+  --text-body: #4b5565;
+  --text-muted: #6b7585;
+  --text-subtle: #8a94a3;
+  --accent: #e85d1a;
+  --accent-soft: #fff3eb;
+  --green: #1f8f55;
+  --warn: #b45309;
+  --danger: #c0392b;
+  --font-sans: "Be Vietnam Pro", "Segoe UI Variable", "Segoe UI", sans-serif;
+}
+
+#app,
+.app-shell {
+  height: 100vh;
+}
+
 .app {
   display: grid;
-  grid-template-rows: var(--topbar-h) 1fr var(--statusbar-h);
-  height: 100vh;
+  grid-template-rows: var(--topbar-h) minmax(0, 1fr) var(--statusbar-h);
   min-height: 0;
   overflow: hidden;
+  background: var(--paper);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--topbar-h);
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  -webkit-app-region: drag;
+}
+
+.topbar__leading,
+.topbar__trailing,
+.topbar__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topbar__brand-mark {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background: var(--accent);
+}
+
+.topbar__brand-name {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.no-drag,
+button,
+input,
+select,
+textarea,
+[contenteditable="true"] {
+  -webkit-app-region: no-drag;
+}
+
+.window-controls {
+  display: flex;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.win-btn {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--line-warm);
+}
+
+.win-btn--close {
+  background: #f4b4a8;
 }
 
 .shell-frame {
   display: grid;
-  min-height: 0;
   min-width: 0;
+  min-height: 0;
   grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
   grid-template-areas: "rail sidebar main inspector";
-}
-
-.shell-frame.shell-frame--no-sidebar {
-  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--panel-w);
-  grid-template-areas: "rail main inspector";
-}
-
-.shell-frame.shell-frame--no-sidebar .contextual-sidebar {
-  display: none !important;
-}
-
-.shell-frame.shell-frame--no-sidebar.shell-frame--inspector-closed {
-  grid-template-columns: var(--rail-w) minmax(0, 1fr);
-  grid-template-areas: "rail main";
+  overflow: hidden;
+  background: var(--paper);
 }
 
 .shell-frame.shell-frame--inspector-closed {
@@ -41,24 +121,97 @@
   grid-template-areas: "rail sidebar main";
 }
 
-.shell-frame .product-rail {
-  grid-area: rail;
+.shell-frame.shell-frame--no-sidebar {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-areas: "rail main";
 }
 
-.shell-frame .contextual-sidebar {
+.shell-frame.shell-frame--no-sidebar .contextual-sidebar,
+.shell-frame.shell-frame--no-sidebar .inspector-shell {
+  display: none !important;
+}
+
+.product-rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 4px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.product-rail__nav {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+
+.product-rail__item,
+.product-rail__sidebar-toggle,
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-body);
+}
+
+.product-rail__item {
+  position: relative;
+  margin: 0 auto;
+}
+
+.product-rail__item:hover,
+.product-rail__sidebar-toggle:hover,
+.icon-btn:hover {
+  border-color: var(--line-soft);
+  background: var(--surface-muted);
+}
+
+.product-rail__item[aria-current="page"] {
+  border-color: #f5d4bf;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.product-rail__item--awaiting_integration::after,
+.product-rail__item--planned::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.product-rail__sidebar-toggle {
+  margin-top: auto;
+  display: none;
+}
+
+.contextual-sidebar {
   grid-area: sidebar;
 }
 
-.shell-frame .view--cowork,
-.shell-frame .view--workspace,
-.shell-frame .view--knowledge,
-.shell-frame .view--integration {
+.view--cowork,
+.view--workspace,
+.view--knowledge,
+.view--integration {
   grid-area: main;
   min-width: 0;
   min-height: 0;
 }
 
-.shell-frame .inspector-shell {
+.inspector-shell {
   grid-area: inspector;
   min-width: 0;
 }
@@ -66,12 +219,17 @@
 .drawer-scrim {
   position: fixed;
   inset: var(--topbar-h) 0 var(--statusbar-h) 0;
-  background: rgba(15, 23, 42, 0.32);
   z-index: 18;
+  background: rgba(16, 24, 40, 0.28);
 }
 
 @media (max-width: 1366px) {
-  .shell-frame.inspector-overlay .inspector-shell:not([hidden]) {
+  .shell-frame {
+    grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(680px, 1fr);
+    grid-template-areas: "rail sidebar main";
+  }
+
+  .shell-frame .inspector-shell:not([hidden]) {
     position: fixed;
     top: var(--topbar-h);
     right: 0;
@@ -83,7 +241,12 @@
 }
 
 @media (max-width: 900px) {
-  .shell-frame {
+  .topbar__brand-name {
+    display: none;
+  }
+
+  .shell-frame,
+  .shell-frame.shell-frame--inspector-closed {
     grid-template-columns: var(--rail-w) minmax(0, 1fr);
     grid-template-areas: "rail main";
   }
@@ -98,7 +261,7 @@
     top: var(--topbar-h);
     left: var(--rail-w);
     bottom: var(--statusbar-h);
-    width: min(var(--sidebar-w), 88vw);
+    width: min(300px, calc(100vw - var(--rail-w)));
     z-index: 20;
     box-shadow: 8px 0 28px rgba(16, 24, 40, 0.14);
   }
