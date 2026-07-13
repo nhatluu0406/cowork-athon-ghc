@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -29,6 +30,7 @@ type Config struct {
 	OAuthRedirectURI  string // T184: redirect_uri used for the Entra ID auth-code exchange
 	DevLoginUsername  string // T184: optional username/password login fallback (dev/smoke-test only)
 	DevLoginPassword  string
+	AdminUserIDs      []string // comma-separated JWT user IDs/emails allowed to promote/rollback fine-tuned models
 }
 
 func LoadConfig() (*Config, error) {
@@ -54,6 +56,7 @@ func LoadConfig() (*Config, error) {
 		OAuthRedirectURI:  getEnv("OAUTH_REDIRECT_URI", ""),
 		DevLoginUsername:  getEnv("DEV_LOGIN_USERNAME", ""),
 		DevLoginPassword:  getEnv("DEV_LOGIN_PASSWORD", ""),
+		AdminUserIDs:      getEnvList("ADMIN_USER_IDS"),
 	}
 	return cfg, nil
 }
@@ -87,6 +90,24 @@ func getEnvInt(key string, defaultVal int) int {
 		}
 	}
 	return defaultVal
+}
+
+// getEnvList parses a comma-separated env var into a trimmed, non-empty
+// string slice (e.g. ADMIN_USER_IDS="alice@example.com, bob@example.com").
+// Returns nil if the var is unset or empty.
+func getEnvList(key string) []string {
+	val := os.Getenv(key)
+	if val == "" {
+		return nil
+	}
+	parts := strings.Split(val, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if trimmed := strings.TrimSpace(p); trimmed != "" {
+			out = append(out, trimmed)
+		}
+	}
+	return out
 }
 
 func getEnvDuration(key string, defaultVal time.Duration) time.Duration {

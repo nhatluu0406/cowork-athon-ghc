@@ -6,23 +6,40 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
+	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 )
 
-// HandleGraphNodes wires GET /api/graph/nodes to real Neo4j entity queries
-// (tasks.md T185). Optional query params: `label` (node label filter),
-// `limit` (default 100, max 1000).
-func HandleGraphNodes(qb *graph.QueryBuilder) http.HandlerFunc {
+// HandleGraphNodes wires GET /api/graph/nodes to real Neo4j entity queries,
+// scoped to the caller's Stage-0 permission set (tasks.md T185/T186).
+// Optional query params: `label` (node label filter), `limit` (default 100,
+// max 1000).
+func HandleGraphNodes(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFilter, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		userID, ok := requireUserID(w, r, jwtAuth)
+		if !ok {
+			return
+		}
+
+		allowedFileIDs, err := permFilter.Filter(r.Context(), userID)
+		if err != nil {
+			http.Error(w, "permission filter failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if allowedFileIDs == nil {
+			allowedFileIDs = []int{}
+		}
+
 		label := r.URL.Query().Get("label")
 		limit := parseLimit(r, 100)
 
-		nodes, err := qb.ListNodes(r.Context(), label, limit)
+		nodes, err := qb.ListNodes(r.Context(), label, allowedFileIDs, limit)
 		if err != nil {
 			http.Error(w, "failed to query nodes: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -37,19 +54,34 @@ func HandleGraphNodes(qb *graph.QueryBuilder) http.HandlerFunc {
 }
 
 // HandleGraphEdges wires GET /api/graph/edges to real Neo4j relationship
-// queries (tasks.md T185). Optional query params: `type` (relationship type
-// filter), `limit` (default 100, max 1000).
-func HandleGraphEdges(qb *graph.QueryBuilder) http.HandlerFunc {
+// queries, scoped to the caller's Stage-0 permission set (tasks.md
+// T185/T186). Optional query params: `type` (relationship type filter),
+// `limit` (default 100, max 1000).
+func HandleGraphEdges(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFilter, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		userID, ok := requireUserID(w, r, jwtAuth)
+		if !ok {
+			return
+		}
+
+		allowedFileIDs, err := permFilter.Filter(r.Context(), userID)
+		if err != nil {
+			http.Error(w, "permission filter failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if allowedFileIDs == nil {
+			allowedFileIDs = []int{}
+		}
+
 		relType := r.URL.Query().Get("type")
 		limit := parseLimit(r, 100)
 
-		edges, err := qb.ListEdges(r.Context(), relType, limit)
+		edges, err := qb.ListEdges(r.Context(), relType, allowedFileIDs, limit)
 		if err != nil {
 			http.Error(w, "failed to query edges: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -65,11 +97,20 @@ func HandleGraphEdges(qb *graph.QueryBuilder) http.HandlerFunc {
 
 // HandleGraphPath wires GET /api/graph/path?from=<id>&to=<id> to a real
 // Neo4j shortest-path query (tasks.md T185). Optional `max_depth` (default 2,
-// clamped 1-3 by QueryBuilder.FindPath).
-func HandleGraphPath(qb *graph.QueryBuilder) http.HandlerFunc {
+// clamped 1-3 by QueryBuilder.FindPath). Requires a valid caller JWT; unlike
+// HandleGraphNodes/HandleGraphEdges, path traversal does not yet scope
+// intermediate nodes by allowedFileIDs (that needs FindPath's Cypher/return
+// shape to carry source_file_id per node, a larger follow-up change) —
+// authentication is the interim mitigation so the endpoint is at least not
+// fully open.
+func HandleGraphPath(qb *graph.QueryBuilder, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		if _, ok := requireUserID(w, r, jwtAuth); !ok {
 			return
 		}
 

@@ -61,14 +61,14 @@ func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedb
 	router.Register("/api/m365/sync/status", api.HandleM365SyncStatus(m365Deps))
 
 	// Knowledge / Q&A + entities
-	router.Register("/api/knowledge/query", api.HandleKnowledgeQuery(retriever))
-	router.Register("/api/entities", api.HandleEntities(queryBuilder, permFilter))
-	router.Register("/api/entities/", api.HandleEntityDetail(queryBuilder))
+	router.Register("/api/knowledge/query", api.HandleKnowledgeQuery(retriever, jwtAuth))
+	router.Register("/api/entities", api.HandleEntities(queryBuilder, permFilter, jwtAuth))
+	router.Register("/api/entities/", api.HandleEntityDetail(queryBuilder, jwtAuth))
 
 	// Graph
-	router.Register("/api/graph/nodes", api.HandleGraphNodes(queryBuilder))
-	router.Register("/api/graph/edges", api.HandleGraphEdges(queryBuilder))
-	router.Register("/api/graph/path", api.HandleGraphPath(queryBuilder))
+	router.Register("/api/graph/nodes", api.HandleGraphNodes(queryBuilder, permFilter, jwtAuth))
+	router.Register("/api/graph/edges", api.HandleGraphEdges(queryBuilder, permFilter, jwtAuth))
+	router.Register("/api/graph/path", api.HandleGraphPath(queryBuilder, jwtAuth))
 
 	// Stats
 	router.Register("/api/stats/overview", api.HandleStatsOverview(queryBuilder, statsDB))

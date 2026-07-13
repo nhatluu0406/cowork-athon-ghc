@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 )
@@ -23,13 +24,19 @@ type KnowledgeQueryResponse struct {
 }
 
 // HandleKnowledgeQuery wires the real 8-stage Retriever (tasks.md Group D)
-// into the /api/knowledge/query endpoint. UserID currently falls back to the
-// X-User-ID header / "anonymous" until real JWT claim extraction lands
-// (tasks.md T117/T118 — Group B).
-func HandleKnowledgeQuery(retriever *retrieval.Retriever) http.HandlerFunc {
+// into the /api/knowledge/query endpoint. UserID is the verified subject of
+// the caller's JWT (Authorization: Bearer <token>) — never a client-supplied
+// header, which would let any caller impersonate any user for Stage-0
+// permission filtering.
+func HandleKnowledgeQuery(retriever *retrieval.Retriever, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userID, ok := requireUserID(w, r, jwtAuth)
+		if !ok {
 			return
 		}
 
@@ -37,11 +44,6 @@ func HandleKnowledgeQuery(retriever *retrieval.Retriever) http.HandlerFunc {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
 			return
-		}
-
-		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			userID = "anonymous"
 		}
 
 		result, err := retriever.Query(r.Context(), retrieval.QueryRequest{Query: req.Query, UserID: userID})
@@ -66,19 +68,17 @@ func HandleKnowledgeQuery(retriever *retrieval.Retriever) http.HandlerFunc {
 // HandleEntities wires GET /api/entities to real Neo4j entity queries with
 // Stage-0 permission-scope filtering (tasks.md T186). Optional query params:
 // `type` (entity/node label filter), `limit` (default 100, max 1000). UserID
-// resolution follows the same X-User-ID header / "anonymous" fallback used
-// by HandleKnowledgeQuery until real JWT claim extraction is wired into
-// every handler (tasks.md T117/T118 — Group B).
-func HandleEntities(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFilter) http.HandlerFunc {
+// is the verified subject of the caller's JWT (see HandleKnowledgeQuery).
+func HandleEntities(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFilter, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		userID := r.Header.Get("X-User-ID")
-		if userID == "" {
-			userID = "anonymous"
+		userID, ok := requireUserID(w, r, jwtAuth)
+		if !ok {
+			return
 		}
 
 		entityType := r.URL.Query().Get("type")
@@ -119,11 +119,20 @@ func HandleEntities(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFilt
 
 // HandleEntityDetail wires GET /api/entities/{id} to a real Neo4j entity +
 // neighbor query (tasks.md T186). The entity ID is taken from the last path
-// segment (router mounts this at the "/api/entities/" prefix).
-func HandleEntityDetail(qb *graph.QueryBuilder) http.HandlerFunc {
+// segment (router mounts this at the "/api/entities/" prefix). Requires a
+// valid caller JWT; unlike HandleEntities/ListEntities, this endpoint does
+// not yet scope the returned entity/neighbors by allowedFileIDs (a
+// single-entity lookup by ID, so that scoping needs to be added to
+// GetEntityByID/GetNeighbors as a follow-up) — authentication is the
+// interim mitigation so the endpoint is at least not fully open.
+func HandleEntityDetail(qb *graph.QueryBuilder, jwtAuth *auth.JWTAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		if _, ok := requireUserID(w, r, jwtAuth); !ok {
 			return
 		}
 
