@@ -59,6 +59,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { mountWorkspacePicker } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
+import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
@@ -1658,6 +1659,11 @@ export function mountCoworkApp(root: HTMLElement): void {
             },
           });
           mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
+          mountSkillsSettingsPanel(dom.settingsSkillsBody, dynamicClient, (skills) => {
+            const enabled = skills.filter((skill) => skill.status === "enabled").length;
+            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
+            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+          });
           mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
             const enabled = skills.filter((skill) => skill.status === "enabled").length;
             dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;

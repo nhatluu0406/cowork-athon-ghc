@@ -10,6 +10,7 @@ import {
   readdir,
   realpath,
   rename,
+  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
@@ -18,11 +19,15 @@ import { isInsideRoot } from "../workspace/path-safety.js";
 import type {
   EnabledSkillSnapshot,
   SkillCatalog,
+  SkillCreateDraft,
+  SkillDraft,
   SkillRoot,
   SkillSource,
   SkillUseMetadata,
   SkillView,
 } from "./types.js";
+
+export type { SkillCreateDraft, SkillDraft } from "./types.js";
 
 export const SKILL_FILE_NAME = "SKILL.md";
 export const SKILL_MAX_COUNT = 64;
@@ -34,6 +39,56 @@ const INTERNAL_MARKER = /<<<(?:END_)?CGHC_/u;
 interface ParsedSkill {
   readonly view: SkillView;
   readonly content?: string;
+  readonly folderPath?: string;
+}
+
+export function suggestSkillId(name: string): string {
+  const slug = name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 64);
+  const candidate = slug.length > 0 ? slug : "skill";
+  return SKILL_ID_PATTERN.test(candidate) ? candidate : "my-skill";
+}
+
+function validateDraft(draft: SkillDraft, id: string): string | null {
+  if (!SKILL_ID_PATTERN.test(id)) return "Skill id không hợp lệ.";
+  if (draft.name.trim().length === 0 || draft.name.length > 100) {
+    return "Skill name là bắt buộc (tối đa 100 ký tự).";
+  }
+  if (draft.description.trim().length === 0 || draft.description.length > 300) {
+    return "Skill description là bắt buộc (tối đa 300 ký tự).";
+  }
+  if (draft.version.trim().length === 0 || draft.version.length > 40) {
+    return "Skill version không hợp lệ.";
+  }
+  if (draft.body.trim().length === 0) return "Nội dung hướng dẫn Skill không được rỗng.";
+  if (INTERNAL_MARKER.test(draft.body)) return "Skill chứa internal transport marker bị cấm.";
+  const bytes = Buffer.byteLength(buildSkillMarkdown({ ...draft, id }), "utf8");
+  if (bytes > SKILL_MAX_FILE_BYTES) {
+    return `SKILL.md vượt quá ${SKILL_MAX_FILE_BYTES} byte.`;
+  }
+  return null;
+}
+
+function buildSkillMarkdown(draft: SkillDraft & { readonly id: string }): string {
+  return `---\nid: ${draft.id}\nname: ${draft.name}\ndescription: ${draft.description}\nversion: ${draft.version}\n---\n\n${draft.body.trim()}\n`;
+}
+
+function userLocalRoot(roots: readonly SkillRoot[]): SkillRoot {
+  const root = roots.find((entry) => entry.source === "user_local");
+  if (root === undefined) throw new Error("User-local Skills root is not configured.");
+  return root;
+}
+
+async function writeSkillFile(folderPath: string, text: string): Promise<void> {
+  const filePath = join(folderPath, SKILL_FILE_NAME);
+  const temp = `${filePath}.tmp`;
+  await writeFile(temp, text, "utf8");
+  await rename(temp, filePath);
 }
 
 interface RegistryFile {
@@ -203,6 +258,7 @@ async function parseSkill(
         sizeBytes: bytes.byteLength,
       },
       content: body,
+      folderPath,
     };
   } catch (error) {
     const code =
@@ -237,7 +293,8 @@ export async function createSkillCatalog(options: SkillCatalogOptions): Promise<
         .sort((a, b) => a.name.localeCompare(b.name))
         .slice(0, SKILL_MAX_COUNT);
       for (const child of children) {
-        entries.push(await parseSkill(rootReal, join(rootReal, child.name), root.source));
+        const folderPath = join(rootReal, child.name);
+        entries.push(await parseSkill(rootReal, folderPath, root.source));
       }
     }
 
@@ -325,6 +382,67 @@ export async function createSkillCatalog(options: SkillCatalogOptions): Promise<
         content: entry.content.slice(0, SKILL_PREVIEW_CHARS),
         truncated: entry.content.length > SKILL_PREVIEW_CHARS,
       };
+    },
+    readContent(id) {
+      const entry = discovered.get(id);
+      if (entry === undefined || entry.content === undefined || entry.view.validationStatus !== "valid") {
+        throw new Error(`Skill không khả dụng: ${id}`);
+      }
+      return entry.content;
+    },
+    async createUserSkill(draft) {
+      const id = (draft.id?.trim() ?? suggestSkillId(draft.name)).toLowerCase();
+      const validationError = validateDraft(draft, id);
+      if (validationError !== null) throw new Error(validationError);
+      if ([...discovered.values()].some((entry) => entry.view.validationStatus === "valid" && entry.view.id === id)) {
+        throw new Error(`Skill id đã tồn tại: ${id}`);
+      }
+      const root = userLocalRoot(options.roots);
+      if (root.createIfMissing === true) await mkdir(root.path, { recursive: true });
+      const rootReal = await realpath(root.path);
+      const folderPath = join(rootReal, id);
+      if (!isInsideRoot(rootReal, folderPath)) throw new Error("Đường dẫn Skill không hợp lệ.");
+      try {
+        await lstat(folderPath);
+        throw new Error(`Skill id đã tồn tại: ${id}`);
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? String((error as { code?: unknown }).code)
+            : "";
+        if (code !== "ENOENT") throw error;
+      }
+      await mkdir(folderPath);
+      await writeSkillFile(folderPath, buildSkillMarkdown({ ...draft, id }));
+      await refresh();
+      const created = discovered.get(id);
+      if (created === undefined) throw new Error("Không thể tạo Skill.");
+      return created.view;
+    },
+    async updateUserSkill(id, draft) {
+      const entry = discovered.get(id);
+      if (entry === undefined) throw new Error(`Unknown Skill: ${id}`);
+      if (entry.view.source !== "user_local") throw new Error("Skill tích hợp sẵn không thể chỉnh sửa.");
+      if (entry.folderPath === undefined) throw new Error("Không tìm thấy thư mục Skill.");
+      const validationError = validateDraft(draft, id);
+      if (validationError !== null) throw new Error(validationError);
+      await writeSkillFile(entry.folderPath, buildSkillMarkdown({ ...draft, id }));
+      await refresh();
+      return discovered.get(id)!.view;
+    },
+    async deleteUserSkill(id) {
+      const entry = discovered.get(id);
+      if (entry === undefined) throw new Error(`Unknown Skill: ${id}`);
+      if (entry.view.source !== "user_local") throw new Error("Skill tích hợp sẵn không thể xóa.");
+      if (entry.folderPath === undefined) throw new Error("Không tìm thấy thư mục Skill.");
+      const root = userLocalRoot(options.roots);
+      const rootReal = await realpath(root.path);
+      const folderReal = await realpath(entry.folderPath);
+      if (!isInsideRoot(rootReal, folderReal)) throw new Error("Không thể xóa Skill ngoài thư mục được phép.");
+      enabledIds.delete(id);
+      await writeRegistry(options.stateFilePath, enabledIds);
+      await rm(folderReal, { recursive: true, force: true });
+      await refresh();
     },
   };
 }

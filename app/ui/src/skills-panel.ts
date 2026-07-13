@@ -49,7 +49,7 @@ export function mountSkillsPanel(
       card.dataset["skillId"] = skill.id;
       const title = el("h3", "skill-card__name", skill.name);
       const description = el("p", "skill-card__description", skill.description);
-      const source = skill.source === "built_in" ? "Built-in" : "User local";
+      const source = skill.source === "built_in" ? "Tích hợp sẵn" : "Người dùng";
       const meta = el(
         "p",
         "skill-card__meta",

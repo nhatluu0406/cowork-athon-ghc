@@ -32,9 +32,9 @@ Hành trình bắt buộc cho funding/demo review trên **packaged app** (`dist-
 
 ## Không yêu cầu trong demo này
 
-- D1–D4 integration surfaces (ẩn khỏi product rail).
+- D1–D4 backend integrations (placeholder UI only).
 - File delete journey (known limitation).
-- Skills add/edit/delete UI.
+- Skills marketplace / MCP / URL install.
 - Full L9 / release-candidate pass.
 - Screenshot matrix hoặc live LLM determinism suite.
 
@@ -54,6 +54,19 @@ Hành trình bắt buộc cho funding/demo review trên **packaged app** (`dist-
 - [x] Chat Cowork ở cột phải (1366×768 usable)
 - [x] Agent sửa file đang mở → preview refresh + badge “Agent đã cập nhật tệp”
 - [ ] PO sign-off trên packaged live journey
+
+## Skills CRUD happy path (Basic)
+
+- [x] Settings → tab **Kỹ năng** (không có trên product rail)
+- [x] Danh sách Skill: tên, mô tả, version, nguồn, trạng thái bật/tắt
+- [x] Tìm theo tên
+- [x] Tạo Skill người dùng → `skill-folder/SKILL.md` với frontmatter `id`, `name`, `description`, `version`
+- [x] Sửa Skill người dùng (metadata + Markdown)
+- [x] Xóa Skill người dùng (xác nhận + gỡ enabled state)
+- [x] Skill tích hợp sẵn: chỉ đọc, vẫn bật/tắt được
+- [x] Từ chối ID trùng / path traversal
+- [x] Provenance lịch sử vẫn đọc được sau khi xóa Skill
+- [ ] PO sign-off packaged journey: create → edit → disable → enable → delete
 
 ## Bằng chứng
 
