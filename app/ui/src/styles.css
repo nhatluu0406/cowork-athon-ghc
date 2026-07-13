@@ -2052,6 +2052,10 @@ textarea,
   padding: 32px;
 }
 
+.integration-surface__mount {
+  width: min(720px, 100%);
+}
+
 .integration-empty {
   width: min(620px, 100%);
   padding: 30px;
