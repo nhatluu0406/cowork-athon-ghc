@@ -60,6 +60,31 @@ test("redacted review shows notice and no diff content", () => {
   assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
 });
 
+test("missing review id shows missing-review notice", () => {
+  const dom = createCodeEditor();
+  const open: OpenCodeFile = { key: fileTabKey("review", "src/gone.ts"), relativePath: "src/gone.ts", kind: "review", reviewId: "review-missing" };
+  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [REVIEW] }, NO_HANDLERS);
+  assert.match(dom.body.textContent ?? "", /Không tìm thấy dữ liệu review/);
+  assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
+});
+
+test("empty diff renders zero stats and no rows without crashing", () => {
+  const dom = createCodeEditor();
+  const emptyDiff = { ...REVIEW, id: "review-3", unifiedDiff: undefined } as FileReviewArtifact;
+  const open: OpenCodeFile = { key: fileTabKey("review", "src/app.ts"), relativePath: "src/app.ts", kind: "review", reviewId: "review-3" };
+  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [emptyDiff] }, NO_HANDLERS);
+  assert.match(dom.body.querySelector(".code-diff__adds")?.textContent ?? "", /\+0/);
+  assert.match(dom.body.querySelector(".code-diff__dels")?.textContent ?? "", /−0/);
+  assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
+});
+
+test("stale activeKey falls back to welcome screen", () => {
+  const dom = createCodeEditor();
+  const open: OpenCodeFile = { key: fileTabKey("file", "README.md"), relativePath: "README.md", kind: "file" };
+  renderCodeEditor(dom, { openFiles: [open], activeKey: "file:does-not-exist.md", reviews: [] }, NO_HANDLERS);
+  assert.match(dom.body.textContent ?? "", /Chưa mở tệp nào/);
+});
+
 test("plain file tab shows read-only pill and close fires handler", () => {
   const dom = createCodeEditor();
   let closed: string | null = null;
