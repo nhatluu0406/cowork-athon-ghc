@@ -13,8 +13,8 @@ decisions.
 Related docs:
 
 - [Current Status](../product/current-status.md)
-- [Cowork GHC Product Plan](../product/cowork-ghc-product-plan.md) — §12 external tracks
-- [Recovery and Modernization Plan](../product/cowork-ghc-recovery-and-modernization-plan.md) — §5 merge order
+- [Product Plan](../product/product-plan.md)
+- [Roadmap](../product/roadmap.md)
 - [POC Acceptance](../quality/poc-acceptance.md)
 - [Known Limitations](../quality/known-limitations.md)
 

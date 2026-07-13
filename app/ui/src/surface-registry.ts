@@ -52,7 +52,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "external_dispatch_backend",
     availability: "awaiting_integration",
     dependency: "D1",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Dispatch chưa được merge vào Cowork GHC.",
+    description: "Sắp có — backend Dispatch chưa được tích hợp vào Cowork GHC.",
     component: "DispatchIntegrationSlot",
   },
   {
@@ -63,7 +63,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "advanced_gateway_backend",
     availability: "awaiting_integration",
     dependency: "D4",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Gateway chưa được merge vào Cowork GHC.",
+    description: "Sắp có — backend Gateway chưa được tích hợp vào Cowork GHC.",
     component: "GatewayIntegrationSlot",
   },
   {
@@ -74,7 +74,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "knowledge_index_backend",
     availability: "awaiting_integration",
     dependency: "D3",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Knowledge chưa được merge vào Cowork GHC.",
+    description: "Sắp có — backend Knowledge chưa được tích hợp vào Cowork GHC.",
     component: "KnowledgeIntegrationSlot",
   },
   {
@@ -85,7 +85,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     requiredCapability: "microsoft_connector_backend",
     availability: "awaiting_integration",
     dependency: "D2",
-    description: "Surface này đã sẵn sàng về giao diện và contract. Backend Microsoft 365 chưa được merge vào Cowork GHC.",
+    description: "Sắp có — backend Microsoft 365 chưa được tích hợp vào Cowork GHC.",
     component: "MicrosoftIntegrationSlot",
   },
   {
@@ -95,7 +95,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     featureFlag: "code.workspace",
     requiredCapability: "workspace_code_surface",
     availability: "planned",
-    description: "Surface Code được lên kế hoạch sau navigator/preview read-only; chưa có editor hoặc terminal.",
+    description: "Sắp có — surface Code được lên kế hoạch sau navigator/preview read-only.",
     component: "CodeIntegrationSlot",
   },
 ]);
@@ -108,8 +108,11 @@ export function createSurfaceRegistry(
 
 export function visibleProductSurfaces(
   surfaces: readonly ProductSurfaceDefinition[],
+  env: SurfaceRegistryEnv = {},
 ): readonly ProductSurfaceDefinition[] {
-  return surfaces.filter((surface) => surface.availability !== "hidden");
+  const base = surfaces.filter((surface) => surface.availability !== "hidden");
+  if (env.revealFutureSurfaces === true) return base;
+  return base.filter((surface) => surface.availability === "available");
 }
 
 export const PRODUCT_SURFACES = createSurfaceRegistry();
