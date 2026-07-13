@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-14"
 ---
 
 # Current Status
@@ -10,6 +10,73 @@ Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
 
 Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
 and the current working tree instead.
+
+## MS365 connector + SharePoint slice — D2 (2026-07-14)
+
+| Item | Status |
+|---|---|
+| Spec | `docs/superpowers/specs/2026-07-13-ms365-connector-sharepoint-design.md` |
+| Plan | `docs/superpowers/plans/2026-07-13-ms365-connector-sharepoint.md` |
+| Branch | `feature/ms365-connector-sharepoint` |
+| HEAD | `d086ecd` — fix(ms365): advertise tool endpoint to OpenCode child via baseEnv when flag on |
+| Feature flag | `CGHC_MS365_ENABLED` — **OFF by default**; with flag off, composition and child env are byte-for-byte unchanged (verified in review) |
+
+### Đã triển khai (what shipped)
+
+- Nền tảng connector MS365 (`ms365-connector`, `ms365-graph-client`, `ms365-errors`) với ánh xạ lỗi Graph rõ ràng.
+- Đăng nhập bằng **manual token hoạt động được** (dán access token thủ công, xác thực qua Graph client).
+- **Device-code OAuth đã viết code nhưng đang bị chặn (gated)**: chưa có Azure app registration / client ID thật cho tenant thật, nên luồng device-code chưa thể hoàn tất việc kết nối thực sự. Không có trạng thái "đã kết nối" giả nào được hiển thị.
+- SharePoint: tìm kiếm (search), liệt kê (list), tóm tắt (summary), và **upload** (ghi, có kiểm soát quyền).
+- Tool dispatch cho SharePoint với **upload chỉ chạy sau khi có quyết định Allow được ghi nhận** (permission-gated); Deny chặn thực sự ở boundary thực thi.
+- Router loopback token-guarded (`ms365-tool-router` + barrel) làm ranh giới port/adapter cho MS365.
+- Khi flag **ON**, service quảng bá (advertise) endpoint tool MS365 cho OpenCode child qua biến môi trường `CGHC_MS365_TOOL_ENDPOINT` / `CGHC_MS365_TOKEN` trong `baseEnv` của child process.
+
+### Bằng chứng hồi quy đã xác minh (verified regression)
+
+```text
+npm run typecheck        → exit 0 PASS (trên HEAD d086ecd)
+npm run build:renderer   → exit 0 PASS (trên HEAD d086ecd)
+MS365 unit tests         → 54/54 PASS, 0 fail, 10 file:
+  ms365-errors, ms365-graph-client, ms365-manual-token, ms365-device-code,
+  ms365-connector, ms365-sharepoint, ms365-view-redaction, ms365-tool-router,
+  ms365-flag-off, ms365-child-env
+```
+
+Bộ test đầy đủ của repo có **~20 lỗi có sẵn (pre-existing) trên 13 suite** không liên quan đến
+MS365 (`composition-ssot-and-redaction`, `composition-loopback-e2e`, `conversation-relaunch`,
+`execution-captured-frames`, `execution-ev-reducer`, `execution-sse-mapper`,
+`runtime-session-store-adapter`, `session-live-run-e2e`, `session-restart`,
+`session-router-boundary`, `session-stream-hub`, `session-stream-live-e2e`,
+`streaming-backpressure`, `streaming-coalesce`). Đây là các suite live/integration/streaming
+lỗi trong môi trường dev hiện tại **độc lập** với slice này — không có file nào trong danh sách
+là file MS365, và tập lỗi không đổi khi tắt flag MS365. Các suite này KHÔNG được coi là PASS
+và KHÔNG do slice này gây ra; báo cáo này không tuyên bố chúng pass.
+
+### Giới hạn trung thực (honesty limitations — phải đọc trước khi coi slice là "xong")
+
+1. **Device-code OAuth bị gate**: chỉ đăng nhập bằng manual token là dùng được thật; device-code
+   đã có code nhưng chưa thể hoàn tất kết nối vì chưa có Azure app registration/client ID thật —
+   không có trạng thái "đã kết nối" giả.
+2. **Quảng bá tool vs. thực sự tiêu thụ (consumption) chưa được xác minh end-to-end**: service đã
+   set `CGHC_MS365_TOOL_ENDPOINT` / `CGHC_MS365_TOKEN` trong env của OpenCode child khi flag ON,
+   nhưng việc runtime OpenCode thực tế có đọc các biến này để đăng ký MS365 tool thành tool mà
+   model có thể gọi (model-callable) **chưa được kiểm chứng qua một child đang chạy thật**. Đây là
+   một hạng mục xác minh còn mở (open verification item) — không tuyên bố model đã gọi được
+   SharePoint tool trong một phiên chạy thật.
+3. **Chưa có xác minh packaged/live với tenant thật**: toàn bộ bằng chứng ở mức unit test; chưa có
+   lưu lượng Microsoft Graph / SharePoint thật nào được thực thi.
+4. **Thực thi quyền cho hành động ghi (upload)** đã được xác minh ở mức unit (Deny chặn thực sự;
+   upload chỉ chạy sau một quyết định Allow được ghi nhận), nhưng **chưa được xác minh qua một
+   lượt chạy end-to-end thật**.
+5. Slice này **tắt theo mặc định** (`CGHC_MS365_ENABLED=false`); baseline không bị ảnh hưởng khi flag off.
+
+### Kết luận trạng thái
+
+```text
+D2 (MS365 connector + SharePoint): foundation implemented behind flag, NOT merge-ready
+  as a full live integration. Manual token connect works; device-code gated; tool
+  consumption by live OpenCode child not yet verified; no packaged/live tenant run.
+```
 
 ## Microsoft 365 & Claude Code surfaces (2026-07-13)
 
