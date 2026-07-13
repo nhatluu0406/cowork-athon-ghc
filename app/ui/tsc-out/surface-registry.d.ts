@@ -1,5 +1,5 @@
 import type { ProductIconName } from "./product-icons.js";
-export type ProductSurfaceId = "cowork" | "dispatch" | "gateway" | "knowledge" | "knowledge-graph" | "microsoft" | "code";
+export type ProductSurfaceId = "cowork" | "dispatch" | "gateway" | "knowledge" | "microsoft" | "code";
 export type SurfaceAvailability = "available" | "awaiting_integration" | "planned" | "not_configured" | "backend_unavailable" | "coming_later" | "hidden";
 export interface ProductSurfaceDefinition {
     readonly id: ProductSurfaceId;
@@ -18,6 +18,6 @@ export interface SurfaceRegistryEnv {
 export declare function createSurfaceRegistry(_env?: SurfaceRegistryEnv): readonly ProductSurfaceDefinition[];
 export declare function visibleProductSurfaces(surfaces: readonly ProductSurfaceDefinition[]): readonly ProductSurfaceDefinition[];
 export declare const PRODUCT_SURFACES: readonly ProductSurfaceDefinition[];
-/** D3 graph tab is capability-gated; false until D3 integration merges. */
+/** V3 shows the graph tab as an internal Knowledge placeholder; D3 data remains unintegrated. */
 export declare function hasKnowledgeGraphCapability(_env?: SurfaceRegistryEnv): boolean;
 //# sourceMappingURL=surface-registry.d.ts.map

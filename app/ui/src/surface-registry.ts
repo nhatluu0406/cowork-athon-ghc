@@ -5,7 +5,6 @@ export type ProductSurfaceId =
   | "dispatch"
   | "gateway"
   | "knowledge"
-  | "knowledge-graph"
   | "microsoft"
   | "code";
 
@@ -115,7 +114,7 @@ export function visibleProductSurfaces(
 
 export const PRODUCT_SURFACES = createSurfaceRegistry();
 
-/** D3 graph tab is capability-gated; false until D3 integration merges. */
+/** V3 shows the graph tab as an internal Knowledge placeholder; D3 data remains unintegrated. */
 export function hasKnowledgeGraphCapability(_env: SurfaceRegistryEnv = {}): boolean {
-  return false;
+  return true;
 }
