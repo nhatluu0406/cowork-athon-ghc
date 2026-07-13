@@ -76,6 +76,31 @@ export interface ProviderSettingsView {
     readonly baseUrl?: string;
     readonly envVar?: string;
 }
+export type ProviderProfileType = "deepseek" | "custom-openai-compat";
+export interface ProviderProfileView {
+    readonly id: string;
+    readonly displayName: string;
+    readonly providerType: ProviderProfileType;
+    readonly baseUrl: string;
+    readonly modelId: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly credentialConfigured: boolean;
+    readonly credentialAccount?: string;
+    readonly presetId?: string;
+    readonly isActive: boolean;
+}
+export interface ProviderProfileRecord {
+    readonly id: string;
+    readonly displayName: string;
+    readonly providerType: ProviderProfileType;
+    readonly baseUrl: string;
+    readonly modelId: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+    readonly credentialConfigured: boolean;
+    readonly presetId?: string;
+}
 /** The non-secret settings projection the service returns to the renderer (CGHC-022 SD1). */
 export interface SettingsView {
     readonly general: GeneralSettingsView;
@@ -84,6 +109,8 @@ export interface SettingsView {
     readonly activeWorkspace: {
         readonly rootPath: string;
     } | null;
+    readonly providerProfiles?: readonly ProviderProfileView[];
+    readonly activeProfileId?: string | null;
 }
 /** Result of dispatching a prompt to a live session. */
 export type SendSessionMessageResult = {
@@ -182,8 +209,16 @@ export interface PersistedActivitySnapshot {
 export interface ConversationRecord extends ConversationSummary {
     readonly messages: readonly ConversationMessage[];
     readonly model?: ModelRef;
+    readonly providerSnapshot?: ConversationProviderSnapshot;
     readonly activity?: PersistedActivitySnapshot;
     readonly runtimeTurns?: readonly RuntimeTurnRecord[];
+}
+export interface ConversationProviderSnapshot {
+    readonly profileId: string;
+    readonly displayName: string;
+    readonly providerType: ProviderProfileType;
+    readonly modelId: string;
+    readonly baseUrl: string;
 }
 export interface RuntimeTurnRecord {
     readonly runtimeSessionId: string;
@@ -197,6 +232,7 @@ export interface CreateConversationInput {
     readonly providerId?: string;
     readonly modelId?: string;
     readonly parentId?: string;
+    readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 export interface ContinueSessionResult {
     readonly session: SessionMeta;
@@ -250,6 +286,27 @@ export interface ServiceClient {
     setProviderEnvVar(providerId: string, envVar: string): Promise<SettingsView>;
     /** Bounded provider connectivity test (resolves credential from keyring). */
     testProviderConnection(providerId: string): Promise<TestResult>;
+    listProviderProfiles(): Promise<{
+        readonly profiles: readonly ProviderProfileView[];
+        readonly activeProfileId: string | null;
+    }>;
+    createProviderProfile(input: {
+        readonly displayName: string;
+        readonly providerType: ProviderProfileType;
+        readonly baseUrl?: string;
+        readonly modelId?: string;
+        readonly presetId?: string;
+    }): Promise<ProviderProfileRecord>;
+    updateProviderProfile(profileId: string, input: {
+        readonly displayName?: string;
+        readonly baseUrl?: string;
+        readonly modelId?: string;
+    }): Promise<ProviderProfileRecord>;
+    deleteProviderProfile(profileId: string): Promise<void>;
+    setActiveProviderProfile(profileId: string): Promise<SettingsView>;
+    storeProfileCredential(profileId: string, secret: string): Promise<SettingsView>;
+    removeProfileCredential(profileId: string): Promise<SettingsView>;
+    testProfileConnection(profileId: string): Promise<TestResult>;
     /** Patch general settings; returns the updated settings view. */
     updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
     /**

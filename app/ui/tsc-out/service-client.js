@@ -102,6 +102,53 @@ export function createServiceClient(baseUrl, clientToken) {
             method: "POST",
             body: JSON.stringify({ providerId }),
         })).result,
+        listProviderProfiles: async () => call("/v1/provider-profiles"),
+        createProviderProfile: async (input) => (await call("/v1/provider-profiles", {
+            method: "POST",
+            body: JSON.stringify(input),
+        })).profile,
+        updateProviderProfile: async (profileId, input) => (await call(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+            method: "PUT",
+            body: JSON.stringify(input),
+        })).profile,
+        deleteProviderProfile: async (profileId) => {
+            await call(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+                method: "DELETE",
+                body: "{}",
+            });
+        },
+        setActiveProviderProfile: async (profileId) => {
+            await call("/v1/provider-profiles/active", {
+                method: "PUT",
+                body: JSON.stringify({ profileId }),
+            });
+            return (await call("/v1/settings")).settings;
+        },
+        storeProfileCredential: async (profileId, secret) => {
+            const account = `profile:${profileId}`;
+            const { ref } = await call("/v1/credentials", {
+                method: "POST",
+                body: JSON.stringify({ providerId: profileId, secret, account }),
+            });
+            await call(`/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`, {
+                method: "PUT",
+                body: JSON.stringify({ ref }),
+            });
+            return (await call("/v1/settings")).settings;
+        },
+        removeProfileCredential: async (profileId) => {
+            const settings = await call("/v1/settings").then((r) => r.settings);
+            const row = settings.providerProfiles?.find((p) => p.id === profileId);
+            if (row?.credentialConfigured && row.credentialAccount !== undefined) {
+                await call("/v1/credentials", {
+                    method: "DELETE",
+                    body: JSON.stringify({ ref: { store: "os", account: row.credentialAccount } }),
+                });
+            }
+            await call(`/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`, { method: "DELETE" });
+            return (await call("/v1/settings")).settings;
+        },
+        testProfileConnection: async (profileId) => (await call(`/v1/provider-profiles/${encodeURIComponent(profileId)}/test-connection`, { method: "POST", body: JSON.stringify({}) })).result,
         updateGeneral: async (patch) => (await call("/v1/settings/general", {
             method: "PATCH",
             body: JSON.stringify(patch),

@@ -60,6 +60,20 @@ function parseUpdateBody(body: unknown): UpdateProviderProfileInput {
   };
 }
 
+function validateDeleteProfile(input: ProviderProfileStore, id: string): void {
+  const profiles = input.list();
+  const existing = profiles.find((p) => p.id === id);
+  if (existing === undefined) {
+    throw new ProviderProfileRequestError("Profile not found.");
+  }
+  if (profiles.length <= 1) {
+    throw new ProviderProfileRequestError("Bạn cần tạo một profile khác trước khi xóa profile này.");
+  }
+  if (input.activeProfileId() === id) {
+    throw new ProviderProfileRequestError("Hãy đặt một profile khác làm active trước khi xóa profile này.");
+  }
+}
+
 export function createProviderProfileRouter(input: {
   readonly profiles: ProviderProfileStore;
   readonly tester: ProviderConnectionTester;
@@ -109,14 +123,12 @@ export function createProviderProfileRouter(input: {
         path: PROVIDER_PROFILE_ITEM_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
           const id = requireId(ctx.params);
-          const rec = asRecord(ctx.body ?? {});
+          validateDeleteProfile(input.profiles, id);
           const existing = input.profiles.get(id);
+          await input.profiles.delete(id);
           if (existing?.credentialRef !== undefined) {
             await input.removeCredential(id, existing.credentialRef.account);
           }
-          await input.profiles.delete(id, {
-            forceUnconfigured: rec["forceUnconfigured"] === true,
-          });
           await input.runtimeBridge.syncActiveProfile();
           return { status: 200, data: { deleted: true } };
         },
