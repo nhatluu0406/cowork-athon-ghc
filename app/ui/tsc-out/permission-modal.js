@@ -28,6 +28,7 @@ const ACTION_LABEL = {
     file_delete: "Xoá tệp",
     file_move: "Di chuyển tệp",
     command_exec: "Chạy lệnh",
+    network_access: "Truy vấn dữ liệu bên ngoài",
 };
 const APPROVAL_LABEL = {
     standard: "Mức tiêu chuẩn",
