@@ -95,8 +95,10 @@ import {
 } from "./ui-shell/knowledge-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
-import { openWorkspaceFileInView } from "./ui-shell/workspace-view.js";
+import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
+
+let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
@@ -561,6 +563,7 @@ async function finalizeFileMutationReview(
   event: Extract<EvEvent, { kind: "file_mutation" }>,
   sessionId: string,
   dom: AppDom,
+  workspaceCompanion: WorkspaceCompanionPaneHandle | null,
 ): Promise<void> {
   if (state.client === null) return;
   const relativePath = toRelativePath(event.path, state.activeWorkspace);
@@ -614,6 +617,10 @@ async function finalizeFileMutationReview(
     state.fileReviews = [...state.fileReviews, review];
     refreshActivityUi(state, dom);
     void persistActivity(state);
+    const openPath = workspaceCompanion?.getOpenPath() ?? null;
+    if (openPath !== null && openPath === relativePath && event.operation !== "delete") {
+      workspaceCompanion?.showAgentUpdated();
+    }
   } catch {
     // best effort
   }
@@ -732,8 +739,9 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
 
   dom.sidebar.hidden = settingsOpen || layoutMode !== "work";
-  dom.coworkView.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "cowork";
+  dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
   dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
+  dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden = settingsOpen || isCoworkSurface || isKnowledgeSurface;
 
@@ -807,7 +815,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const composerText = textFromComposer(dom.composerInput);
   renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
   renderCoworkEmptyState(dom, state, sendPreflight);
-  dom.composer.hidden = !isCoworkSurface || state.workMode !== "cowork";
+  dom.composer.hidden = settingsOpen || !isCoworkSurface;
   dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
   dom.composer.classList.toggle("is-locked", locked);
   dom.composerInput.contentEditable = locked ? "false" : "true";
@@ -829,7 +837,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.newConversationButton.disabled =
     phase === "starting" || phase === "running" || state.activeWorkspace === null;
 
-  if (isCoworkSurface && state.workMode === "cowork") {
+  if (isCoworkSurface && (state.workMode === "cowork" || state.workMode === "workspace")) {
     renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
   }
 
@@ -1028,7 +1036,7 @@ function bindEvStream(
         void captureBeforeOnToolStart(state, event);
       }
       if (event.kind === "file_mutation") {
-        void finalizeFileMutationReview(state, event, sessionId, dom);
+        void finalizeFileMutationReview(state, event, sessionId, dom, workspaceCompanionHandle);
       }
     },
     onView: (view) => {
@@ -1482,14 +1490,14 @@ function openWorkspaceFileFromCowork(
   dom: AppDom,
   handlers: Parameters<typeof renderState>[2],
   workspaceNavigator: WorkspaceNavigatorHandle | null,
+  workspaceCompanion: WorkspaceCompanionPaneHandle | null,
   relativePath: string,
 ): void {
   if (state.activeSurface !== "cowork") return;
   state.workMode = "workspace";
   workspaceNavigator?.selectPath(relativePath);
-  const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
   if (state.client !== null) {
-    void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+    void workspaceCompanion?.open(relativePath);
   }
   renderState(dom, state, handlers);
 }
@@ -1652,11 +1660,15 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onFileSelected: (relativePath) => {
-              if (state.client === null) return;
-              const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
-              void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
+              state.workMode = "workspace";
+              void workspaceCompanionHandle?.open(relativePath);
+              renderState(dom, state, handlers);
             },
           });
+          workspaceCompanionHandle = mountWorkspaceCompanionPane(
+            dom.workspaceView.companionSlot,
+            dynamicClient,
+          );
           mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             onSettingsUpdated: (view) => {
@@ -1751,7 +1763,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               showFileReview(dom.activityPanel, review);
               return;
             }
-            openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
+            openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanionHandle, relativePath);
             void showFilePreview(dom.activityPanel, state.client, change);
           });
         }
