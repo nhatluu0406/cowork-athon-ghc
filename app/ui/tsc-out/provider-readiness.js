@@ -4,6 +4,7 @@
  * Distinguishes local service health from provider configuration readiness.
  */
 import { needsContinuation } from "./conversation-controller.js";
+import { PROVIDER_PRESETS } from "./provider-presets.js";
 export function localServiceStatus(state) {
     switch (state.phase) {
         case "starting":
@@ -41,6 +42,25 @@ export function localServiceStatus(state) {
 function providerRow(settings, providerId) {
     return settings.providers.find((p) => p.providerId === providerId);
 }
+export function providerDisplayName(settings) {
+    const model = settings?.defaultModel;
+    if (model === null || model === undefined)
+        return "Provider";
+    const preset = PROVIDER_PRESETS.find((p) => p.providerId === model.providerID &&
+        p.models.some((presetModel) => presetModel.ref.modelID === model.modelID));
+    if (preset !== undefined)
+        return preset.label;
+    if (model.providerID === "custom-openai-compat" && model.modelID.toLowerCase().includes("deepseek")) {
+        return "DeepSeek";
+    }
+    return model.providerID;
+}
+export function providerModelLabel(settings) {
+    const model = settings?.defaultModel;
+    if (model === null || model === undefined)
+        return "Provider chưa cấu hình";
+    return `${providerDisplayName(settings)} / ${model.modelID}`;
+}
 export function isBaseUrlLocallyValid(baseUrl) {
     if (baseUrl === undefined || baseUrl.trim().length === 0)
         return true;
@@ -53,9 +73,10 @@ export function isBaseUrlLocallyValid(baseUrl) {
     }
 }
 export function providerStatus(settings, connectionTestState = "unknown") {
+    const subject = providerDisplayName(settings);
     if (settings === null) {
         return {
-            label: "Provider: Chưa cấu hình",
+            label: "Provider · Chưa cấu hình",
             detail: "Chưa tải cài đặt provider.",
             ok: false,
         };
@@ -63,7 +84,7 @@ export function providerStatus(settings, connectionTestState = "unknown") {
     const model = settings.defaultModel;
     if (model === null) {
         return {
-            label: "Provider: Chưa cấu hình",
+            label: "Provider · Chưa cấu hình",
             detail: "Chọn nhà cung cấp và mô hình.",
             ok: false,
         };
@@ -71,50 +92,50 @@ export function providerStatus(settings, connectionTestState = "unknown") {
     const row = providerRow(settings, model.providerID);
     if (row === undefined) {
         return {
-            label: "Provider: Chưa cấu hình",
+            label: `${subject} · Chưa cấu hình`,
             detail: "Nhà cung cấp chưa được đăng ký.",
             ok: false,
         };
     }
     if (!isBaseUrlLocallyValid(row.baseUrl)) {
         return {
-            label: "Provider: Cấu hình chưa hợp lệ",
+            label: `${subject} · Cấu hình chưa hợp lệ`,
             detail: "Base URL không hợp lệ.",
             ok: false,
         };
     }
     if (!row.hasCredential) {
         return {
-            label: "Provider: Chưa cấu hình",
+            label: `${subject} · Chưa cấu hình`,
             detail: "Cần khoá API trước khi bắt đầu.",
             ok: false,
         };
     }
     if (model.modelID.trim().length === 0) {
         return {
-            label: "Provider: Cấu hình chưa hợp lệ",
+            label: `${subject} · Cấu hình chưa hợp lệ`,
             detail: "Mô hình không được để trống.",
             ok: false,
         };
     }
     if (connectionTestState === "failed") {
         return {
-            label: "Provider: Kết nối thất bại",
+            label: `${subject} · Kết nối thất bại`,
             detail: "Kiểm tra kết nối không thành công — mở cài đặt để sửa.",
             ok: false,
         };
     }
     if (connectionTestState === "ok") {
         return {
-            label: "Provider: Đã kiểm tra kết nối",
+            label: `${subject} · Sẵn sàng`,
             detail: `${model.modelID} · khoá API đã cấu hình.`,
             ok: true,
         };
     }
     return {
-        label: "Provider: Sẵn sàng để kiểm tra",
+        label: `${subject} · Chưa kiểm tra`,
         detail: `${model.modelID} · khoá API đã cấu hình.`,
-        ok: true,
+        ok: false,
     };
 }
 export function runtimeReadinessKind(phase) {

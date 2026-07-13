@@ -31,6 +31,8 @@ export interface StatusCopy {
     readonly ok: boolean;
 }
 export declare function localServiceStatus(state: ReadinessState): StatusCopy;
+export declare function providerDisplayName(settings: SettingsView | null): string;
+export declare function providerModelLabel(settings: SettingsView | null): string;
 export declare function isBaseUrlLocallyValid(baseUrl: string | undefined): boolean;
 export declare function providerStatus(settings: SettingsView | null, connectionTestState?: ConnectionTestState): StatusCopy;
 export declare function runtimeReadinessKind(phase: RuntimePhase): ReadinessKind;

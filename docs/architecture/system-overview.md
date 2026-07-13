@@ -44,6 +44,61 @@ workspace, provider configuration, credential presence, local URL validity, conn
 `assessSendPreflight` / `assertCreatePrerequisites` chặn tạo runtime turn khi thiếu prerequisite; không thay thế
 connectivity probe cho API key/model invalid sau request.
 
+## Boundary UI shell / product surfaces
+
+Renderer dùng **UI Shell V3** (alignment pass 2026-07-13): ~50px product rail → contextual
+sidebar (Cowork \| Workspace work modes) → main workspace → optional inspector → bottom status bar.
+Integration surfaces (Dispatch, Gateway, Knowledge, Microsoft 365, Code) dùng full-width main **không**
+giữ cột sidebar trống (`shell-frame--no-sidebar`).
+Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
+integration data giả để làm đẹp layout.
+
+Settings là một surface ứng dụng trong cùng V3 frame, không phải backdrop modal. Topbar Settings, provider control, provider status và readiness CTA mở surface này; Back/Close quay về surface trước đó. Surface có hai panel `Nhà cung cấp` và `Chung`, reuse toàn bộ behavior production hiện có cho provider/model/Base URL/keyring/test connection/general settings và không triển khai Multi-Provider Profiles.
+
+Top-level product surfaces được khai báo tập trung trong `app/ui/src/surface-registry.ts`:
+
+```text
+cowork
+dispatch
+gateway
+knowledge
+microsoft
+code
+```
+
+Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`,
+`dependency`, `description`, và `component`. Production default expose toàn bộ product rail:
+`cowork` là `available`; Dispatch/Gateway/Knowledge/Microsoft 365 là
+`awaiting_integration` với dependency D1-D4 cụ thể; `code` là `planned`. Knowledge Graph không phải rail surface riêng;
+nó là tab nội bộ `Đồ thị` trong Knowledge và vẫn chỉ hiển thị trạng thái chờ D3. Các surface này
+không phải capability backend thật và không render mock production data.
+
+D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slots.ts`:
+
+- D1 Dispatch: task summary, child tasks, cancellation, permission wait, result provenance.
+- D2 Microsoft: connection state, service list, scopes, action history, reconnect/error.
+- D3 Knowledge: index state, sources, query results, provenance, stale/rebuild state.
+- D4 Gateway: health, routes, provider/model, latency, usage/cost, fallback/error state.
+
+Không có backend adapter D1-D4 trong shell foundation này.
+
+## Boundary Minimal Workspace Navigator
+
+Renderer không đọc filesystem. Workspace Navigator gọi service route `GET /v1/workspace/list`
+để list direct children của active workspace hoặc folder đã expand. Service:
+
+- validate active workspace root server-side;
+- dùng workspace guard + realpath confinement;
+- không follow symlink/reparse point ra ngoài workspace;
+- sort folder trước file;
+- giới hạn số entry mỗi request;
+- không recursive scan mặc định;
+- không đọc file content khi chỉ listing.
+
+Selected workspace file preview đi qua `GET /v1/workspace/file-preview`, bounded 64 KiB,
+text-only. Binary/unsupported trả trạng thái không xem trước. Direct editor, save/undo,
+PDF, Office, and image preview are not started.
+
 ## Boundary process lifecycle
 
 Electron shell là owner của local service và runtime child. Shutdown chỉ dừng process do Cowork GHC sở hữu, không
