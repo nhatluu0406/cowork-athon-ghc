@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # Current Status
@@ -91,6 +91,41 @@ Daily source of truth is Git plus active docs in `docs/product/`, `docs/quality/
   steps did not complete in this verification environment (re-run in clean profile recommended).
 
 Full L9 / release-candidate verification is **not** complete.
+
+## Renderer Toolchain Slice (this session)
+
+`app/ui` (the Cowork GHC renderer) now builds with React, executing the stack already named
+in ADR 0008 §5 ("Electron + React", bundler/version choice deferred to the UI task) and the
+`@cowork-ghc/ui` package description ("React/UI in later tasks"). This is a foundation slice
+only — one representative module was converted end-to-end to prove the pattern; the remaining
+~35 `app/ui/src` modules (including the `app-shell.ts` chat shell) are still vanilla
+TypeScript/DOM and will convert one at a time in later slices.
+
+### What shipped
+
+- Toolchain: `react`/`react-dom` 19.2.7 (in `app/ui/package.json`), `@vitejs/plugin-react`
+  ^4.7.0 + `@types/react`/`@types/react-dom` (root devDependencies, matching the
+  `vite`/`typescript`/`electron` convention). Stayed on the monorepo's existing Vite 6 /
+  TypeScript 5.7 pins rather than adopting newer majors.
+- `app/ui/vite.config.ts` and `app/ui/tsconfig.json` updated for JSX (`react-jsx` runtime);
+  all existing build invariants (`base: "./"`, `sourcemap: false`, loopback-only CSP) unchanged.
+- Pilot conversion: `skills-panel.ts`'s `mountSkillsPanel` DOM builder replaced by a
+  `SkillsPanel`/`SkillCard` React component (`app/ui/src/SkillsPanel.tsx`), with `skills-panel.ts`
+  kept as a thin `createRoot`/`useImperativeHandle` shim so the existing call site in
+  `app-shell.ts` needed no changes. Markup, classnames, and Vietnamese copy preserved 1:1.
+- Tailwind/CVA/`cn()` and `@testing-library/react` deliberately deferred — not needed until a
+  second component requires shared variant-driven styling.
+
+### Verification
+
+- `npm run typecheck` — no new errors (2 pre-existing errors in `knowledge-graph-view.ts` /
+  `knowledge-settings.ts`, unrelated to this slice, confirmed present on the unmodified baseline).
+- `app/ui` test suite (`npm test --workspace @cowork-ghc/ui`) — 185/188 runnable tests pass;
+  the 3 failures are pre-existing, in `knowledge-e2e-timeout.test.ts` /
+  `knowledge-e2e-unavailable.test.ts` (files untouched by this slice, confirmed via `git diff`
+  against the baseline).
+- `npm run build:renderer` — production Vite build succeeds, no sourcemaps emitted.
+- `git diff --stat app/ui/src/app-shell.ts` — no changes (chat shell untouched).
 
 ## Next Implementation Slice
 

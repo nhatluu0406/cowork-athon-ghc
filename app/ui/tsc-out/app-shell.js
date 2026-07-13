@@ -6,6 +6,7 @@
 import { initialSessionView, sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { buildActivitySnapshot, markRunningAsCancelled, mergeEvEvents, snapshotFromSessionView, toRelativePath, } from "./activity-model.js";
 import { createActivityPanel, permissionEntryFromDecision, persistedToSnapshot, renderActivityPanel, showFilePreview, showFileReview, snapshotToPersisted, } from "./activity-panel.js";
+import { createKnowledgePanel, } from "./knowledge-panel.js";
 import { getShellBridge } from "./bridge.js";
 import { createConversationManager, formatConversationMeta, needsContinuation, } from "./conversation-controller.js";
 import { createReadinessController } from "./readiness-controller.js";
@@ -371,6 +372,29 @@ function rebuildActivitySnapshot(state) {
 function refreshActivityUi(state, dom) {
     state.activitySnapshot = rebuildActivitySnapshot(state);
     renderActivityPanel(dom.activityPanel, state.activitySnapshot);
+    refreshKnowledgePanel(state, dom);
+}
+function refreshKnowledgePanel(state, dom) {
+    // Check if there's a knowledge tool invocation in the current session (T2.7 — US-2 requirement).
+    // Only show the knowledge panel if a knowledge-tool call occurred (no empty-panel affordance).
+    // Look for a tool call with toolName = "m365_knowledge_search" in the session
+    const hasKnowledgeToolCall = state.lastView.toolCalls.some((tc) => tc.toolName === "m365_knowledge_search");
+    if (!hasKnowledgeToolCall) {
+        // No knowledge tool call — clean up any existing panel
+        dom.knowledgePanelHost.replaceChildren();
+        dom.knowledgePanel = null;
+        return;
+    }
+    // A knowledge tool invocation exists. For Phase 2, we create the panel container
+    // with a placeholder. The actual knowledge invocation metadata (query, answer, citations)
+    // would be populated in Phase 3 when the service layer provides the full KnowledgeToolResult.
+    if (!dom.knowledgePanel) {
+        // Mount the knowledge panel only once per session, when we detect a knowledge tool call
+        const knowledgeInvocation = null; // Placeholder for Phase 3
+        dom.knowledgePanel = createKnowledgePanel(dom.knowledgePanelHost, {
+            invocation: knowledgeInvocation,
+        });
+    }
 }
 async function persistActivity(state) {
     const id = state.conv.state.activeConversationId;
@@ -1082,7 +1106,8 @@ function createShell(root) {
     const inputFiles = el("div", "input-files");
     inputSection.append(inputFiles);
     const permissionSummary = el("p", "permission-summary", "Quyền: chưa có yêu cầu.");
-    rightPanel.append(rpHeader, executionStatus, planCard, outputSection, inputSection, permissionSummary);
+    const knowledgePanelHost = el("div", "knowledge-panel-container");
+    rightPanel.append(rpHeader, executionStatus, planCard, outputSection, inputSection, permissionSummary, knowledgePanelHost);
     workspace.append(sidebar, chat, rightPanel);
     const statusbar = el("footer", "statusbar");
     const serviceDetail = el("span", "statusbar__left", "Đang khởi động");
@@ -1151,6 +1176,8 @@ function createShell(root) {
         settingsOpener: null,
         modalKeyHandler,
         activityPanel: createActivityPanel(rightPanel),
+        knowledgePanel: null,
+        knowledgePanelHost,
         executionStatus,
         permissionSummary,
         sidebar,

@@ -201,6 +201,18 @@ export function createServiceClient(baseUrl, clientToken) {
         buildFileReview: async (input) => (await call("/v1/file-review/build", { method: "POST", body: JSON.stringify(input) })).review,
         listPendingPermissions: permission.listPendingPermissions,
         decidePermission: permission.decidePermission,
+        getKnowledgeStatus: async () => (await call("/v1/knowledge/status")).status,
+        configureKnowledgeSource: async (baseUrl, token) => (await call("/v1/knowledge/configure", {
+            method: "POST",
+            body: JSON.stringify({ baseUrl, token }),
+        })).status,
+        testKnowledgeConnection: async () => (await call("/v1/knowledge/test-connection", {
+            method: "POST",
+            body: "{}",
+        })).result,
+        disconnectKnowledgeSource: async () => (await call("/v1/knowledge/connection", {
+            method: "DELETE",
+        })).status,
     };
 }
 //# sourceMappingURL=service-client.js.map

@@ -13,3 +13,7 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 if (!GlobalRegistrator.isRegistered) {
   GlobalRegistrator.register();
 }
+
+// Lets React's `act()` (used by React-component tests) know it's running in a test
+// environment, so it flushes effects/state updates synchronously instead of warning.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
