@@ -1,0 +1,43 @@
+.ms-surface { display: flex; flex-direction: column; background: #f7f8fa; overflow: hidden; }
+.ms-surface__header { display: flex; align-items: center; justify-content: space-between; padding: 14px 24px; background: #fff; border-bottom: 1px solid #eceff3; }
+.ms-surface__title-wrap { display: flex; align-items: center; gap: 10px; }
+.ms-surface__title { font-size: 20px; font-weight: 600; color: #1a2332; margin: 0; }
+.ms-segmented { display: flex; background: #f1f3f6; border-radius: 10px; padding: 3px; gap: 2px; }
+.ms-segmented__item { border: 0; background: transparent; border-radius: 8px; padding: 6px 14px; font-size: 13px; color: #4b5565; cursor: pointer; }
+.ms-segmented__item--active { background: #fff; color: #1a2332; box-shadow: 0 1px 2px rgba(16,24,40,.06); }
+.ms-surface__body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+.ms-card { background: #fff; border: 1px solid #e2e6ec; border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.06); padding: 24px; }
+.ms-card__title { font-size: 17px; font-weight: 600; color: #1a2332; margin: 10px 0 6px; }
+.ms-card__copy { font-size: 14px; line-height: 1.6; color: #4b5565; margin: 0 0 14px; }
+.ms-assistant { display: flex; flex-direction: column; flex: 1; max-width: 840px; width: 100%; margin: 0 auto; padding: 24px 16px 0; }
+.ms-assistant__transcript { flex: 1; display: flex; align-items: center; justify-content: center; }
+.ms-assistant__empty { text-align: center; max-width: 420px; }
+.ms-assistant__connect-cta { background: #e85d1a; color: #fff; border: 0; border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.ms-assistant__connect-cta:hover { background: #d1500f; }
+.ms-composer { padding: 16px 0 20px; background: linear-gradient(transparent, #f7f8fa 30%); }
+.ms-composer__chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.ms-composer__chip { border: 1px solid #e2e6ec; background: #fff; border-radius: 999px; padding: 5px 12px; font-size: 12px; color: #4b5565; cursor: pointer; }
+.ms-composer__chip:not(:disabled):hover { border-color: #f0c9ad; color: #e85d1a; background: #fff3eb; }
+.ms-composer__chip:disabled, .ms-composer__input:disabled, .ms-composer__send:disabled { opacity: .55; cursor: not-allowed; }
+.ms-composer__row { display: flex; gap: 8px; align-items: flex-end; }
+.ms-composer__input { flex: 1; border: 1px solid #e2e6ec; border-radius: 14px; padding: 10px 14px; font: inherit; font-size: 14px; resize: none; background: #fff; }
+.ms-composer__send { width: 34px; height: 34px; border-radius: 10px; border: 0; background: #e85d1a; color: #fff; cursor: pointer; }
+.ms-composer__hint { text-align: center; font-size: 11px; color: #9aa4b2; margin: 10px 0 0; }
+.ms-connect { max-width: 1080px; width: 100%; margin: 0 auto; padding: 24px 16px; }
+.ms-connect__signin-card { max-width: 460px; margin: 40px auto; text-align: center; }
+.ms-connect__signin { background: #1a2332; color: #fff; border: 0; border-radius: 10px; padding: 10px 18px; font-size: 14px; font-weight: 600; }
+.ms-connect__note { font-size: 12px; color: #b45309; background: #fff4e5; border-radius: 8px; padding: 8px 10px; margin: 12px 0; }
+.ms-section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6b7585; margin: 18px 0 8px; text-align: left; }
+.ms-scope-list { list-style: none; margin: 0; padding: 0; text-align: left; }
+.ms-scope-list__item { display: flex; gap: 10px; padding: 6px 0; border-bottom: 1px solid #eceff3; align-items: baseline; }
+.ms-scope-list__scope { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 12.5px; color: #1a2332; }
+.ms-scope-list__note { font-size: 12px; color: #6b7585; }
+.ms-connect__oauth-note { font-size: 11px; color: #9aa4b2; margin-top: 14px; }
+.ms-pill { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
+.ms-pill--ok { background: #eafaf0; color: #1f8f55; }
+.ms-service-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 12px; }
+.ms-service-card { border: 1px solid #eceff3; border-radius: 10px; padding: 12px; }
+.ms-service-card__name { font-size: 13px; font-weight: 600; color: #1a2332; }
+.ms-service-card__state { font-size: 12px; color: #6b7585; }
+.ms-granted-scopes { display: flex; flex-wrap: wrap; gap: 6px; }
+.ms-scope-pill { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 12px; background: #f1f3f6; border-radius: 999px; padding: 3px 10px; color: #1a2332; }
