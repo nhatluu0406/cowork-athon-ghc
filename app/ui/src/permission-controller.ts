@@ -17,6 +17,7 @@
 import type { EvEvent, PermissionDecision, PermissionScope } from "@cowork-ghc/contracts";
 import { sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { openPermissionModal, type PermissionModalHandle } from "./permission-modal.js";
+import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 import type {
   PendingPermissionView,
   PermissionDecisionResponse,
@@ -55,6 +56,8 @@ export interface PermissionControllerDeps {
   readonly timer?: PermissionControllerTimer;
   /** Visibility seam; defaults to the `document` visibility API. Tests inject a fake. */
   readonly visibility?: PermissionControllerVisibility;
+  /** Current product permission mode selected in the composer. */
+  readonly getMode?: () => PermissionMode;
   /** Fired when a pending permission is shown (read-only history seed). */
   readonly onPending?: (request: PendingPermissionView) => void;
   /** Fired after a decision POST returns (resolved / already_resolved). */
@@ -112,6 +115,7 @@ export function createPermissionController(
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
   let consecutivePollFailures = 0;
+  const announced = new Set<string>();
 
   const setNote = (text: string): void => {
     note.textContent = text;
@@ -174,6 +178,24 @@ export function createPermissionController(
   };
 
   const showHead = (head: PendingPermissionView, waiting: number): void => {
+    lastPending = head;
+    if (!announced.has(head.requestId)) {
+      announced.add(head.requestId);
+      deps.onPending?.(head);
+    }
+
+    const mode = deps.getMode?.() ?? "ask";
+    if (mode === "read_only") {
+      closeModal();
+      void decide(head.requestId, false);
+      return;
+    }
+    if (mode === "workspace_auto" && head.approvalLevel === "standard") {
+      closeModal();
+      void decide(head.requestId, true, "once");
+      return;
+    }
+
     if (modal !== null && modal.requestId === head.requestId) {
       modal.setQueueCount(waiting); // same head: keep it open, just refresh the live queue count
       return;
@@ -195,8 +217,6 @@ export function createPermissionController(
       },
       { queueCount: waiting },
     );
-    lastPending = head;
-    deps.onPending?.(head);
   };
 
   async function refresh(): Promise<void> {
@@ -216,6 +236,8 @@ export function createPermissionController(
     const head = pending[0];
     if (head === undefined) {
       closeModal(); // nothing pending → show nothing (honest idle)
+      announced.clear();
+      lastPending = null;
       return;
     }
     showHead(head, pending.length - 1);
