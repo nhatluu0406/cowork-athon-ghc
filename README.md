@@ -26,7 +26,7 @@ go build -o bin/m365-knowledge-graph ./cmd
 ./bin/m365-knowledge-graph
 
 # Build and run LLM service (new terminal)
-cd llm-svc
+cd app/llm-svc
 cargo build --release
 ./target/release/llm-svc
 
