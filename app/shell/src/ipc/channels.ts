@@ -17,6 +17,8 @@ export const IpcChannel = {
   PickWorkspaceFile: "cowork:pick-workspace-file",
   /** Renderer asks the shell to restart the service into the LIVE runtime (user-gated Connect). */
   ConnectLive: "cowork:connect-live",
+  /** Renderer synchronizes the native title-bar overlay with light/dark theme. */
+  SetWindowTheme: "cowork:set-window-theme",
 } as const;
 
 /** Union of the allowed channel name literals. */

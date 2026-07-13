@@ -17,7 +17,7 @@ export interface ConversationProviderControl {
 export function createConversationProviderControl(): ConversationProviderControl {
   const root = el("button", "provider-select conversation-provider-control") as HTMLButtonElement;
   root.type = "button";
-  root.title = "Mở Settings provider";
+  root.dataset["tooltip"] = "Mở cài đặt nhà cung cấp";
   root.setAttribute("aria-label", "Mở Settings provider");
   const dot = el("span", "status-dot status-dot--idle");
   dot.setAttribute("aria-hidden", "true");
@@ -41,7 +41,7 @@ export function renderConversationProviderControl(
   control.root.hidden = !input.visible;
   control.root.disabled = !input.interactive;
   control.label.textContent = input.label;
-  control.root.title = input.label;
+  control.root.dataset["tooltip"] = input.label;
   control.root.dataset["tooltip"] = input.label;
   control.root.setAttribute("aria-label", `Mở Settings provider: ${input.label}`);
   control.failText.hidden = !input.failed;

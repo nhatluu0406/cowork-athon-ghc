@@ -30,6 +30,16 @@ test("reads editable text file", async () => {
   await rm(join(root, ".."), { recursive: true, force: true });
 });
 
+test("truncated text preview is read-only to prevent destructive overwrite", async () => {
+  const root = await tempWorkspace();
+  await writeFile(join(root, "large.txt"), "x".repeat(512 * 1024 + 10), "utf8");
+  const result = await readWorkspaceFileContent(root, "large.txt");
+  assert.equal(result.kind, "text");
+  assert.equal(result.truncated, true);
+  assert.equal(result.editable, false);
+  await rm(join(root, ".."), { recursive: true, force: true });
+});
+
 test("writes text file", async () => {
   const root = await tempWorkspace();
   await writeFile(join(root, "draft.txt"), "old", "utf8");
@@ -50,22 +60,25 @@ test("reads png as image base64", async () => {
   await rm(join(root, ".."), { recursive: true, force: true });
 });
 
-test("reads xlsx spreadsheet and writes cell edits", async () => {
+test("reads xlsx as read-only and rejects destructive rewrite", async () => {
   const root = await tempWorkspace();
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["A", "B"], ["1", "2"]]), "Demo");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["Keep me"]]), "Second");
   const buf = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
   await writeFile(join(root, "sheet.xlsx"), buf);
   const read = await readWorkspaceFileContent(root, "sheet.xlsx");
   assert.equal(read.kind, "spreadsheet");
-  assert.equal(read.editable, true);
+  assert.equal(read.editable, false);
   assert.deepEqual(read.sheets?.[0]?.rows[0], ["A", "B"]);
-  await writeWorkspaceFileContent(root, "sheet.xlsx", {
-    kind: "spreadsheet",
-    sheets: [{ name: "Demo", rows: [["A", "B"], ["9", "10"]] }],
-  });
-  const reread = await readWorkspaceFileContent(root, "sheet.xlsx");
-  assert.deepEqual(reread.sheets?.[0]?.rows[1], ["9", "10"]);
+  await assert.rejects(
+    writeWorkspaceFileContent(root, "sheet.xlsx", {
+      kind: "spreadsheet",
+      sheets: [{ name: "Demo", rows: [["changed"]] }],
+    }),
+    /tạm thời bị vô hiệu hóa/i,
+  );
+  assert.deepEqual(await readFile(join(root, "sheet.xlsx")), buf);
   await rm(join(root, ".."), { recursive: true, force: true });
 });
 

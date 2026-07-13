@@ -55,6 +55,9 @@ export interface ConnectLiveResult {
   readonly restarted: boolean;
 }
 
+/** Visual theme used to keep the native Windows title-bar overlay aligned with the renderer. */
+export type WindowTheme = "light" | "dark";
+
 /**
  * The complete renderer-visible bridge surface. Extended by later UI tasks ONLY with
  * additional explicit, typed native-capability methods — never a passthrough.
@@ -75,6 +78,8 @@ export interface CoworkShellBridge {
    * not_connected if the live start failed).
    */
   readonly connectLive: () => Promise<ConnectLiveResult>;
+  /** Synchronize the native title-bar overlay with the renderer theme. */
+  readonly setWindowTheme: (theme: WindowTheme) => Promise<void>;
 }
 
 /** Global key under which the preload exposes {@link CoworkShellBridge} on `window`. */

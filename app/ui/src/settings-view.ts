@@ -20,6 +20,7 @@ import type {
   SettingsView,
   ThemePreference,
 } from "./service-client.js";
+import { applyThemePreference } from "./theme-manager.js";
 
 export interface SettingsViewDeps {
   readonly client: Pick<ServiceClient, "getSettings" | "updateGeneral">;
@@ -59,7 +60,9 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
   const run = async (label: string, action: () => Promise<SettingsView>): Promise<void> => {
     setStatus(`${label}…`);
     try {
-      render(await action());
+      const next = await action();
+      render(next);
+      applyThemePreference(next.general.theme);
       setStatus("Đã lưu.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Không lưu được cài đặt.";
@@ -76,7 +79,7 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
     for (const theme of THEMES) {
       const opt = document.createElement("option");
       opt.value = theme;
-      opt.textContent = theme;
+      opt.textContent = theme === "system" ? "Theo hệ thống" : theme === "light" ? "Sáng" : "Tối";
       if (view.general.theme === theme) opt.selected = true;
       themeSelect.append(opt);
     }
@@ -114,7 +117,9 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
   async function load(): Promise<void> {
     setStatus("Đang tải cài đặt…");
     try {
-      render(await deps.client.getSettings());
+      const view = await deps.client.getSettings();
+      render(view);
+      applyThemePreference(view.general.theme);
       setStatus("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Không tải được cài đặt.");

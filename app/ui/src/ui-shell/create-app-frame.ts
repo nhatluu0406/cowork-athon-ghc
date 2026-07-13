@@ -9,6 +9,7 @@ import { createActivityPanel, setRightPanelCollapsed, type ActivityPanelDom } fr
 import type { ProductSurfaceId } from "../surface-registry.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
 import type { ConversationProviderControl } from "./conversation-provider-control.js";
+import type { PermissionModeControl } from "./permission-mode-control.js";
 import { createCoworkView } from "./cowork-view.js";
 import { el, icon } from "./dom-utils.js";
 import { createInspectorShell } from "./inspector.js";
@@ -59,6 +60,7 @@ export interface AppFrameDom {
   readonly cancelButton: HTMLButtonElement;
   readonly newConversationButton: HTMLButtonElement;
   readonly providerControl: ConversationProviderControl;
+  readonly permissionModeControl: PermissionModeControl;
   readonly skillsButton: HTMLButtonElement;
   readonly settingsSurface: HTMLElement;
   readonly settingsProviderBody: HTMLElement;
@@ -171,6 +173,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     cancelButton: cowork.cancelButton,
     newConversationButton: sidebar.newConversationButton,
     providerControl: cowork.providerControl,
+    permissionModeControl: cowork.permissionModeControl,
     skillsButton: cowork.skillsButton,
     settingsSurface: settingsSurface.root,
     settingsProviderBody: settingsSurface.providerBody,
@@ -368,7 +371,7 @@ function createSettingsSurface(): {
   backButton.type = "button";
   const closeButton = el("button", "icon-btn settings-surface__close") as HTMLButtonElement;
   closeButton.type = "button";
-  closeButton.title = "Đóng cài đặt";
+  closeButton.dataset["tooltip"] = "Đóng cài đặt";
   closeButton.dataset["tooltip"] = "Đóng cài đặt";
   closeButton.setAttribute("aria-label", "Đóng cài đặt");
   closeButton.append(icon("panel-right-close", "Đóng cài đặt"));

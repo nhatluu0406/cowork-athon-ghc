@@ -3,7 +3,7 @@
  */
 
 import type { ServiceClient } from "./service-client.js";
-import { el } from "./ui-shell/dom-utils.js";
+import { el, icon } from "./ui-shell/dom-utils.js";
 
 export type WorkspaceFileContentView = Awaited<ReturnType<ServiceClient["readWorkspaceFileContent"]>>;
 
@@ -43,19 +43,33 @@ export function mountWorkspaceCompanionPane(
 
   const root = el("div", "workspace-companion-pane");
   const toolbar = el("div", "workspace-companion-pane__toolbar");
-  const pathLabel = el("span", "workspace-companion-pane__path");
-  const statusBadge = el("span", "workspace-companion-pane__status");
-  statusBadge.hidden = true;
+  const pathWrap = el("div", "workspace-companion-pane__path-wrap");
+  pathWrap.append(icon("file", "Tệp đang mở"));
+  const pathLabel = el("span", "workspace-companion-pane__path", "Xem trước tệp");
+  pathWrap.append(pathLabel);
+  const statusBadge = el("span", "workspace-companion-pane__status", "Chưa chọn tệp");
   const saveButton = el("button", "workspace-companion-pane__save", "Lưu") as HTMLButtonElement;
   saveButton.type = "button";
   saveButton.hidden = true;
-  toolbar.append(pathLabel, statusBadge, saveButton);
+  toolbar.append(pathWrap, statusBadge, saveButton);
 
   const body = el("div", "workspace-companion-pane__body");
   const empty = el("div", "workspace-companion-pane__empty");
+  const emptyIcon = el("div", "workspace-companion-pane__empty-icon");
+  emptyIcon.append(icon("workspace", "Workspace"));
+  const formats = el("div", "workspace-companion-pane__formats");
+  for (const format of ["TXT", "MD", "DOCX", "PDF", "Ảnh", "XLSX"]) {
+    formats.append(el("span", "workspace-companion-pane__format", format));
+  }
   empty.append(
-    el("h2", "workspace-companion-pane__empty-title", "Chọn một tệp"),
-    el("p", "workspace-companion-pane__empty-copy", "Duyệt workspace ở sidebar trái để xem trước hoặc chỉnh sửa."),
+    emptyIcon,
+    el("h2", "workspace-companion-pane__empty-title", "Mở một tệp để bắt đầu"),
+    el(
+      "p",
+      "workspace-companion-pane__empty-copy",
+      "Chọn tệp ở sidebar để xem trước tại đây, rồi thảo luận hoặc yêu cầu Agent chỉnh sửa ở panel Cowork bên cạnh.",
+    ),
+    formats,
   );
   body.append(empty);
   root.append(toolbar, body);
@@ -108,15 +122,18 @@ export function mountWorkspaceCompanionPane(
         const input = el("input", "workspace-companion-pane__grid-input") as HTMLInputElement;
         input.type = "text";
         input.value = row[c] ?? "";
+        input.readOnly = !file.editable;
         input.dataset["row"] = String(r);
         input.dataset["col"] = String(c);
-        input.addEventListener("input", () => {
-          const ri = Number(input.dataset["row"]);
-          const ci = Number(input.dataset["col"]);
-          const target = ensureRow(ri);
-          target[ci] = input.value;
-          markDirty();
-        });
+        if (file.editable) {
+          input.addEventListener("input", () => {
+            const ri = Number(input.dataset["row"]);
+            const ci = Number(input.dataset["col"]);
+            const target = ensureRow(ri);
+            target[ci] = input.value;
+            markDirty();
+          });
+        }
         td.append(input);
         tr.append(td);
       }
@@ -145,6 +162,7 @@ export function mountWorkspaceCompanionPane(
     saveButton.disabled = true;
     revokeBlob();
     pathLabel.textContent = file.relativePath;
+    statusBadge.hidden = true;
     pathLabel.title = file.relativePath;
 
     if (file.kind === "missing") {
@@ -159,7 +177,8 @@ export function mountWorkspaceCompanionPane(
       const editor = el("textarea", "workspace-companion-pane__editor") as HTMLTextAreaElement;
       editor.value = file.content ?? "";
       editor.spellcheck = false;
-      editor.addEventListener("input", markDirty);
+      editor.readOnly = !file.editable;
+      if (file.editable) editor.addEventListener("input", markDirty);
       body.replaceChildren(editor);
       if (file.truncated) {
         setStatus("Đã cắt bớt — tệp lớn hơn 512 KiB", 0);
@@ -167,9 +186,8 @@ export function mountWorkspaceCompanionPane(
       return;
     }
     if (file.kind === "image" && file.dataBase64 && file.mimeType) {
-      blobUrl = base64ToBlobUrl(file.dataBase64, file.mimeType);
       const img = el("img", "workspace-companion-pane__image") as HTMLImageElement;
-      img.src = blobUrl;
+      img.src = `data:${file.mimeType};base64,${file.dataBase64}`;
       img.alt = file.relativePath;
       body.replaceChildren(img);
       return;
@@ -184,18 +202,23 @@ export function mountWorkspaceCompanionPane(
     }
     if (file.kind === "docx") {
       const article = el("article", "workspace-companion-pane__docx");
-      article.innerHTML = file.html ?? "";
+      article.textContent = file.content ?? "";
       body.replaceChildren(article);
       return;
     }
     if (file.kind === "spreadsheet") {
       renderSpreadsheet(file);
+      if (!file.editable) setStatus("Chỉ xem — bảo toàn công thức và định dạng XLSX", 0);
       return;
     }
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Không hiển thị được tệp."));
   };
 
   const load = async (relativePath: string): Promise<void> => {
+    if (dirty && openPath !== null && relativePath !== openPath) {
+      setStatus("Bạn có thay đổi chưa lưu. Hãy lưu trước khi mở tệp khác.", 0);
+      return;
+    }
     openPath = relativePath;
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Đang tải..."));
     try {
@@ -241,10 +264,18 @@ export function mountWorkspaceCompanionPane(
     open: load,
     refresh: async () => {
       if (openPath === null) return;
+      if (dirty) {
+        setStatus("Tệp đã thay đổi bên ngoài. Hãy lưu hoặc mở lại sau khi xử lý thay đổi hiện tại.", 0);
+        return;
+      }
       await load(openPath);
     },
     getOpenPath: () => openPath,
     showAgentUpdated: () => {
+      if (dirty) {
+        setStatus("Agent đã cập nhật tệp. Thay đổi chưa lưu của bạn được giữ nguyên.", 0);
+        return;
+      }
       setStatus("Agent đã cập nhật tệp", 3500);
       void load(openPath ?? "");
     },
