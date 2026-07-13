@@ -8,10 +8,11 @@ updated_at: "2026-07-13"
 
 ## Baseline
 
-- Branch: `fix/ui-shell-v3-commercial-readiness`
+- Branch: `main`
 - Audit baseline: `ecce634` — `docs(quality): audit V3 commercial UI readiness`
-- UI baseline commit: use the merge commit that includes the commercial-readiness remediation from this branch after Product Owner review.
+- UI baseline commit: `4688f39` - `fix(ui): close remaining packaged V3 visual issues`; docs/evidence commit follows with refreshed packaged screenshots.
 - Evidence folder: `reports/ui-shell-v3-commercial-readiness/`
+- Commercial baseline decision: **PASS** for packaged visual baseline; Product Owner sign-off remains the next visual acceptance step.
 
 ## Stable Shell Modules
 
@@ -60,4 +61,4 @@ Provider settings reuse existing production behavior: provider, model, Base URL,
 
 ## Next Action
 
-After Product Owner accepts the commercial-readiness screenshots, the next product action is integration intake for D1-D4. Do not redesign UI Shell V3 again unless a new Product Owner/audit finding explicitly requires it.
+After Product Owner reviews the refreshed commercial-readiness screenshots, the next product action is integration intake for D1-D4. Do not redesign UI Shell V3 again unless a new Product Owner/audit finding explicitly requires it.
