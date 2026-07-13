@@ -1,0 +1,124 @@
+/**
+ * V3 shell frame layout — grid columns, no-sidebar integration surfaces, responsive drawers.
+ */
+
+[hidden] {
+  display: none !important;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr var(--statusbar-h);
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shell-frame {
+  display: grid;
+  min-height: 0;
+  min-width: 0;
+  grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
+  grid-template-areas: "rail sidebar main inspector";
+}
+
+.shell-frame.shell-frame--no-sidebar {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--panel-w);
+  grid-template-areas: "rail main inspector";
+}
+
+.shell-frame.shell-frame--no-sidebar .contextual-sidebar {
+  display: none !important;
+}
+
+.shell-frame.shell-frame--no-sidebar.shell-frame--inspector-closed {
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  grid-template-areas: "rail main";
+}
+
+.shell-frame.shell-frame--inspector-closed {
+  grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr);
+  grid-template-areas: "rail sidebar main";
+}
+
+.shell-frame .product-rail {
+  grid-area: rail;
+}
+
+.shell-frame .contextual-sidebar {
+  grid-area: sidebar;
+}
+
+.shell-frame .view--cowork,
+.shell-frame .view--workspace,
+.shell-frame .view--knowledge,
+.shell-frame .view--integration {
+  grid-area: main;
+  min-width: 0;
+  min-height: 0;
+}
+
+.shell-frame .inspector-shell {
+  grid-area: inspector;
+  min-width: 0;
+}
+
+.drawer-scrim {
+  position: fixed;
+  inset: var(--topbar-h) 0 var(--statusbar-h) 0;
+  background: rgba(15, 23, 42, 0.32);
+  z-index: 18;
+}
+
+@media (max-width: 1366px) {
+  .shell-frame.inspector-overlay .inspector-shell:not([hidden]) {
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: var(--statusbar-h);
+    width: min(var(--panel-w), 92vw);
+    z-index: 20;
+    box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
+  }
+}
+
+@media (max-width: 900px) {
+  .shell-frame {
+    grid-template-columns: var(--rail-w) minmax(0, 1fr);
+    grid-template-areas: "rail main";
+  }
+
+  .shell-frame .contextual-sidebar {
+    display: none;
+  }
+
+  .shell-frame.sidebar-drawer-open .contextual-sidebar {
+    display: flex;
+    position: fixed;
+    top: var(--topbar-h);
+    left: var(--rail-w);
+    bottom: var(--statusbar-h);
+    width: min(var(--sidebar-w), 88vw);
+    z-index: 20;
+    box-shadow: 8px 0 28px rgba(16, 24, 40, 0.14);
+  }
+
+  .shell-frame .inspector-shell {
+    display: none;
+  }
+
+  .shell-frame.inspector-drawer-open .inspector-shell:not([hidden]) {
+    display: flex;
+    position: fixed;
+    top: var(--topbar-h);
+    right: 0;
+    bottom: var(--statusbar-h);
+    width: min(var(--panel-w), 92vw);
+    z-index: 20;
+    box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
+  }
+
+  .product-rail__sidebar-toggle {
+    display: inline-flex;
+  }
+}

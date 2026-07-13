@@ -43,17 +43,6 @@ const BASE_SURFACES = Object.freeze([
         component: "KnowledgeIntegrationSlot",
     },
     {
-        id: "knowledge-graph",
-        label: "Knowledge Graph",
-        icon: "knowledge-graph",
-        featureFlag: "d3.knowledge_graph",
-        requiredCapability: "knowledge_graph_backend",
-        availability: "awaiting_integration",
-        dependency: "D3",
-        description: "Surface này đã sẵn sàng về giao diện và contract. Backend Knowledge Graph chưa được merge vào Cowork GHC.",
-        component: "KnowledgeGraphIntegrationSlot",
-    },
-    {
         id: "microsoft",
         label: "Microsoft 365",
         icon: "microsoft",
@@ -82,4 +71,8 @@ export function visibleProductSurfaces(surfaces) {
     return surfaces.filter((surface) => surface.availability !== "hidden");
 }
 export const PRODUCT_SURFACES = createSurfaceRegistry();
+/** D3 graph tab is capability-gated; false until D3 integration merges. */
+export function hasKnowledgeGraphCapability(_env = {}) {
+    return false;
+}
 //# sourceMappingURL=surface-registry.js.map

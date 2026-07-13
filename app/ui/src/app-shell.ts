@@ -24,7 +24,6 @@ import {
   setRightPanelCollapsed,
   showFilePreview,
   showFileReview,
-  showWorkspaceFilePreview,
   snapshotToPersisted,
   type ActivityPanelDom,
 } from "./activity-panel.js";
@@ -85,7 +84,23 @@ import {
   type ResolvedFinalText,
 } from "./session-finalization.js";
 import { createProductIcon } from "./product-icons.js";
-import { PRODUCT_SURFACES, visibleProductSurfaces, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
+import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
+import { createAppFrame, type AppFrameDom } from "./ui-shell/create-app-frame.js";
+import {
+  applyShellLayoutClasses,
+  applyWorkMode,
+  shellLayoutModeForSurface,
+  type WorkMode,
+} from "./ui-shell/shell-layout.js";
+import {
+  renderKnowledgeTab,
+  setKnowledgeGraphCapability,
+  type KnowledgeTab,
+} from "./ui-shell/knowledge-view.js";
+import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
+import { renderStatusBar } from "./ui-shell/status-bar.js";
+import { openWorkspaceFileInView } from "./ui-shell/workspace-view.js";
+import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
@@ -121,61 +136,13 @@ interface AppState {
   localServiceReady: boolean;
   connectionTestState: ConnectionTestState;
   activeSurface: ProductSurfaceId;
+  workMode: WorkMode;
+  knowledgeTab: KnowledgeTab;
+  serviceLabel: string;
+  serviceOk: boolean;
 }
 
-interface AppDom {
-  root: HTMLElement;
-  serviceStatus: HTMLElement;
-  providerStatus: HTMLElement;
-  serviceDetail: HTMLElement;
-  workspaceLabel: HTMLElement;
-  modelLabel: HTMLElement;
-  sessionSearch: HTMLInputElement;
-  sessionList: HTMLElement;
-  chatTitle: HTMLElement;
-  chatSub: HTMLElement;
-  chat: HTMLElement;
-  transcript: HTMLElement;
-  continuationBanner: HTMLElement;
-  continuationButton: HTMLButtonElement;
-  transcriptInner: HTMLElement;
-  emptyState: HTMLElement;
-  thinking: HTMLElement;
-  composer: HTMLElement;
-  composerInput: HTMLElement;
-  composerHint: HTMLElement;
-  composerPreflight: HTMLElement;
-  composerPreflightMessage: HTMLElement;
-  composerPreflightCta: HTMLButtonElement;
-  attachButton: HTMLButtonElement;
-  attachmentChips: HTMLElement;
-  sendButton: HTMLButtonElement;
-  cancelButton: HTMLButtonElement;
-  newConversationButton: HTMLButtonElement;
-  settingsModal: HTMLElement;
-  settingsPanel: HTMLElement;
-  settingsBody: HTMLElement;
-  settingsButton: HTMLButtonElement;
-  closeSettingsButton: HTMLButtonElement;
-  settingsOpener: HTMLElement | null;
-  modalKeyHandler: (event: KeyboardEvent) => void;
-  activityPanel: ActivityPanelDom;
-  executionStatus: HTMLElement;
-  permissionSummary: HTMLElement;
-  sidebar: HTMLElement;
-  rightPanel: HTMLElement;
-  activityMobileToggle: HTMLButtonElement;
-  sidebarToggle: HTMLButtonElement;
-  coworkTab: HTMLButtonElement;
-  skillsTab: HTMLButtonElement;
-  coworkSidebarPanel: HTMLElement;
-  skillsPanel: HTMLElement;
-  skillsButton: HTMLButtonElement;
-  productRail: HTMLElement;
-  surfaceButtons: Map<ProductSurfaceId, HTMLButtonElement>;
-  integrationSurface: HTMLElement;
-  workspaceNavigatorSlot: HTMLElement;
-}
+type AppDom = AppFrameDom;
 
 const DEFAULT_TITLE = "Cuộc trò chuyện mới";
 
@@ -192,19 +159,6 @@ function el<K extends keyof HTMLElementTagNameMap>(
 
 function icon(name: Parameters<typeof createProductIcon>[0], label?: string): SVGSVGElement {
   return createProductIcon(name, label);
-}
-
-function appendIconLabel(parent: HTMLElement, iconName: Parameters<typeof createProductIcon>[0], label: string): void {
-  parent.append(icon(iconName), el("span", "icon-label", label));
-}
-
-function setIconLabel(
-  parent: HTMLElement,
-  iconName: Parameters<typeof createProductIcon>[0],
-  label: string,
-): void {
-  parent.replaceChildren();
-  appendIconLabel(parent, iconName, label);
 }
 
 function renderIntegrationSurface(container: HTMLElement, surface: ProductSurfaceDefinition): void {
@@ -240,31 +194,6 @@ function shortPath(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
   if (parts.length <= 2) return path;
   return `.../${parts.slice(-2).join("/")}`;
-}
-
-function phaseLabel(phase: RuntimePhase): string {
-  switch (phase) {
-    case "idle":
-      return "Chưa bắt đầu";
-    case "starting":
-      return "Đang khởi động";
-    case "ready":
-      return "Phiên đã sẵn sàng";
-    case "running":
-      return "Đang xử lý";
-    case "cancelling":
-      return "Đang hủy";
-    case "completed":
-      return "Đã hoàn tất";
-    case "completed_without_final_message":
-      return "Đã hoàn tất (không có phản hồi cuối)";
-    case "denied":
-      return "Đã bị từ chối";
-    case "cancelled":
-      return "Đã hủy";
-    case "failed":
-      return "Có lỗi xảy ra";
-  }
 }
 
 function safeError(error: unknown): string {
@@ -736,25 +665,74 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const phase = state.conv.state.runtimePhase;
   const record = state.conv.state.activeRecord;
   const activeSurface = surfaceById(state.activeSurface);
+  const layoutMode = shellLayoutModeForSurface(state.activeSurface);
+  const inspectorOpen = !dom.rightPanel.hidden;
+  const isCoworkSurface = state.activeSurface === "cowork";
+  const isKnowledgeSurface = state.activeSurface === "knowledge";
 
   for (const [id, button] of dom.surfaceButtons) {
     button.setAttribute("aria-current", id === state.activeSurface ? "page" : "false");
   }
-  const isCoworkSurface = state.activeSurface === "cowork";
-  dom.chat.hidden = !isCoworkSurface;
-  dom.integrationSurface.hidden = isCoworkSurface;
-  dom.sidebar.classList.toggle("sidebar--surface-muted", !isCoworkSurface);
-  if (!isCoworkSurface) {
+
+  applyShellLayoutClasses(dom.shellFrame, layoutMode, inspectorOpen);
+  dom.shellFrame.classList.toggle("shell-frame--inspector-closed", !inspectorOpen);
+  dom.shellFrame.classList.toggle(
+    "inspector-overlay",
+    window.matchMedia("(max-width: 1366px)").matches && inspectorOpen,
+  );
+
+  dom.sidebar.hidden = layoutMode !== "work";
+  dom.coworkView.hidden = !isCoworkSurface || state.workMode !== "cowork";
+  dom.workspaceView.root.hidden = !isCoworkSurface || state.workMode !== "workspace";
+  dom.knowledgeView.root.hidden = !isKnowledgeSurface;
+  dom.integrationSurface.hidden = isCoworkSurface || isKnowledgeSurface;
+
+  if (isKnowledgeSurface) {
+    setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
+    renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+  } else if (!isCoworkSurface) {
     renderIntegrationSurface(dom.integrationSurface, activeSurface);
+  }
+
+  if (isCoworkSurface) {
+    applyWorkMode(
+      dom.shellFrame,
+      dom.sidebar,
+      dom.coworkView,
+      dom.workspaceView.root,
+      dom.coworkSidebarPanel,
+      dom.workspaceSidebarPanel,
+      state.workMode,
+    );
   }
 
   dom.workspaceLabel.textContent = state.activeWorkspace === null ? "Chưa chọn workspace" : shortPath(state.activeWorkspace);
   dom.workspaceLabel.title = state.activeWorkspace ?? "";
+
   const providerCopy = providerStatus(state.settings, state.connectionTestState);
-  setIconLabel(dom.providerStatus, "gateway", providerCopy.label);
-  dom.providerStatus.title = providerCopy.detail;
-  dom.providerStatus.classList.toggle("is-ok", providerCopy.ok);
-  dom.executionStatus.textContent = phaseLabel(phase);
+  const modelLabel =
+    state.settings?.defaultModel !== null && state.settings?.defaultModel !== undefined
+      ? `${state.settings.defaultModel.providerID} / ${state.settings.defaultModel.modelID}`
+      : "Chưa cấu hình";
+  renderConversationProviderControl(dom.providerControl, {
+    visible: isCoworkSurface && state.workMode === "cowork",
+    interactive: false,
+    label: modelLabel,
+    status: providerCopy.ok ? (state.connectionTestState === "failed" ? "danger" : "ok") : "warn",
+    failed: state.connectionTestState === "failed",
+  });
+
+  const hasPendingPermission = state.permissionHistory.some((entry) => entry.decision === "pending");
+  renderStatusBar(dom.statusBar, {
+    workspacePath: state.activeWorkspace,
+    serviceLabel: state.serviceLabel,
+    serviceOk: state.serviceOk,
+    runtimePhase: phase,
+    hasPendingPermission,
+    settings: state.settings,
+    connectionTestState: state.connectionTestState,
+  });
+
   dom.chatTitle.textContent = record?.title ?? DEFAULT_TITLE;
   dom.chatSub.textContent =
     record?.status === "interrupted"
@@ -766,9 +744,9 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     record,
     phase,
   );
-  if (showContinuation) {
+  if (showContinuation && isCoworkSurface && state.workMode === "cowork") {
     if (!dom.continuationBanner.isConnected) {
-      dom.chat.insertBefore(dom.continuationBanner, dom.transcript);
+      dom.coworkView.insertBefore(dom.continuationBanner, dom.transcript);
     }
     dom.continuationBanner.hidden = false;
     dom.continuationButton.hidden = false;
@@ -781,6 +759,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const sendPreflight = assessSendPreflight(readinessInput);
   const composerText = textFromComposer(dom.composerInput);
   renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+  dom.composer.hidden = !isCoworkSurface || state.workMode !== "cowork";
   dom.composer.classList.toggle("is-running", phase === "running" || phase === "cancelling");
   dom.composer.classList.toggle("is-locked", locked);
   dom.composerInput.contentEditable = locked ? "false" : "true";
@@ -802,7 +781,10 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.newConversationButton.disabled =
     phase === "starting" || phase === "running" || state.activeWorkspace === null;
 
-  renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
+  if (isCoworkSurface && state.workMode === "cowork") {
+    renderSessionList(dom, state, handlers.onSelect, handlers.onRename, handlers.onDelete);
+  }
+
   renderPendingAttachmentChips(dom, state.pendingAttachments, (id) => {
     state.pendingAttachments = state.pendingAttachments.filter((a) => a.id !== id);
     renderState(dom, state, handlers);
@@ -1416,377 +1398,27 @@ async function cancelRun(
   renderState(dom, state, handlers);
 }
 
-function createShell(root: HTMLElement): AppDom {
-  root.className = "app-shell";
-  root.replaceChildren();
-
-  const topbar = el("header", "topbar");
-  const brand = el("div", "topbar__brand");
-  appendIconLabel(brand, "cowork", "Cowork GHC");
-  topbar.append(brand);
-  const serviceStatus = el("span", "topbar__status no-drag", "Local service: Đang khởi động");
-  const providerStatus = el("button", "topbar__gateway topbar__provider-status no-drag");
-  providerStatus.type = "button";
-  appendIconLabel(providerStatus, "gateway", "Provider: Chưa cấu hình");
-  const modelLabel = providerStatus;
-  const settingsButton = el("button", "icon-btn no-drag") as HTMLButtonElement;
-  settingsButton.type = "button";
-  settingsButton.setAttribute("aria-label", "Mở cài đặt");
-  settingsButton.append(icon("settings"), el("span", "icon-label", "Cài đặt"));
-  const layoutControls = el("div", "topbar__layout-controls no-drag");
-  const rightPanelTopbarToggle = el("button", "topbar__layout-toggle right-panel-topbar-toggle") as HTMLButtonElement;
-  rightPanelTopbarToggle.type = "button";
-  rightPanelTopbarToggle.title = "Thu gọn bảng thông tin";
-  rightPanelTopbarToggle.setAttribute("aria-label", "Thu gọn bảng thông tin");
-  rightPanelTopbarToggle.setAttribute("aria-expanded", "true");
-  appendIconLabel(rightPanelTopbarToggle, "panel", "Thông tin");
-  layoutControls.append(rightPanelTopbarToggle);
-  topbar.append(el("div", "topbar__spacer"), serviceStatus, providerStatus, layoutControls, settingsButton);
-
-  const workspace = el("main", "workspace");
-  const productRail = el("aside", "product-rail");
-  productRail.setAttribute("aria-label", "Product surfaces");
-  const railBrand = el("div", "product-rail__brand");
-  railBrand.append(icon("cowork", "Cowork GHC"));
-  productRail.append(railBrand);
-  const railNav = el("nav", "product-rail__nav");
-  const surfaceButtons = new Map<ProductSurfaceId, HTMLButtonElement>();
-  for (const surface of visibleProductSurfaces(PRODUCT_SURFACES)) {
-    const item = el("button", `product-rail__item product-rail__item--${surface.availability}`) as HTMLButtonElement;
-    item.type = "button";
-    item.dataset["surfaceId"] = surface.id;
-    item.title =
-      surface.dependency !== undefined
-        ? `${surface.label} - Chờ tích hợp ${surface.dependency}`
-        : surface.label;
-    item.setAttribute("aria-label", item.title);
-    item.setAttribute("aria-current", surface.id === "cowork" ? "page" : "false");
-    item.append(icon(surface.icon, surface.label));
-    railNav.append(item);
-    surfaceButtons.set(surface.id, item);
+function openWorkspaceFileFromCowork(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  workspaceNavigator: WorkspaceNavigatorHandle | null,
+  relativePath: string,
+): void {
+  if (state.activeSurface !== "cowork") return;
+  state.workMode = "workspace";
+  workspaceNavigator?.selectPath(relativePath);
+  const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
+  if (state.client !== null) {
+    void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
   }
-  productRail.append(railNav);
-  const sidebarRailToggle = el("button", "product-rail__sidebar-toggle") as HTMLButtonElement;
-  sidebarRailToggle.type = "button";
-  sidebarRailToggle.title = "Mở sidebar Cowork";
-  sidebarRailToggle.setAttribute("aria-label", "Mở sidebar Cowork");
-  sidebarRailToggle.setAttribute("aria-expanded", "false");
-  sidebarRailToggle.append(icon("conversation", "Mở sidebar Cowork"));
-  productRail.append(sidebarRailToggle);
-  const sidebar = el("aside", "sidebar");
-  sidebar.setAttribute("aria-label", "Sidebar Cowork");
-  const sidebarBrand = el("div", "sidebar-brand");
-  const sidebarBrandMark = el("div", "sidebar-brand__mark");
-  sidebarBrandMark.append(icon("cowork", "Cowork GHC"));
-  const sidebarBrandText = el("div", "sidebar-brand__text");
-  sidebarBrandText.append(el("strong", "sidebar-brand__name", "Cowork GHC"));
-  sidebarBrandText.append(el("span", "sidebar-brand__copy", "AI cowork workspace"));
-  const sidebarToggle = el("button", "sidebar-collapse", "Thu gọn") as HTMLButtonElement;
-  sidebarToggle.type = "button";
-  sidebarToggle.setAttribute("aria-expanded", "true");
-  sidebarToggle.setAttribute("aria-label", "Thu gọn sidebar Cowork");
-  sidebarBrand.append(sidebarBrandMark, sidebarBrandText, sidebarToggle);
-  const coworkTab = el("button", "sidebar-tab sidebar-tab--active") as HTMLButtonElement;
-  const skillsTab = el("button", "sidebar-tab") as HTMLButtonElement;
-  const newConversationButton = el("button", "sidebar__new-btn");
-  newConversationButton.type = "button";
-  appendIconLabel(newConversationButton, "conversation", "Cuộc trò chuyện mới");
-  const workspaceBox = el("section", "workspace-slot");
-  const workspaceLabel = el("p", "workspace-context", "Chưa chọn workspace");
-  const sessionSearch = el("input", "sidebar__search") as HTMLInputElement;
-  sessionSearch.type = "search";
-  sessionSearch.placeholder = "Tìm cuộc trò chuyện…";
-  sessionSearch.setAttribute("aria-label", "Tìm cuộc trò chuyện");
-  const sessionList = el("div", "sidebar__history");
-  const workspaceNavigatorSlot = el("section", "workspace-nav");
-  const coworkSidebarPanel = el("div", "sidebar__cowork-panel");
-  coworkSidebarPanel.append(
-    newConversationButton,
-    workspaceLabel,
-    workspaceBox,
-    sessionSearch,
-    el("h2", "sidebar__heading", "Phiên"),
-    sessionList,
-    workspaceNavigatorSlot,
-  );
-  const skillsPanel = el("section", "skills-panel");
-  skillsPanel.hidden = true;
-  sidebar.append(sidebarBrand, coworkSidebarPanel, skillsPanel);
-
-  const chat = el("section", "chat-area");
-  const header = el("div", "chat-header");
-  const headerInfo = el("div", "chat-header__info");
-  const chatTitle = el("div", "chat-header__title", DEFAULT_TITLE);
-  const chatSub = el("div", "chat-header__sub", "Cowork GHC sử dụng workspace và provider đã cấu hình.");
-  headerInfo.append(chatTitle, chatSub);
-  const headerActions = el("div", "chat-header__actions");
-  const skillsButton = el("button", "label-btn skills-open");
-  skillsButton.type = "button";
-  appendIconLabel(skillsButton, "skills", "Skills: 0 bật");
-  const activityMobileToggle = el("button", "label-btn activity-mobile-toggle") as HTMLButtonElement;
-  activityMobileToggle.type = "button";
-  activityMobileToggle.setAttribute("aria-label", "Mở bảng hoạt động");
-  activityMobileToggle.setAttribute("aria-expanded", "false");
-  appendIconLabel(activityMobileToggle, "panel", "Thông tin");
-  headerActions.append(activityMobileToggle, skillsButton);
-  const chatIcon = el("div", "chat-header__icon");
-  chatIcon.append(icon("cowork", "Cowork"));
-  header.append(chatIcon, headerInfo, headerActions);
-
-  const continuationBanner = el("div", "continuation-banner");
-  continuationBanner.hidden = true;
-  continuationBanner.append(el("span", "continuation-banner__text", "Đây là lịch sử đã lưu — không phải phiên runtime đang chạy."));
-  const continuationButton = el("button", "label-btn", "Tiếp tục cuộc trò chuyện này") as HTMLButtonElement;
-  continuationButton.type = "button";
-  continuationBanner.append(continuationButton);
-
-  const transcript = el("div", "transcript");
-  const transcriptInner = el("div", "transcript__inner");
-  const emptyState = el("div", "empty-state");
-  emptyState.append(el("h2", "empty-state__title", "Bắt đầu làm việc với Cowork GHC"));
-  emptyState.append(
-    el("p", "empty-state__copy", "Chọn workspace, cấu hình provider/model, rồi tạo cuộc trò chuyện mới hoặc gửi yêu cầu."),
-  );
-  const thinking = el("div", "thinking");
-  thinking.hidden = true;
-  thinking.append(el("span", "thinking__dots", "..."), el("span", "thinking__label", "Đang xử lý"));
-  transcriptInner.append(emptyState, thinking);
-  transcript.append(transcriptInner);
-
-  const composer = el("div", "composer");
-  const composerBox = el("div", "composer__box");
-  const composerInput = el("div", "composer__input");
-  composerInput.contentEditable = "true";
-  composerInput.setAttribute("role", "textbox");
-  composerInput.setAttribute("aria-multiline", "true");
-  composerInput.setAttribute("aria-label", "Nhập yêu cầu");
-  composerInput.setAttribute("data-placeholder", "Nhập yêu cầu cho Cowork GHC...");
-  const composerBar = el("div", "composer__bar");
-  const attachButton = el("button", "icon-btn attach-btn") as HTMLButtonElement;
-  attachButton.type = "button";
-  attachButton.title = "Đính kèm tệp văn bản trong workspace";
-  attachButton.setAttribute("aria-label", "Đính kèm");
-  attachButton.append(icon("attachment"));
-  const attachLabel = el("span", "model-picker attach-label", "Đính kèm");
-  const cancelButton = el("button", "stop-btn", "Dừng");
-  cancelButton.type = "button";
-  cancelButton.hidden = true;
-  const sendButton = el("button", "send-btn", "Gửi");
-  sendButton.type = "button";
-  const attachmentChips = el("div", "composer__attachments");
-  attachmentChips.hidden = true;
-  composerBar.append(
-    attachButton,
-    attachLabel,
-    el("div", "composer__spacer"),
-    cancelButton,
-    sendButton,
-  );
-  const composerPreflight = el("div", "composer-preflight");
-  composerPreflight.hidden = true;
-  composerPreflight.setAttribute("role", "status");
-  const composerPreflightMessage = el("p", "composer-preflight__message");
-  const composerPreflightCta = el("button", "label-btn composer-preflight__cta", "Mở cài đặt provider") as HTMLButtonElement;
-  composerPreflightCta.type = "button";
-  composerPreflight.append(composerPreflightMessage, composerPreflightCta);
-  const composerHint = el("div", "composer__hint", "Enter để gửi, Shift+Enter xuống dòng");
-  composerBox.append(composerInput, attachmentChips, composerPreflight, composerBar);
-  composer.append(composerBox, composerHint);
-  chat.append(header, transcript, composer);
-
-  const integrationSurface = el("section", "integration-surface");
-  integrationSurface.hidden = true;
-
-  const rightPanel = el("aside", "right-panel");
-  rightPanel.setAttribute("aria-label", "Bảng thông tin");
-  const rpHeader = el("div", "rp-header");
-  const rpTitle = el("span", "rp-header__title");
-  appendIconLabel(rpTitle, "panel", "Thông tin");
-  rpHeader.append(rpTitle);
-  const executionStatus = el("p", "execution-status", "Chưa bắt đầu");
-  const planCard = el("section", "plan-card");
-  planCard.append(el("div", "plan-card__hd", "Kế hoạch"));
-  const planSteps = el("div", "plan-card__steps");
-  planCard.append(planSteps);
-  const outputSection = el("section", "file-section");
-  outputSection.append(el("div", "file-section__label", "Tệp đầu ra"));
-  const outputFiles = el("div", "output-files");
-  outputSection.append(outputFiles);
-  const inputSection = el("section", "file-section");
-  inputSection.append(el("div", "file-section__label", "Tệp đã đọc"));
-  const inputFiles = el("div", "input-files");
-  inputSection.append(inputFiles);
-  const permissionSummary = el("p", "permission-summary", "Quyền: chưa có yêu cầu.");
-  rightPanel.append(rpHeader, executionStatus, planCard, outputSection, inputSection, permissionSummary);
-
-  workspace.append(productRail, sidebar, chat, integrationSurface, rightPanel);
-
-  const statusbar = el("footer", "statusbar");
-  const serviceDetail = el("span", "statusbar__left", "Đang khởi động");
-  statusbar.append(serviceDetail, el("span", "statusbar__right", "OpenCode chỉ chạy khi bạn gửi yêu cầu."));
-
-  const settingsModal = el("div", "modal");
-  settingsModal.hidden = true;
-  settingsModal.setAttribute("role", "dialog");
-  settingsModal.setAttribute("aria-modal", "true");
-  settingsModal.setAttribute("aria-label", "Cài đặt");
-  settingsModal.setAttribute("aria-hidden", "true");
-  const settingsPanel = el("div", "modal__panel");
-  const settingsHeader = el("div", "modal__header");
-  const modalTitle = el("h2", "modal__title", "Cài đặt");
-  modalTitle.tabIndex = -1;
-  settingsHeader.append(modalTitle);
-  const closeSettings = el("button", "icon-btn", "Đóng") as HTMLButtonElement;
-  closeSettings.type = "button";
-  settingsHeader.append(closeSettings);
-  const settingsBody = el("div", "modal__body");
-  settingsPanel.append(settingsHeader, settingsBody);
-  settingsModal.append(settingsPanel);
-
-  let settingsOpener: HTMLElement | null = null;
-  const modalKeyHandler = createModalKeyHandler({
-    panel: settingsPanel,
-    closeButton: closeSettings,
-    onClose: () => {
-      closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
-      settingsOpener = null;
-    },
-  });
-
-  root.append(topbar, workspace, statusbar, settingsModal);
-
-  const domPartial = {
-    root,
-    serviceStatus,
-    providerStatus,
-    serviceDetail,
-    workspaceLabel,
-    modelLabel,
-    sessionSearch,
-    sessionList,
-    chatTitle,
-    chatSub,
-    chat,
-    transcript,
-    continuationBanner,
-    continuationButton,
-    transcriptInner,
-    emptyState,
-    thinking,
-    composer,
-    composerInput,
-    composerHint,
-    composerPreflight,
-    composerPreflightMessage,
-    composerPreflightCta,
-    attachButton,
-    attachmentChips,
-    sendButton,
-    cancelButton,
-    newConversationButton,
-    settingsModal,
-    settingsPanel,
-    settingsBody,
-    settingsButton,
-    closeSettingsButton: closeSettings,
-    settingsOpener: null as HTMLElement | null,
-    modalKeyHandler,
-    activityPanel: createActivityPanel(rightPanel),
-    executionStatus,
-    permissionSummary,
-    sidebar,
-    rightPanel,
-    activityMobileToggle,
-    sidebarToggle,
-    coworkTab,
-    skillsTab,
-    coworkSidebarPanel,
-    skillsPanel,
-    skillsButton,
-    productRail,
-    surfaceButtons,
-    integrationSurface,
-    workspaceNavigatorSlot,
-  };
-
-  const openSettings = (): void => {
-    settingsOpener = document.activeElement instanceof HTMLElement ? document.activeElement : settingsButton;
-    const initial =
-      settingsBody.querySelector<HTMLElement>(".llm-provider-select") ??
-      settingsBody.querySelector<HTMLElement>(".llm-settings-title") ??
-      closeSettings;
-    openModalWithFocus(settingsModal, initial, modalKeyHandler);
-  };
-
-  settingsButton.addEventListener("click", openSettings);
-  providerStatus.addEventListener("click", openSettings);
-  composerPreflightCta.addEventListener("click", openSettings);
-  closeSettings.addEventListener("click", () => {
-    closeModalWithFocus(settingsModal, settingsOpener, modalKeyHandler);
-    settingsOpener = null;
-  });
-
-  activityMobileToggle.addEventListener("click", () => {
-    const open = workspace.classList.toggle("activity-drawer-open");
-    activityMobileToggle.setAttribute("aria-expanded", open ? "true" : "false");
-    setIconLabel(activityMobileToggle, "panel", open ? "Ẩn thông tin" : "Thông tin");
-    domPartial.activityPanel.toggle.setAttribute(
-      "aria-label",
-      open ? "Thu gọn bảng hoạt động" : "Mở rộng bảng hoạt động",
-    );
-  });
-
-  const applySidebarCollapsed = (collapsed: boolean): void => {
-    workspace.classList.toggle("sidebar-collapsed", collapsed);
-    sidebar.setAttribute("aria-hidden", collapsed ? "true" : "false");
-    sidebarToggle.textContent = collapsed ? "Mở" : "Thu gọn";
-    sidebarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    sidebarToggle.setAttribute("aria-label", collapsed ? "Mở sidebar Cowork" : "Thu gọn sidebar Cowork");
-    sidebarRailToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    const railLabel = collapsed ? "Mở sidebar Cowork" : "Thu gọn sidebar Cowork";
-    sidebarRailToggle.title = railLabel;
-    sidebarRailToggle.setAttribute("aria-label", railLabel);
-  };
-
-  const applyRightPanelCollapsed = (collapsed: boolean): void => {
-    setRightPanelCollapsed(rightPanel, domPartial.activityPanel.toggle, collapsed);
-    rightPanelTopbarToggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-    const label = collapsed ? "Mở bảng thông tin" : "Thu gọn bảng thông tin";
-    rightPanelTopbarToggle.title = label;
-    rightPanelTopbarToggle.setAttribute("aria-label", label);
-    setIconLabel(rightPanelTopbarToggle, "panel", collapsed ? "Mở thông tin" : "Thông tin");
-  };
-
-  sidebarToggle.addEventListener("click", () => {
-    applySidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
-  });
-
-  sidebarRailToggle.addEventListener("click", () => {
-    applySidebarCollapsed(!workspace.classList.contains("sidebar-collapsed"));
-  });
-
-  rightPanelTopbarToggle.addEventListener("click", () => {
-    applyRightPanelCollapsed(!rightPanel.classList.contains("right-panel--collapsed"));
-  });
-
-  domPartial.activityPanel.toggle.addEventListener("click", () => {
-    applyRightPanelCollapsed(!rightPanel.classList.contains("right-panel--collapsed"));
-  });
-
-  const showSkills = (show: boolean): void => {
-    coworkSidebarPanel.hidden = show;
-    skillsPanel.hidden = !show;
-    coworkTab.classList.toggle("sidebar-tab--active", !show);
-    skillsTab.classList.toggle("sidebar-tab--active", show);
-    coworkTab.setAttribute("aria-selected", show ? "false" : "true");
-    skillsTab.setAttribute("aria-selected", show ? "true" : "false");
-  };
-  coworkTab.addEventListener("click", () => showSkills(false));
-  skillsTab.addEventListener("click", () => showSkills(true));
-  skillsButton.addEventListener("click", () => showSkills(true));
-
-  return domPartial;
+  renderState(dom, state, handlers);
 }
+
+function createShell(root: HTMLElement): AppDom {
+  return createAppFrame(root);
+}
+
 
 export function mountCoworkApp(root: HTMLElement): void {
   const dom = createShell(root);
@@ -1816,6 +1448,10 @@ export function mountCoworkApp(root: HTMLElement): void {
     localServiceReady: false,
     connectionTestState: "unknown",
     activeSurface: "cowork",
+    workMode: "cowork",
+    knowledgeTab: "base",
+    serviceLabel: "Service · Đang khởi động",
+    serviceOk: false,
   };
 
   const handlers = {
@@ -1849,16 +1485,41 @@ export function mountCoworkApp(root: HTMLElement): void {
   for (const [id, button] of dom.surfaceButtons) {
     button.addEventListener("click", () => {
       state.activeSurface = id;
-      dom.coworkSidebarPanel.hidden = false;
+      if (id === "cowork") {
+        state.workMode = "cowork";
+      }
       dom.skillsPanel.hidden = true;
       renderState(dom, state, handlers);
     });
   }
 
+  dom.workModeCoworkTab.addEventListener("click", () => {
+    state.workMode = "cowork";
+    renderState(dom, state, handlers);
+  });
+  dom.workModeWorkspaceTab.addEventListener("click", () => {
+    state.workMode = "workspace";
+    renderState(dom, state, handlers);
+  });
+
+  for (const btn of dom.knowledgeView.root.querySelectorAll<HTMLButtonElement>("[data-knowledge-tab]")) {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset["knowledgeTab"];
+      if (tab === "base" || tab === "graph") {
+        state.knowledgeTab = tab;
+        renderState(dom, state, handlers);
+      }
+    });
+  }
+
+  dom.skillsButton.addEventListener("click", () => {
+    dom.skillsPanel.hidden = !dom.skillsPanel.hidden;
+  });
+
   let featuresMounted = false;
   let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
-  let workspaceNavigator: { refresh: () => Promise<void> } | null = null;
+  let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
     getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1869,6 +1530,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     },
     onState: (readinessState) => {
       const copy = localServiceStatus(readinessState);
+      state.serviceLabel = copy.label;
+      state.serviceOk = copy.ok;
       dom.serviceStatus.textContent = copy.label;
       dom.serviceStatus.classList.toggle("is-ok", copy.ok);
       dom.serviceDetail.textContent = copy.detail;
@@ -1892,7 +1555,7 @@ export function mountCoworkApp(root: HTMLElement): void {
         });
         if (!featuresMounted) {
           featuresMounted = true;
-          mountWorkspacePicker(dom.sidebar.querySelector(".workspace-slot") as HTMLElement, {
+          mountWorkspacePicker(dom.workspaceBox, {
             bridge: getShellBridge(),
             client: dynamicClient,
             onActivated: (rootPath) => {
@@ -1912,7 +1575,8 @@ export function mountCoworkApp(root: HTMLElement): void {
             getWorkspaceRoot: () => state.activeWorkspace,
             onFileSelected: (relativePath) => {
               if (state.client === null) return;
-              void showWorkspaceFilePreview(dom.activityPanel, state.client, relativePath);
+              const label = relativePath.split(/[\\/]/).pop() ?? relativePath;
+              void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
             },
           });
           mountLlmSettingsPanel(dom.settingsBody, {
@@ -1932,7 +1596,7 @@ export function mountCoworkApp(root: HTMLElement): void {
           mountSettingsView(dom.settingsBody, { client: dynamicClient });
           mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
             const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            setIconLabel(dom.skillsButton, "skills", `Skills: ${enabled} bật`);
+            dom.skillsButton.textContent = `Skills: ${enabled}`;
             dom.skillsButton.setAttribute("aria-label", `Mở Skills, ${enabled} đang bật`);
           });
           const permissions = createPermissionController({
@@ -2008,8 +1672,10 @@ export function mountCoworkApp(root: HTMLElement): void {
                   );
             if (review !== undefined) {
               showFileReview(dom.activityPanel, review);
+              openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
               return;
             }
+            openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, relativePath);
             void showFilePreview(dom.activityPanel, state.client, change);
           });
         }
