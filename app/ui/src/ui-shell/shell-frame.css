@@ -339,6 +339,16 @@ textarea,
   min-width: 0;
 }
 
+.shell-frame .inspector-shell:not([hidden]) {
+  position: fixed;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: var(--statusbar-h);
+  width: min(var(--panel-w), 92vw);
+  z-index: 20;
+  box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
+}
+
 .drawer-scrim {
   position: fixed;
   inset: var(--topbar-h) 0 var(--statusbar-h) 0;
