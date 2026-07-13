@@ -89,6 +89,37 @@ export interface WorkspaceListResult {
   readonly limit: number;
 }
 
+export type WorkspaceFileContentKind =
+  | "text"
+  | "image"
+  | "pdf"
+  | "docx"
+  | "spreadsheet"
+  | "missing"
+  | "unsupported";
+
+export interface WorkspaceSpreadsheetSheetView {
+  readonly name: string;
+  readonly rows: readonly (readonly string[])[];
+}
+
+export interface WorkspaceFileContentView {
+  readonly relativePath: string;
+  readonly kind: WorkspaceFileContentKind;
+  readonly editable: boolean;
+  readonly mimeType?: string;
+  readonly content?: string;
+  readonly html?: string;
+  readonly dataBase64?: string;
+  readonly sheets?: readonly WorkspaceSpreadsheetSheetView[];
+  readonly truncated: boolean;
+  readonly sizeBytes: number;
+}
+
+export type WorkspaceFileWriteInput =
+  | { readonly kind: "text"; readonly content: string }
+  | { readonly kind: "spreadsheet"; readonly sheets: readonly WorkspaceSpreadsheetSheetView[] };
+
 /** UI theme preference mirrored from the service (CGHC-022). */
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -447,6 +478,11 @@ export interface ServiceClient {
     readonly truncated: boolean;
     readonly sizeBytes: number;
   }>;
+  readWorkspaceFileContent(relativePath: string): Promise<WorkspaceFileContentView>;
+  writeWorkspaceFileContent(
+    relativePath: string,
+    input: WorkspaceFileWriteInput,
+  ): Promise<{ readonly relativePath: string; readonly sizeBytes: number }>;
   captureFileReviewSnapshot(relativePath: string): Promise<import("@cowork-ghc/service/file-review").FileSnapshotCapture>;
   buildFileReview(input: Record<string, unknown>): Promise<import("@cowork-ghc/service/file-review").FileReviewArtifact>;
   /**
@@ -809,6 +845,19 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
           };
         }>(`/v1/workspace/file-preview?path=${encodeURIComponent(relativePath)}`)
       ).preview,
+
+    readWorkspaceFileContent: async (relativePath) =>
+      (await call<{ file: WorkspaceFileContentView }>(
+        `/v1/workspace/file-content?path=${encodeURIComponent(relativePath)}`,
+      )).file,
+
+    writeWorkspaceFileContent: async (relativePath, input) =>
+      (
+        await call<{ result: { relativePath: string; sizeBytes: number } }>(
+          "/v1/workspace/file-content",
+          { method: "PUT", body: JSON.stringify({ relativePath, ...input }) },
+        )
+      ).result,
 
     captureFileReviewSnapshot: async (relativePath) =>
       (

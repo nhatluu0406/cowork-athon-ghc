@@ -215,14 +215,51 @@ textarea,
 }
 
 /* ── Main views ── */
+.workspace-companion-host {
+  grid-area: main;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shell-frame[data-work-mode="cowork"] .workspace-companion-host {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-frame[data-work-mode="workspace"] .workspace-companion-host {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 36%);
+}
+
+.shell-frame[data-work-mode="cowork"] .view--workspace {
+  display: none !important;
+}
+
 .view--cowork,
 .view--workspace,
 .view--knowledge,
 .view--integration,
 .view--settings {
-  grid-area: main;
   min-width: 0;
   min-height: 0;
+}
+
+.view--cowork,
+.view--workspace,
+.view--knowledge,
+.view--integration,
+.view--settings {
+  /* grid-area assigned via host or direct child below */
+}
+
+.shell-frame[data-work-mode="cowork"] .view--cowork {
+  grid-column: 1;
+}
+
+.view--knowledge,
+.view--integration,
+.view--settings {
+  grid-area: main;
 }
 
 /* ── Settings surface (full-screen, no modal backdrop) ── */
@@ -379,6 +416,163 @@ textarea,
     z-index: 20;
     box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
   }
+}
+
+/* ── 1366px: tighten companion chat column ── */
+@media (max-width: 1366px) {
+  .shell-frame[data-work-mode="workspace"] .workspace-companion-host {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 40%);
+  }
+}
+
+/* ── 900px: rail + main only, sidebar/inspector as drawers ── */
+.cowork-view--companion {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.cowork-view--companion .conv-header {
+  padding: 8px 12px;
+}
+
+.cowork-view--companion .conv-header__title {
+  font-size: 14px;
+}
+
+.cowork-view--companion .conv-header__meta {
+  display: none;
+}
+
+.cowork-view--companion .transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+.cowork-view--companion .composer__hint {
+  display: none;
+}
+
+.view--cowork,
+.view--workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-view__companion-slot {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-companion-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-companion-pane__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--paper-deep);
+}
+
+.workspace-companion-pane__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-body);
+}
+
+.workspace-companion-pane__status {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.workspace-companion-pane__save {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-warm);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.workspace-companion-pane__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.workspace-companion-pane__editor {
+  width: 100%;
+  min-height: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.workspace-companion-pane__image,
+.workspace-companion-pane__pdf {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  border: 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.workspace-companion-pane__pdf {
+  min-height: 480px;
+}
+
+.workspace-companion-pane__docx {
+  max-width: 720px;
+  line-height: 1.6;
+}
+
+.workspace-companion-pane__grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.workspace-companion-pane__grid-cell {
+  border: 1px solid var(--line-soft);
+  padding: 0;
+}
+
+.workspace-companion-pane__grid-input {
+  width: 100%;
+  min-width: 72px;
+  border: 0;
+  padding: 6px 8px;
+  font: inherit;
+  background: transparent;
+}
+
+.workspace-companion-pane__empty,
+.workspace-companion-pane__message {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.workspace-companion-pane__message--error {
+  color: var(--danger);
 }
 
 /* ── 900px: rail + main only, sidebar/inspector as drawers ── */
