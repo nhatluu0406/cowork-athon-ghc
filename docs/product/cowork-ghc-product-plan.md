@@ -280,7 +280,7 @@ Foundation Phase 1 và không khóa layout UI cuối. Minimal Workspace Navigato
 - Danh sách file/folder trong active workspace: **implemented read-only**.
 - Icon loại file: **implemented for common file/folder distinction**.
 - Search/filter: **implemented as filter over loaded entries**.
-- Recent và changed files: deferred.
+- Recent và changed files: **segmented filter UI** (`Tất cả | Gần đây | Đã đổi`) with `modifiedTime` heuristics; full recent/changed API deferred.
 - Không biến ứng dụng thành IDE clone: still enforced.
 
 ### Rich File Viewing
@@ -321,10 +321,10 @@ Cowork GHC **không** cam kết xây một Office editor hoàn chỉnh trong s�
 Reference assessment:
 [Cowork Frontend Design Assessment](../references/cowork-frontend-design-assessment.md)
 
-Recommended shell direction: hybrid `1a Airy + 1b rail`, now adopted as the staged
-shell/layout foundation before D1-D4 merge work: product rail, contextual sidebar,
-main chat workspace, and a right information panel. This does **not** change File Work
-Review acceptance, which remains PARTIAL PASS. `1c Zen` is only suitable as focus-mode
+Recommended shell direction: hybrid `1a Airy + 1b rail`, **now ported as UI Shell V3**
+(`app/ui/src/ui-shell/`) before D1-D4 merge work: product rail, Cowork/Workspace work modes,
+main workspace (chat or file preview), optional inspector, bottom status bar. This does **not**
+change File Work Review acceptance, which remains PARTIAL PASS. `1c Zen` is only suitable as focus-mode
 or empty-state inspiration.
 
 Important constraints:

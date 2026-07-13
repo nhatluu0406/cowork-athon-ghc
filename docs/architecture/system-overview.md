@@ -46,8 +46,10 @@ connectivity probe cho API key/model invalid sau request.
 
 ## Boundary UI shell / product surfaces
 
-Renderer hiện dùng hướng hybrid `1a Airy + 1b rail`: 56px product rail → contextual
-sidebar → main chat workspace → right information panel.
+Renderer dùng **UI Shell V3** (production port 2026-07-13): 56px product rail → contextual
+sidebar (Cowork \| Workspace work modes) → main workspace → optional inspector → bottom status bar.
+Integration surfaces (Dispatch, Gateway, Knowledge, Microsoft 365, Code) dùng full-width main **không**
+giữ cột sidebar trống (`shell-frame--no-sidebar`).
 Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
 integration data giả để làm đẹp layout.
 

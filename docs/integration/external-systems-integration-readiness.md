@@ -38,7 +38,7 @@ Related docs:
 | Provider Readiness | **PASS** | |
 | Attachment Honesty | **PASS** | |
 | File Work Review | **PARTIAL PASS** | Live Journey A–B PASS; Journey C blocked; D–L incomplete |
-| Commercial UI Product Owner acceptance | **FAIL** | Shell foundation shipped; polish and PO sign-off pending |
+| Commercial UI Product Owner acceptance | **Pending** | V3 production shell ported; packaged screenshots in `reports/ui-shell-v3-production/` await PO review |
 | D1–D4 external tracks | **Not merged** | UI surfaces are `awaiting_integration` registry slots only |
 | Full L9 / release-candidate regression | **Incomplete** | Deferred to combined integration milestone |
 | Architecture refactor (`app-shell.ts`, snapshot/watchdog → service) | **Deferred** | After combined external integration merge |
