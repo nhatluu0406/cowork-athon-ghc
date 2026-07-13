@@ -75,6 +75,15 @@ export function credentialAccountFor(providerId: string, account?: string): stri
   return raw;
 }
 
+/** Stable keyring account namespace for a provider profile (Phase 1). */
+export function credentialAccountForProfile(profileId: string): string {
+  const raw = `profile:${profileId.trim()}`;
+  if (!raw || raw.length > 256 || !ACCOUNT_RE.test(raw)) {
+    throw new Error(`Invalid profile credential account for id ${JSON.stringify(profileId)}.`);
+  }
+  return raw;
+}
+
 /** Build the handle persisted in app state. It is NOT a key — only a lookup handle. */
 export function credentialRef(account: string): CredentialRef {
   return { store: "os", account };

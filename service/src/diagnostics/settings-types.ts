@@ -15,7 +15,7 @@
 import type { CredentialRef, ModelRef, ProviderId } from "@cowork-ghc/contracts";
 
 /** Current on-disk settings schema version. Bump when the persisted shape changes. */
-export const SETTINGS_SCHEMA_VERSION = 2;
+export const SETTINGS_SCHEMA_VERSION = 3;
 
 /** UI theme preference. Non-secret. */
 export type ThemePreference = "system" | "light" | "dark";
@@ -59,12 +59,32 @@ export interface ModelPreference {
   readonly default?: ModelRef;
 }
 
+/** Persisted provider profile (secret-free; credential is a handle only). */
+export interface PersistedProviderProfile {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerType: "deepseek" | "custom-openai-compat";
+  readonly baseUrl: string;
+  readonly modelId: string;
+  readonly envVar: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly credentialRef?: CredentialRef;
+  readonly presetId?: string;
+}
+
 /** The complete, versioned settings document persisted by the service. */
 export interface CoworkSettings {
   readonly version: number;
   readonly general: GeneralSettings;
   readonly providers: readonly ProviderSettingsEntry[];
   readonly modelPreference: ModelPreference;
+  /** Phase 1 multi-provider profiles. */
+  readonly providerProfiles?: readonly PersistedProviderProfile[];
+  /** Active profile id at application level. */
+  readonly activeProfileId?: string;
+  /** Idempotent legacy migration marker. */
+  readonly providerProfilesMigrated?: boolean;
   /** The granted workspace root the user selected. Absent until one is granted. */
   readonly activeWorkspace?: ActiveWorkspace;
 }
@@ -82,6 +102,7 @@ export function defaultSettings(): CoworkSettings {
     version: SETTINGS_SCHEMA_VERSION,
     general: { ...DEFAULT_GENERAL_SETTINGS },
     providers: [],
+    providerProfiles: [],
     modelPreference: {},
   };
 }
