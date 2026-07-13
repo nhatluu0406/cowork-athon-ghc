@@ -23,8 +23,21 @@ function fileIconFor(entry) {
     }
     return "file";
 }
-function matchesFilter(entry, filter) {
-    return filter.length === 0 || entry.name.toLowerCase().includes(filter.toLowerCase());
+function matchesFilter(entry, filter, mode) {
+    if (filter.length > 0 && !entry.name.toLowerCase().includes(filter.toLowerCase())) {
+        return false;
+    }
+    if (mode === "all" || entry.kind === "folder")
+        return true;
+    if (entry.modifiedTime === undefined)
+        return false;
+    const modified = Date.parse(entry.modifiedTime);
+    if (Number.isNaN(modified))
+        return true;
+    const ageMs = Date.now() - modified;
+    if (mode === "recent")
+        return ageMs <= 7 * 24 * 60 * 60 * 1000;
+    return ageMs <= 24 * 60 * 60 * 1000;
 }
 export function mountWorkspaceNavigator(container, options) {
     const state = {
@@ -32,6 +45,7 @@ export function mountWorkspaceNavigator(container, options) {
         entries: [],
         nodes: new Map(),
         filter: "",
+        filterMode: "all",
         loading: false,
         error: null,
         selectedPath: null,
@@ -48,14 +62,30 @@ export function mountWorkspaceNavigator(container, options) {
     refreshButton.append(icon("refresh", "Làm mới"));
     header.append(title, refreshButton);
     const rootLabel = el("div", "workspace-nav__root", "Chưa chọn workspace");
-    const filter = el("input", "workspace-nav__filter");
-    filter.type = "search";
-    filter.placeholder = "Lọc tệp đã tải...";
-    filter.setAttribute("aria-label", "Lọc tệp trong workspace đã tải");
+    const search = el("input", "workspace-nav__filter");
+    search.type = "search";
+    search.placeholder = "Tìm tệp…";
+    search.setAttribute("aria-label", "Tìm tệp trong workspace");
+    const segments = el("div", "workspace-filter-segments");
+    segments.setAttribute("role", "group");
+    segments.setAttribute("aria-label", "Bộ lọc workspace");
+    const segmentButtons = new Map();
+    for (const [label, mode] of [
+        ["Tất cả", "all"],
+        ["Gần đây", "recent"],
+        ["Đã đổi", "changed"],
+    ]) {
+        const btn = el("button", "workspace-filter-segments__btn", label);
+        btn.type = "button";
+        btn.dataset["filterMode"] = mode;
+        btn.setAttribute("aria-pressed", mode === "all" ? "true" : "false");
+        segments.append(btn);
+        segmentButtons.set(mode, btn);
+    }
     const body = el("div", "workspace-nav__body");
-    container.append(header, rootLabel, filter, body);
+    container.append(header, rootLabel, search, segments, body);
     const renderEntries = (entries, parent, depth) => {
-        for (const entry of entries.filter((item) => matchesFilter(item, state.filter))) {
+        for (const entry of entries.filter((item) => matchesFilter(item, state.filter, state.filterMode))) {
             const node = state.nodes.get(entry.relativePath);
             const row = el("button", `workspace-tree__row workspace-tree__row--${entry.kind}`);
             row.type = "button";
@@ -197,14 +227,39 @@ export function mountWorkspaceNavigator(container, options) {
             render();
         }
     };
+    const selectPath = (relativePath) => {
+        state.selectedPath = relativePath;
+        render();
+    };
     refreshButton.addEventListener("click", () => {
         void refresh();
     });
-    filter.addEventListener("input", () => {
-        state.filter = filter.value.trim();
+    search.addEventListener("input", () => {
+        state.filter = search.value.trim();
         render();
     });
+    for (const [mode, btn] of segmentButtons) {
+        btn.addEventListener("click", () => {
+            state.filterMode = mode;
+            for (const [m, b] of segmentButtons) {
+                b.setAttribute("aria-pressed", m === mode ? "true" : "false");
+            }
+            render();
+        });
+        btn.addEventListener("keydown", (event) => {
+            if (!(event instanceof KeyboardEvent))
+                return;
+            const modes = ["all", "recent", "changed"];
+            const idx = modes.indexOf(mode);
+            if (event.key === "ArrowRight" && idx < modes.length - 1) {
+                segmentButtons.get(modes[idx + 1])?.focus();
+            }
+            if (event.key === "ArrowLeft" && idx > 0) {
+                segmentButtons.get(modes[idx - 1])?.focus();
+            }
+        });
+    }
     void refresh();
-    return { refresh };
+    return { refresh, selectPath };
 }
 //# sourceMappingURL=workspace-navigator.js.map
