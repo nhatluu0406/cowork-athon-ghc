@@ -1,1 +1,0 @@
-{"version":3,"file":"bridge.d.ts","sourceRoot":"","sources":["../src/bridge.ts"],"names":[],"mappings":"AAAA;;;;;;;GAOG;AAEH,OAAO,EAA2B,KAAK,iBAAiB,EAAE,MAAM,uBAAuB,CAAC;AAExF,OAAO,CAAC,MAAM,CAAC;IACb,UAAU,MAAM;QACd,sEAAsE;QACtE,QAAQ,CAAC,WAAW,CAAC,EAAE,iBAAiB,CAAC;KAC1C;CACF;AAED,yEAAyE;AACzE,qBAAa,2BAA4B,SAAQ,KAAK;;CAQrD;AAED,0FAA0F;AAC1F,wBAAgB,cAAc,IAAI,iBAAiB,CAMlD"}
