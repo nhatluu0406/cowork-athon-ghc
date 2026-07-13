@@ -22,8 +22,8 @@ export const EXIT = Object.freeze({
 // Markers that TOGETHER prove a directory is THE Cowork GHC project root. Requiring several
 // distinct, project-specific markers makes an incorrect / attacker-supplied --root fail the
 // certainty gate rather than allowing deletion in an unrelated directory.
-const ROOT_MARKERS = ['CLAUDE.md', '.agent-workflow',
-  join('scripts', 'cleanup-manifest.json'), join('tools', 'loop-engineer')];
+const ROOT_MARKERS = ['CLAUDE.md', 'AGENTS.md',
+  join('scripts', 'cleanup-manifest.json'), join('tools', 'app', 'cli.mjs')];
 
 // ---- path helpers ----
 

@@ -8,9 +8,9 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { capturePidRecord, writePidRecord } from '../loop-engineer/supervision.mjs';
-import { stopAll } from '../loop-engineer/reaper.mjs';
-import { cleanCommand } from '../loop-engineer/clean.mjs';
+import { capturePidRecord, writePidRecord } from './supervision.mjs';
+import { stopAll } from './reaper.mjs';
+import { cleanCommand } from './clean.mjs';
 import { log, ensureRuntimeDirs, runtimeInitialized, liveRecords, isRunning } from './runtime-io.mjs';
 
 // Honest, distinct exit codes (never always-0). Clean returns its own codes from clean.mjs.
