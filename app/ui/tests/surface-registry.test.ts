@@ -32,8 +32,15 @@ test("surface registry declares the six top-level product surfaces", () => {
   }
 });
 
-test("production default exposes product rail surfaces with honest availability", () => {
+test("production default exposes only available product rail surfaces", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
+  assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
+    ["cowork", "available"],
+  ]);
+});
+
+test("revealFutureSurfaces exposes awaiting integration and planned slots", () => {
+  const visible = visibleProductSurfaces(createSurfaceRegistry(), { revealFutureSurfaces: true });
   assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
     ["cowork", "available"],
     ["dispatch", "awaiting_integration"],
@@ -45,12 +52,12 @@ test("production default exposes product rail surfaces with honest availability"
 });
 
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
-  const visible = visibleProductSurfaces(createSurfaceRegistry());
+  const visible = visibleProductSurfaces(createSurfaceRegistry(), { revealFutureSurfaces: true });
   assert.equal(visible.find((surface) => surface.id === "dispatch")?.dependency, "D1");
   assert.equal(visible.find((surface) => surface.id === "microsoft")?.dependency, "D2");
   assert.equal(visible.find((surface) => surface.id === "knowledge")?.dependency, "D3");
   assert.equal(visible.find((surface) => surface.id === "gateway")?.dependency, "D4");
-  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /Backend Gateway chưa được merge/u);
+  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /Sắp có/u);
 });
 
 test("D1-D4 integration slots are passive UI contracts", () => {

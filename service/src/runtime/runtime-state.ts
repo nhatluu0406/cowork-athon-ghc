@@ -3,7 +3,7 @@
  *
  * The single owner of the OpenCode child persists its PID/port/identity here so the durable
  * record is the source of truth across a crashed shell (ADR 0004). The on-disk shape matches the
- * ADR 0004 schema (`role`/`startedAt`) so the lifecycle reaper (`tools/loop-engineer/supervision.mjs`)
+ * ADR 0004 schema (`role`/`startedAt`) so the lifecycle reaper (`tools/app/supervision.mjs`)
  * can read/verify/prune it; the identity fields round-trip through the runtime's own
  * {@link parseIdentityRecord} (`startedAt` == `RuntimeProcessIdentity.startTime`), keeping this
  * consistent with `process-identity`. Writes are ATOMIC (temp file + rename) so a crash mid-write
