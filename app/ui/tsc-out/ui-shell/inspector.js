@@ -1,6 +1,6 @@
 import { el } from "./dom-utils.js";
 export function createInspectorShell() {
-    const root = el("aside", "inspector inspector-shell right-panel");
+    const root = el("aside", "inspector inspector-shell");
     root.setAttribute("aria-label", "Inspector");
     root.hidden = true;
     const header = el("header", "inspector__header rp-header");
