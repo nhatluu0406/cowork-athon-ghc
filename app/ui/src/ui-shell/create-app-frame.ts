@@ -7,6 +7,7 @@
 
 import { createActivityPanel, setRightPanelCollapsed, type ActivityPanelDom } from "../activity-panel.js";
 import type { ProductSurfaceId } from "../surface-registry.js";
+import { createClaudeCodeView, type ClaudeCodeViewDom } from "./code/code-view.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
 import type { ConversationProviderControl } from "./conversation-provider-control.js";
 import { createCoworkView } from "./cowork-view.js";
@@ -14,6 +15,7 @@ import { el, icon } from "./dom-utils.js";
 import { createInspectorShell } from "./inspector.js";
 import { createIntegrationView } from "./integration-view.js";
 import { createKnowledgeView, type KnowledgeViewDom } from "./knowledge-view.js";
+import { createMicrosoftView, type MicrosoftViewDom } from "./microsoft/microsoft-view.js";
 import { createProductRail } from "./product-rail.js";
 import { createStatusBar, type StatusBarDom } from "./status-bar.js";
 import { createTopbar } from "./topbar.js";
@@ -85,10 +87,13 @@ export interface AppFrameDom {
   readonly workspaceBox: HTMLElement;
   readonly rightPanelTopbarToggle: HTMLButtonElement;
   readonly sidebarRailToggle: HTMLButtonElement;
+  readonly microsoftView: MicrosoftViewDom;
+  readonly codeView: ClaudeCodeViewDom;
   openSettings: () => void;
   closeSettings: () => void;
   applySidebarCollapsed: (collapsed: boolean) => void;
   applyRightPanelCollapsed: (collapsed: boolean) => void;
+  onCodePanelSend: (text: string) => void;
 }
 
 export function createAppFrame(root: HTMLElement): AppFrameDom {
@@ -102,6 +107,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const workspaceView = createWorkspaceView();
   const knowledgeView = createKnowledgeView();
   const integrationSurface = createIntegrationView();
+  const microsoftView = createMicrosoftView();
+  const codeView = createClaudeCodeView({ onSendPrompt: (text) => dom.onCodePanelSend(text) });
   const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
   const statusBar = createStatusBar();
@@ -114,6 +121,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     workspaceView.root,
     knowledgeView.root,
     integrationSurface,
+    microsoftView.root,
+    codeView.root,
     settingsSurface.root,
     inspector.root,
   );
@@ -193,10 +202,13 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     workspaceBox: sidebar.workspaceBox,
     rightPanelTopbarToggle: topbar.inspectorToggle,
     sidebarRailToggle: rail.sidebarToggle,
+    microsoftView,
+    codeView,
     openSettings: () => undefined,
     closeSettings: () => undefined,
     applySidebarCollapsed: () => undefined,
     applyRightPanelCollapsed: () => undefined,
+    onCodePanelSend: () => undefined,
   };
 
   const closeSettings = (): void => {
