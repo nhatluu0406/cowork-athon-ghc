@@ -1665,6 +1665,7 @@ export function mountCoworkApp(root: HTMLElement): void {
   let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
   let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
+  let codeNavigator: WorkspaceNavigatorHandle | null = null;
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
     getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1707,11 +1708,13 @@ export function mountCoworkApp(root: HTMLElement): void {
               state.activeWorkspace = rootPath;
               void refreshSettings(state, dom, handlers);
               void workspaceNavigator?.refresh();
+              void codeNavigator?.refresh();
               renderState(dom, state, handlers);
             },
             onDeactivated: () => {
               state.activeWorkspace = null;
               void workspaceNavigator?.refresh();
+              void codeNavigator?.refresh();
               renderState(dom, state, handlers);
             },
           });
@@ -1724,7 +1727,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               void openWorkspaceFileInView(dom.workspaceView, state.client, { relativePath, label });
             },
           });
-          mountWorkspaceNavigator(dom.codeView.explorer.treeSlot, {
+          codeNavigator = mountWorkspaceNavigator(dom.codeView.explorer.treeSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onFileSelected: (relativePath) => {
@@ -1743,6 +1746,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               state.settings = view;
               state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
               void workspaceNavigator?.refresh();
+              void codeNavigator?.refresh();
               renderState(dom, state, handlers);
             },
             onConnectionTestResult: (ok) => {
