@@ -40,7 +40,18 @@ Closure matrix from the final packaged verification:
 | UI-CR-004 - Product rail tooltip | **VERIFIED** |
 | UI-CR-005 - Composer alignment/language/presentation | **VERIFIED** |
 
-Final verification included `scripts\build.bat`, packaged screenshot smoke, `npm run typecheck`, targeted UI tests, `npm run build:renderer`, `npm run verify:release`, `scripts\stop.bat`, and orphan process check.
+## Final PO Fixes (2026-07-13)
+
+A final sweep of PO-confirmed fixes was applied on branch `fix/ui-shell-v3-final-po-fixes`:
+- **Inspector**: Fixed as a docked grid column on desktop (≥1366px); only becomes overlay at narrower widths. Full-height flex column with internal scrolling.
+- **Tooltip**: Removed duplicate native browser `title` attributes on elements using custom `data-tooltip`.
+- **Inspector toggle**: Replaced "Thu gọn" text with icon-only (`panel-right-open`/`panel-right-close`).
+- **Sidebar Height**: Workspace file tree uses `flex: 1` and `min-height: 0` for proper full-height display without gaps.
+- **Transcript**: Removed white background/card around assistant messages; increased user bubble max-width.
+- **Startup Behavior**: Clean new chat on startup; history remains in sidebar but is not auto-loaded/rendered. Continuation banner suppressed on startup.
+- **Context Wrapper**: Fixed render path bug by applying `sanitizeAssistantForDisplay` when rendering historical records, ensuring envelope artifacts (e.g. `[Ngữ cảnh cuộc trò chuyện trước...]`) do not leak into the UI.
+
+Final verification included `npm run typecheck`, targeted UI tests (141 pass, 0 fail including new context wrapper regression tests), `npm run build:renderer`, and a successful packaged build `scripts\build.bat`.
 
 ## UI Shell V3 production alignment (2026-07-13)
 
