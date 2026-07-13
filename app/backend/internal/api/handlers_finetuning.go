@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 	"github.com/rad-system/m365-knowledge-graph/internal/finetuning"
 )
 
@@ -166,14 +167,22 @@ func HandleFineTuningMetrics(versioning *finetuning.Versioning, abTest *finetuni
 	}
 }
 
-func HandlePromoteModel(versioning *finetuning.Versioning) http.HandlerFunc {
+// HandlePromoteModel requires the caller to be an authenticated admin (per
+// adminIDs, checked against the verified JWT's user ID/email) before
+// promoting a fine-tuned model version — an unauthenticated or non-admin
+// caller must not be able to change which model version serves production
+// traffic.
+func HandlePromoteModel(versioning *finetuning.Versioning, jwtAuth *auth.JWTAuth, adminIDs []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		// TODO: Verify admin authorization
+		if _, ok := requireAdmin(w, r, jwtAuth, adminIDs); !ok {
+			return
+		}
+
 		var req PromoteModelRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request", http.StatusBadRequest)
@@ -197,14 +206,20 @@ func HandlePromoteModel(versioning *finetuning.Versioning) http.HandlerFunc {
 	}
 }
 
-func HandleRollbackModel(versioning *finetuning.Versioning) http.HandlerFunc {
+// HandleRollbackModel requires the caller to be an authenticated admin (see
+// HandlePromoteModel) before rolling back a model type to its previous
+// version.
+func HandleRollbackModel(versioning *finetuning.Versioning, jwtAuth *auth.JWTAuth, adminIDs []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
-		// TODO: Verify admin authorization
+		if _, ok := requireAdmin(w, r, jwtAuth, adminIDs); !ok {
+			return
+		}
+
 		modelType := r.URL.Query().Get("model_type")
 		if modelType == "" {
 			http.Error(w, "model_type required", http.StatusBadRequest)
