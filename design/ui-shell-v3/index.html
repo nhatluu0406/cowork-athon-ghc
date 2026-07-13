@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Cowork GHC — UI Shell V3 R1 (Design Prototype)</title>
+    <title>Cowork GHC — UI Shell V3 R2 (Design Prototype)</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -89,8 +89,6 @@
         </div>
       </aside>
 
-      <div class="drawer-scrim" id="drawer-scrim" hidden></div>
-
       <main class="main" id="main">
         <section class="view view--cowork" data-view="cowork">
           <div class="doc-tabs" id="doc-tabs" role="tablist" aria-label="Tài liệu mở"></div>
@@ -142,13 +140,10 @@
           </div>
 
           <div class="doc-panel doc-panel--file" id="doc-file" hidden>
-            <nav class="breadcrumb" aria-label="Đường dẫn tệp">
-              <span>src</span><span class="breadcrumb__sep">/</span><span>README.md</span>
+            <nav class="breadcrumb" id="file-breadcrumb" aria-label="Đường dẫn tệp">
+              <span id="file-breadcrumb-path">src / README.md</span>
             </nav>
-            <header class="file-header">
-              <h1 class="file-header__title">README.md</h1>
-              <p class="file-header__meta">Văn bản · 2,4 KB · sửa 2 giờ trước</p>
-            </header>
+            <p class="file-header__meta" id="file-meta">Văn bản · 2,4 KB · sửa 2 giờ trước</p>
             <div class="file-preview">
               <pre class="file-preview__body" id="file-body"></pre>
             </div>
@@ -175,6 +170,8 @@
         <div class="inspector__body" id="inspector-body"></div>
       </aside>
     </div>
+
+    <div class="drawer-scrim" id="drawer-scrim" hidden></div>
 
     <footer class="statusbar" aria-label="Trạng thái hệ thống">
       <button type="button" class="statusbar__item" id="status-workspace" data-tooltip="Workspace hiện tại: cowork-athon-ghc">

@@ -1,28 +1,31 @@
 /**
- * Capture UI Shell V3 R1 design prototype screenshots.
- * Design artifact only — not production verification.
+ * Capture UI Shell V3 R2 design prototype screenshots.
+ * Runs visibility assertions before each capture; fails on invariant violation.
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
 const HTML = join(HERE, "index.html");
-const OUT = join(REPO, "reports", "ui-shell-v3-r1");
+const OUT = join(REPO, "reports", "ui-shell-v3-r2");
+const CHECK_JSON = join(OUT, "visual-state-check.json");
 
 const SHOTS = [
   { file: "cowork-1920.png", state: "cowork-active", width: 1920, height: 1080 },
   { file: "cowork-1366.png", state: "cowork-active", width: 1366, height: 768 },
   { file: "cowork-900.png", state: "cowork-active", width: 900, height: 768 },
+  { file: "sidebar-cowork.png", state: "sidebar-cowork", width: 1920, height: 1080 },
   { file: "sidebar-workspace.png", state: "sidebar-workspace", width: 1920, height: 1080 },
   { file: "file-document.png", state: "file-document", width: 1920, height: 1080 },
-  { file: "inspector.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
+  { file: "inspector-open.png", state: "cowork-inspector-open", width: 1920, height: 1080 },
   { file: "gateway.png", state: "gateway", width: 1366, height: 768 },
   { file: "knowledge-graph.png", state: "knowledge-graph", width: 1366, height: 768 },
   { file: "provider-missing.png", state: "provider-missing", width: 1920, height: 1080 },
+  { file: "waiting-permission.png", state: "waiting-permission", width: 1920, height: 1080 },
 ];
 
 async function runPlaywright() {
@@ -44,24 +47,93 @@ async function runPlaywright() {
 
   const script = `
 const { chromium } = require('playwright');
+const fs = require('fs');
 const path = require('path');
 const shots = ${JSON.stringify(SHOTS)};
 const base = ${JSON.stringify(base)};
 const out = ${JSON.stringify(OUT)};
+const checkJson = ${JSON.stringify(CHECK_JSON)};
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function settle(page, state) {
+  return page.evaluate(async (s) => window.__cghcV3Prototype.applyStateAndSettle(s), state);
+}
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await browser.newPage();
-  await page.goto(base);
-  await page.waitForFunction(() => window.__cghcV3Prototype);
+  const results = [];
+
+  // Sequential transition test in isolated context
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const page = await ctx.newPage();
+    await page.goto(base);
+    await page.waitForFunction(() => window.__cghcV3Prototype);
+    const seq = await page.evaluate(() => window.__cghcV3Prototype.runSequentialTransitionTest());
+    if (!seq.passed) {
+      console.error('sequential transition failed at', seq.failedAt, JSON.stringify(seq.results.at(-1), null, 2));
+      process.exit(1);
+    }
+    await ctx.close();
+  }
+
+  // Harness must fail when two views are forced visible
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
+    const page = await ctx.newPage();
+    await page.goto(base);
+    await page.waitForFunction(() => window.__cghcV3Prototype);
+    await settle(page, 'cowork-active');
+    const broken = await page.evaluate(() => {
+      document.querySelector('.view[data-view="integration"]').hidden = false;
+      return window.__cghcV3Prototype.assertVisualState('cowork-active');
+    });
+    if (broken.passed) {
+      console.error('expected assertion failure when two views visible');
+      process.exit(1);
+    }
+    await ctx.close();
+  }
+
   for (const s of shots) {
-    await page.setViewportSize({ width: s.width, height: s.height });
-    await page.evaluate((state) => window.__cghcV3Prototype.applyState(state), s.state);
+    const ctx = await browser.newContext({ viewport: { width: s.width, height: s.height } });
+    const page = await ctx.newPage();
+    await page.goto(base);
+    await page.waitForFunction(() => window.__cghcV3Prototype);
+
+    const check = await settle(page, s.state);
+  const record = {
+      state: s.state,
+      file: s.file,
+      visibleViews: check.visibleViews,
+      visibleSidebarPanels: check.visibleSidebarPanels,
+      visibleDocPanels: check.visibleDocPanels,
+      sidebarVisible: check.sidebarVisible,
+      inspectorVisible: check.inspectorVisible,
+      horizontalOverflow: check.horizontalOverflow,
+      passed: check.passed,
+      errors: check.errors,
+    };
+    results.push(record);
+
+    if (!check.passed) {
+      console.error('assertion failed for', s.state, check.errors.join('; '));
+      await ctx.close();
+      await browser.close();
+      fs.writeFileSync(checkJson, JSON.stringify({ generatedAt: new Date().toISOString(), results }, null, 2));
+      process.exit(1);
+    }
+
     await page.evaluate(() => { document.body.dataset.screenshot = 'true'; });
-    await page.waitForTimeout(400);
+    await sleep(200);
     await page.screenshot({ path: path.join(out, s.file), fullPage: false });
     console.log('screenshot:', path.join(out, s.file));
+    await ctx.close();
   }
+
+  fs.writeFileSync(checkJson, JSON.stringify({ generatedAt: new Date().toISOString(), results }, null, 2));
+  console.log('visual-state-check:', checkJson);
   await browser.close();
 })().catch((e) => { console.error(e); process.exit(1); });
 `;
