@@ -41,7 +41,19 @@ Hành trình bắt buộc cho funding/demo review trên **packaged app** (`dist-
 ## Scripts hỗ trợ
 
 - `scripts\demo-reset.bat` — reset runtime temp + packaged profile (giữ keyring).
+- `scripts\demo-seed.bat` — tạo `demo-workspace\` với file mẫu cho Workspace Companion.
 - `scripts\verify-fast.bat` — typecheck + focused tests + renderer build trước commit.
+
+## Workspace Companion happy path (Phase 1)
+
+- [x] Chọn workspace → tab **Workspace** → mở file từ navigator
+- [x] Preview `.txt` / `.md` và chỉnh sửa + **Lưu**
+- [x] Preview ảnh `.png` / `.jpg` / `.webp`
+- [x] Preview read-only `.pdf` và `.docx`
+- [x] Grid preview `.xlsx`, sửa cell, **Lưu**
+- [x] Chat Cowork ở cột phải (1366×768 usable)
+- [x] Agent sửa file đang mở → preview refresh + badge “Agent đã cập nhật tệp”
+- [ ] PO sign-off trên packaged live journey
 
 ## Bằng chứng
 
