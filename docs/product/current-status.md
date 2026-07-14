@@ -61,19 +61,27 @@ request create file
 | Env phụ | `CGHC_REMOTE_LAN=1` (bind LAN, demo cùng Wi-Fi, **chưa TLS**), `CGHC_REMOTE_PORT` (port cố định) |
 | Verified | `npm run typecheck` exit 0; 16/16 unit/integration PASS trên 3 suite mới (`remote-pairing`, `remote-gateway`, `remote-wiring`); suite lân cận `compose-live-wiring` + `live-launch` vẫn PASS |
 
-### Bổ sung cùng ngày: permission Allow/Deny từ điện thoại (Task 1.3)
+### Bổ sung cùng ngày: các slice remote hoàn chỉnh MVP
 
-- Gateway proxy thêm `GET /api/permissions` → `/v1/permission/pending` và
-  `POST /api/permissions/decision` → `/v1/permission/decision` (POST allowlist đúng 1 route).
-- PWA có khu pending permission (poll 3s): nút **Cho phép 1 lần** / **Từ chối**.
-- Bằng chứng: 18/18 test PASS; integration test trên **gate thật** xác nhận Deny từ điện thoại
-  chặn ở execution boundary (`isAllowed=false`, pending rỗng) và allow muộn bị từ chối
-  (`already_resolved: deny`) — không phải chỉ ẩn nút UI.
+- **Task 1.3 — permission Allow/Deny**: `GET /api/permissions` + `POST /api/permissions/decision`
+  (POST allowlist); PWA có khu pending (poll 3s). Verify trên **gate thật**: Deny chặn ở execution
+  boundary (`isAllowed=false`, pending rỗng), allow muộn bị từ chối (`already_resolved: deny`).
+- **Task 1.2 — send prompt**: `POST /api/sessions/{id}/message` (allowlist single-segment); PWA có
+  composer trong detail view; wiring test chứng minh prompt từ phone tới OpenCode child thật.
+- **Task 2.4 — `/remote` panel + QR**: router `/v1/remote` (status/pairing-code+QR SVG/revoke/
+  revoke-all) dùng chung pairing registry với gateway qua `extraRouters`; lệnh `/remote` trong
+  composer mở panel; dep `qrcode` (MIT). QR nhúng URL có `?code=` để PWA tự điền.
+- **Task 2.3 — Discord channel**: adapter transport-injectable (notify redacted + `deny` + prompt);
+  `approve` ghi tệp **bị từ chối theo Q5**; bot outbound-only, token không log, không gửi nội dung
+  tệp. Bật bằng `CGHC_DISCORD_ENABLED` + token/channel/allowlist.
+- Tổng: **36/36 test remote PASS** trên 6 suite; typecheck + renderer build sạch. README có mục
+  hướng dẫn dùng đầy đủ.
 
 ### Giới hạn trung thực
 
-1. Điện thoại xem conversations + transcript + live EV stream và **quyết định permission**;
-   CHƯA gửi prompt, CHƯA Discord channel, CHƯA lệnh `/remote` trong composer.
+1. Điện thoại xem conversations + transcript + live EV stream, **quyết định permission**, **gửi
+   prompt**; Discord notify+deny+prompt. Việc OpenCode child live tiêu thụ lệnh Discord **chưa
+   verify end-to-end** với bot thật (unit dùng transport giả).
 2. **Pairing code hiển thị qua console** (`start.bat` từ terminal) — chưa có QR/panel trong app.
 3. **LAN mode chưa mã hóa transport** — chỉ dùng demo; TLS + cert pinning là slice sau.
 4. Device token in-memory per-launch — restart app thì điện thoại pair lại.
