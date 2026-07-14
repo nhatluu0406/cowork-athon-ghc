@@ -157,6 +157,7 @@ button {
 .topbar {
   height: var(--topbar-h);
   padding-left: 12px;
+  overflow: visible;
   border-bottom: 1px solid var(--cghc-border-subtle);
   background: color-mix(in srgb, var(--cghc-surface-solid) 92%, transparent);
   backdrop-filter: blur(18px) saturate(140%);
@@ -293,7 +294,7 @@ button {
 
 .cowork-sidebar__toolbar {
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 6px;
 }
 
 .sidebar__search,
@@ -827,6 +828,78 @@ button {
   gap: 10px;
 }
 
+.provider-profiles__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.provider-profiles__primary {
+  min-height: 36px;
+  padding-inline: 16px;
+}
+
+.provider-profiles__overflow {
+  position: relative;
+  display: inline-flex;
+}
+
+.provider-profiles__overflow-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 12px;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-secondary);
+  cursor: pointer;
+}
+
+.provider-profiles__overflow-toggle:hover {
+  background: var(--cghc-surface-elevated);
+  color: var(--cghc-text-primary);
+}
+
+.provider-profiles__overflow-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  min-width: 200px;
+  flex-direction: column;
+  padding: 6px;
+  border: 1px solid var(--cghc-border-strong);
+  border-radius: 12px;
+  background: var(--cghc-surface-elevated);
+  box-shadow: var(--cghc-shadow-md);
+}
+
+.provider-profiles__overflow-item {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cghc-text-primary);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+
+.provider-profiles__overflow-item:hover {
+  background: var(--cghc-surface-muted);
+}
+
+.provider-profiles__overflow-item--danger {
+  color: var(--cghc-danger);
+}
+
 .provider-profiles__add,
 .provider-profiles__edit,
 .provider-profiles__back,
@@ -1249,7 +1322,7 @@ button {
 /* ───────────────────────────── tooltip/motion ───────────────────────────── */
 
 .shell-tooltip {
-  z-index: 200;
+  z-index: 90;
   min-width: 0;
   max-width: min(260px, calc(100vw - 24px));
   padding: 7px 10px;
@@ -1262,6 +1335,7 @@ button {
   font-weight: 550;
   line-height: 1.35;
   animation: cghc-tooltip-in 120ms ease both;
+  pointer-events: none;
 }
 
 :root[data-theme="dark"] .shell-tooltip {

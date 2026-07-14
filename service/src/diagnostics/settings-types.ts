@@ -71,6 +71,14 @@ export interface PersistedProviderProfile {
   readonly updatedAt: string;
   readonly credentialRef?: CredentialRef;
   readonly presetId?: string;
+  /** Increments when the bound credential handle is added/replaced/removed. Never a key hash. */
+  readonly credentialRevision?: number;
+  /** ISO timestamp of the last connection test result. */
+  readonly lastVerifiedAt?: string;
+  /** Outcome of the last connection test for the matching target fingerprint. */
+  readonly lastVerifiedOk?: boolean;
+  /** Fingerprint of baseUrl+modelId+credentialRevision at verification time. */
+  readonly verifiedTargetFingerprint?: string;
 }
 
 /** The complete, versioned settings document persisted by the service. */
