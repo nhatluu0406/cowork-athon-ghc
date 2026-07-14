@@ -51,7 +51,7 @@ test("production default exposes all navigable product rail surfaces", () => {
 
 test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
-  assert.deepEqual(visible.map((surface) => surface.id), ["cowork"]);
+  assert.deepEqual(visible.map((surface) => surface.id), ["cowork", "code"]);
 });
 
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
