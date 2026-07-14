@@ -1,99 +1,248 @@
+<div align="center">
+  <img src="docs/assets/cowork-ghc-logo-256.png" width="112" alt="Cowork GHC logo" />
+
 # Cowork GHC
 
-**Cowork GHC** là một sản phẩm **AI cowork desktop cho Windows 11 (máy local)**. UI là client của một
-**local application service** chạy trên loopback; service điều phối một **OpenCode runtime** (tiến trình
-con) và gọi LLM qua một **endpoint có thể thay thế** (provider-neutral). Đây là sản phẩm riêng — OpenWork
-chỉ là tham khảo nghiên cứu (xem `docs/references/openwork-reference.md`).
+**Local-first AI workspace for Windows — chat, files, Skills, providers, permissions, and agent-assisted work in one desktop app.**
 
-> **Trạng thái: POC đang phát triển — CHƯA phải bản release dùng được.**
-> Packaged `.exe` build được và mở được GUI, nhưng **chưa có luồng người dùng hoàn chỉnh** trong bản
-> đóng gói. Xem [Giới hạn hiện tại](#giới-hạn-hiện-tại-known-limitations).
+[![Windows 11](https://img.shields.io/badge/Windows-11-0078D4?logo=windows11&logoColor=white)](#requirements)
+[![Electron](https://img.shields.io/badge/Electron-33-47848F?logo=electron&logoColor=white)](#technology)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178C6?logo=typescript&logoColor=white)](#technology)
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A522-339933?logo=nodedotjs&logoColor=white)](#requirements)
+[![License](https://img.shields.io/badge/License-MIT-orange)](LICENSE)
+[![Status](https://img.shields.io/badge/Status-POC%20Demo-orange)](docs/product/current-status.md)
 
-## Kiến trúc (ngắn)
+[Features](#features) · [Quick start](#quick-start) · [Configuration](#configuration) · [Architecture](#architecture) · [Roadmap](docs/product/roadmap.md) · [Documentation](docs/README.md)
 
+</div>
+
+---
+
+## Overview
+
+Cowork GHC is a Windows desktop AI cowork environment. It connects a local workspace to an LLM through a supervised OpenCode runtime, keeps credentials in Windows Credential Manager, asks for permission before sensitive actions, and preserves conversations and file-work evidence locally.
+
+The current target is a polished, local-first POC for product demonstration—not a cloud multi-user release.
+
+## Features
+
+### Cowork chat
+
+- New Chat startup and persistent conversation history
+- Streaming assistant responses and bounded multi-turn context
+- Conversation search, rename, and delete
+- Text attachments with secret-like file blocking
+- Permission modes: ask first, workspace automation, and read-only
+- Verified file-action handling and File Work Review foundations
+
+### Workspace Companion
+
+- Workspace folder picker and guarded file navigation
+- Preview for text, Markdown, images, PDF, DOCX, and XLSX within current safety limits
+- Direct editing for supported small text/Markdown files
+- Agent-driven file refresh with protection for unsaved edits
+- Cowork conversation available alongside workspace work
+
+### Provider profiles
+
+- Multiple saved provider connections
+- DeepSeek preset
+- Custom OpenAI-compatible endpoint, model ID, and API token
+- API keys stored in Windows Credential Manager
+- Active provider/model presentation and readiness state
+
+### Skills
+
+- Built-in and user-managed local `SKILL.md` files
+- Create, edit, delete, enable, and disable user Skills
+- Built-in Skills remain read-only
+- Skill provenance stored without persisting raw Skill instructions in chat history
+
+### Desktop product shell
+
+- Commercial light and dark visual system
+- Native Windows titlebar controls and Snap Layout compatibility
+- Product surfaces for Cowork, Dispatch, Gateway, Knowledge, Microsoft 365, and Code
+- D1–D4 surfaces are integration mount points; their backends are not yet merged
+
+## Screenshots
+
+> Keep accepted packaged screenshots under `docs/demo/screenshots/` and update them only at a UI milestone.
+
+| Cowork | Workspace | Settings |
+|---|---|---|
+| `docs/demo/screenshots/01-new-chat.png` | `docs/demo/screenshots/03-workspace.png` | `docs/demo/screenshots/02-provider-settings.png` |
+
+## Architecture
+
+```text
+Electron renderer
+    ↓ typed preload bridge
+Electron main process
+    ↓ loopback HTTP/SSE + capability-scoped IPC
+Local application service
+    ↓ supervised child process
+OpenCode runtime
+    ↓ provider profile
+LLM endpoint
 ```
-┌─────────────────────────────┐
-│ Cowork GHC desktop (Electron)│  UI (app/ui) + native shell (app/shell)
-│  renderer  ⇄  main process   │  shell sở hữu vòng đời service + child
-└───────────────┬─────────────┘
-                │ HTTP/SSE, loopback-only, token-guarded
-┌───────────────▼─────────────┐
-│ Local application service    │  service/ (workspace, credential, provider,
-│  (bind 127.0.0.1 / ::1)      │  session, permission, streaming, settings)
-└───────────────┬─────────────┘
-                │ spawn + supervise (PID/port/identity)
-┌───────────────▼─────────────┐
-│ OpenCode runtime (child)     │  runtime/ — pinned binary, isolated env
-└───────────────┬─────────────┘
-                │ provider-neutral
-┌───────────────▼─────────────┐
-│ Replaceable LLM endpoint     │  cloud API / OpenAI-compatible (không lock 1 vendor)
-└─────────────────────────────┘
-```
 
-Nguyên tắc: business logic không nằm trong UI; mutation filesystem đi qua execution boundary;
-**permission enforce tại execution boundary** (Deny thật sự chặn); một credential store OS-backed
-(Windows Credential Manager); secret không bao giờ vào log/UI/screenshot.
+Core principles:
 
-## Cấu trúc repository
+- local-first application state;
+- renderer does not receive unrestricted Node.js or IPC access;
+- filesystem actions stay inside the active workspace boundary;
+- permission is enforced at the execution boundary;
+- secrets never belong in UI state, logs, screenshots, or profile JSON;
+- assistant prose is not proof that a file mutation succeeded.
 
-| Path | Nội dung |
+See [System overview](docs/architecture/system-overview.md).
+
+## Technology
+
+| Layer | Technology |
 |---|---|
-| `core/contracts/` | Type/contract dùng chung (EV, provider, permission, workspace, session, ref). |
-| `service/` | Local application service (loopback), business logic. |
-| `runtime/` | Tích hợp OpenCode runtime (pin, spawn, isolation). |
-| `app/shell/` | Electron main process (shell, IPC, security, service ownership). |
-| `app/ui/` | Renderer (client của service). |
-| `scripts/` | `.bat` Windows (init/build/start/stop/clean/demo-reset/verify-fast). |
-| `tools/app/` | App lifecycle CLI (init/start/stop/clean/status) + supervision/reaper. |
-| `docs/` | Tài liệu canonical — bắt đầu tại `docs/README.md`. |
+| Desktop shell | Electron 33 |
+| Renderer | TypeScript, Vite, DOM-based UI modules |
+| Local service | Node.js, TypeScript, loopback HTTP/SSE |
+| Agent runtime | OpenCode child process |
+| Packaging | electron-builder |
+| Credential storage | Windows Credential Manager via `@napi-rs/keyring` |
+| Application persistence | Local JSON files written atomically; no SQL database in the current POC |
+| Tests | Node test runner through `tsx` |
 
-## Yêu cầu (prerequisites)
+## Repository structure
 
-- **Windows 11** (target chính).
-- **Node.js ≥ 22** (repo phát triển trên v24) + npm 11.
-- Toolchain build khác (electron-builder, tsx) được cài qua `npm install`.
+```text
+app/
+  shell/            Electron main process, preload bridge, packaging
+  ui/               Renderer and UI shell
+core/contracts/     Shared typed contracts
+service/            Local application service and business boundaries
+runtime/            OpenCode runtime integration
+skills/             Packaged built-in Skills
+scripts/            Windows entry scripts
+tools/              App lifecycle and focused verification utilities
+docs/               Canonical product, architecture, quality, and demo docs
+```
 
-## Lệnh phát triển
+## Requirements
+
+- Windows 11
+- Node.js 22 or newer
+- npm
+- A compatible LLM API key for chat/runtime use
+
+## Quick start
+
+```bat
+npm install
+scripts\init.bat
+scripts\build.bat
+scripts\start.bat
+```
+
+Stop the app cleanly:
+
+```bat
+scripts\stop.bat
+```
+
+Create a safe demo workspace:
+
+```bat
+scripts\demo-seed.bat
+```
+
+## Configuration
+
+### Provider connection
+
+1. Open **Settings → Nhà cung cấp**.
+2. Select **Thêm kết nối**.
+3. Choose the DeepSeek preset or an OpenAI-compatible connection.
+4. Enter display name, endpoint, model ID, and API token.
+5. Test the connection and set the desired profile active.
+
+Saved API tokens are stored in Windows Credential Manager. Profile JSON contains only non-secret metadata and credential status/handles.
+
+### Permission mode
+
+The composer supports:
+
+- **Hỏi trước** — ask before file mutation or command execution;
+- **Tự động trong workspace** — allow supported workspace operations according to the implemented policy;
+- **Chỉ đọc** — deny mutations and execution.
+
+For product demos, use **Hỏi trước**.
+
+### Theme
+
+Open **Settings → Chung** and select:
+
+- Theo hệ thống
+- Sáng
+- Tối
+
+## Development commands
 
 ```bash
-npm install                # cài dependency workspaces
-npm run typecheck          # tsc -b (TypeScript strict)
-npm test                   # node --test qua tsx, toàn bộ *.test.ts
-npm run build:app          # build renderer + shell
-npm run package:win        # đóng gói Electron (Windows) -> dist-app/ (không commit)
-npm run app -- status      # app CLI
-scripts\verify-fast.bat    # typecheck + focused tests + renderer build
+npm run typecheck
+npm test
+npm run build:renderer
+npm run build:app
+npm run package:win
+npm run verify:release
+```
+
+Fast pre-commit verification on Windows:
+
+```bat
+scripts\verify-fast.bat
 ```
 
 ## Windows scripts
 
-`scripts/*.bat` là entry mỏng gọi `tools/app/cli.mjs`, trả exit code trung thực:
+| Script | Purpose |
+|---|---|
+| `scripts/init.bat` | Prepare the local environment idempotently |
+| `scripts/build.bat` | Typecheck and package the Windows application |
+| `scripts/start.bat` | Start the packaged application |
+| `scripts/stop.bat` | Stop only Cowork-owned processes |
+| `scripts/clean.bat` | Remove allowlisted generated artifacts |
+| `scripts/demo-reset.bat` | Reset demo-safe state without deleting keyring credentials |
+| `scripts/demo-seed.bat` | Create representative demo files |
+| `scripts/verify-fast.bat` | Run the normal focused pre-commit checks |
 
-- `init.bat` — chuẩn bị môi trường (idempotent).
-- `build.bat` — typecheck + package Windows app.
-- `start.bat` — khởi động packaged app.
-- `stop.bat` — dừng process Cowork GHC đã track.
-- `clean.bat` — xoá generated/downloaded theo allowlist (không đụng credential/history).
-- `demo-reset.bat` — reset demo-safe state (giữ keyring).
-- `verify-fast.bat` — kiểm tra nhanh trước commit.
+See [scripts/README.md](scripts/README.md).
 
-Chi tiết: `scripts/README.md`. Tài liệu: `docs/README.md`.
+## Security model
 
-## Bảo mật credential
+- Credentials are stored in Windows Credential Manager.
+- Renderer state never receives saved plaintext API keys.
+- Workspace paths are validated and confined by the local service.
+- Secret-like attachments and previews are blocked or redacted.
+- Diagnostics use secret scrubbing.
+- OpenCode runs as a supervised child process with bounded configuration.
 
-- Key LLM lưu ở **Windows Credential Manager** (OS-backed), state chỉ giữ **handle tham chiếu**.
-- Key **không bao giờ** xuất hiện trong log, error, frontend state, screenshot, hay browser local storage.
-- Key được inject vào tiến trình con qua biến môi trường tại lúc spawn; **không** ghi `auth.json`.
-- **Không commit** `.env`/secret (xem `.gitignore`).
+## Current status
 
-## Giới hạn hiện tại (known limitations)
+Cowork GHC is a POC demo candidate. Core chat, provider, Skill, workspace, theme, and permission foundations exist; remaining demo work is tracked explicitly rather than hidden behind broad “PASS” claims.
 
-Xem [docs/quality/known-limitations.md](docs/quality/known-limitations.md) và
-[docs/product/current-status.md](docs/product/current-status.md).
+- [Current status](docs/product/current-status.md)
+- [Product plan](docs/product/product-plan.md)
+- [Roadmap](docs/product/roadmap.md)
+- [Demo acceptance](docs/quality/demo-acceptance.md)
+- [Known limitations](docs/quality/known-limitations.md)
 
-## Cho agent (Claude / Codex)
+## Contributing with coding agents
 
-- Điểm vào: [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md).
-- Tài liệu canonical: [`docs/README.md`](docs/README.md).
-- Chế độ mặc định: **LEAN** (một agent, slice nhỏ, test tập trung).
+Read in this order:
+
+1. [AGENTS.md](AGENTS.md)
+2. [docs/README.md](docs/README.md)
+3. [Current status](docs/product/current-status.md)
+4. [Roadmap](docs/product/roadmap.md)
+5. The current Git diff
+
+Default workflow is LEAN: one agent, one bounded slice, focused verification, one meaningful commit.

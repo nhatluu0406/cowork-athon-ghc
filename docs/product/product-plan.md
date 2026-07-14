@@ -1,60 +1,90 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
 # Kế hoạch sản phẩm Cowork GHC
 
-## 1. Tầm nhìn
+## Tầm nhìn
 
-Cowork GHC là ứng dụng desktop Windows local-first: người dùng chọn workspace trên máy,
-cấu hình LLM endpoint, trò chuyện với agent, và phê duyệt thao tác file khi cần. Giá trị
-cốt lõi là vòng làm việc rõ ràng, có kiểm soát, và trung thực về trạng thái runtime.
+Cowork GHC là desktop AI workspace local-first trên Windows: người dùng kết nối LLM, chọn workspace, trò chuyện với Agent, kiểm soát permission và cùng làm việc trên file trong một giao diện đáng tin cậy.
 
-## 2. Nguyên tắc
+## Giá trị POC
 
-- Local-first; Windows packaged app là acceptance surface hiện tại.
-- Provider thay thế được; credential trong Windows keyring.
-- Permission trước mutation; UI không claim ready khi chưa verify.
-- Packaged acceptance ưu tiên hơn dev server.
-- Phát triển LEAN: một slice, test tập trung, commit có ý nghĩa.
+1. **Một nơi làm việc thống nhất:** chat, file, Skill, provider và activity.
+2. **Local-first:** workspace, conversation và configuration nằm trên máy người dùng.
+3. **Có kiểm soát:** permission trước mutation, key trong Windows keyring.
+4. **Trung thực:** assistant text không thay thế bằng chứng file action.
+5. **Có khả năng mở rộng:** D1–D4 có mount boundary nhưng không fake capability.
 
-## 3. Kiến trúc (tóm tắt)
+## Capability map
 
-```text
-Electron renderer → preload/shell bridge → local service → OpenCode runtime → LLM endpoint
-```
+### Cowork
 
-Cowork conversation là identity dài hạn (transcript, workspace, provider snapshot, activity,
-file-change history). Một conversation có thể span nhiều OpenCode runtime turns.
+- [x] New Chat, streaming, history
+- [x] Text attachments bounded
+- [x] Permission mode selector
+- [x] File create/modify foundation
+- [ ] Chat presentation cleanup: bỏ tool/Skill narration, compact metadata
+- [ ] Reliable repeated permission happy path
 
-## 4. Năng lực trong phạm vi POC
+### Workspace
 
-| Vùng | Mô tả |
-|---|---|
-| Lifecycle | init/start/stop/clean qua scripts Windows |
-| Workspace | Chọn thư mục, navigator read-only bounded |
-| Provider | Profiles Phase 1, keyring, readiness preflight |
-| Chat | Streaming, multi-turn context envelope |
-| Attachments | Text files, secret blocking, budget |
-| Skills | Local SKILL.md discovery, enable/disable |
-| Permissions | Allow/Deny trước tool/file mutation |
-| File Work Review | Before/after diff, activity persistence |
-| Conversations | Sidebar, search, rename, delete, relaunch |
-| Settings | Full-screen: Nhà cung cấp + Chung |
+- [x] Guarded file navigator
+- [x] Text/Markdown preview và edit
+- [x] Binary preview foundation
+- [ ] PDF packaged preview reliable
+- [ ] Agent-created/modified file auto-open và live refresh
+- [ ] Workspace companion chat refinement
 
-## 5. Ngoài phạm vi hiện tại
+### Providers
 
-- D1–D4 external integrations (Dispatch, Microsoft, Knowledge, Gateway)
-- Skill marketplace / MCP / cloud catalog
-- Full workspace IDE explorer
-- Universal Preview tab / direct editor
-- Web / Next.js, cloud sync, multi-user
-- D4 advanced gateway (routing, failover, key pool)
+- [x] Multiple saved profiles
+- [x] DeepSeek preset
+- [x] Custom OpenAI-compatible endpoint/token/model
+- [x] Windows keyring
+- [ ] Automatic connection test on credential save
+- [ ] Persist last verified status with expiry/invalidation rules
+- [ ] Discover model IDs through OpenAI-compatible `/models` when supported
+- [ ] Manual model ID fallback when discovery is unavailable
 
-## 6. Acceptance
+### Skills
 
-- Demo journey: [demo-acceptance.md](../quality/demo-acceptance.md)
-- Giới hạn: [known-limitations.md](../quality/known-limitations.md)
-- Trạng thái: [current-status.md](./current-status.md)
+- [x] Built-in and user-local Skills
+- [x] Create/edit/delete/enable/disable
+- [ ] Richer validation/presentation only if needed by demo
+
+### Inspector
+
+- [x] Shell/tabs foundation
+- [ ] Plan state and current step
+- [ ] Activity timeline
+- [ ] Permission history
+- [ ] File Work Review surface and provenance
+- [ ] Clear empty/error/loading states
+
+### Settings / operations
+
+- [x] Full-screen Settings
+- [x] Light/dark/system themes
+- [ ] Document and finish detailed logging behavior
+- [ ] Document and finish local telemetry behavior
+- [ ] Local single-user authentication/lock gate for demo
+
+### External systems
+
+- [ ] D1 Dispatch — waiting for team merge
+- [ ] D2 Microsoft 365 — waiting for team merge
+- [ ] D3 Knowledge/RAG/Graph — waiting for team merge
+- [ ] D4 Advanced Gateway — waiting for team merge
+
+## Out of scope for the current demo
+
+- Cloud multi-user accounts
+- Enterprise identity federation
+- Provider routing/failover/key pools
+- Full Office-grade editing
+- Skill marketplace/executable plugin runtime
+- Full IDE replacement
+- Web/Next.js client
