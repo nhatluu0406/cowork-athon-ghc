@@ -18,6 +18,7 @@ import {
 import type { SupervisorStartSpec } from "../src/runtime/index.js";
 import { createMemoryStore } from "../src/credential/index.js";
 import type { SettingsFs } from "../src/diagnostics/index.js";
+import { createPermissionRequest } from "../src/permission/index.js";
 import { startFakeOpencodeServer } from "./opencode-fake-server.js";
 
 const WS = "C:/Users/test/Remote Workspace";
@@ -130,6 +131,55 @@ test("flag ON: pair a device and read conversations through the gateway; stop() 
       headers: { authorization: `Bearer ${pairBody.data.token}` },
     });
     assert.equal(direct.status, 403);
+
+    // --- Permission round trip against the ONE real gate (agent-harness-plan Task 1.3). ---
+    live.deps.permissionGate.submit(
+      createPermissionRequest({
+        requestId: "perm-remote-1",
+        sessionId: "s-remote",
+        requestedAt: NOW(),
+        action: { kind: "file_create", description: "Tạo file demo.txt", targetPath: "demo.txt" },
+      }),
+    );
+
+    const pendingRes = await fetch(`${remote.url}/api/permissions`, {
+      headers: { authorization: `Bearer ${pairBody.data.token}` },
+    });
+    assert.equal(pendingRes.status, 200);
+    const pendingBody = (await pendingRes.json()) as {
+      data: { pending: readonly { requestId: string; action: { description: string } }[] };
+    };
+    assert.equal(pendingBody.data.pending[0]?.requestId, "perm-remote-1");
+
+    const denyRes = await fetch(`${remote.url}/api/permissions/decision`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${pairBody.data.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ requestId: "perm-remote-1", decision: "deny" }),
+    });
+    assert.equal(denyRes.status, 200);
+    const denyBody = (await denyRes.json()) as { data: { status: string; decision: string } };
+    assert.equal(denyBody.data.status, "resolved");
+    assert.equal(denyBody.data.decision, "deny");
+
+    // The deny from the phone is REAL at the execution boundary: the gate holds no allow,
+    // the request left the pending list, and a late allow cannot override (idempotent).
+    assert.equal(live.deps.permissionGate.isAllowed("perm-remote-1"), false);
+    assert.equal(live.deps.permissionGate.pending().length, 0);
+    const lateAllow = await fetch(`${remote.url}/api/permissions/decision`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${pairBody.data.token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ requestId: "perm-remote-1", decision: "allow", scope: "once" }),
+    });
+    const lateBody = (await lateAllow.json()) as { data: { status: string; decision: string } };
+    assert.equal(lateBody.data.status, "already_resolved");
+    assert.equal(lateBody.data.decision, "deny");
+    assert.equal(live.deps.permissionGate.isAllowed("perm-remote-1"), false);
   } finally {
     await live.stop();
     await fake.close();

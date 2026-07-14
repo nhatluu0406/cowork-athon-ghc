@@ -31,9 +31,11 @@ web application đầy đủ. Cần một quyết định kiến trúc cho remot
    TLS + cert pinning cho channel `lan-qr` là hardening slice tiếp theo.
 4. **PWA là thin control client** (một file HTML tự chứa serve bởi gateway, không Next.js,
    không `apps/web`) — không mâu thuẫn ADR 0007: web application đầy đủ vẫn DEFERRED.
-5. MVP này chỉ **read-only** (list conversations, transcript, live EV stream). Send prompt,
-   permission reply, channel `discord`, và lệnh `/remote` trong composer là các slice tiếp theo
-   theo `agent-harness-plan.md` Phase 1–3.
+5. MVP gồm **read + permission decision** (list conversations, transcript, live EV stream, và
+   Allow/Deny qua POST allowlist duy nhất tới `/v1/permission/decision` — gateway không phải
+   authority thứ hai, gate duy nhất vẫn resolve và enforce tại `gate.proceed`). Send prompt,
+   channel `discord`, và lệnh `/remote` trong composer là các slice tiếp theo theo
+   `agent-harness-plan.md` Phase 1–3.
 
 ## Consequences
 
@@ -65,5 +67,6 @@ web application đầy đủ. Cần một quyết định kiến trúc cho remot
 
 - TLS self-signed + cert fingerprint trong QR (channel `lan-qr` production).
 - Persist device registry vào keyring; revoke UI (`/remote` panel — plan Task 2.4).
-- Send prompt + permission reply qua gateway (plan Task 1.2/1.3) và channel `discord` (Task 2.3).
+- Send prompt qua gateway (plan Task 1.2) và channel `discord` (Task 2.3). Permission reply
+  (Task 1.3) đã giao cùng ngày.
 - QR code render trên desktop thay cho mã gõ tay.
