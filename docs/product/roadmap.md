@@ -1,40 +1,46 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
-# Lộ trình sản phẩm
+# Roadmap
 
-## NOW — một golden path đáng tin cậy
+## NOW — demo-critical happy paths
 
-- [x] Thêm Cowork file-action contract vào dispatch prompt.
-- [x] Map `permission.asked.properties.tool` đúng (`write` → create, `edit` → modify).
-- [x] Thêm false-success guard dựa trên File Work Review/disk evidence.
-- [x] Tắt các đường ghi file nguy hiểm: truncated text và XLSX destructive save.
-- [ ] Packaged manual: create file → Permission → Allow → file tồn tại.
-- [ ] Packaged manual: modify file → Deny → file không đổi.
-- [ ] Xác nhận File Work Review create/modify sau golden path.
+- [ ] Chat cleanup: user/assistant presentation, remove tool and Skill narration
+- [ ] Provider save → test → persist verified state
+- [ ] Provider action simplification and tooltip clipping fixes
+- [ ] PDF packaged preview
+- [ ] Workspace Agent file auto-open / refresh
+- [ ] Inspector Phase 1 product definition and implementation
 
-## NEXT — demo xuất sắc sau khi P0 PASS
+## NEXT — complete demo operations
 
-- [ ] Một commercial UI pass thống nhất: design tokens, icons, tooltip, permission card, transcript, Settings, Workspace, Skills.
-- [ ] Light/dark mode thật, gồm titlebar overlay và toàn bộ surface.
-- [ ] Capture tối đa 10 màn hình packaged sau khi các feature thật đã ổn định.
-- [ ] Hoàn thiện preview Office an toàn; chỉ mở edit khi bảo toàn dữ liệu được chứng minh.
+- [ ] OpenAI-compatible model discovery with manual fallback
+- [ ] Detailed logging contract, retention, redaction, and UI
+- [ ] Local telemetry contract, local-only storage, export/clear UI
+- [ ] Local single-user authentication / app lock
+- [ ] Final demo regression and accepted screenshots
 
-## WAITING — team khác
+## LATER — post-demo product hardening
 
-- [ ] D1 Dispatch backend integration.
-- [ ] D2 Microsoft 365 integration.
-- [ ] D3 Knowledge/RAG integration.
-- [ ] D4 Advanced Gateway integration.
+- [ ] Rich Office editing beyond current safe preview/edit limits
+- [ ] Permission session/directory policy refinement
+- [ ] Conversation export/import
+- [ ] Diagnostics/support bundle UX
+- [ ] Installer metadata, signing, updater, release channel
+- [ ] Full RC regression
+
+## WAITING — external teams
+
+- [ ] D1 Dispatch backend/UI merge
+- [ ] D2 Microsoft 365 backend/UI merge
+- [ ] D3 Knowledge/RAG/Graph backend/UI merge
+- [ ] D4 Advanced Gateway merge
 
 ## DEFERRED
 
-- File Work Review delete trên OpenCode v1.17.11.
-- XLSX direct editing cho đến khi patch-in-place giữ công thức/format/sheet.
-- Full DOCX/PPTX editor.
-- Routing, failover, key pool, cost routing.
-- Web/Next.js.
-- Full L9/RC.
+- [ ] File Work Review delete on current OpenCode tool surface
+- [ ] Web/Next.js
+- [ ] Cloud multi-user authentication

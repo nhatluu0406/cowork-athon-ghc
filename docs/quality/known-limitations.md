@@ -1,46 +1,49 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
 # Known limitations
 
-## P0 — cần xác nhận packaged
+## Chat / permission
 
-- Golden path file create/permission chưa được chạy trên Windows packaged app sau recovery patch.
-- OpenCode vẫn có thể không chọn tool trong một số prompt; Cowork nay phải hiển thị trạng thái **chưa xác minh**, không được coi prose là mutation thành công.
-- Permission hiện dùng polling 500 ms; chưa có push notification trực tiếp từ event stream tới renderer.
-
-## Workspace Companion
-
-- Chỉ `.txt` và `.md` nhỏ được edit.
-- File text vượt 512 KiB hiển thị truncated và read-only.
-- XLSX chỉ preview read-only. Direct save bị vô hiệu hóa vì implementation cũ có thể mất formula, format, merged cells và sheet khác.
-- DOCX render plain text; chưa có Office-grade layout/editing.
-- PDF iframe blob cần packaged verification theo CSP.
-- Image/PDF/DOCX/XLSX preview giới hạn 8 MiB.
-- Khi editor dirty và Agent update file, UI giữ edit hiện tại và chỉ báo conflict; chưa có merge UI.
-
-## Agent / Permission / File Review
-
-- File Work Review delete chưa tin cậy trên OpenCode v1.17.11.
-- `file_mutation` là candidate runtime event; user-facing verified success dựa thêm trên File Work Review snapshot cùng runtime turn.
-- Command policy nâng cao, allow-for-session, directory rule và enterprise policy chưa có.
+- Permission modes exist, but repeated prompt/policy behavior must remain covered by packaged happy-path checks.
+- Internal tool and Skill narration may still appear in assistant prose until transcript cleanup is completed.
+- Permission automation is intentionally limited; execution boundary remains authoritative.
 
 ## Provider
 
-- Phase hiện tại hỗ trợ DeepSeek preset và custom OpenAI-compatible profiles, không phải universal native provider layer.
-- Switching active profile trên running OpenCode child cần packaged proof với hai endpoint thật.
-- D4 routing/failover/key pool/cost routing chưa merge.
+- Current native presets are limited; custom OpenAI-compatible connections require endpoint and model information.
+- Model discovery is not yet implemented. Some providers expose OpenAI-compatible `GET /models`; others require model selection in their portal or manual model ID.
+- Verified connection state persistence/invalidation policy needs implementation.
+- D4 routing, failover, key pool, quota and cost routing are not implemented.
 
-## UI
+## Workspace
 
-- Commercial visual readiness hiện **FAIL/PARTIAL**, chưa có PO sign-off.
-- Dark mode setting chưa phải dark theme hoàn chỉnh.
-- Component system, tooltip, transcript, Settings, Inspector và Workspace cần một pass đồng bộ sau khi P0 golden path PASS.
+- PDF packaged preview needs hardening across Electron environments.
+- DOCX/XLSX are not Office-grade editors.
+- Large/binary files remain bounded.
+- Agent-driven auto-open/live refresh needs more complete mapping from mutation events to selected file and safe dirty-state handling.
+
+## Inspector
+
+- Inspector shell exists, but Plan, Activity, Permission history, and File Review need a clear Phase 1 data contract and product behavior.
+
+## Logging / telemetry
+
+- `Ghi log chi tiết` and `Telemetry cục bộ` settings are visible, but user-facing documentation, retention, redaction, export/clear behavior, and acceptance are incomplete.
+- Telemetry must remain local-only unless a future explicit opt-in remote contract is approved.
+
+## Authentication
+
+- No local sign-in/app-lock screen exists.
+- Current POC relies on Windows user/session security and local app profile isolation.
+
+## External integrations
+
+- D1–D4 product surfaces are placeholders/mount points until external team code is merged.
 
 ## Release
 
-- Full L9/RC chưa hoàn tất.
-- Routine verification không được dựa vào live LLM determinism; cần focused deterministic seams + một manual packaged smoke.
+- Full RC regression, signing, installer polish, updater, and release channels are deferred.

@@ -1,42 +1,56 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
 # Demo acceptance
 
-Không checkbox nào được đánh dấu PASS chỉ vì unit test hoặc model trả lời bằng văn bản.
+Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test hoặc assistant prose không đủ làm bằng chứng.
 
-## Golden path bắt buộc trên packaged Windows app
+## Core demo
 
-- [ ] Launch app, service healthy, New Chat sạch.
-- [ ] Provider credential sẵn sàng.
+- [ ] Launch vào New Chat sạch.
+- [ ] Theme light/dark hiển thị đúng và native titlebar đồng bộ.
+- [ ] Provider đã cấu hình và trạng thái verified hiển thị đúng.
 - [ ] Chọn workspace demo.
-- [ ] Gửi: `Hãy tạo file permission-demo.txt trong workspace với nội dung: Cowork GHC permission demo.`
-- [ ] Runtime phát sinh tool `write` thật.
-- [ ] Permission hiển thị action **Tạo tệp** và đúng workspace-relative path.
-- [ ] File chưa tồn tại trước khi Allow.
-- [ ] `Cho phép một lần` tạo đúng file và đúng nội dung.
-- [ ] File Work Review ghi create với after snapshot.
-- [ ] Assistant success chỉ xuất hiện sau mutation được xác minh.
-- [ ] Yêu cầu modify cùng file, chọn Deny, file không đổi.
-- [ ] Conversation/history/relaunch vẫn hoạt động.
+- [ ] Gửi prompt chat và nhận streaming response đọc được.
+- [ ] Permission mode là `Hỏi trước`.
+- [ ] File create request hiển thị Permission đúng action/path.
+- [ ] File chưa tồn tại trước Allow.
+- [ ] `Cho phép một lần` tạo file thật, đúng nội dung.
+- [ ] Yêu cầu modify rồi Deny; file không đổi.
+- [ ] Assistant không hiển thị internal tool/Skill narration.
+- [ ] Workspace tự refresh/open file liên quan sau Agent mutation.
+- [ ] Reopen conversation và relaunch giữ history/configuration.
 
-## Workspace safety acceptance
+## Provider demo
 
-- [ ] Text nhỏ `.txt`/`.md`: edit + atomic save.
-- [ ] Text truncated: read-only, Save không xuất hiện.
-- [ ] XLSX: read-only và có thông báo bảo toàn dữ liệu.
-- [ ] DOCX: plain-text preview, không chèn raw HTML.
-- [ ] Image preview hoạt động với CSP.
-- [ ] PDF preview hoạt động trong packaged app với `frame-src blob:`.
-- [ ] Agent refresh không ghi đè edit chưa lưu.
+- [ ] Add custom OpenAI-compatible connection.
+- [ ] Save key triggers safe connection verification.
+- [ ] Valid status persists across Settings navigation/relaunch according to policy.
+- [ ] Model discovery works when `/models` is supported.
+- [ ] Manual model ID remains available when discovery fails or is unsupported.
 
-## Không thuộc demo blocker hiện tại
+## Workspace demo
 
-- File delete.
-- D1–D4 backend.
-- Full Office editing.
-- Marketplace/MCP.
-- Full release-candidate suite.
+- [ ] Text/Markdown opens and edits safely.
+- [ ] PDF renders in packaged app.
+- [ ] Image/DOCX/XLSX safe preview states are clear.
+- [ ] Agent file update refreshes current file without overwriting dirty edits.
+
+## Settings / Skills / Inspector
+
+- [ ] Provider actions are understandable without button clutter.
+- [ ] Skills create/edit/delete/enable happy path works.
+- [ ] Inspector Plan/Activity/File Review display useful data or intentional empty state.
+- [ ] No tooltip clipping at titlebar or sidebar boundaries.
+- [ ] No unnecessary page-level scrollbar at 1366×768.
+
+## Not demo blockers
+
+- File delete review.
+- D1–D4 backend capability before team merge.
+- Full Office-grade editing.
+- Cloud multi-user authentication.
+- Full RC/signing/updater.
