@@ -199,3 +199,12 @@ export {
   type RemoteGatewayOptions,
   type RemoteStatusView,
 } from "./remote-gateway/index.js";
+
+export {
+  createDiscordAdapter,
+  createDiscordRestTransport,
+  readDiscordConfig,
+  type DiscordAdapter,
+  type DiscordTransport,
+  type DiscordConfig,
+} from "./remote-gateway/discord/index.js";
