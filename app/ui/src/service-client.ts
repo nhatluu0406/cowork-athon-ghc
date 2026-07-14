@@ -483,6 +483,7 @@ export interface ServiceClient {
     },
   ): Promise<ConversationRecord>;
   deleteConversation(id: string): Promise<void>;
+  compactConversation(id: string): Promise<{ readonly summary: string }>;
   appendConversationMessage(
     id: string,
     role: "user" | "assistant",
@@ -832,6 +833,11 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         method: "DELETE",
       });
     },
+
+    compactConversation: async (id) =>
+      await call<{ summary: string }>(`/v1/conversations/${encodeURIComponent(id)}/compact`, {
+        method: "POST",
+      }),
 
     appendConversationMessage: async (id, role, text, attachments, skills) =>
       (await call<{ conversation: ConversationRecord }>(
