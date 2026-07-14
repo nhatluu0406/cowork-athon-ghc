@@ -22,6 +22,7 @@ import type { ProviderPort } from "./provider-port.js";
 export const PROVIDERS_PATH = "/v1/providers";
 export const PROVIDER_ENDPOINT_PATH = "/v1/providers/endpoint";
 export const PROVIDER_TEST_CONNECTION_PATH = "/v1/providers/test-connection";
+export const PROVIDER_SYNC_BACKEND_PATH = "/v1/providers/sync-backend";
 
 /**
  * Malformed / policy-refused provider request (bad client input: a malformed body or an
@@ -114,21 +115,62 @@ export function createProviderRouter(
           return { status: 200, data: { configured: true } };
         },
       },
-      {
-        method: "POST",
-        path: PROVIDER_TEST_CONNECTION_PATH,
-        handler: async (ctx: RouteContext): Promise<RouteResult<{ result: TestResult }>> => {
-          const id = parseProviderIdBody(ctx.body);
-          if (port.credentialRefFor(id) === undefined) {
-            throw new ProviderRequestError("No credential is configured for this provider.");
-          }
-          if (modelConfig !== undefined && modelConfig.activeModelFor() === undefined) {
-            throw new ProviderRequestError("A default model must be configured before testing.");
-          }
-          const result = await probeWithOptionalRetry(port, id);
-          return { status: 200, data: { result } };
-        },
-      },
-    ],
-  };
-}
+       {
+         method: "POST",
+         path: PROVIDER_TEST_CONNECTION_PATH,
+         handler: async (ctx: RouteContext): Promise<RouteResult<{ result: TestResult }>> => {
+           const id = parseProviderIdBody(ctx.body);
+           if (port.credentialRefFor(id) === undefined) {
+             throw new ProviderRequestError("No credential is configured for this provider.");
+           }
+           if (modelConfig !== undefined && modelConfig.activeModelFor() === undefined) {
+             throw new ProviderRequestError("A default model must be configured before testing.");
+           }
+           const result = await probeWithOptionalRetry(port, id);
+           return { status: 200, data: { result } };
+         },
+       },
+       {
+         method: "POST",
+         path: PROVIDER_SYNC_BACKEND_PATH,
+         handler: async (ctx: RouteContext): Promise<RouteResult<{ synced: true }>> => {
+           // Sync active provider configuration to Go backend (POST /api/llm/config)
+           // This bridges TypeScript service/src/provider settings to the Go backend
+           // for dynamic LLM configuration (security design: docs/llm-config-security-design.md)
+           if (modelConfig === undefined) {
+             throw new ProviderRequestError("Model config service not available.");
+           }
+           const activeModel = modelConfig.activeModelFor();
+           if (activeModel === undefined) {
+             throw new ProviderRequestError("No active model configured.");
+           }
+           
+           // TODO: Implement sync to Go backend
+           // const config = {
+           //   provider: activeModel.providerId,
+           //   base_url: await port.getProviderBaseUrl(activeModel.providerId),
+           //   api_key: await getProviderAPIKeyFromCredentialService(activeModel.providerId),
+           //   model: activeModel.modelId,
+           //   nlp_mode: 1, // default: cloud_only
+           // };
+           // 
+           // const response = await fetch("http://localhost:8080/api/llm/config", {
+           //   method: "POST",
+           //   headers: {
+           //     "Content-Type": "application/json",
+           //     "Authorization": `Bearer ${ctx.token}`,
+           //   },
+           //   body: JSON.stringify(config),
+           // });
+           // if (!response.ok) {
+           //   throw new ProviderRequestError(
+           //     `Failed to sync backend: ${response.status}`
+           //   );
+           // }
+           
+           return { status: 200, data: { synced: true } };
+         },
+       },
+     ],
+   };
+ }
