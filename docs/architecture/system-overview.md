@@ -1,167 +1,98 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
-# System overview hiện tại
-
-Cowork GHC là desktop app local-first cho Windows. Kiến trúc runtime hiện tại:
+# Tổng quan kiến trúc
 
 ```text
 Electron renderer
-→ preload/shell bridge
-→ local service
-→ OpenCode runtime
-→ replaceable LLM endpoint
+→ typed preload / shell bridge
+→ loopback local application service
+→ supervised OpenCode runtime
+→ active provider profile / LLM endpoint
 ```
 
-## Thành phần
+## Desktop shell
 
-- `Electron renderer`: UI cho onboarding, workspace, provider/model, session timeline, prompt và permission.
-- `preload/shell bridge`: cầu nối hẹp, không expose Node hoặc IPC tùy ý cho renderer.
-- `local service`: boundary ứng dụng chạy trên loopback, token-guarded, giữ business logic và router.
-- `OpenCode runtime`: child process được shell/service giám sát để chạy phiên agent.
-- `replaceable LLM endpoint`: provider-neutral, hiện DeepSeek được verify qua OpenAI-compatible mode.
+- Electron main process sở hữu BrowserWindow, native titlebar overlay, service/runtime lifecycle và allow-listed IPC.
+- Renderer không có Node.js access trực tiếp.
+- Commercial UI V3 dùng product rail, surface-specific layout, light/dark semantic tokens và native Windows controls.
 
-## Boundary workspace
+## Local service
 
-Workspace được chọn qua native picker, validate ở service, rồi lưu làm active workspace. File action phải đi qua
-workspace guard và permission boundary. UI không tự mutate filesystem.
+Service giữ business logic và boundary:
 
-## Boundary credential
+- workspace validation và file access;
+- conversation persistence;
+- provider profiles và connection testing;
+- credential references;
+- Skills catalog/CRUD;
+- permission gate;
+- runtime event mapping;
+- File Work Review snapshots;
+- settings/diagnostics.
 
-Credential source of truth là Windows keyring. UI chỉ làm việc với handle/trạng thái đã redact, không giữ key
-plaintext. Khi runtime cần key, key được inject vào child process qua env tại launch boundary.
+Service bind loopback và dùng authenticated local boundary.
 
-## Boundary provider/model
+## Persistence / database
 
-Provider/model là cấu hình thay thế được qua **Multi-Provider Profiles Phase 1** (application layer, độc lập D4 Gateway):
+POC hiện không dùng SQL database.
 
-- `ProviderProfileStore` — CRUD profile, active profile, migration từ cấu hình legacy
-- `credentialAccountForProfile` — keyring namespace `profile:{id}`
-- `ProviderConnectionTester` — test connection theo profile id (kết quả tách biệt)
-- `RuntimeProviderConfig` + `ProfileRuntimeBridge` — map profile active → OpenCode/custom adapter không restart
-- Conversation snapshot `providerSnapshot` ghi trên conversation mới; conversation cũ fallback deterministic
+- Conversation/index/settings/profile/Skill-enabled state: local JSON files, ghi atomically bằng temporary file + rename khi phù hợp.
+- API secrets: Windows Credential Manager thông qua `@napi-rs/keyring`.
+- Runtime/process identity: `.runtime` hoặc application profile data.
+- Generated reports/screenshots không phải source of truth.
 
-DeepSeek preset và custom OpenAI-compatible dùng adapter `custom-openai-compat` ở runtime boundary; UI không expose technical adapter id.
+## Provider boundary
 
-**Readiness model** (`provider-readiness.ts` UI + `assessProviderReadiness` service): ưu tiên active profile khi có; phân tách local service, workspace, credential, URL validity, connectivity test, runtime phase.
+`ProviderProfileStore` quản lý nhiều profile secret-free. Credential được namespace theo profile ID trong keyring. Runtime resolver chuyển active profile thành OpenCode configuration.
 
-## Boundary UI shell / product surfaces
+Current provider UX:
 
-Renderer dùng **UI Shell V3** (alignment pass 2026-07-13): ~50px product rail → contextual
-sidebar (Cowork \| Workspace work modes) → main workspace → optional inspector → bottom status bar.
-Integration surfaces (Dispatch, Gateway, Knowledge, Microsoft 365, Code) dùng full-width main **không**
-giữ cột sidebar trống (`shell-frame--no-sidebar`).
-Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
-integration data giả để làm đẹp layout.
+- DeepSeek preset;
+- custom OpenAI-compatible endpoint;
+- explicit model ID;
+- connection test/readiness.
 
-Settings là một surface ứng dụng trong cùng V3 frame với navigation `Nhà cung cấp` (danh sách profile, add/edit/delete, test connection, set active) và `Chung`.
+Planned extension: call OpenAI-compatible `GET /models` when endpoint supports it, with manual model ID fallback. Discovery failure must not prevent manual configuration.
 
-Top-level product surfaces được khai báo tập trung trong `app/ui/src/surface-registry.ts`:
+## Permission boundary
+
+File mutation và command execution phải qua permission policy/gate. Composer exposes permission mode, but execution boundary remains authoritative.
+
+Product invariant:
 
 ```text
-cowork
-dispatch
-gateway
-knowledge
-microsoft
-code
+assistant prose ≠ verified mutation
 ```
 
-Mỗi surface có `id`, `label`, `icon`, `featureFlag`, `requiredCapability`, `availability`,
-`dependency`, `description`, và `component`. Production default expose toàn bộ product rail:
-`cowork` là `available`; Dispatch/Gateway/Knowledge/Microsoft 365 là
-`awaiting_integration` với dependency D1-D4 cụ thể; `code` là `planned`. Knowledge Graph không phải rail surface riêng;
-nó là tab nội bộ `Đồ thị` trong Knowledge và vẫn chỉ hiển thị trạng thái chờ D3. Các surface này
-không phải capability backend thật và không render mock production data.
+Create/modify success requires successful tool/mutation evidence and valid workspace confinement.
 
-D1-D4 integration slots chỉ là UI contracts trong `app/ui/src/integration-slots.ts`:
+## Workspace boundary
 
-- D1 Dispatch: task summary, child tasks, cancellation, permission wait, result provenance.
-- D2 Microsoft: connection state, service list, scopes, action history, reconnect/error.
-- D3 Knowledge: index state, sources, query results, provenance, stale/rebuild state.
-- D4 Gateway: health, routes, provider/model, latency, usage/cost, fallback/error state.
+- Native folder picker selects active workspace.
+- Service validates and confines file access through realpath/workspace guard.
+- Navigator lists bounded entries without unrestricted renderer filesystem access.
+- Preview/edit behavior is extension- and size-bounded.
+- Dirty editor content must not be overwritten by Agent refresh.
 
-Không có backend adapter D1-D4 trong shell foundation này.
+## Conversation / runtime turn
 
-## Boundary Minimal Workspace Navigator
+Cowork conversation is persistent user identity. OpenCode runtime sessions may be ephemeral per turn. Context handoff is bounded and never shown as visible transcript content.
 
-Renderer không đọc filesystem. Workspace Navigator gọi service route `GET /v1/workspace/list`
-để list direct children của active workspace hoặc folder đã expand. Service:
+## UI surface ownership
 
-- validate active workspace root server-side;
-- dùng workspace guard + realpath confinement;
-- không follow symlink/reparse point ra ngoài workspace;
-- sort folder trước file;
-- giới hạn số entry mỗi request;
-- không recursive scan mặc định;
-- không đọc file content khi chỉ listing.
+| Surface | Layout ownership |
+|---|---|
+| Cowork | conversation sidebar + conversation canvas + optional Inspector |
+| Workspace | file tree + editor/preview + optional Cowork companion |
+| Settings | settings navigation + content |
+| D1–D4 / Code | full application surface |
 
-Selected workspace file preview đi qua `GET /v1/workspace/file-preview`, bounded 64 KiB,
-text-only. Binary/unsupported trả trạng thái không xem trước. Direct editor, save/undo,
-PDF, Office, and image preview are not started.
+Hidden Inspector or sidebar columns must never reserve space outside their owning surface.
 
-## Boundary process lifecycle
+## External integration boundaries
 
-Electron shell là owner của local service và runtime child. Shutdown chỉ dừng process do Cowork GHC sở hữu, không
-kill generic `node.exe` hoặc process ngoài quyền sở hữu. State runtime tạm thời nằm dưới `.runtime/` hoặc profile
-ứng dụng, không phải source of truth cho sản phẩm.
-
-## Boundary conversation / runtime turn
-
-Cowork GHC tách **conversation identity** (persisted, user-facing) khỏi **OpenCode runtime session** (ephemeral, một lượt):
-
-```text
-Cowork conversation A
-├── runtime turn A1 (OpenCode session s1) → terminal
-├── runtime turn A2 (OpenCode session s2) → terminal
-└── ...
-```
-
-- UI và `conversation` store giữ transcript sạch (chỉ user/assistant đã sanitize), activity, workspace binding.
-- Trước mỗi user message, `planRuntimeTurn` quyết định reuse (`canPrompt`) hoặc tạo session mới.
-- **Context handoff (untrusted):** OpenCode v1.17.11 chỉ nhận `POST /session/{id}/message` với `parts: [{type:"text"}]` — không có native multi-message seed. Cowork GHC gửi envelope nội bộ bounded (`<<<CGHC_UNTRUSTED_PRIOR_TURNS>>>` + `<<<CGHC_UNTRUSTED_ATTACHMENT_CONTEXT>>>` + `<<<CGHC_CURRENT_USER_REQUEST>>>`) chỉ trên wire; **không** persist trong transcript user.
-- **Assistant extraction:** EV mapper theo dõi `message.updated` role; chỉ `message.part.*` text của **assistant** được map sang `SessionView.text`. User prompt (kể cả envelope) không bao giờ hiển thị như assistant output.
-- Event stream lọc theo `runtimeSessionId` hiện hành để tránh late events từ turn cũ.
-
-Giới hạn POC: **một runtime execution active** tại một thời điểm.
-
-## Boundary attachment read (Phase 1)
-
-- Renderer gọi shell `pickWorkspaceFile(workspaceRoot)` → service `POST /v1/workspace/attachment-read` validate absolute path trong grant + `assertRealPathInside`.
-- **Secret-like policy** (`attachment-secret-policy.ts`): kiểm tra filename/path trước `stat`/`readFile`; file bị block không đọc raw content, không dispatch, không persist content.
-- Snapshot tại thời điểm gửi: relative path, size, mtime, content hash, truncated flag, `inclusionStatus` / `inclusionReason` — **không** copy content vào app data.
-- **Dispatch preflight** (`dispatch-plan.ts`): tính budget cuối 12k ký tự từ prior context + attachment envelopes + user request; fail-fast nếu attachment selected không fit; không tạo runtime turn khi preflight fail.
-- Pending chips trong composer; metadata gắn `ConversationMessage.attachments`; content chỉ trên wire trong envelope untrusted.
-
-## Boundary file review (File Work Review slice)
-
-- Service module `service/src/file-review/`: bounded snapshot capture (`POST /v1/file-review/snapshot`),
-  artifact build (`POST /v1/file-review/build`), deterministic unified diff, secret-like redaction.
-- UI captures **before** snapshot khi permission pending cho file mutation; **after** snapshot khi `file_mutation` EV
-  (retry ngắn nếu disk chưa flush); persist `fileReviews[]` trên activity conversation.
-- Activity panel tách `attachmentContextPaths` vs `runtimeReadPaths`; review surface ở right panel (không Preview tab toàn cục).
-- Historical diff dùng snapshot đã persist — không đọc lại file disk để tái tạo; hash mismatch banner khi file hiện tại khác.
-
-## Boundary Skills (Phase 1)
-
-- Skill là directory chứa `SKILL.md` với frontmatter `id`, `name`, `description`, optional
-  `version`, theo sau bởi instruction text. Không có code execution hoặc dependency loading.
-- Allowed roots explicit: built-in Skills đóng gói cùng app và app-managed user-local Skills
-  dưới user data. Service chỉ scan direct children, tối đa 64/root; không scan workspace.
-- Service validate regular-file/realpath confinement, 32 KiB, UTF-8 text, metadata/ID,
-  duplicate IDs, nội dung rỗng/binary và internal transport marker. Invalid Skill vẫn list
-  với lý do nhưng không enable được.
-- Enabled registry là global-local, persist qua relaunch. Mỗi user turn lưu snapshot metadata
-  `id/name/version/source/contentHash/modifiedAt`; raw Skill content không vào transcript.
-- Dispatch transport tách `<<<CGHC_SELECTED_LOCAL_SKILLS>>>` khỏi prior turns, attachment data
-  và current request. Skills dùng chung bounded 12k budget và fail-fast nếu không fit.
-- Skill chỉ là instruction context. Workspace guards, provider readiness, keyring,
-  tool/file permission và OpenCode runtime boundary vẫn authoritative.
-
-## Không lặp lại tài liệu cũ
-
-Các ADR trong `docs/architecture/decisions/` và evidence trong `reports/` là provenance. Khi cần làm việc hằng ngày, đọc tài liệu canonical trong
-`docs/README.md`, `docs/product/`, `docs/quality/`, và file này trước.
+D1–D4 entries are stable mount points only until team code is merged. The production shell must not fake records, metrics, connectivity, or completed capability.
