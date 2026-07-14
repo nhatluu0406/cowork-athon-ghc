@@ -32,6 +32,7 @@ const ACTION_LABEL: Record<PermissionActionKind, string> = {
   file_delete: "Xoá tệp",
   file_move: "Di chuyển tệp",
   command_exec: "Chạy lệnh",
+  network_access: "Truy cập mạng",
   ms365_write: "Tải lên SharePoint",
 };
 
@@ -41,6 +42,7 @@ const ACTION_LEAD: Record<PermissionActionKind, string> = {
   file_delete: "Cowork muốn xoá một tệp khỏi workspace của bạn.",
   file_move: "Cowork muốn di chuyển một tệp trong workspace của bạn.",
   command_exec: "Cowork muốn chạy một lệnh trong workspace của bạn.",
+  network_access: "Cowork muốn truy cập dữ liệu từ Microsoft 365.",
   ms365_write: "Cowork muốn ghi dữ liệu lên Microsoft 365 (SharePoint).",
 };
 

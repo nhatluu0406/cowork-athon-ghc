@@ -8,6 +8,7 @@ import { createElement, createRef } from "react";
 import { createRoot } from "react-dom/client";
 import { SkillsPanel, type SkillsPanelHandle } from "./SkillsPanel.js";
 import type { ServiceClient, SkillView } from "./service-client.js";
+import { el } from "./ui-shell/dom-utils.js";
 
 export type { SkillsPanelHandle };
 
