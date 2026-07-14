@@ -1,0 +1,140 @@
+/**
+ * Remote-gateway composition wiring (agent-harness-plan.md remote MVP):
+ *  1. flag OFF (default) → no gateway, `live.remote` is undefined — baseline untouched;
+ *  2. flag ON → the gateway is up, a phone can pair and read conversations THROUGH it,
+ *     the pairing code prints via the injected log, and `stop()` also stops the gateway.
+ *
+ * Uses the same fake supervisor + fake OpenCode server as compose-live-wiring.test.ts —
+ * no real spawn, keyring, egress, or secret.
+ */
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { captureIdentity, type RuntimeProcessIdentity } from "@cowork-ghc/runtime";
+import {
+  startLiveCoworkService,
+  type LiveRuntimeSupervisor,
+} from "../src/composition/index.js";
+import type { SupervisorStartSpec } from "../src/runtime/index.js";
+import { createMemoryStore } from "../src/credential/index.js";
+import type { SettingsFs } from "../src/diagnostics/index.js";
+import { startFakeOpencodeServer } from "./opencode-fake-server.js";
+
+const WS = "C:/Users/test/Remote Workspace";
+const NOW = () => "2026-07-14T00:00:00.000Z";
+
+const START_SPEC: SupervisorStartSpec = {
+  binPath: "C:/opencode/opencode.exe",
+  cwd: WS,
+  port: 65001,
+  dataHome: "C:/tmp/data",
+  configDir: "C:/tmp/config",
+  injectionRequests: [],
+};
+
+function fakeSupervisor(baseUrl: () => string | null): LiveRuntimeSupervisor {
+  let started = false;
+  const identity: RuntimeProcessIdentity = captureIdentity({
+    pid: 4321,
+    startTime: "2026-07-14T00:00:00.000Z",
+    exePath: "C:/opencode/opencode.exe",
+    port: 65001,
+    host: "127.0.0.1",
+  });
+  return {
+    isAlive: () => started,
+    get baseUrl(): string | null {
+      return started ? baseUrl() : null;
+    },
+    start: async () => {
+      started = true;
+      return identity;
+    },
+    stop: async () => {
+      started = false;
+    },
+  };
+}
+
+function memorySettingsFs(): SettingsFs {
+  let data: string | undefined;
+  return {
+    read: () => Promise.resolve(data),
+    write: (d) => {
+      data = d;
+      return Promise.resolve();
+    },
+  };
+}
+
+test("flag OFF: no remote gateway is started and the handle carries none", async () => {
+  const fake = await startFakeOpencodeServer();
+  const live = await startLiveCoworkService({
+    supervisor: fakeSupervisor(() => fake.baseUrl),
+    startSpec: START_SPEC,
+    workspaceId: WS,
+    now: NOW,
+    env: {},
+    service: { credentialStore: createMemoryStore(), settingsFs: memorySettingsFs() },
+  });
+  try {
+    assert.equal(live.remote, undefined);
+  } finally {
+    await live.stop();
+    await fake.close();
+  }
+});
+
+test("flag ON: pair a device and read conversations through the gateway; stop() closes it", async () => {
+  const fake = await startFakeOpencodeServer();
+  const logged: string[] = [];
+  const live = await startLiveCoworkService({
+    supervisor: fakeSupervisor(() => fake.baseUrl),
+    startSpec: START_SPEC,
+    workspaceId: WS,
+    now: NOW,
+    env: { CGHC_REMOTE_ENABLED: "1" },
+    remoteLog: (line) => logged.push(line),
+    service: { credentialStore: createMemoryStore(), settingsFs: memorySettingsFs() },
+  });
+  assert.ok(live.remote, "the gateway handle is exposed when the flag is on");
+  const remote = live.remote;
+  try {
+    // The pairing code was surfaced through the injected log (never the device token).
+    assert.ok(logged.some((line) => line.includes("ma pairing")));
+    assert.ok(!logged.some((line) => line.includes(live.running.clientToken)));
+
+    // Pair over HTTP with a FRESH code, then read the real composed /v1/conversations.
+    const { code } = remote.issuePairingCode();
+    const pairRes = await fetch(`${remote.url}/pair`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code, deviceName: "wiring-phone" }),
+    });
+    assert.equal(pairRes.status, 200);
+    const pairBody = (await pairRes.json()) as { data: { token: string } };
+
+    const convRes = await fetch(`${remote.url}/api/conversations`, {
+      headers: { authorization: `Bearer ${pairBody.data.token}` },
+    });
+    assert.equal(convRes.status, 200);
+    const convBody = (await convRes.json()) as {
+      ok: boolean;
+      data: { conversations: unknown[] };
+    };
+    assert.equal(convBody.ok, true);
+    assert.ok(Array.isArray(convBody.data.conversations));
+
+    // The main service still refuses the DEVICE token directly (separate trust domains).
+    const direct = await fetch(`${live.running.baseUrl}/v1/conversations`, {
+      headers: { authorization: `Bearer ${pairBody.data.token}` },
+    });
+    assert.equal(direct.status, 403);
+  } finally {
+    await live.stop();
+    await fake.close();
+  }
+
+  // stop() closed the gateway socket too.
+  await assert.rejects(() => fetch(`${remote.url}/api/me`));
+});

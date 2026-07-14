@@ -182,3 +182,14 @@ export {
   type ProviderProfileView,
   type ProviderProfileStore,
 } from "./provider-profiles/index.js";
+
+export {
+  createPairingRegistry,
+  startRemoteGateway,
+  isRemoteEnabled,
+  resolveRemoteBindHost,
+  type PairingRegistry,
+  type PairedDeviceView,
+  type RemoteGateway,
+  type RemoteGatewayOptions,
+} from "./remote-gateway/index.js";

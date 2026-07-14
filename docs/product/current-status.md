@@ -50,6 +50,26 @@ request create file
 
 ---
 
+## Remote gateway + PWA MVP (2026-07-14)
+
+| Item | Status |
+|---|---|
+| Plan | `agent-harness-plan.md` (repo root) — Phase 2 MVP slice |
+| ADR | `docs/architecture/decisions/0010-remote-gateway-and-pwa-surface.md` |
+| Feature flag | `CGHC_REMOTE_ENABLED` — **OFF mặc định**; flag off ⇒ composition không đổi (test `remote-wiring.test.ts`) |
+| Modules | `service/src/remote-gateway/` — `pairing.ts` (code 1 lần TTL 2 phút, device token SHA-256 digest, lockout, revoke), `gateway.ts` (listener riêng, reverse proxy allowlist tới main service), `pwa.ts` (PWA 1 file: pair → list → live stream) |
+| Env phụ | `CGHC_REMOTE_LAN=1` (bind LAN, demo cùng Wi-Fi, **chưa TLS**), `CGHC_REMOTE_PORT` (port cố định) |
+| Verified | `npm run typecheck` exit 0; 16/16 unit/integration PASS trên 3 suite mới (`remote-pairing`, `remote-gateway`, `remote-wiring`); suite lân cận `compose-live-wiring` + `live-launch` vẫn PASS |
+
+### Giới hạn trung thực
+
+1. **Read-only**: điện thoại xem conversations + transcript + live EV stream; CHƯA gửi prompt,
+   CHƯA permission reply, CHƯA Discord channel, CHƯA lệnh `/remote` trong composer.
+2. **Pairing code hiển thị qua console** (`start.bat` từ terminal) — chưa có QR/panel trong app.
+3. **LAN mode chưa mã hóa transport** — chỉ dùng demo; TLS + cert pinning là slice sau.
+4. Device token in-memory per-launch — restart app thì điện thoại pair lại.
+5. Chưa có packaged verification cho slice này (dev-run only).
+
 ## MS365 connector + SharePoint slice — D2 (2026-07-14)
 
 | Item | Status |
