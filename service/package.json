@@ -12,7 +12,9 @@
       "default": "./dist/index.js"
     },
     "./execution": "./src/execution/index.ts",
-    "./file-review": "./src/file-review/index.ts"
+    "./file-review": "./src/file-review/index.ts",
+    "./knowledge/types": "./src/knowledge/types.ts",
+    "./knowledge/stack": "./src/knowledge/stack/index.ts"
   },
   "scripts": {
     "typecheck": "tsc -b",

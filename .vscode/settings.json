@@ -1,0 +1,109 @@
+{
+  // "remote.SSH.httpsProxy": "http://10.36.232.10:8080",
+  // "remote.SSH.httpProxy": "http://10.36.232.10:8080",
+  "chat.promptFilesRecommendations": {
+    "speckit.constitution": true,
+    "speckit.specify": true,
+    "speckit.plan": true,
+    "speckit.tasks": true,
+    "speckit.implement": true
+  },
+  "chat.tools.terminal.autoApprove": {
+    ".specify/scripts/bash/": true,
+    ".specify/scripts/powershell/": true,
+    "go": true,
+    "/^cd ./ragmini && git ls-tree -r --name-only cf286bb7435104a0ad3ce299fe8890c3cdb0d841 -- \\.claude/agents/speckit-checklist\\.md \\.claude/skills/speckit-checklist/SKILL\\.md tools/emt_brain/workflow_resolver\\.py$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd ./ragmini && git cat-file -t cf286bb7 && git log --format=\"%P\" -1 cf286bb7$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd src/Backend && gofmt -w internal/indexer/orchestrator_test\\.go && go test \\./internal/indexer$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd ./MiniRAD/src/Backend && gofmt -w internal/indexer/orchestrator_test\\.go && go test \\./internal/indexer$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/dungpham/MiniRag && sed -n '1,160p' scripts/run-local-backend\\.sh && printf '\\\\n---FILE---\\\\n' && sed -n '1,180p' scripts/run-local-all\\.sh && printf '\\\\n---FILE---\\\\n' && sed -n '1,140p' scripts/run-local-frontend\\.sh$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/dungpham/MiniRag && sed -n '1,220p' \\.env\\.example && printf '\\\\n---FILE---\\\\n' && sed -n '1,220p' src/\\.env\\.example && printf '\\\\n---FILE---\\\\n' && sed -n '1,220p' src/Backend/\\.env && printf '\\\\n---FILE---\\\\n' && sed -n '1,220p' src/Frontend/\\.env$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^cd /home/dungpham/MiniRag && python3 - <<'PY'\nimport subprocess, json, os\n\ncmd=\\['/usr/bin/node','/home/dungpham/MiniRag/mcp-adapter/claude-adapter\\.js'\\]\nenv=os\\.environ\\.copy\\(\\)\nenv\\['RAD_SERVER_URL'\\]='http://127\\.0\\.0\\.1:8080'\nenv\\['RAD_API_URL'\\]='http://127\\.0\\.0\\.1:8080'\nenv\\['RAD_API_KEY'\\]='gyXBZ75fTouCSgv5VGDYtWqAfVnjQtCjccaHN5eZ8RQ='\np=subprocess\\.Popen\\(cmd,stdin=subprocess\\.PIPE,stdout=subprocess\\.PIPE,stderr=subprocess\\.PIPE\\)\n\n\ndef send\\(msg\\):\n    data=json\\.dumps\\(msg\\)\\.encode\\('utf-8'\\)\n    hdr=f'Content-Length: \\{len\\(data\\)\\}\\\\r\\\\n\\\\r\\\\n'\\.encode\\('ascii'\\)\n    p\\.stdin\\.write\\(hdr\\+data\\)\n    p\\.stdin\\.flush\\(\\)\n\ndef recv\\(\\):\n    headers=b''\n    while b'\\\\r\\\\n\\\\r\\\\n' not in headers:\n        ch=p\\.stdout\\.read\\(1\\)\n        if not ch:\n            return None\n        headers\\+=ch\n    head,rest=headers\\.split\\(b'\\\\r\\\\n\\\\r\\\\n',1\\)\n    clen=0\n    for line in head\\.decode\\('ascii','ignore'\\)\\.split\\('\\\\r\\\\n'\\):\n        if line\\.lower\\(\\)\\.startswith\\('content-length:'\\):\n            clen=int\\(line\\.split\\(':',1\\)\\[1\\]\\.strip\\(\\)\\)\n    body=rest\n    while len\\(body\\)<clen:\n        chunk=p\\.stdout\\.read\\(clen-len\\(body\\)\\)\n        if not chunk:\n            break\n        body\\+=chunk\n    return json\\.loads\\(body\\.decode\\('utf-8','ignore'\\)\\)\n\n# init\nsend\\(\\{\"jsonrpc\":\"2\\.0\",\"id\":1,\"method\":\"initialize\",\"params\":\\{\"protocolVersion\":\"2024-11-05\",\"capabilities\":\\{\\},\"clientInfo\":\\{\"name\":\"copilot-cli\",\"version\":\"1\\.0\"\\}\\}\\}\\)\nprint\\('INIT',json\\.dumps\\(recv\\(\\),ensure_ascii=False\\)\\[:400\\]\\)\n# list tools\nsend\\(\\{\"jsonrpc\":\"2\\.0\",\"id\":2,\"method\":\"tools/list\",\"params\":\\{\\}\\}\\)\nresp=recv\\(\\)\nprint\\('TOOLS',json\\.dumps\\(resp,ensure_ascii=False\\)\\[:1200\\]\\)\n\nqueries=\\[\n    \\(3,'get_stats',\\{\\}\\),\n    \\(4,'search_knowledge',\\{\"query\":\"system architecture layers api gateway business logic data layer\", \"intent\":\"code_review\", \"search_mode\":\"hybrid\", \"max_tokens\":12000\\}\\),\n    \\(5,'search_knowledge',\\{\"query\":\"database schema sqlite tables epochs symbols relations chunks source_ref\", \"intent\":\"code_review\", \"search_mode\":\"hybrid\", \"max_tokens\":12000\\}\\),\n    \\(6,'search_knowledge',\\{\"query\":\"build scripts makefile docker-compose deployment ci commands\", \"intent\":\"code_review\", \"search_mode\":\"keyword\", \"max_tokens\":12000\\}\\),\n    \\(7,'search_knowledge',\\{\"query\":\"api endpoints authentication websocket jwt middleware router\", \"intent\":\"code_review\", \"search_mode\":\"hybrid\", \"max_tokens\":12000\\}\\),\n    \\(8,'search_knowledge',\\{\"query\":\"frontend architecture react typescript tanstack query zustand hooks api client\", \"intent\":\"code_review\", \"search_mode\":\"hybrid\", \"max_tokens\":12000\\}\\),\n    \\(9,'search_knowledge',\\{\"query\":\"runtime workflow indexing pipeline epoch publish search pipeline sequence\", \"intent\":\"code_review\", \"search_mode\":\"hybrid\", \"max_tokens\":12000\\}\\),\n\\]\nfor i,name,args in queries:\n    send\\(\\{\"jsonrpc\":\"2\\.0\",\"id\":i,\"method\":\"tools/call\",\"params\":\\{\"name\":name,\"arguments\":args\\}\\}\\)\n    r=recv\\(\\)\n    txt=json\\.dumps\\(r,ensure_ascii=False\\)\n    print\\(f'RESP_\\{i\\}_BEGIN'\\)\n    print\\(txt\\[:5000\\]\\)\n    print\\(f'RESP_\\{i\\}_END'\\)\n\np\\.terminate\\(\\)\nerr=p\\.stderr\\.read\\(\\)\\.decode\\('utf-8','ignore'\\)\nprint\\('STDERR_TAIL'\\)\nprint\\(err\\[-1500:\\]\\)\nPY$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^ls /home/dungpham/MiniRag/src/Frontend/dist 2>/dev/null \\| head -5 \\|\\| echo \"Frontend not built\"\ncd /home/dungpham/MiniRag/src/Frontend && node --version && npm --version 2>/dev/null$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^mkdir -p /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/frontend/assets \\\\\n           /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/models/all-MiniLM-L6-v2\n# Placeholder index so go:embed finds at least one file in each subtree\necho '<!DOCTYPE html><html><body>placeholder - run build-standalone\\.sh</body></html>' \\\\\n  > /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/frontend/index\\.html\necho '\\{\\}' > /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/models/all-MiniLM-L6-v2/tokenizer\\.json\necho '' > /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/models/all-MiniLM-L6-v2/vocab\\.txt\n# Minimal valid ONNX file \\(magic bytes \\+ empty model — real one copied by build script\\)\nprintf '\\\\x08\\\\x00' > /home/dungpham/MiniRag/src/Backend/cmd/standalone/assets/models/all-MiniLM-L6-v2/model\\.onnx\necho \"Placeholder assets created\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
+  },
+  "rad.copilot.enabled": true,
+  "rad.copilot.apiUrl": "http://localhost:8080",
+  "rad.copilot.apiToken": "",
+  "rad.copilot.cacheTTL": 300,
+  "rad.copilot.topK": 10,
+  "rad.copilot.graphDepth": 2,
+
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.eslint": "explicit"
+    }
+  },
+  "[json]": {
+    "editor.defaultFormatter": "vscode.json-language-features",
+    "editor.formatOnSave": true
+  },
+  "[markdown]": {
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "on"
+  },
+  "go.lintOnSave": "package",
+  "go.lintTool": "golangci-lint",
+  "go.lintFlags": ["--fast"],
+  "go.useLanguageServer": true,
+  "go.testing.uncover": false,
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "**/*.o": true,
+    "**/*.a": true,
+    "**/node_modules": true,
+    "**/.git": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.claude": false
+  },
+  "search.exclude": {
+    "**/.git": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.specify": true
+  },
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+  "go.toolsManagement.checkForUpdates": "proxy",
+}
