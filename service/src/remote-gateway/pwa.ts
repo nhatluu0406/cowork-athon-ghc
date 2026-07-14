@@ -415,6 +415,13 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     loadConversations();
   });
 
+  // A QR-scanned pairing URL carries ?code= — prefill it so the user only taps Connect.
+  try {
+    var params = new URLSearchParams(window.location.search);
+    var prefill = params.get("code");
+    if (prefill) el("pair-code").value = prefill.toUpperCase();
+  } catch (e) { /* no-op */ }
+
   if (token) enter(); else show("view-pair");
 })();
 </script>

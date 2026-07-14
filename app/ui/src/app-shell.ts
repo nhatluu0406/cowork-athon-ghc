@@ -47,6 +47,7 @@ import {
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
 import { mountProviderProfilesPanel } from "./provider-profiles-panel.js";
 import { createPermissionController } from "./permission-controller.js";
+import { openRemotePanel } from "./remote-panel.js";
 import {
   createServiceClient,
   ServiceClientError,
@@ -2049,6 +2050,19 @@ export function mountCoworkApp(root: HTMLElement): void {
   };
 
   dom.sendButton.addEventListener("click", () => {
+    // `/remote` (and `/remote off`) are LOCAL composer commands: open the remote-control panel
+    // instead of dispatching a prompt. The panel is the desktop half of the remote feature
+    // (agent-harness-plan.md Task 2.4). Only intercept the exact command, never real prompts.
+    const composerText = textFromComposer(dom.composerInput).trim();
+    if (composerText === "/remote" || composerText.toLowerCase().startsWith("/remote ")) {
+      if (state.client !== null) {
+        setComposerText(dom.composerInput, "");
+        saveComposerDraft(state, dom);
+        openRemotePanel(state.client);
+        renderState(dom, state, handlers);
+      }
+      return;
+    }
     void sendPrompt(state, dom, readiness, handlers).catch((error) => {
       const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
       if (!preflight.canSend) {

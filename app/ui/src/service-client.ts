@@ -49,6 +49,31 @@ export type {
  */
 export type ServiceHealth = HealthData;
 
+/** Secret-free paired-device view mirrored from `/v1/remote` (no token material). */
+export interface RemoteDeviceView {
+  readonly deviceId: string;
+  readonly name: string;
+  readonly pairedAtIso: string;
+  readonly lastSeenAtIso: string;
+}
+
+/** Remote-control status the `/remote` panel renders. */
+export interface RemoteStatus {
+  readonly enabled: boolean;
+  readonly url: string | null;
+  readonly lanUrls: readonly string[];
+  readonly devices: readonly RemoteDeviceView[];
+  readonly activeCode: boolean;
+}
+
+/** A freshly issued one-time pairing code (+ optional scannable QR). */
+export interface RemotePairingCode {
+  readonly code: string;
+  readonly expiresAtMs: number;
+  readonly qrSvg: string | null;
+  readonly pairingUrl: string | null;
+}
+
 /** Non-secret rejection reasons mirrored from the service (CGHC-008). */
 export type WorkspaceRejectReason =
   | "not_absolute"
@@ -430,6 +455,12 @@ export interface ServiceClient {
   sendSessionMessage(sessionId: string, text: string): Promise<SendSessionMessageResult>;
   /** Request cancellation of the in-flight run. */
   cancelSession(sessionId: string): Promise<void>;
+  /** Read remote-control status (gateway URL, LAN URLs, paired devices). */
+  remoteStatus(): Promise<RemoteStatus>;
+  /** Issue a one-time pairing code (+ QR SVG when the gateway is reachable). */
+  remoteIssuePairingCode(): Promise<RemotePairingCode>;
+  /** Revoke every paired device (the `/remote off` teardown). */
+  remoteRevokeAll(): Promise<void>;
   /** List persisted conversations (optional local search query). */
   listConversations(query?: string): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
@@ -757,6 +788,13 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         `/v1/session/${encodeURIComponent(sessionId)}/cancel`,
         { method: "POST", body: "{}" },
       );
+    },
+
+    remoteStatus: () => call<RemoteStatus>("/v1/remote/status"),
+    remoteIssuePairingCode: () =>
+      call<RemotePairingCode>("/v1/remote/pairing-code", { method: "POST", body: "{}" }),
+    remoteRevokeAll: async () => {
+      await call<{ ok: true }>("/v1/remote/revoke-all", { method: "POST", body: "{}" });
     },
 
     listConversations: async (query) => {

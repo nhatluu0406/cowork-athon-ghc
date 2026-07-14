@@ -181,6 +181,39 @@ test("flag ON: pair a device and read conversations through the gateway; stop() 
     assert.equal(lateBody.data.decision, "deny");
     assert.equal(live.deps.permissionGate.isAllowed("perm-remote-1"), false);
 
+    // --- Desktop /v1/remote surface shares the gateway's pairing registry (Task 2.4). ---
+    const statusRes = await fetch(`${live.running.baseUrl}/v1/remote/status`, {
+      headers: { authorization: `Bearer ${live.running.clientToken}` },
+    });
+    assert.equal(statusRes.status, 200);
+    const statusBody = (await statusRes.json()) as {
+      data: { enabled: boolean; url: string | null; devices: readonly unknown[] };
+    };
+    assert.equal(statusBody.data.enabled, true);
+    assert.equal(statusBody.data.url, remote.url);
+    // The device paired earlier through the gateway is visible to the desktop surface.
+    assert.equal(statusBody.data.devices.length, 1);
+
+    // A code issued via /v1/remote pairs a NEW phone against the gateway (one registry).
+    const codeRes = await fetch(`${live.running.baseUrl}/v1/remote/pairing-code`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${live.running.clientToken}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    const codeBody = (await codeRes.json()) as { data: { code: string } };
+    const secondPair = await fetch(`${remote.url}/pair`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code: codeBody.data.code, deviceName: "second-phone" }),
+    });
+    assert.equal(secondPair.status, 200);
+
+    // The desktop /v1/remote route is refused for the DEVICE token (desktop-only surface).
+    const deviceHitsRemote = await fetch(`${remote.url}/api/remote/status`, {
+      headers: { authorization: `Bearer ${pairBody.data.token}` },
+    });
+    assert.equal(deviceHitsRemote.status, 404);
+
     // --- Send-prompt from the phone reaches the real child (agent-harness-plan Task 1.2). ---
     const meta = await live.deps.sessionService.create({ workspaceId: WS, title: "Phone turn" });
     const promptRes = await fetch(

@@ -318,6 +318,7 @@ export async function createCoworkService(
       },
     }),
     ...(ms365Router !== undefined ? [ms365Router] : []),
+    ...(options.extraRouters ?? []),
   ];
 
   const deps: CoworkServiceDeps = {
