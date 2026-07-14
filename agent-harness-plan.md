@@ -301,6 +301,18 @@ AgentDefinition contract, loop runner với guardrails, fan-out orchestrator (D1
   injection (LLM trả field lạ/permission preset nới rộng → bị từ chối).
 - **Dependencies**: 4.1, 5.1 (cần agent catalog để chọn agent). **Scope**: M.
 
+#### Task 4.4: Slash commands cho custom prompts và skills
+- **Mô tả**: Rà soát khả năng hỗ trợ slash commands (lệnh `/`) để kích hoạt custom prompts hoặc gọi trực tiếp các skills từ ô nhập liệu (composer). Thiết kế hạ tầng đăng ký (registry) cho các slash commands tương lai thay vì xử lý thô (hardcoded).
+- **Hiện trạng kiểm tra**:
+  - Hiện tại, lệnh `/remote` và `/remote off` được xử lý cứng ở tầng giao diện tại [app-shell.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/app/ui/src/app-shell.ts#L2057).
+  - Chưa có cơ chế đăng ký động hoặc ánh xạ các slash commands khác tới danh sách Skills (được định nghĩa trong [skill-registry.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/extensions/skill-registry.ts)).
+- **Thiết kế tích hợp (Registry & Quy hoạch trong tương lai)**:
+  - **Nơi thêm slash commands**: Cần tạo một module quản lý lệnh mới tại `app/ui/src/commands/` hoặc `service/src/commands/`.
+  - **Đăng ký (Registry)**: Khởi tạo một `CommandRegistry` để quản lý các cặp `[commandName, CommandHandler]`. Bộ gõ composer trong `app-shell.ts` sẽ phân tích cú pháp (parse) tin nhắn bắt đầu bằng `/`, truy vấn Registry này để gọi trình xử lý tương ứng (ví dụ: chuyển thành prompt đặc biệt gửi tới Agent hoặc gọi trực tiếp Skill qua `SkillRegistry.exercise`).
+- **Acceptance**: Tài liệu hướng dẫn thiết kế được tích hợp vào kế hoạch; bổ sung cấu trúc registry mẫu và cơ chế phân phối lệnh sạch; kiểm thử biên cho cú pháp lệnh không hợp lệ.
+- **Dependencies**: 4.1. **Scope**: S.
+
+
 ### Phase 5 — Built-in agents + Fan-out (D1)
 
 #### Task 5.1: AgentDefinition catalog
