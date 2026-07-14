@@ -42,6 +42,14 @@ import type { CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createWorkspaceGuard, grantWorkspace } from "../workspace/index.js";
 import { createPermissionBridge } from "../runtime/permission-bridge.js";
 import { normalizeOpencodeFramePaths } from "../runtime/opencode-frame-paths.js";
+import {
+  createPairingRegistry,
+  isRemoteEnabled,
+  lanGatewayUrls,
+  resolveRemoteBindHost,
+  startRemoteGateway,
+  type RemoteGateway,
+} from "../remote-gateway/index.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -77,6 +85,13 @@ export interface LiveCoworkServiceOptions {
    * (FIX-6). Called after the child is up and before the socket opens.
    */
   readonly seedScrubber?: (scrubber: SecretScrubber, deps: CoworkServiceDeps) => void | Promise<void>;
+  /**
+   * Env seam for the flag-gated remote gateway (default `process.env`). Unset/off keeps the
+   * composition byte-for-byte unchanged (agent-harness-plan.md remote MVP).
+   */
+  readonly env?: Record<string, string | undefined>;
+  /** Secret-free info sink for remote-gateway startup lines (default: stdout). */
+  readonly remoteLog?: (line: string) => void;
 }
 
 export interface LiveCoworkService {
@@ -84,6 +99,8 @@ export interface LiveCoworkService {
   readonly deps: CoworkServiceDeps;
   readonly supervisor: LiveRuntimeSupervisor;
   readonly identity: RuntimeProcessIdentity;
+  /** The flag-gated remote gateway, present only when `CGHC_REMOTE_ENABLED` is on. */
+  readonly remote?: RemoteGateway;
   /** Stop the loopback socket THEN the supervised child (ONE owner). Idempotent-friendly. */
   stop(): Promise<void>;
 }
@@ -154,23 +171,66 @@ export async function startLiveCoworkService(
     }
     const running = await composed.start();
     pump.start();
+
+    // Flag-gated remote gateway (agent-harness-plan.md remote MVP): started AFTER the main
+    // loopback socket so it proxies a live endpoint. A gateway failure must never take the
+    // product down — remote is an optional observer, so it degrades to "not available".
+    const env = options.env ?? process.env;
+    const remoteLog =
+      options.remoteLog ?? ((line: string) => process.stdout.write(`${line}\n`));
+    let remote: RemoteGateway | undefined;
+    if (isRemoteEnabled(env)) {
+      try {
+        const remotePort = Number.parseInt(env["CGHC_REMOTE_PORT"] ?? "", 10);
+        remote = await startRemoteGateway({
+          mainBaseUrl: running.baseUrl,
+          mainClientToken: running.clientToken,
+          pairing: createPairingRegistry(),
+          host: resolveRemoteBindHost(env),
+          ...(Number.isFinite(remotePort) && remotePort > 0 ? { port: remotePort } : {}),
+          log: remoteLog,
+        });
+        const issued = remote.issuePairingCode();
+        // Deliberate user-facing display (the MVP `/remote` surface), not a log leak: the
+        // pairing code is one-time and expires in 2 minutes; the device token never prints.
+        remoteLog(`[cowork-remote] gateway san sang: ${remote.url}`);
+        if (remote.host === "0.0.0.0") {
+          for (const url of lanGatewayUrls(remote.port)) {
+            remoteLog(`[cowork-remote] tu dien thoai (cung Wi-Fi): ${url}`);
+          }
+        }
+        remoteLog(`[cowork-remote] ma pairing (het han 2 phut, dung 1 lan): ${issued.code}`);
+      } catch (err) {
+        remote = undefined;
+        remoteLog(
+          `[cowork-remote] khong khoi dong duoc gateway: ${err instanceof Error ? err.message : "unknown"}`,
+        );
+      }
+    }
+
     return {
       running,
       deps: composed.deps,
       supervisor,
       identity,
-      // Ordered teardown (ONE owner): stop the socket (no new requests) → stop the pump (close
-      // the `/event` consumer) → stop the child. The pump reads FROM the child, so it must be
-      // torn down before the child is killed. Each step is protected so a later step always runs.
+      ...(remote !== undefined ? { remote } : {}),
+      // Ordered teardown (ONE owner): stop the remote gateway (it depends on the socket) →
+      // stop the socket (no new requests) → stop the pump (close the `/event` consumer) →
+      // stop the child. The pump reads FROM the child, so it must be torn down before the
+      // child is killed. Each step is protected so a later step always runs.
       stop: async (): Promise<void> => {
         try {
-          await running.service.stop();
+          await remote?.stop().catch(() => undefined);
         } finally {
           try {
-            await pump.stop();
+            await running.service.stop();
           } finally {
-            permissionBridge.reset();
-            await supervisor.stop();
+            try {
+              await pump.stop();
+            } finally {
+              permissionBridge.reset();
+              await supervisor.stop();
+            }
           }
         }
       },
