@@ -6,11 +6,8 @@ straight from File Explorer — you do **not** need to open a terminal, `cd` any
 edit the files, or run as Administrator.
 
 Each script is a thin entry point that calls the tested Node backend
-`tools/app/cli.mjs` where needed — the **app lifecycle CLI** (distinct from the
-loop-engineer controller). Complex logic lives there, not in the batch file. The CLI
-reuses the loop-engineer supervision (pid identity), reaper (identity-gated stop), and
-cleanup manifest allowlist, so `stop`, `clean`, and `status` agree on what "running"
-means.
+`tools/app/cli.mjs`. Supervision (pid identity), reaper (identity-gated stop), and
+cleanup manifest allowlist live under `tools/app/`.
 
 > Prerequisite: **Node.js LTS** on PATH (`node`, `npm`). Install from https://nodejs.org.
 > If Node is missing, every script stops with a clear message and exit code 9.
@@ -28,6 +25,8 @@ init → build → start → stop → clean
 | Run packaged app | `scripts\start.bat` | Launch `dist-app\win-unpacked\Cowork GHC.exe` |
 | Stop app | `scripts\stop.bat` | Graceful-then-force stop of tracked Cowork processes |
 | Clean generated data | `scripts\clean.bat` | Remove allowlisted build/cache/runtime temp only |
+| Demo reset | `scripts\demo-reset.bat` | Reset demo-safe local state (keeps keyring) |
+| Fast verify | `scripts\verify-fast.bat` | Typecheck + focused tests + renderer build |
 
 ## npm build commands (not the same thing)
 
@@ -141,11 +140,10 @@ scripts\stop.bat
   framework caches (`.turbo`, `.vite`, `.next`), `coverage`, `test-results`,
   `src-tauri/target`, downloaded tools (`.tools`, `.cache`), and runtime temp
   (`.runtime/pids|logs|temp|state`).
-- **Never deletes:** `.git/`, source code, `docs/`, `.agent-workflow/`, `.claude/`,
-  `.agents/`, `CLAUDE.md`, `AGENTS.md`, `tools/`, `scripts/`, `.loop-engineer/state`,
-  `.loop-engineer/checkpoints`, `.loop-engineer/evidence`, `.loop-engineer/reports`,
-  the reference source under `.loop-engineer/source`, your **credentials**, your
-  **workspace**, or the packaged output under `dist-app/` (not in the allowlist).
+- **Never deletes:** `.git/`, source code, `docs/`, `.claude/`, `.agents/`, `CLAUDE.md`,
+  `AGENTS.md`, `tools/`, `scripts/`, your **credentials** (Windows keyring), your
+  **workspace**, conversation history under the packaged profile, or packaged output under
+  `dist-app/` (not in the allowlist).
 - Refuses to run if the project root cannot be determined, if a target would escape the
   project (path traversal), or if Cowork GHC appears to be running (run `stop.bat` first).
 
@@ -186,9 +184,8 @@ lưu). Lệnh này chỉ *lưu* khóa; nó không gọi mạng và không kiểm
 
 ## Resetting user application data
 
-`clean.bat` never removes sessions, history, or credentials. Resetting user application
-data is a separate, explicit action (a future in-app reset / dedicated option), not a
-side effect of `clean.bat`.
+`clean.bat` never removes sessions, history, or credentials. Use `demo-reset.bat` for an
+explicit demo-safe reset (runtime temp + packaged profile folder; keyring preserved).
 
 ## Exit codes
 

@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-12"
+updated_at: "2026-07-13"
 ---
 
 # System overview hiện tại
@@ -36,13 +36,17 @@ plaintext. Khi runtime cần key, key được inject vào child process qua env
 
 ## Boundary provider/model
 
-Provider/model là cấu hình thay thế được. DeepSeek là endpoint đầu tiên đã verify, không phải ràng buộc domain.
-Custom base URL đi qua policy kiểm soát SSRF ở service.
+Provider/model là cấu hình thay thế được qua **Multi-Provider Profiles Phase 1** (application layer, độc lập D4 Gateway):
 
-**Readiness model** (`provider-readiness.ts` UI + `assessProviderReadiness` service): phân tách local service,
-workspace, provider configuration, credential presence, local URL validity, connectivity test result, và runtime phase.
-`assessSendPreflight` / `assertCreatePrerequisites` chặn tạo runtime turn khi thiếu prerequisite; không thay thế
-connectivity probe cho API key/model invalid sau request.
+- `ProviderProfileStore` — CRUD profile, active profile, migration từ cấu hình legacy
+- `credentialAccountForProfile` — keyring namespace `profile:{id}`
+- `ProviderConnectionTester` — test connection theo profile id (kết quả tách biệt)
+- `RuntimeProviderConfig` + `ProfileRuntimeBridge` — map profile active → OpenCode/custom adapter không restart
+- Conversation snapshot `providerSnapshot` ghi trên conversation mới; conversation cũ fallback deterministic
+
+DeepSeek preset và custom OpenAI-compatible dùng adapter `custom-openai-compat` ở runtime boundary; UI không expose technical adapter id.
+
+**Readiness model** (`provider-readiness.ts` UI + `assessProviderReadiness` service): ưu tiên active profile khi có; phân tách local service, workspace, credential, URL validity, connectivity test, runtime phase.
 
 ## Boundary UI shell / product surfaces
 
@@ -53,7 +57,7 @@ giữ cột sidebar trống (`shell-frame--no-sidebar`).
 Shell này là client của dữ liệu thật từ bridge/service; nó không tạo plan, file event, provider status hoặc
 integration data giả để làm đẹp layout.
 
-Settings là một surface ứng dụng trong cùng V3 frame, không phải backdrop modal. Topbar Settings, provider control, provider status và readiness CTA mở surface này; Back/Close quay về surface trước đó. Surface có hai panel `Nhà cung cấp` và `Chung`, reuse toàn bộ behavior production hiện có cho provider/model/Base URL/keyring/test connection/general settings và không triển khai Multi-Provider Profiles.
+Settings là một surface ứng dụng trong cùng V3 frame với navigation `Nhà cung cấp` (danh sách profile, add/edit/delete, test connection, set active) và `Chung`.
 
 Top-level product surfaces được khai báo tập trung trong `app/ui/src/surface-registry.ts`:
 
@@ -159,5 +163,5 @@ Giới hạn POC: **một runtime execution active** tại một thời điểm.
 
 ## Không lặp lại tài liệu cũ
 
-Các ADR và báo cáo trong `.loop-engineer/` vẫn là provenance. Khi cần làm việc hằng ngày, đọc tài liệu ngắn trong
-`docs/product/`, `docs/quality/`, và file này trước.
+Các ADR trong `docs/architecture/decisions/` và evidence trong `reports/` là provenance. Khi cần làm việc hằng ngày, đọc tài liệu canonical trong
+`docs/README.md`, `docs/product/`, `docs/quality/`, và file này trước.

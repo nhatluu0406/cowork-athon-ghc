@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "mode": "live",
+  "at": "2026-07-13T07:43:28.392Z",
+  "journeys": {
+    "A": "PASS",
+    "B": "PASS",
+    "L": "PASS"
+  },
+  "artifactRoot": "C:\\Users\\NHATLU~1\\AppData\\Local\\Temp\\cghc-freview-artifacts-Z18FJk",
+  "gitHead": "6ea630669c68b78452bf084ec75b3f0f884923a0"
+}

@@ -90,6 +90,37 @@ export interface WorkspaceListResult {
   readonly limit: number;
 }
 
+export type WorkspaceFileContentKind =
+  | "text"
+  | "image"
+  | "pdf"
+  | "docx"
+  | "spreadsheet"
+  | "missing"
+  | "unsupported";
+
+export interface WorkspaceSpreadsheetSheetView {
+  readonly name: string;
+  readonly rows: readonly (readonly string[])[];
+}
+
+export interface WorkspaceFileContentView {
+  readonly relativePath: string;
+  readonly kind: WorkspaceFileContentKind;
+  readonly editable: boolean;
+  readonly mimeType?: string;
+  readonly content?: string;
+  readonly html?: string;
+  readonly dataBase64?: string;
+  readonly sheets?: readonly WorkspaceSpreadsheetSheetView[];
+  readonly truncated: boolean;
+  readonly sizeBytes: number;
+}
+
+export type WorkspaceFileWriteInput =
+  | { readonly kind: "text"; readonly content: string }
+  | { readonly kind: "spreadsheet"; readonly sheets: readonly WorkspaceSpreadsheetSheetView[] };
+
 /** UI theme preference mirrored from the service (CGHC-022). */
 export type ThemePreference = "system" | "light" | "dark";
 
@@ -112,12 +143,42 @@ export interface ProviderSettingsView {
   readonly envVar?: string;
 }
 
+export type ProviderProfileType = "deepseek" | "custom-openai-compat";
+
+export interface ProviderProfileView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly baseUrl: string;
+  readonly modelId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly credentialConfigured: boolean;
+  readonly credentialAccount?: string;
+  readonly presetId?: string;
+  readonly isActive: boolean;
+}
+
+export interface ProviderProfileRecord {
+  readonly id: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly baseUrl: string;
+  readonly modelId: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly credentialConfigured: boolean;
+  readonly presetId?: string;
+}
+
 /** The non-secret settings projection the service returns to the renderer (CGHC-022 SD1). */
 export interface SettingsView {
   readonly general: GeneralSettingsView;
   readonly providers: readonly ProviderSettingsView[];
   readonly defaultModel: ModelRef | null;
   readonly activeWorkspace: { readonly rootPath: string } | null;
+  readonly providerProfiles?: readonly ProviderProfileView[];
+  readonly activeProfileId?: string | null;
 }
 
 /** Result of dispatching a prompt to a live session. */
@@ -238,8 +299,17 @@ export interface PersistedActivitySnapshot {
 export interface ConversationRecord extends ConversationSummary {
   readonly messages: readonly ConversationMessage[];
   readonly model?: ModelRef;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
   readonly activity?: PersistedActivitySnapshot;
   readonly runtimeTurns?: readonly RuntimeTurnRecord[];
+}
+
+export interface ConversationProviderSnapshot {
+  readonly profileId: string;
+  readonly displayName: string;
+  readonly providerType: ProviderProfileType;
+  readonly modelId: string;
+  readonly baseUrl: string;
 }
 
 export interface RuntimeTurnRecord {
@@ -255,6 +325,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
 export interface ContinueSessionResult {
@@ -317,6 +388,26 @@ export interface ServiceClient {
   setProviderEnvVar(providerId: string, envVar: string): Promise<SettingsView>;
   /** Bounded provider connectivity test (resolves credential from keyring). */
   testProviderConnection(providerId: string): Promise<TestResult>;
+  listProviderProfiles(): Promise<{
+    readonly profiles: readonly ProviderProfileView[];
+    readonly activeProfileId: string | null;
+  }>;
+  createProviderProfile(input: {
+    readonly displayName: string;
+    readonly providerType: ProviderProfileType;
+    readonly baseUrl?: string;
+    readonly modelId?: string;
+    readonly presetId?: string;
+  }): Promise<ProviderProfileRecord>;
+  updateProviderProfile(
+    profileId: string,
+    input: { readonly displayName?: string; readonly baseUrl?: string; readonly modelId?: string },
+  ): Promise<ProviderProfileRecord>;
+  deleteProviderProfile(profileId: string): Promise<void>;
+  setActiveProviderProfile(profileId: string): Promise<SettingsView>;
+  storeProfileCredential(profileId: string, secret: string): Promise<SettingsView>;
+  removeProfileCredential(profileId: string): Promise<SettingsView>;
+  testProfileConnection(profileId: string): Promise<TestResult>;
   /** Patch general settings; returns the updated settings view. */
   updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
   /**
@@ -374,6 +465,24 @@ export interface ServiceClient {
   setSkillEnabled(id: string, enabled: boolean): Promise<SkillView>;
   enabledSkillSnapshots(): Promise<readonly EnabledSkillSnapshot[]>;
   previewSkill(id: string): Promise<{ readonly content: string; readonly truncated: boolean }>;
+  readSkillContent(id: string): Promise<string>;
+  createSkill(input: {
+    readonly id?: string;
+    readonly name: string;
+    readonly description: string;
+    readonly version: string;
+    readonly body: string;
+  }): Promise<SkillView>;
+  updateSkill(
+    id: string,
+    input: {
+      readonly name: string;
+      readonly description: string;
+      readonly version: string;
+      readonly body: string;
+    },
+  ): Promise<SkillView>;
+  deleteSkill(id: string): Promise<void>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -388,6 +497,11 @@ export interface ServiceClient {
     readonly truncated: boolean;
     readonly sizeBytes: number;
   }>;
+  readWorkspaceFileContent(relativePath: string): Promise<WorkspaceFileContentView>;
+  writeWorkspaceFileContent(
+    relativePath: string,
+    input: WorkspaceFileWriteInput,
+  ): Promise<{ readonly relativePath: string; readonly sizeBytes: number }>;
   captureFileReviewSnapshot(relativePath: string): Promise<import("@cowork-ghc/service/file-review").FileSnapshotCapture>;
   buildFileReview(input: Record<string, unknown>): Promise<import("@cowork-ghc/service/file-review").FileReviewArtifact>;
   /**
@@ -508,6 +622,73 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         method: "POST",
         body: JSON.stringify({ providerId }),
       })).result,
+    listProviderProfiles: async () =>
+      call<{ profiles: readonly ProviderProfileView[]; activeProfileId: string | null }>(
+        "/v1/provider-profiles",
+      ),
+    createProviderProfile: async (input) =>
+      (await call<{ profile: ProviderProfileRecord }>("/v1/provider-profiles", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })).profile,
+    updateProviderProfile: async (profileId, input) =>
+      (await call<{ profile: ProviderProfileRecord }>(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      })).profile,
+    deleteProviderProfile: async (profileId) => {
+      await call<{ deleted: boolean }>(`/v1/provider-profiles/${encodeURIComponent(profileId)}`, {
+        method: "DELETE",
+        body: "{}",
+      });
+    },
+    setActiveProviderProfile: async (profileId) => {
+      await call<{ profile: ProviderProfileRecord; activeProfileId: string }>(
+        "/v1/provider-profiles/active",
+        {
+          method: "PUT",
+          body: JSON.stringify({ profileId }),
+        },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    storeProfileCredential: async (profileId, secret) => {
+      const account = `profile:${profileId}`;
+      const { ref } = await call<{ ref: CredentialRef }>("/v1/credentials", {
+        method: "POST",
+        body: JSON.stringify({ providerId: profileId, secret, account }),
+      });
+      await call<{ profile: ProviderProfileRecord }>(
+        `/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ ref }),
+        },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    removeProfileCredential: async (profileId) => {
+      const settings = await call<{ settings: SettingsView }>("/v1/settings").then((r) => r.settings);
+      const row = settings.providerProfiles?.find((p) => p.id === profileId);
+      if (row?.credentialConfigured && row.credentialAccount !== undefined) {
+        await call<{ removed: boolean }>("/v1/credentials", {
+          method: "DELETE",
+          body: JSON.stringify({ ref: { store: "os", account: row.credentialAccount } }),
+        });
+      }
+      await call<{ profile: ProviderProfileRecord }>(
+        `/v1/provider-profiles/${encodeURIComponent(profileId)}/credential`,
+        { method: "DELETE" },
+      );
+      return (await call<{ settings: SettingsView }>("/v1/settings")).settings;
+    },
+    testProfileConnection: async (profileId) =>
+      (
+        await call<{ result: TestResult }>(
+          `/v1/provider-profiles/${encodeURIComponent(profileId)}/test-connection`,
+          { method: "POST", body: JSON.stringify({}) },
+        )
+      ).result,
     updateGeneral: async (patch) =>
       (
         await call<{ settings: SettingsView }>("/v1/settings/general", {
@@ -655,6 +836,21 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       (await call<{ preview: { readonly content: string; readonly truncated: boolean } }>(
         `/v1/skills/${encodeURIComponent(id)}/preview`,
       )).preview,
+    readSkillContent: async (id) =>
+      (await call<{ content: string }>(`/v1/skills/${encodeURIComponent(id)}/content`)).content,
+    createSkill: async (input) =>
+      (await call<{ skill: SkillView }>("/v1/skills", {
+        method: "POST",
+        body: JSON.stringify(input),
+      })).skill,
+    updateSkill: async (id, input) =>
+      (await call<{ skill: SkillView }>(`/v1/skills/${encodeURIComponent(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(input),
+      })).skill,
+    deleteSkill: async (id) => {
+      await call<{ ok: boolean }>(`/v1/skills/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
 
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {
@@ -691,6 +887,19 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
           };
         }>(`/v1/workspace/file-preview?path=${encodeURIComponent(relativePath)}`)
       ).preview,
+
+    readWorkspaceFileContent: async (relativePath) =>
+      (await call<{ file: WorkspaceFileContentView }>(
+        `/v1/workspace/file-content?path=${encodeURIComponent(relativePath)}`,
+      )).file,
+
+    writeWorkspaceFileContent: async (relativePath, input) =>
+      (
+        await call<{ result: { relativePath: string; sizeBytes: number } }>(
+          "/v1/workspace/file-content",
+          { method: "PUT", body: JSON.stringify({ relativePath, ...input }) },
+        )
+      ).result,
 
     captureFileReviewSnapshot: async (relativePath) =>
       (

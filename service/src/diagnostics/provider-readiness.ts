@@ -4,6 +4,7 @@
 
 import type { ModelRef } from "@cowork-ghc/contracts";
 import type { SettingsStore } from "./settings-store.js";
+import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 
 export type ProviderReadinessBlockReason =
   | "provider_missing"
@@ -36,13 +37,40 @@ function isBaseUrlLocallyValid(baseUrl: string | undefined): boolean {
 /** Assess whether a runtime session may be created for the given model. */
 export function assessProviderReadiness(
   store: Pick<SettingsStore, "defaultModel" | "listProviderSettings">,
+  profiles?: Pick<ProviderProfileStore, "activeProfile">,
   model?: ModelRef,
 ): ProviderReadinessResult {
+  const activeProfile = profiles?.activeProfile();
+  if (activeProfile !== undefined) {
+    if (activeProfile.modelId.trim().length === 0) {
+      return {
+        ok: false,
+        reason: "model_missing",
+        message: "Mô hình không được để trống.",
+      };
+    }
+    if (!isBaseUrlLocallyValid(activeProfile.baseUrl)) {
+      return {
+        ok: false,
+        reason: "base_url_invalid",
+        message: "Base URL không hợp lệ.",
+      };
+    }
+    if (activeProfile.credentialRef === undefined) {
+      return {
+        ok: false,
+        reason: "credential_missing",
+        message: "Cần cấu hình khoá API trước khi bắt đầu.",
+      };
+    }
+    return { ok: true };
+  }
+
   const resolved = model ?? store.defaultModel();
   if (resolved === undefined) {
     return {
       ok: false,
-      reason: "model_missing",
+      reason: "provider_missing",
       message: "Chọn nhà cung cấp và mô hình trước khi bắt đầu.",
     };
   }
