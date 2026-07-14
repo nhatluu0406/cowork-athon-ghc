@@ -87,6 +87,70 @@ Chi tiết: `scripts/README.md`. Tài liệu: `docs/README.md`.
 - Key được inject vào tiến trình con qua biến môi trường tại lúc spawn; **không** ghi `auth.json`.
 - **Không commit** `.env`/secret (xem `.gitignore`).
 
+## Điều khiển từ điện thoại (Remote — tính năng tùy chọn)
+
+Cowork GHC có một **cổng remote** để theo dõi và điều khiển từ điện thoại/trình duyệt khác, tương tự
+Remote Control của Claude Code. **Tắt mặc định**; bật bằng biến môi trường. Chi tiết kiến trúc:
+[ADR 0010](docs/architecture/decisions/0010-remote-gateway-and-pwa-surface.md) và
+[`agent-harness-plan.md`](agent-harness-plan.md).
+
+Một feature, **3 channel** (dùng chung một pairing registry + một permission gate):
+
+| Channel | Kiểu | Bật bằng |
+|---|---|---|
+| `lan-qr` | PWA qua LAN, ghép nối bằng QR/mã một lần | `CGHC_REMOTE_ENABLED=1` + `CGHC_REMOTE_LAN=1` |
+| `tunnel` | PWA qua Tailscale/VPN (gateway giữ loopback) | `CGHC_REMOTE_ENABLED=1` (không đặt `CGHC_REMOTE_LAN`) |
+| `discord` | Bot Discord: notify + `deny` + gửi prompt | `CGHC_DISCORD_ENABLED=1` + token/channel/allowlist |
+
+### Bật gateway PWA (lan-qr / tunnel)
+
+```powershell
+$env:CGHC_REMOTE_ENABLED = "1"     # bật feature remote
+$env:CGHC_REMOTE_LAN     = "1"     # tùy chọn: bind LAN cho cùng Wi-Fi (chưa TLS — chỉ demo)
+$env:CGHC_REMOTE_PORT    = "7777"  # tùy chọn: cố định port (mặc định ephemeral)
+scripts\start.bat
+```
+
+Trong app, gõ **`/remote`** ở ô soạn để mở bảng điều khiển: xem địa chỉ mở trên điện thoại, tạo
+**mã ghép nối một lần + QR**, danh sách thiết bị đã ghép, và **thu hồi tất cả** (`/remote off`).
+
+Trên điện thoại (cùng Wi-Fi hoặc qua VPN): mở URL gateway → quét QR (tự điền mã) hoặc nhập mã →
+đặt tên thiết bị → **Kết nối**. Sau đó điện thoại có thể:
+
+- xem danh sách hội thoại, transcript, và **stream trực tiếp** của phiên đang chạy;
+- **Cho phép 1 lần / Từ chối** khi agent xin quyền (Deny chặn thật ở execution boundary);
+- **gửi prompt** tới phiên đang chạy.
+
+### Bật channel Discord (notify + deny + prompt)
+
+```powershell
+$env:CGHC_DISCORD_ENABLED         = "1"
+$env:CGHC_DISCORD_BOT_TOKEN       = "<bot token>"      # chỉ nằm trong process, không bao giờ log
+$env:CGHC_DISCORD_CHANNEL_ID      = "<channel id>"     # 1 channel/thread trong guild riêng của bạn
+$env:CGHC_DISCORD_ALLOWED_USER_IDS = "<id1>,<id2>"     # allowlist — ngoài danh sách bị bỏ qua
+scripts\start.bat
+```
+
+Bot chỉ kết nối **outbound** (không mở cổng vào máy). Nó đẩy thông báo **đã lược bỏ nội dung nhạy
+cảm** khi agent xin quyền / phiên kết thúc, và nhận lệnh từ user trong allowlist:
+
+- `deny <requestId>` — từ chối một yêu cầu quyền (chặn thật ở gate);
+- `pending` — liệt kê yêu cầu đang chờ;
+- văn bản thường — gửi làm prompt cho phiên gần nhất;
+- `approve …` — **bị từ chối theo thiết kế**: phê duyệt hành động ghi tệp bắt buộc từ PWA/desktop
+  (nếu tài khoản Discord bị chiếm, kẻ tấn công chỉ chặn được việc, không cho phép được việc).
+
+Bot **không bao giờ** gửi nội dung tệp/diff/secret lên Discord — chỉ tóm tắt ngắn + deep link mở app.
+
+### Giới hạn của Remote (MVP — đọc kỹ)
+
+- `CGHC_REMOTE_LAN` **chưa có TLS** → chỉ dùng demo cùng Wi-Fi; kênh `tunnel` (Tailscale/VPN) an
+  toàn hơn cho dùng thật. TLS + cert pinning cho `lan-qr` là hạng mục hardening kế tiếp.
+- Device token **lưu trong bộ nhớ theo phiên chạy** → khởi động lại app thì điện thoại ghép nối lại.
+- Việc runtime OpenCode live tiêu thụ lệnh qua Discord **chưa được kiểm chứng end-to-end** với bot
+  thật (unit test dùng transport giả). Chưa có xác minh packaged cho toàn bộ remote.
+- Chưa có Web Push (thông báo khi rời app do Discord đảm nhiệm).
+
 ## Giới hạn hiện tại (known limitations)
 
 Xem [docs/quality/known-limitations.md](docs/quality/known-limitations.md) và
