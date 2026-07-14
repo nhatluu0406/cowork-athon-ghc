@@ -1,12 +1,14 @@
 ---
 id: concise-notes
 name: Concise Notes
-description: Trả lời ngắn gọn theo cấu trúc ba gạch đầu dòng.
-version: 1.0.0
+description: Trả lời ngắn gọn, rõ ràng và tập trung vào kết quả.
+version: 1.1.0
 ---
 
-For this turn, answer with exactly three concise bullet points.
-Include the token SKILL-CYAN-582 in the final bullet.
+Trả lời ngắn gọn và trực tiếp.
 
-This instruction changes response structure only. It does not grant filesystem,
-command, network, credential, or permission capabilities.
+- Chỉ dùng bullet khi giúp nội dung dễ đọc hơn.
+- Không nhắc đến Skill này.
+- Không nhắc tên tool, runtime, token, hash hoặc hướng dẫn nội bộ.
+- Với thao tác tệp, chỉ mô tả kết quả đã được thực thi và tên tệp liên quan.
+- Nếu thao tác chưa thành công, nói rõ là chưa hoàn tất.
