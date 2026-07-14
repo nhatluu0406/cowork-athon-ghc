@@ -44,11 +44,14 @@ import { createPermissionBridge } from "../runtime/permission-bridge.js";
 import { normalizeOpencodeFramePaths } from "../runtime/opencode-frame-paths.js";
 import {
   createPairingRegistry,
+  createRemoteRouter,
   isRemoteEnabled,
   lanGatewayUrls,
   resolveRemoteBindHost,
   startRemoteGateway,
+  type PairingRegistry,
   type RemoteGateway,
+  type RemoteGatewayInfo,
 } from "../remote-gateway/index.js";
 
 /**
@@ -128,10 +131,34 @@ export async function startLiveCoworkService(
   // out-of-band on `/event` (consumed by the pump below), never in this POST's response.
   const sendPrompt = createOpencodeSendPrompt({ http });
 
+  // Remote feature (flag-gated): ONE pairing registry shared by the desktop `/v1/remote` router
+  // and the phone-facing gateway, plus a mutable holder the desktop reads for gateway coordinates
+  // (filled after the gateway binds below). When the flag is off, no router is added and the
+  // holder stays empty — the baseline composition is unchanged.
+  const env = options.env ?? process.env;
+  const remoteEnabled = isRemoteEnabled(env);
+  const remotePairing: PairingRegistry | undefined = remoteEnabled
+    ? createPairingRegistry()
+    : undefined;
+  let remoteGatewayInfo: RemoteGatewayInfo | null = null;
+  const extraRouters =
+    remotePairing !== undefined
+      ? [
+          createRemoteRouter({
+            pairing: remotePairing,
+            state: {
+              enabled: () => remoteGatewayInfo !== null,
+              gateway: () => remoteGatewayInfo,
+            },
+          }),
+        ]
+      : [];
+
   // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).
   const composed = await createCoworkService({
     ...(options.service ?? {}),
     ...(options.now !== undefined ? { now: options.now } : {}),
+    ...(extraRouters.length > 0 ? { extraRouters } : {}),
     runtimeHealth: supervisor,
     sessionStore,
     runtimeReply,
@@ -175,33 +202,32 @@ export async function startLiveCoworkService(
     // Flag-gated remote gateway (agent-harness-plan.md remote MVP): started AFTER the main
     // loopback socket so it proxies a live endpoint. A gateway failure must never take the
     // product down — remote is an optional observer, so it degrades to "not available".
-    const env = options.env ?? process.env;
     const remoteLog =
       options.remoteLog ?? ((line: string) => process.stdout.write(`${line}\n`));
     let remote: RemoteGateway | undefined;
-    if (isRemoteEnabled(env)) {
+    if (remotePairing !== undefined) {
       try {
         const remotePort = Number.parseInt(env["CGHC_REMOTE_PORT"] ?? "", 10);
         remote = await startRemoteGateway({
           mainBaseUrl: running.baseUrl,
           mainClientToken: running.clientToken,
-          pairing: createPairingRegistry(),
+          pairing: remotePairing,
           host: resolveRemoteBindHost(env),
           ...(Number.isFinite(remotePort) && remotePort > 0 ? { port: remotePort } : {}),
           log: remoteLog,
         });
-        const issued = remote.issuePairingCode();
-        // Deliberate user-facing display (the MVP `/remote` surface), not a log leak: the
-        // pairing code is one-time and expires in 2 minutes; the device token never prints.
+        const lanUrls = remote.host === "0.0.0.0" ? lanGatewayUrls(remote.port) : [];
+        remoteGatewayInfo = { url: remote.url, lanUrls };
+        // The desktop `/remote` panel issues codes + QR via `/v1/remote`; only surface the
+        // reachable URL here (never a pairing code or token in a log line).
         remoteLog(`[cowork-remote] gateway san sang: ${remote.url}`);
-        if (remote.host === "0.0.0.0") {
-          for (const url of lanGatewayUrls(remote.port)) {
-            remoteLog(`[cowork-remote] tu dien thoai (cung Wi-Fi): ${url}`);
-          }
+        for (const url of lanUrls) {
+          remoteLog(`[cowork-remote] tu dien thoai (cung Wi-Fi): ${url}`);
         }
-        remoteLog(`[cowork-remote] ma pairing (het han 2 phut, dung 1 lan): ${issued.code}`);
+        remoteLog(`[cowork-remote] mo /remote trong app de lay ma pairing + QR`);
       } catch (err) {
         remote = undefined;
+        remoteGatewayInfo = null;
         remoteLog(
           `[cowork-remote] khong khoi dong duoc gateway: ${err instanceof Error ? err.message : "unknown"}`,
         );
@@ -220,6 +246,7 @@ export async function startLiveCoworkService(
       // child is killed. Each step is protected so a later step always runs.
       stop: async (): Promise<void> => {
         try {
+          remoteGatewayInfo = null;
           await remote?.stop().catch(() => undefined);
         } finally {
           try {

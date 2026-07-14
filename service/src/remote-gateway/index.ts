@@ -21,3 +21,15 @@ export {
   type RemoteGateway,
   type RemoteGatewayOptions,
 } from "./gateway.js";
+
+export {
+  createRemoteRouter,
+  REMOTE_STATUS_PATH,
+  REMOTE_PAIRING_CODE_PATH,
+  REMOTE_REVOKE_PATH,
+  REMOTE_REVOKE_ALL_PATH,
+  type RemoteRouterOptions,
+  type RemoteControlState,
+  type RemoteGatewayInfo,
+  type RemoteStatusView,
+} from "./remote-router.js";
