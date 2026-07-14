@@ -119,12 +119,18 @@ function resolveProxyTarget(pathname: string): string | undefined {
 }
 
 /**
- * POST allowlist (agent-harness-plan Task 1.3): ONLY the permission decision crosses. The
- * gateway still records no decision itself — the single PermissionGate on the main service
- * resolves it, and enforcement stays at `gate.proceed` on the execution boundary.
+ * POST allowlist (agent-harness-plan Task 1.3 + 1.2 MVP): the permission decision and a plain
+ * text prompt to an existing session. The gateway records/executes nothing itself — the single
+ * PermissionGate resolves decisions, and the session router owns prompt semantics (202
+ * fire-and-forget, honest 409 on a terminal session, 503 when the runtime is not attached).
  */
 function resolvePostProxyTarget(pathname: string): string | undefined {
   if (pathname === "/api/permissions/decision") return "/v1/permission/decision";
+  if (pathname.startsWith("/api/sessions/") && pathname.endsWith("/message")) {
+    const middle = pathname.slice("/api/sessions/".length, -"/message".length);
+    // Exactly one path segment (the session id) between the fixed prefix and suffix.
+    if (middle.length > 0 && !middle.includes("/")) return `/v1/session/${middle}/message`;
+  }
   return undefined;
 }
 

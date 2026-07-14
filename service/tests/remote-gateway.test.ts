@@ -18,9 +18,11 @@ function startFakeMain(): Promise<{
   baseUrl: string;
   seen: string[];
   decisionBodies: string[];
+  messageBodies: string[];
 }> {
   const seen: string[] = [];
   const decisionBodies: string[] = [];
+  const messageBodies: string[] = [];
   const server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url ?? ""} auth=${req.headers.authorization ?? "none"}`);
     if (req.headers.authorization !== `Bearer ${MAIN_TOKEN}`) {
@@ -61,6 +63,16 @@ function startFakeMain(): Promise<{
       );
       return;
     }
+    if (req.method === "POST" && /^\/v1\/session\/[^/]+\/message$/.test(url.pathname)) {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        messageBodies.push(`${url.pathname} ${Buffer.concat(chunks).toString("utf8")}`);
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, data: { accepted: true } }));
+      });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/permission/decision") {
       const chunks: Buffer[] = [];
       req.on("data", (c: Buffer) => chunks.push(c));
@@ -84,7 +96,7 @@ function startFakeMain(): Promise<{
   return new Promise((resolve) => {
     server.listen({ host: "127.0.0.1", port: 0 }, () => {
       const info = server.address() as AddressInfo;
-      resolve({ server, baseUrl: `http://127.0.0.1:${info.port}`, seen, decisionBodies });
+      resolve({ server, baseUrl: `http://127.0.0.1:${info.port}`, seen, decisionBodies, messageBodies });
     });
   });
 }
@@ -282,6 +294,33 @@ test("POST is allowlisted to the decision route only, and unauthenticated POST i
       assert.equal(res.status, 404, `expected 404 for POST ${path}`);
     }
     assert.equal(main.decisionBodies.length, 0);
+  } finally {
+    await gateway.stop();
+    main.server.close();
+  }
+});
+
+test("send prompt to a session proxies through the POST allowlist", async () => {
+  const main = await startFakeMain();
+  const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);
+  try {
+    const token = await pairAndGetToken();
+    const res = await fetch(`${gateway.url}/api/sessions/s-77/message`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ text: "hello from phone" }),
+    });
+    assert.equal(res.status, 202);
+    assert.deepEqual(main.messageBodies, ['/v1/session/s-77/message {"text":"hello from phone"}']);
+
+    // Deep/odd session paths never cross the allowlist.
+    const deep = await fetch(`${gateway.url}/api/sessions/a/b/message`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(deep.status, 404);
+    assert.equal(main.messageBodies.length, 1);
   } finally {
     await gateway.stop();
     main.server.close();
