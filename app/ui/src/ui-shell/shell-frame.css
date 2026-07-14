@@ -194,9 +194,9 @@ textarea,
 /* No position:relative on [data-tooltip] — tooltip is fixed-positioned by JS */
 .shell-tooltip {
   position: fixed;
-  z-index: 80;
+  z-index: 90;
   min-width: 168px;
-  max-width: min(280px, calc(100vw - 24px));
+  max-width: min(260px, calc(100vw - 24px));
   padding: 6px 8px;
   border: 1px solid var(--line-warm);
   border-radius: 6px;
