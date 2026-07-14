@@ -276,9 +276,17 @@ async function assertStructure(call, label) {
       const equalTabs = tabs.length === 2 && Math.abs(tabs[0] - tabs[1]) <= 1;
       const errors = [];
       if (shellRoots !== 1) errors.push('expected exactly one shell-frame');
-      if (activeViews.length !== 1) errors.push('expected exactly one active view, got ' + activeViews.join(','));
+      // Workspace Companion intentionally keeps the Cowork conversation visible beside the
+      // workspace editor, so workspace mode legitimately shows BOTH cowork and workspace views.
+      // Every other mode must show exactly one active view.
+      const workspaceCompanion = !settingsOpen && surface === 'cowork' && workMode === 'workspace';
+      const activeSet = [...activeViews].sort().join(',');
+      if (workspaceCompanion) {
+        if (activeSet !== 'cowork,workspace') errors.push('workspace mode must show cowork + workspace companion views, got ' + activeViews.join(','));
+      } else if (activeViews.length !== 1) {
+        errors.push('expected exactly one active view, got ' + activeViews.join(','));
+      }
       if (!settingsOpen && surface === 'cowork' && workMode === 'cowork' && activeViews[0] !== 'cowork') errors.push('cowork mode must show cowork view only');
-      if (!settingsOpen && surface === 'cowork' && workMode === 'workspace' && activeViews[0] !== 'workspace') errors.push('workspace mode must show workspace view only');
       if (settingsOpen && (sidebarVisible || inspectorVisible)) errors.push('settings surface must not show sidebar or inspector');
       if (!settingsOpen && surface !== 'cowork' && sidebarVisible) errors.push('integration/knowledge surfaces must not show sidebar');
       if (!settingsOpen && surface !== 'cowork' && inspectorVisible) errors.push('integration/knowledge surfaces must not show inspector');

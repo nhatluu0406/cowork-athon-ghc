@@ -239,6 +239,8 @@ textarea,
 .view--workspace,
 .view--knowledge,
 .view--integration,
+.view--microsoft,
+.view--code,
 .view--settings {
   min-width: 0;
   min-height: 0;
@@ -258,6 +260,8 @@ textarea,
 
 .view--knowledge,
 .view--integration,
+.view--microsoft,
+.view--code,
 .view--settings {
   grid-area: main;
 }
