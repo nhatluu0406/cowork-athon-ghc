@@ -20,3 +20,4 @@ export * from "./workspace.js";
 export * from "./session.js";
 export * from "./refs.js";
 export * from "./shell-bridge.js";
+export * from "./dispatch.js";
