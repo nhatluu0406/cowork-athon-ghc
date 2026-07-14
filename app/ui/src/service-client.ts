@@ -156,6 +156,9 @@ export interface ProviderProfileView {
   readonly credentialAccount?: string;
   readonly presetId?: string;
   readonly isActive: boolean;
+  readonly verificationCurrent: boolean;
+  readonly lastVerifiedAt?: string;
+  readonly lastVerifiedOk?: boolean;
 }
 
 export interface ProviderProfileRecord {

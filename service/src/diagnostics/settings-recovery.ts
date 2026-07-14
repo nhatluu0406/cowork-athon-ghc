@@ -135,6 +135,14 @@ function coerceProviderProfile(raw: unknown): PersistedProviderProfile | undefin
   if (typeof raw.createdAt !== "string" || typeof raw.updatedAt !== "string") return undefined;
   const credentialRef = coerceCredentialRef(raw.credentialRef);
   const presetId = typeof raw.presetId === "string" ? raw.presetId : undefined;
+  const credentialRevision =
+    typeof raw.credentialRevision === "number" && Number.isFinite(raw.credentialRevision)
+      ? Math.max(0, Math.floor(raw.credentialRevision))
+      : undefined;
+  const lastVerifiedAt = typeof raw.lastVerifiedAt === "string" ? raw.lastVerifiedAt : undefined;
+  const lastVerifiedOk = typeof raw.lastVerifiedOk === "boolean" ? raw.lastVerifiedOk : undefined;
+  const verifiedTargetFingerprint =
+    typeof raw.verifiedTargetFingerprint === "string" ? raw.verifiedTargetFingerprint : undefined;
   return {
     id: raw.id,
     displayName: raw.displayName,
@@ -146,6 +154,10 @@ function coerceProviderProfile(raw: unknown): PersistedProviderProfile | undefin
     updatedAt: raw.updatedAt,
     ...(credentialRef !== undefined ? { credentialRef } : {}),
     ...(presetId !== undefined ? { presetId } : {}),
+    ...(credentialRevision !== undefined ? { credentialRevision } : {}),
+    ...(lastVerifiedAt !== undefined ? { lastVerifiedAt } : {}),
+    ...(lastVerifiedOk !== undefined ? { lastVerifiedOk } : {}),
+    ...(verifiedTargetFingerprint !== undefined ? { verifiedTargetFingerprint } : {}),
   };
 }
 

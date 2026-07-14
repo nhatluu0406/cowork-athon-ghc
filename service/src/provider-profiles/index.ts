@@ -41,3 +41,7 @@ export {
   PROVIDER_PROFILE_TEST_PATH,
   PROVIDER_PROFILE_CREDENTIAL_PATH,
 } from "./router.js";
+export {
+  computeVerifiedTargetFingerprint,
+  isVerificationCurrent,
+} from "./verification-fingerprint.js";

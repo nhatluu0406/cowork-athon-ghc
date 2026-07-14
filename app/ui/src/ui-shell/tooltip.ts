@@ -15,6 +15,7 @@ export function installShellTooltips(root: HTMLElement): void {
   const show = (target: HTMLElement): void => {
     const text = target.dataset["tooltip"];
     if (text === undefined || text.trim().length === 0 || tooltip === null) return;
+    if (target.hasAttribute("title")) target.removeAttribute("title");
     tooltip.textContent = text;
     tooltip.hidden = false;
     activeTarget = target;
@@ -37,6 +38,7 @@ export function installShellTooltips(root: HTMLElement): void {
   };
 
   root.addEventListener("pointerenter", (event) => {
+    if (document.querySelector(".permission-backdrop:not([hidden])") !== null) return;
     const target = tooltipTarget(event);
     if (target !== null && root.contains(target)) show(target);
   }, true);
@@ -45,6 +47,7 @@ export function installShellTooltips(root: HTMLElement): void {
     if (target !== null) hide(target);
   }, true);
   root.addEventListener("focusin", (event) => {
+    if (document.querySelector(".permission-backdrop:not([hidden])") !== null) return;
     const target = tooltipTarget(event);
     if (target !== null && root.contains(target)) show(target);
   });
@@ -68,20 +71,41 @@ function tooltipTarget(event: Event): HTMLElement | null {
   return event.target instanceof HTMLElement ? event.target.closest<HTMLElement>("[data-tooltip]") : null;
 }
 
-function positionTooltip(target: HTMLElement, tooltip: HTMLElement): void {
+/**
+ * Place the shared tooltip relative to the target, clamped inside the viewport.
+ * Prefers below the control for titlebar/top-edge targets to avoid clipping.
+ */
+export function positionTooltip(target: HTMLElement, tooltip: HTMLElement): void {
   const gap = 8;
   const margin = 8;
   const targetRect = target.getBoundingClientRect();
   const tooltipRect = tooltip.getBoundingClientRect();
-  let left = targetRect.right + gap;
-  let top = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2;
+  const preferBelow = targetRect.top < 72;
 
-  if (left + tooltipRect.width + margin > window.innerWidth) {
-    left = targetRect.left - tooltipRect.width - gap;
+  let left = targetRect.left + targetRect.width / 2 - tooltipRect.width / 2;
+  let top = preferBelow
+    ? targetRect.bottom + gap
+    : targetRect.top - tooltipRect.height - gap;
+
+  if (!preferBelow && top < margin) {
+    top = targetRect.bottom + gap;
   }
+  if (preferBelow && top + tooltipRect.height + margin > window.innerHeight) {
+    top = targetRect.top - tooltipRect.height - gap;
+  }
+
+  // Fall back to side placement when vertical space is still insufficient.
+  if (top < margin || top + tooltipRect.height + margin > window.innerHeight) {
+    left = targetRect.right + gap;
+    top = targetRect.top + targetRect.height / 2 - tooltipRect.height / 2;
+    if (left + tooltipRect.width + margin > window.innerWidth) {
+      left = targetRect.left - tooltipRect.width - gap;
+    }
+  }
+
   left = Math.max(margin, Math.min(left, window.innerWidth - tooltipRect.width - margin));
   top = Math.max(margin, Math.min(top, window.innerHeight - tooltipRect.height - margin));
 
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
+  tooltip.style.left = `${Math.round(left)}px`;
+  tooltip.style.top = `${Math.round(top)}px`;
 }
