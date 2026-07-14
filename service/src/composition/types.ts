@@ -80,6 +80,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * RuntimeNotAttachedError so the message route honestly reports `runtime_not_attached`.
    */
   readonly sendPrompt?: SendPrompt;
+
+  /**
+   * Extra token-guarded routers mounted after the built-ins (e.g. the flag-gated `/v1/remote`
+   * control surface wired by `compose-live`). Empty by default — the baseline is unchanged.
+   */
+  readonly extraRouters?: readonly BoundaryRouter[];
 }
 
 /** The wired singletons exposed for the shell, tests, and the Tier 2 live supervisor to attach. */
