@@ -49,7 +49,7 @@ impl NlpMode {
 
 impl Default for NlpMode {
     fn default() -> Self {
-        NlpMode::CloudWithLocalPreprocess
+        NlpMode::CloudOnly
     }
 }
 

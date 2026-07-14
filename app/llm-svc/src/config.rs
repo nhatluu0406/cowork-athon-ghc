@@ -52,7 +52,7 @@ impl Config {
             .unwrap_or_else(|_| "0.0.0.0:9090".to_string());
 
         let nlp_mode_str =
-            std::env::var("NLP_MODE").unwrap_or_else(|_| "2".to_string());
+            std::env::var("NLP_MODE").unwrap_or_else(|_| "1".to_string());
         let nlp_mode = NlpMode::from_env(&nlp_mode_str)
             .map_err(|e| anyhow!("Invalid NLP_MODE: {}", e))?;
 
