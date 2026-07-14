@@ -59,8 +59,15 @@ jobs:
       - name: Install PostgreSQL server (official Ubuntu package)
         run: |
           sudo apt-get install -y postgresql postgresql-client
-          sudo systemctl stop postgresql
-          sudo systemctl disable postgresql
+          # Stop and disable the apt-managed service — run.sh manages its own
+          # pg_ctl lifecycle directly. Ignore failures: on some CI images systemd
+          # is not the init so the unit may not exist.
+          sudo systemctl stop postgresql 2>/dev/null || true
+          sudo systemctl disable postgresql 2>/dev/null || true
+          # Add the versioned bin dir to PATH so initdb/pg_ctl/createdb are found.
+          PG_BIN="$(pg_config --bindir)"
+          echo "pg_config resolved bin dir: $PG_BIN"
+          echo "$PG_BIN" >> "$GITHUB_PATH"
 
       - name: Install Neo4j server (Neo4j's own signed apt repo)
         run: |
@@ -68,8 +75,8 @@ jobs:
           echo "deb [signed-by=/usr/share/keyrings/neo4j.gpg] https://debian.neo4j.com stable 5" | sudo tee /etc/apt/sources.list.d/neo4j.list
           sudo apt-get update
           sudo apt-get install -y neo4j
-          sudo systemctl stop neo4j
-          sudo systemctl disable neo4j
+          sudo systemctl stop neo4j 2>/dev/null || true
+          sudo systemctl disable neo4j 2>/dev/null || true
 
       - name: Cache cargo registry/build
         uses: actions/cache@v4
