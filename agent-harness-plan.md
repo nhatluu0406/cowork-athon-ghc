@@ -21,11 +21,12 @@ Gõ /remote trong Cowork → chọn channel (lan-qr | tunnel | discord)
 → dispatch task cho built-in agents (fan-out N session) → nhận kết quả đã verified.
 ```
 
-> **Tiến độ (2026-07-14)**: MVP đầu tiên đã chạy — `service/src/remote-gateway/` (pairing +
-> gateway allowlist-proxy + PWA read-only), flag `CGHC_REMOTE_ENABLED` OFF mặc định, 16/16 test
-> PASS, typecheck sạch, ADR 0010 đã accept. Đã phủ: một phần Task 1.1 (read-only API), một phần
-> 2.1 (pairing chưa persist keyring, chưa QR), một phần 2.2 (chưa TLS `lan-qr`), một phần 3.1/3.2
-> (PWA xem được, chưa send prompt). Chưa làm: 1.2, 1.3, 2.3 (Discord), 2.4 (`/remote`), 3.3, 3.4.
+> **Tiến độ (2026-07-14)**: MVP đã chạy — `service/src/remote-gateway/` (pairing + gateway
+> allowlist-proxy + PWA), flag `CGHC_REMOTE_ENABLED` OFF mặc định, ADR 0010 accepted, 18/18 test
+> PASS, typecheck sạch. Đã phủ: một phần Task 1.1 (read-only API); **Task 1.3 XONG** (permission
+> pending + Allow/Deny từ phone, verify trên gate thật: Deny chặn ở boundary, allow muộn bị từ
+> chối); một phần 2.1 (chưa keyring/QR), 2.2 (chưa TLS `lan-qr`), 3.1/3.2/3.3 (PWA xem + quyết
+> permission, chưa Web Push). Chưa làm: 1.2 (send prompt), 2.3 (Discord), 2.4 (`/remote`), 3.4.
 
 Remote là MỘT feature với **3 channel** (chốt bởi PO 2026-07-14, sau khảo sát GitHub):
 

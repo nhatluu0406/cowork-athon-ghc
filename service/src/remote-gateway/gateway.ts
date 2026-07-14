@@ -103,7 +103,7 @@ function sendError(res: ServerResponse, status: number, code: string, message: s
   sendJson(res, status, { ok: false, error: { code, message } });
 }
 
-/** Explicit remote-path → main-path allowlist. Anything else is 404, never forwarded. */
+/** Explicit remote-path → main-path allowlist (GET). Anything else is 404, never forwarded. */
 function resolveProxyTarget(pathname: string): string | undefined {
   if (pathname === "/api/conversations") return "/v1/conversations";
   if (pathname.startsWith("/api/conversations/")) {
@@ -114,6 +114,17 @@ function resolveProxyTarget(pathname: string): string | undefined {
   }
   if (pathname === "/api/snapshot") return "/v1/session/stream/snapshot";
   if (pathname === "/api/stream") return "/v1/session/stream";
+  if (pathname === "/api/permissions") return "/v1/permission/pending";
+  return undefined;
+}
+
+/**
+ * POST allowlist (agent-harness-plan Task 1.3): ONLY the permission decision crosses. The
+ * gateway still records no decision itself — the single PermissionGate on the main service
+ * resolves it, and enforcement stays at `gate.proceed` on the execution boundary.
+ */
+function resolvePostProxyTarget(pathname: string): string | undefined {
+  if (pathname === "/api/permissions/decision") return "/v1/permission/decision";
   return undefined;
 }
 
@@ -181,10 +192,26 @@ export function startRemoteGateway(options: RemoteGatewayOptions): Promise<Remot
       return;
     }
 
-    const target = method === "GET" ? resolveProxyTarget(pathname) : undefined;
+    const target =
+      method === "GET"
+        ? resolveProxyTarget(pathname)
+        : method === "POST"
+          ? resolvePostProxyTarget(pathname)
+          : undefined;
     if (target === undefined) {
       sendError(res, 404, "not_found", "No such remote route.");
       return;
+    }
+
+    // A POST body is read bounded and re-sent verbatim (JSON only; main re-validates it).
+    let forwardBody: string | undefined;
+    if (method === "POST") {
+      try {
+        forwardBody = await readBody(req, MAX_PAIR_BODY_BYTES);
+      } catch {
+        sendError(res, 413, "payload_too_large", "Body too large.");
+        return;
+      }
     }
 
     // Forward to the main loopback service with ITS token; pipe the response through
@@ -193,11 +220,17 @@ export function startRemoteGateway(options: RemoteGatewayOptions): Promise<Remot
       {
         host: main.hostname,
         port: main.port,
-        method: "GET",
+        method,
         path: target + url.search,
         headers: {
           authorization: `Bearer ${options.mainClientToken}`,
           accept: firstHeader(req.headers.accept) ?? "application/json",
+          ...(forwardBody !== undefined
+            ? {
+                "content-type": "application/json",
+                "content-length": Buffer.byteLength(forwardBody),
+              }
+            : {}),
         },
       },
       (proxyRes) => {
@@ -214,6 +247,7 @@ export function startRemoteGateway(options: RemoteGatewayOptions): Promise<Remot
     });
     // A phone that disconnects mid-stream must tear down the upstream SSE subscription too.
     res.on("close", () => upstream.destroy());
+    if (forwardBody !== undefined) upstream.write(forwardBody);
     upstream.end();
   }
 

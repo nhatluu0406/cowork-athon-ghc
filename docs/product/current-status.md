@@ -61,10 +61,19 @@ request create file
 | Env phụ | `CGHC_REMOTE_LAN=1` (bind LAN, demo cùng Wi-Fi, **chưa TLS**), `CGHC_REMOTE_PORT` (port cố định) |
 | Verified | `npm run typecheck` exit 0; 16/16 unit/integration PASS trên 3 suite mới (`remote-pairing`, `remote-gateway`, `remote-wiring`); suite lân cận `compose-live-wiring` + `live-launch` vẫn PASS |
 
+### Bổ sung cùng ngày: permission Allow/Deny từ điện thoại (Task 1.3)
+
+- Gateway proxy thêm `GET /api/permissions` → `/v1/permission/pending` và
+  `POST /api/permissions/decision` → `/v1/permission/decision` (POST allowlist đúng 1 route).
+- PWA có khu pending permission (poll 3s): nút **Cho phép 1 lần** / **Từ chối**.
+- Bằng chứng: 18/18 test PASS; integration test trên **gate thật** xác nhận Deny từ điện thoại
+  chặn ở execution boundary (`isAllowed=false`, pending rỗng) và allow muộn bị từ chối
+  (`already_resolved: deny`) — không phải chỉ ẩn nút UI.
+
 ### Giới hạn trung thực
 
-1. **Read-only**: điện thoại xem conversations + transcript + live EV stream; CHƯA gửi prompt,
-   CHƯA permission reply, CHƯA Discord channel, CHƯA lệnh `/remote` trong composer.
+1. Điện thoại xem conversations + transcript + live EV stream và **quyết định permission**;
+   CHƯA gửi prompt, CHƯA Discord channel, CHƯA lệnh `/remote` trong composer.
 2. **Pairing code hiển thị qua console** (`start.bat` từ terminal) — chưa có QR/panel trong app.
 3. **LAN mode chưa mã hóa transport** — chỉ dùng demo; TLS + cert pinning là slice sau.
 4. Device token in-memory per-launch — restart app thì điện thoại pair lại.
