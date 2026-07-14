@@ -157,6 +157,7 @@ button {
 .topbar {
   height: var(--topbar-h);
   padding-left: 12px;
+  overflow: visible;
   border-bottom: 1px solid var(--cghc-border-subtle);
   background: color-mix(in srgb, var(--cghc-surface-solid) 92%, transparent);
   backdrop-filter: blur(18px) saturate(140%);
@@ -293,7 +294,7 @@ button {
 
 .cowork-sidebar__toolbar {
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 6px;
 }
 
 .sidebar__search,
@@ -1321,7 +1322,7 @@ button {
 /* ───────────────────────────── tooltip/motion ───────────────────────────── */
 
 .shell-tooltip {
-  z-index: 200;
+  z-index: 90;
   min-width: 0;
   max-width: min(260px, calc(100vw - 24px));
   padding: 7px 10px;
@@ -1334,6 +1335,7 @@ button {
   font-weight: 550;
   line-height: 1.35;
   animation: cghc-tooltip-in 120ms ease both;
+  pointer-events: none;
 }
 
 :root[data-theme="dark"] .shell-tooltip {
