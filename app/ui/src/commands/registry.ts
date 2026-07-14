@@ -160,18 +160,21 @@ export function createDefaultRegistry(): CommandRegistry {
   // /bug
   registry.register({
     name: "bug",
-    description: "Thu thập và kết xuất gói chẩn đoán (diagnostics) cục bộ.",
+    description: "Thu thập và hiển thị thông tin chẩn đoán (diagnostics) của ứng dụng.",
     type: "client_side",
-    handler: async (ctx) => {
-      ctx.appendAssistantMessage("🔍 Đang thu thập thông tin chẩn đoán hệ thống...");
-      try {
-        const bridge = getShellBridge();
-        const info = await bridge.gatherDiagnostics?.();
-        ctx.appendAssistantMessage(`✅ Đã kết xuất thông tin chẩn đoán thành công.\n\n${JSON.stringify(info ?? {}, null, 2)}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Lỗi không xác định.";
-        ctx.appendAssistantMessage(`❌ Lỗi khi thu thập chẩn đoán: ${msg}`);
-      }
+    handler: (ctx) => {
+      const info = {
+        activeConversationId: ctx.state.conv.state.activeConversationId,
+        runtimeSessionId: ctx.state.conv.state.runtimeSessionId,
+        runtimePhase: ctx.state.conv.state.runtimePhase,
+        activeWorkspace: ctx.state.activeWorkspace?.rootPath ?? null,
+        localServiceReady: ctx.state.localServiceReady,
+        connectionTestState: ctx.state.connectionTestState,
+        permissionMode: ctx.state.permissionMode,
+        openFilesCount: ctx.state.codeOpenFiles?.length ?? 0,
+        userAgent: navigator.userAgent,
+      };
+      ctx.appendAssistantMessage(`✅ Đã thu thập thông tin chẩn đoán:\n\n\`\`\`json\n${JSON.stringify(info, null, 2)}\n\`\`\``);
     },
   });
 

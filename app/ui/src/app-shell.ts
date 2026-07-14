@@ -48,6 +48,7 @@ import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
 import { mountProviderProfilesPanel } from "./provider-profiles-panel.js";
 import { createPermissionController } from "./permission-controller.js";
 import { openRemotePanel } from "./remote-panel.js";
+import { createDefaultRegistry } from "./commands/registry.js";
 import {
   createServiceClient,
   ServiceClientError,
@@ -1703,6 +1704,7 @@ function createShell(root: HTMLElement): AppDom {
 
 export function mountCoworkApp(root: HTMLElement): void {
   const dom = createShell(root);
+  const registry = createDefaultRegistry();
   const state: AppState = {
     client: null,
     bootstrap: null,
@@ -2050,16 +2052,40 @@ export function mountCoworkApp(root: HTMLElement): void {
   };
 
   dom.sendButton.addEventListener("click", () => {
-    // `/remote` (and `/remote off`) are LOCAL composer commands: open the remote-control panel
-    // instead of dispatching a prompt. The panel is the desktop half of the remote feature
-    // (agent-harness-plan.md Task 2.4). Only intercept the exact command, never real prompts.
     const composerText = textFromComposer(dom.composerInput).trim();
-    if (composerText === "/remote" || composerText.toLowerCase().startsWith("/remote ")) {
+    if (composerText.startsWith("/")) {
       if (state.client !== null) {
+        const ctx = {
+          client: state.client,
+          conv: state.conv,
+          activeSessionId: state.conv.state.runtimeSessionId,
+          arguments: [],
+          dom,
+          state,
+          handlers,
+          appendAssistantMessage: (text: string) => {
+            appendMessage(dom, "assistant", text);
+          },
+          clearChatUI: () => {
+            clearTranscript(dom);
+          },
+          refreshUI: () => {
+            renderState(dom, state, handlers);
+          },
+        };
         setComposerText(dom.composerInput, "");
         saveComposerDraft(state, dom);
-        openRemotePanel(state.client);
-        renderState(dom, state, handlers);
+        void registry.dispatch(composerText, ctx).then(async (dispatchRes) => {
+          if (dispatchRes.handled && typeof dispatchRes.result === "string") {
+            setComposerText(dom.composerInput, dispatchRes.result);
+            await sendPrompt(state, dom, readiness, handlers);
+          } else {
+            renderState(dom, state, handlers);
+          }
+        }).catch((error) => {
+          appendMessage(dom, "assistant", safeError(error));
+          renderState(dom, state, handlers);
+        });
       }
       return;
     }
