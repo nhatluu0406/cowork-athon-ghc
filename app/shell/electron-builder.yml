@@ -22,6 +22,7 @@ copyright: Copyright (c) 2026 Cowork GHC
 directories:
   # Packaged artifacts land at repo-root/dist-app (kept out of any workspace dist/).
   output: dist-app
+  buildResources: app/shell/assets
 
 asar: true
 # The native keyring addon MUST be unpacked from the asar archive: a `.node` addon cannot be
@@ -63,10 +64,13 @@ extraResources:
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  - from: "app/shell/assets/cowork-ghc.ico"
+    to: "branding/cowork-ghc.ico"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.
 win:
+  icon: app/shell/assets/cowork-ghc.ico
   target:
     - nsis
     - portable
@@ -77,6 +81,9 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  installerIcon: app/shell/assets/cowork-ghc.ico
+  uninstallerIcon: app/shell/assets/cowork-ghc.ico
+  installerHeaderIcon: app/shell/assets/cowork-ghc.ico
   artifactName: "${productName}-${version}-setup.${ext}"
 
 portable:
