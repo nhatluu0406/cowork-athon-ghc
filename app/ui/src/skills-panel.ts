@@ -1,16 +1,23 @@
 /**
- * Mount shim: bridges the React `SkillsPanel` component onto the imperative
- * `mountSkillsPanel(root, client, onChanged) -> SkillsPanelHandle` contract still used by
- * `app-shell.ts`, so that call site needs no changes.
+ * Minimal functional Skills UI: service-owned discovery, enable/disable, bounded preview.
  */
 
-import { createElement, createRef } from "react";
-import { createRoot } from "react-dom/client";
-import { SkillsPanel, type SkillsPanelHandle } from "./SkillsPanel.js";
 import type { ServiceClient, SkillView } from "./service-client.js";
-import { el } from "./ui-shell/dom-utils.js";
 
-export type { SkillsPanelHandle };
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+export interface SkillsPanelHandle {
+  refresh(): Promise<void>;
+}
 
 export function mountSkillsPanel(
   root: HTMLElement,

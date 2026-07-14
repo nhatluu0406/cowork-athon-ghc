@@ -13,8 +13,6 @@
   "dependencies": {
     "@cowork-ghc/contracts": "*",
     "@cowork-ghc/service": "*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
     "@fontsource/be-vietnam-pro": "^5.2.8"
   },
   "devDependencies": {
