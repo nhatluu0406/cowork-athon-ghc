@@ -53,6 +53,12 @@ import {
   type RemoteGateway,
   type RemoteGatewayInfo,
 } from "../remote-gateway/index.js";
+import {
+  createDiscordAdapter,
+  createDiscordRestTransport,
+  readDiscordConfig,
+  type DiscordAdapter,
+} from "../remote-gateway/discord/index.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -176,13 +182,20 @@ export async function startLiveCoworkService(
     return normalized;
   }
 
+  // Most-recently-active session, tracked as the hub opens runs — the Discord channel's default
+  // prompt target (the app owns richer session selection; this is a best-effort MVP default).
+  let lastActiveSessionId: string | null = null;
+
   // The live `/event` → hub pump. It feeds each raw child frame into the session's hub run
   // (the hub owns the single mapper/fold/coalesce/fan-out), so the SSE route has frames to stream.
   const pump: EventPump = createEventPump({
     baseUrl: () => supervisor.baseUrl,
     target: {
       knows: (sessionId) => composed.deps.sessionService.view(sessionId) !== undefined,
-      open: (sessionId) => composed.deps.streamHub.open(sessionId),
+      open: (sessionId) => {
+        lastActiveSessionId = sessionId;
+        return composed.deps.streamHub.open(sessionId);
+      },
     },
     redactError: composed.deps.redactError,
     onFrame: preprocessFrame,
@@ -234,6 +247,67 @@ export async function startLiveCoworkService(
       }
     }
 
+    // Flag-gated Discord channel (agent-harness-plan.md Task 2.3). One poll loop both notifies
+    // newly-pending permissions (redacted) and processes inbound commands. Q5: only `deny` and
+    // `prompt` reach the gate/session; `approve` of a write is refused inside the adapter.
+    const discordConfig = readDiscordConfig(env);
+    let discordAdapter: DiscordAdapter | undefined;
+    let discordTimer: ReturnType<typeof setInterval> | undefined;
+    if (discordConfig !== null) {
+      const gate = composed.deps.permissionGate;
+      const notified = new Set<string>();
+      discordAdapter = createDiscordAdapter({
+        transport: createDiscordRestTransport({
+          botToken: discordConfig.botToken,
+          channelId: discordConfig.channelId,
+          log: remoteLog,
+        }),
+        allowedUserIds: discordConfig.allowedUserIds,
+        hooks: {
+          listPending: () =>
+            gate.pending().map((r) => ({
+              requestId: r.requestId,
+              description: r.action.description,
+              ...(r.action.targetPath !== undefined ? { targetPath: r.action.targetPath } : {}),
+            })),
+          denyPermission: async (requestId) => {
+            const outcome = await gate.resolve({ requestId, decision: "deny" });
+            return { status: outcome.status === "resolved" ? "resolved" : outcome.status };
+          },
+          // MVP: the most recently active session is the prompt target.
+          activeSessionId: () => lastActiveSessionId,
+          sendPrompt: async (sessionId, text) => {
+            try {
+              await sendPrompt.send(sessionId, text);
+              return { accepted: true };
+            } catch (e) {
+              const reason =
+                typeof e === "object" && e !== null && typeof (e as { code?: unknown }).code === "string"
+                  ? ((e as { code: string }).code)
+                  : "error";
+              return { accepted: false, reason };
+            }
+          },
+        },
+      });
+      const adapter = discordAdapter;
+      discordTimer = setInterval(() => {
+        // Notify any newly-pending permission (once each), then process inbound commands.
+        for (const r of gate.pending()) {
+          if (notified.has(r.requestId)) continue;
+          notified.add(r.requestId);
+          void adapter.notifyPermissionAsked({
+            requestId: r.requestId,
+            description: r.action.description,
+            ...(r.action.targetPath !== undefined ? { targetPath: r.action.targetPath } : {}),
+          });
+        }
+        void adapter.pump();
+      }, 4000);
+      discordTimer.unref?.();
+      remoteLog(`[cowork-remote] Discord channel bat (allowlist ${discordConfig.allowedUserIds.length} user)`);
+    }
+
     return {
       running,
       deps: composed.deps,
@@ -246,6 +320,7 @@ export async function startLiveCoworkService(
       // child is killed. Each step is protected so a later step always runs.
       stop: async (): Promise<void> => {
         try {
+          if (discordTimer !== undefined) clearInterval(discordTimer);
           remoteGatewayInfo = null;
           await remote?.stop().catch(() => undefined);
         } finally {
