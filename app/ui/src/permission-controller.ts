@@ -17,6 +17,7 @@
 import type { EvEvent, PermissionDecision, PermissionScope } from "@cowork-ghc/contracts";
 import { sanitizeErrorMessage } from "@cowork-ghc/service/execution";
 import { openPermissionModal, type PermissionModalHandle } from "./permission-modal.js";
+import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 import type {
   PendingPermissionView,
   PermissionDecisionResponse,
@@ -49,12 +50,14 @@ export interface PermissionControllerDeps {
   readonly client: Pick<ServiceClient, "listPendingPermissions" | "decidePermission">;
   /** Where the modal + status note mount (usually the app root). */
   readonly container: HTMLElement;
-  /** Poll cadence for `start()`; defaults to 2s. Tests drive `refresh()` directly instead. */
+  /** Poll cadence for `start()`; defaults to 500ms while the app is active. */
   readonly pollIntervalMs?: number;
   /** Timer seam; defaults to host `setInterval`/`clearInterval`. Tests inject a fake. */
   readonly timer?: PermissionControllerTimer;
   /** Visibility seam; defaults to the `document` visibility API. Tests inject a fake. */
   readonly visibility?: PermissionControllerVisibility;
+  /** Current product permission mode selected in the composer. */
+  readonly getMode?: () => PermissionMode;
   /** Fired when a pending permission is shown (read-only history seed). */
   readonly onPending?: (request: PendingPermissionView) => void;
   /** Fired after a decision POST returns (resolved / already_resolved). */
@@ -83,7 +86,7 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): H
 export function createPermissionController(
   deps: PermissionControllerDeps,
 ): PermissionControllerHandle {
-  const intervalMs = deps.pollIntervalMs ?? 2000;
+  const intervalMs = deps.pollIntervalMs ?? 500;
   const setIntervalFn = deps.timer?.setInterval.bind(deps.timer) ?? ((h: () => void, ms: number) => setInterval(h, ms));
   const clearIntervalFn =
     deps.timer?.clearInterval.bind(deps.timer) ??
@@ -111,6 +114,8 @@ export function createPermissionController(
   // The last failed-decision error, kept so a re-opened modal for the SAME request still shows
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
+  let consecutivePollFailures = 0;
+  const announced = new Set<string>();
 
   const setNote = (text: string): void => {
     note.textContent = text;
@@ -173,6 +178,24 @@ export function createPermissionController(
   };
 
   const showHead = (head: PendingPermissionView, waiting: number): void => {
+    lastPending = head;
+    if (!announced.has(head.requestId)) {
+      announced.add(head.requestId);
+      deps.onPending?.(head);
+    }
+
+    const mode = deps.getMode?.() ?? "ask";
+    if (mode === "read_only") {
+      closeModal();
+      void decide(head.requestId, false);
+      return;
+    }
+    if (mode === "workspace_auto" && head.approvalLevel === "standard") {
+      closeModal();
+      void decide(head.requestId, true, "once");
+      return;
+    }
+
     if (modal !== null && modal.requestId === head.requestId) {
       modal.setQueueCount(waiting); // same head: keep it open, just refresh the live queue count
       return;
@@ -194,8 +217,6 @@ export function createPermissionController(
       },
       { queueCount: waiting },
     );
-    lastPending = head;
-    deps.onPending?.(head);
   };
 
   async function refresh(): Promise<void> {
@@ -203,13 +224,20 @@ export function createPermissionController(
     let pending: readonly PendingPermissionView[];
     try {
       pending = await deps.client.listPendingPermissions();
+      consecutivePollFailures = 0;
     } catch {
-      // A transient poll failure must not fabricate or drop state; keep the current modal.
+      // Keep any current modal, but do not hide a broken permission transport indefinitely.
+      consecutivePollFailures += 1;
+      if (consecutivePollFailures >= 3) {
+        setNote("Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.");
+      }
       return;
     }
     const head = pending[0];
     if (head === undefined) {
       closeModal(); // nothing pending → show nothing (honest idle)
+      announced.clear();
+      lastPending = null;
       return;
     }
     showHead(head, pending.length - 1);

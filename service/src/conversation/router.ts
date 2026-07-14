@@ -5,7 +5,7 @@
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import { BadRequestError } from "../server/http-util.js";
 import type { ConversationStore } from "./store.js";
-import type { ConversationStatus, ConversationPatch, PersistedActivitySnapshot, RuntimeTurnRecord } from "./types.js";
+import type { ConversationStatus, ConversationPatch, PersistedActivitySnapshot, RuntimeTurnRecord, CreateConversationInput } from "./types.js";
 import { normalizeTitle } from "./title.js";
 import type { SkillUseMetadata } from "../skills/types.js";
 
@@ -42,12 +42,34 @@ function parseCreateBody(body: unknown) {
   if (parentId !== undefined && typeof parentId !== "string") {
     throw new ConversationRequestError("parentId must be a string.");
   }
-  return {
+  const snapshot = parseProviderSnapshot(rec["providerSnapshot"]);
+  const input: CreateConversationInput = {
     workspacePath: workspacePath.trim(),
     ...(typeof title === "string" ? { title } : {}),
     ...(typeof rec["providerId"] === "string" ? { providerId: rec["providerId"] } : {}),
     ...(typeof rec["modelId"] === "string" ? { modelId: rec["modelId"] } : {}),
     ...(typeof parentId === "string" ? { parentId } : {}),
+  };
+  if (snapshot !== undefined) {
+    return { ...input, providerSnapshot: snapshot };
+  }
+  return input;
+}
+
+function parseProviderSnapshot(value: unknown): import("./types.js").ConversationProviderSnapshot | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const rec = value as Record<string, unknown>;
+  if (typeof rec["profileId"] !== "string") return undefined;
+  if (typeof rec["displayName"] !== "string") return undefined;
+  if (rec["providerType"] !== "deepseek" && rec["providerType"] !== "custom-openai-compat") return undefined;
+  if (typeof rec["modelId"] !== "string") return undefined;
+  if (typeof rec["baseUrl"] !== "string") return undefined;
+  return {
+    profileId: rec["profileId"],
+    displayName: rec["displayName"],
+    providerType: rec["providerType"],
+    modelId: rec["modelId"],
+    baseUrl: rec["baseUrl"],
   };
 }
 

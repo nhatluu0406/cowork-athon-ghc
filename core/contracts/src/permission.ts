@@ -23,12 +23,7 @@ export type PermissionActionKind =
   | "file_delete"
   | "file_move"
   | "command_exec"
-  /**
-   * A network-capable / external-data-access action (e.g. `m365_knowledge_search`,
-   * REQ-205) — never a filesystem or local-execution action. Additive value; existing
-   * kinds are never renamed or removed (T0.3/T1.8).
-   */
-  | "network_access";
+  | "ms365_write";
 
 /** What the user is being asked to Allow or Deny (P2 describes action + target). */
 export interface PermissionAction {

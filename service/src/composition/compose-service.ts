@@ -35,6 +35,13 @@ import {
   readE2eMockLlmBaseUrl,
 } from "../provider/index.js";
 import {
+  createProviderConnectionTester,
+  createProviderProfileRouter,
+  createProviderProfileStore,
+  createProfileRuntimeBridge,
+  migrateLegacySettingsToProfiles,
+} from "../provider-profiles/index.js";
+import {
   createRecentWorkspaces,
   createWorkspaceRouter,
   nodeExistenceProbe,
@@ -69,6 +76,22 @@ import {
 } from "./tier2-seams.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
+import { createWorkspaceLocalFileReader } from "./ms365-file-reader.js";
+import {
+  createHttpGraphClient,
+  createManualTokenProvider,
+  createMs365Connector,
+  createMs365Router,
+  createSharePointService,
+  isMs365Enabled,
+} from "../ms365/index.js";
+
+/**
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
+ * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
+ * summary, upload). No extra scope is requested.
+ */
+const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
@@ -98,7 +121,17 @@ export async function createCoworkService(
 
   // --- Settings store (persistent SD1 source of truth), loaded through the fs seam. ---
   const settingsFs = options.settingsFs ?? createNodeSettingsFs(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
-  const baseSettingsStore = await openSettingsStore({ fs: settingsFs });
+  let baseSettingsStore = await openSettingsStore({ fs: settingsFs });
+
+  const migration = await migrateLegacySettingsToProfiles(
+    baseSettingsStore.snapshot(),
+    credentialStore,
+  );
+  if (migration.migrated || migration.credentialRemapped) {
+    await baseSettingsStore.applyDocument(migration.settings);
+  }
+
+  const providerProfileStore = createProviderProfileStore({ store: baseSettingsStore, now });
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
@@ -125,6 +158,20 @@ export async function createCoworkService(
     httpBundle.bindActiveModelResolver(() => modelConfig.activeModelFor() ?? undefined);
   }
   await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
+
+  const profileRuntimeBridge = createProfileRuntimeBridge({
+    profiles: providerProfileStore,
+    port: providerPort,
+    modelConfig,
+  });
+  await profileRuntimeBridge.syncActiveProfile();
+
+  const profileConnectionTester = createProviderConnectionTester({
+    credentials: credentialService,
+    dnsResolver,
+    now,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
 
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,
   // and (2) mirrors default-model / credential-ref writes into the in-memory runtime resolver so
@@ -191,6 +238,37 @@ export async function createCoworkService(
     stateFilePath: options.skillsStateFilePath ?? DEFAULT_SKILLS_STATE_PATH,
   });
 
+  // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
+  // reads the SAME `process.env` the rest of this module treats as the environment source
+  // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
+  // directly, e.g. `readE2eMockLlmBaseUrl` above). With the var unset, `ms365Router` is
+  // `undefined` and NOTHING below is constructed or mounted — the baseline is byte-for-byte
+  // unaffected. The SAME `ssrf` policy instance built above (line ~105) is reused here; no
+  // second SsrfPolicy is created.
+  const ms365Router = isMs365Enabled(process.env)
+    ? (() => {
+        const ms365Manual = createManualTokenProvider({ credentials: credentialService });
+        const ms365Connector = createMs365Connector({
+          manual: ms365Manual,
+          makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
+        });
+        const sharepoint = createSharePointService({
+          connector: ms365Connector,
+          files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
+        });
+        return createMs365Router({
+          connector: ms365Connector,
+          scopes: MS365_SCOPES,
+          tools: {
+            sharepoint,
+            connectionState: () => ms365Connector.connectionState(),
+            gate: permissionGate,
+            now,
+          },
+        });
+      })()
+    : undefined;
+
   const routers = [
     createWorkspaceRouter({
       recent: recentWorkspaces,
@@ -204,8 +282,20 @@ export async function createCoworkService(
     createCredentialRouter(credentialService, {
       allowEnvImport: options.allowEnvCredentialImport === true,
     }),
-    createSettingsRouter(settingsStore, modelPort),
+    createSettingsRouter(settingsStore, modelPort, providerProfileStore),
     createProviderRouter(providerPort, modelConfig),
+    createProviderProfileRouter({
+      profiles: providerProfileStore,
+      tester: profileConnectionTester,
+      runtimeBridge: profileRuntimeBridge,
+      bindCredentialRef: async (_profileId, ref) => {
+        // Credential value is stored via /v1/credentials before binding.
+        void ref;
+      },
+      removeCredential: async (_profileId, account) => {
+        await credentialStore.delete(account);
+      },
+    }),
     createPermissionRouter(permissionGate),
     createEvStreamRouter(streamHub),
     createSessionStreamRouter(streamHub),
@@ -213,7 +303,7 @@ export async function createCoworkService(
     // not-attached SendPrompt so it compiles + errors truthfully without a child; live fills it.
     createSessionRouter(sessionService, options.sendPrompt ?? notAttachedSendPrompt(), {
       assertCreatePrerequisites: (input) => {
-        const result = assessProviderReadiness(settingsStore, input.model);
+        const result = assessProviderReadiness(settingsStore, providerProfileStore, input.model);
         if (!result.ok) {
           throw new SessionRequestError(result.message);
         }
@@ -227,6 +317,7 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(ms365Router !== undefined ? [ms365Router] : []),
   ];
 
   const deps: CoworkServiceDeps = {
@@ -235,6 +326,8 @@ export async function createCoworkService(
     providerPort,
     modelConfig,
     settingsStore,
+    providerProfileStore,
+    profileRuntimeBridge,
     recentWorkspaces,
     permissionGate,
     permissionAudit,

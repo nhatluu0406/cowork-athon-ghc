@@ -71,7 +71,24 @@ cargo build --release
 └─────────────────────────────┘
 ```
 
-### Yêu cầu (Prerequisites)
+Nguyên tắc: business logic không nằm trong UI; mutation filesystem đi qua execution boundary;
+**permission enforce tại execution boundary** (Deny thật sự chặn); một credential store OS-backed
+(Windows Credential Manager); secret không bao giờ vào log/UI/screenshot.
+
+## Cấu trúc repository
+
+| Path | Nội dung |
+|---|---|
+| `core/contracts/` | Type/contract dùng chung (EV, provider, permission, workspace, session, ref). |
+| `service/` | Local application service (loopback), business logic. |
+| `runtime/` | Tích hợp OpenCode runtime (pin, spawn, isolation). |
+| `app/shell/` | Electron main process (shell, IPC, security, service ownership). |
+| `app/ui/` | Renderer (client của service). |
+| `scripts/` | `.bat` Windows (init/build/start/stop/clean/demo-reset/verify-fast). |
+| `tools/app/` | App lifecycle CLI (init/start/stop/clean/status) + supervision/reaper. |
+| `docs/` | Tài liệu canonical — bắt đầu tại `docs/README.md`. |
+
+## Yêu cầu (prerequisites)
 
 - **Windows 11** (target chính).
 - **Node.js ≥ 22** + npm 11.
@@ -85,18 +102,22 @@ npm test                   # node --test
 npm run build:app          # build renderer + shell
 npm run package:win        # đóng gói Electron (Windows) -> dist-app/
 npm run app -- status      # app CLI
-
-# Workflow state (machine state, not source)
-node tools/loop-engineer/cli.mjs status    # loop/task/gate + next
-node tools/loop-engineer/cli.mjs verify    # validate schema + state
+scripts\verify-fast.bat    # typecheck + focused tests + renderer build
 ```
 
-### Windows Scripts
+## Windows scripts
+
+`scripts/*.bat` là entry mỏng gọi `tools/app/cli.mjs`, trả exit code trung thực:
 
 - `init.bat` — chuẩn bị môi trường (idempotent).
-- `start.bat` — khởi động Cowork GHC + local service.
-- `stop.bat` — dừng process gọn gàng.
-- `clean.bat` — xoá generated data theo allowlist.
+- `build.bat` — typecheck + package Windows app.
+- `start.bat` — khởi động packaged app.
+- `stop.bat` — dừng process Cowork GHC đã track.
+- `clean.bat` — xoá generated/downloaded theo allowlist (không đụng credential/history).
+- `demo-reset.bat` — reset demo-safe state (giữ keyring).
+- `verify-fast.bat` — kiểm tra nhanh trước commit.
+
+Chi tiết: `scripts/README.md`. Tài liệu: `docs/README.md`.
 
 ### Bảo mật Credential
 
@@ -106,13 +127,11 @@ node tools/loop-engineer/cli.mjs verify    # validate schema + state
 
 ### Agent Entry Points
 
-- Claude: [`CLAUDE.md`](CLAUDE.md)
-- Codex: [`AGENTS.md`](AGENTS.md)
-- Workflow source: `.agent-workflow/`
-- Machine state: `.loop-engineer/state/`
+Xem [docs/quality/known-limitations.md](docs/quality/known-limitations.md) và
+[docs/product/current-status.md](docs/product/current-status.md).
 
----
+## Cho agent (Claude / Codex)
 
-## License
-
-Extracted from MiniRag parent repository on 2026-07-11.
+- Điểm vào: [`AGENTS.md`](AGENTS.md), [`CLAUDE.md`](CLAUDE.md).
+- Tài liệu canonical: [`docs/README.md`](docs/README.md).
+- Chế độ mặc định: **LEAN** (một agent, slice nhỏ, test tập trung).
