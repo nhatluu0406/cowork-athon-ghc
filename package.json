@@ -24,7 +24,7 @@
     "package:win": "npm run build:app && electron-builder --win --config app/shell/electron-builder.yml",
     "verify:release": "node tools/verify/release-regression.mjs",
     "app": "node tools/app/cli.mjs",
-    "clean": "node tools/loop-engineer/lifecycle.mjs clean"
+    "clean": "node tools/app/cli.mjs clean"
   },
   "dependencies": {
     "@napi-rs/keyring": "1.3.0"

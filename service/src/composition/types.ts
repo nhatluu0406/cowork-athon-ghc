@@ -29,6 +29,8 @@ import type { ConversationStore } from "../conversation/index.js";
 import type { SessionStreamHub } from "../server/session-stream-hub.js";
 import type { ExtensionRegistry } from "../extensions/index.js";
 import type { SkillCatalog, SkillRoot } from "../skills/index.js";
+import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
+import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
@@ -87,6 +89,8 @@ export interface CoworkServiceDeps {
   readonly providerPort: ProviderPort;
   readonly modelConfig: ModelConfigService;
   readonly settingsStore: SettingsStore;
+  readonly providerProfileStore: ProviderProfileStore;
+  readonly profileRuntimeBridge: ProfileRuntimeBridge;
   readonly recentWorkspaces: RecentWorkspaces;
   readonly permissionGate: PermissionGate;
   readonly permissionAudit: InMemoryAuditSink;

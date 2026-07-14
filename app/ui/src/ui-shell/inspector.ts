@@ -7,7 +7,7 @@ export interface InspectorShellDom {
 }
 
 export function createInspectorShell(): InspectorShellDom {
-  const root = el("aside", "inspector inspector-shell right-panel");
+  const root = el("aside", "inspector inspector-shell");
   root.setAttribute("aria-label", "Inspector");
   root.hidden = true;
 

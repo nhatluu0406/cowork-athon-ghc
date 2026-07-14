@@ -35,6 +35,7 @@ test("RENDERER_CSP sets the required restrictive directives", () => {
   assert.equal(csp.get("base-uri"), "'none'");
   assert.equal(csp.get("frame-ancestors"), "'none'");
   assert.equal(csp.get("form-action"), "'none'");
+  assert.equal(csp.get("frame-src"), "blob:");
 });
 
 test("RENDERER_CSP connect-src is loopback-only — not '*' and no public origin", () => {

@@ -1,15 +1,142 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-14"
 ---
 
-# Current Status
+# Trạng thái hiện tại
 
-Active product plan: [Cowork GHC Product Plan](./cowork-ghc-product-plan.md)
+Baseline source được vá từ snapshot `310524c`. Tài liệu canonical: [docs/README.md](../README.md).
 
-Do not use a moving `HEAD hiện tại` field here. Use the latest verified slice commits
-and the current working tree instead.
+## Capability inventory
+
+| Năng lực | Trạng thái | Ghi chú trung thực |
+|---|---|---|
+| Startup | **BASIC WORKS** | Mở New Chat sạch; lifecycle scripts hiện hữu. |
+| Provider profiles | **PARTIAL** | DeepSeek preset + custom OpenAI-compatible profiles; packaged switching giữa hai endpoint thật vẫn cần xác nhận. |
+| Credentials | **BASIC WORKS** | Windows keyring theo profile; không persist raw key trong profile JSON. |
+| Workspace navigator | **PARTIAL** | Duyệt file và mở preview cơ bản. |
+| Workspace editing | **PARTIAL** | `.txt`/`.md` nhỏ có thể sửa; file text bị truncate là read-only; XLSX chuyển read-only để tránh mất dữ liệu. |
+| Image / PDF / DOCX preview | **PARTIAL** | Image dùng data URL; PDF dùng blob frame theo CSP; DOCX render plain text. Cần packaged PO check. |
+| Chat / streaming | **BASIC WORKS** | OpenCode runtime + conversation persistence. |
+| File create / modify bằng Agent | **BLOCKED — PACKAGED CHECK REQUIRED** | Source đã thêm action contract, permission tool mapping và false-success guard; chưa được xác nhận trên packaged Windows app. |
+| Permissions | **BLOCKED — PACKAGED CHECK REQUIRED** | Bridge nay ưu tiên `permission.asked.properties.tool`; UI poll nhanh hơn và báo lỗi transport. Golden path create→Allow và modify→Deny phải chạy thật. |
+| File Work Review | **PARTIAL** | Create/modify review có nền tảng; delete chưa tin cậy. |
+| Attachments | **PARTIAL** | Text attachments bounded; image/PDF attachment vào prompt chưa có. |
+| Skills | **BASIC WORKS** | User Skill CRUD + enable/disable; built-in read-only. |
+| UI readiness | **PARTIAL / COMMERCIAL FAIL** | Shell dùng được nhưng chưa đạt chuẩn demo thương mại; dark mode thật chưa có. |
+| D1–D4 | **NOT IMPLEMENTED** | Chỉ có integration surfaces/mount points; backend teams chưa merge. |
+| Full RC | **DEFERRED** | Chưa chạy release-candidate đầy đủ. |
+
+## P0 recovery patch trong source này
+
+- Product action contract bắt buộc model dùng file tool và không được báo thành công khi tool chưa thành công.
+- Permission bridge giữ đúng tool thật (`write` → `file_create`) thay vì làm mất thông tin qua permission group.
+- File-action response được đánh dấu **chưa xác minh** nếu không có review/disk evidence cùng runtime turn.
+- Truncated text và XLSX được chuyển sang read-only để tránh ghi đè phá dữ liệu.
+- DOCX không còn chèn HTML chưa sanitize; render plain text.
+- Workspace giữ thay đổi chưa lưu khi Agent refresh.
+
+## Exit criterion trước khi tiếp tục UI commercial pass
+
+```text
+request create file
+→ Permission hiển thị
+→ Allow once
+→ file tồn tại đúng workspace, đúng nội dung
+→ File Work Review có bằng chứng
+→ assistant chỉ báo verified success sau mutation
+```
+
+---
+
+## MS365 connector + SharePoint slice — D2 (2026-07-14)
+
+| Item | Status |
+|---|---|
+| Spec | `docs/superpowers/specs/2026-07-13-ms365-connector-sharepoint-design.md` |
+| Plan | `docs/superpowers/plans/2026-07-13-ms365-connector-sharepoint.md` |
+| Branch | `feature/ms365-connector-sharepoint` |
+| HEAD | `d086ecd` — fix(ms365): advertise tool endpoint to OpenCode child via baseEnv when flag on |
+| Feature flag | `CGHC_MS365_ENABLED` — **OFF by default**; with flag off, composition and child env are byte-for-byte unchanged (verified in review) |
+
+### Đã triển khai (what shipped)
+
+- Nền tảng connector MS365 (`ms365-connector`, `ms365-graph-client`, `ms365-errors`) với ánh xạ lỗi Graph rõ ràng.
+- Đăng nhập bằng **manual token hoạt động được** (dán access token thủ công, xác thực qua Graph client).
+- **Device-code OAuth đã viết code nhưng đang bị chặn (gated)**: chưa có Azure app registration / client ID thật cho tenant thật, nên luồng device-code chưa thể hoàn tất việc kết nối thực sự. Không có trạng thái "đã kết nối" giả nào được hiển thị.
+- SharePoint: tìm kiếm (search), liệt kê (list), tóm tắt (summary), và **upload** (ghi, có kiểm soát quyền).
+- Tool dispatch cho SharePoint với **upload chỉ chạy sau khi có quyết định Allow được ghi nhận** (permission-gated); Deny chặn thực sự ở boundary thực thi.
+- Router loopback token-guarded (`ms365-tool-router` + barrel) làm ranh giới port/adapter cho MS365.
+- Khi flag **ON**, service quảng bá (advertise) endpoint tool MS365 cho OpenCode child qua biến môi trường `CGHC_MS365_TOOL_ENDPOINT` / `CGHC_MS365_TOKEN` trong `baseEnv` của child process.
+
+### Bằng chứng hồi quy đã xác minh (verified regression)
+
+```text
+npm run typecheck        → exit 0 PASS (trên HEAD d086ecd)
+npm run build:renderer   → exit 0 PASS (trên HEAD d086ecd)
+MS365 unit tests         → 54/54 PASS, 0 fail, 10 file:
+  ms365-errors, ms365-graph-client, ms365-manual-token, ms365-device-code,
+  ms365-connector, ms365-sharepoint, ms365-view-redaction, ms365-tool-router,
+  ms365-flag-off, ms365-child-env
+```
+
+Bộ test đầy đủ của repo có **~20 lỗi có sẵn (pre-existing) trên 13 suite** không liên quan đến
+MS365 (`composition-ssot-and-redaction`, `composition-loopback-e2e`, `conversation-relaunch`,
+`execution-captured-frames`, `execution-ev-reducer`, `execution-sse-mapper`,
+`runtime-session-store-adapter`, `session-live-run-e2e`, `session-restart`,
+`session-router-boundary`, `session-stream-hub`, `session-stream-live-e2e`,
+`streaming-backpressure`, `streaming-coalesce`). Đây là các suite live/integration/streaming
+lỗi trong môi trường dev hiện tại **độc lập** với slice này — không có file nào trong danh sách
+là file MS365, và tập lỗi không đổi khi tắt flag MS365. Các suite này KHÔNG được coi là PASS
+và KHÔNG do slice này gây ra; báo cáo này không tuyên bố chúng pass.
+
+### Giới hạn trung thực (honesty limitations — phải đọc trước khi coi slice là "xong")
+
+1. **Device-code OAuth bị gate**: chỉ đăng nhập bằng manual token là dùng được thật; device-code
+   đã có code nhưng chưa thể hoàn tất kết nối vì chưa có Azure app registration/client ID thật —
+   không có trạng thái "đã kết nối" giả.
+2. **Quảng bá tool vs. thực sự tiêu thụ (consumption) chưa được xác minh end-to-end**: service đã
+   set `CGHC_MS365_TOOL_ENDPOINT` / `CGHC_MS365_TOKEN` trong env của OpenCode child khi flag ON,
+   nhưng việc runtime OpenCode thực tế có đọc các biến này để đăng ký MS365 tool thành tool mà
+   model có thể gọi (model-callable) **chưa được kiểm chứng qua một child đang chạy thật**. Đây là
+   một hạng mục xác minh còn mở (open verification item) — không tuyên bố model đã gọi được
+   SharePoint tool trong một phiên chạy thật.
+3. **Chưa có xác minh packaged/live với tenant thật**: toàn bộ bằng chứng ở mức unit test; chưa có
+   lưu lượng Microsoft Graph / SharePoint thật nào được thực thi.
+4. **Thực thi quyền cho hành động ghi (upload)** đã được xác minh ở mức unit (Deny chặn thực sự;
+   upload chỉ chạy sau một quyết định Allow được ghi nhận), nhưng **chưa được xác minh qua một
+   lượt chạy end-to-end thật**.
+5. Slice này **tắt theo mặc định** (`CGHC_MS365_ENABLED=false`); baseline không bị ảnh hưởng khi flag off.
+
+### Kết luận trạng thái
+
+```text
+D2 (MS365 connector + SharePoint): foundation implemented behind flag, NOT merge-ready
+  as a full live integration. Manual token connect works; device-code gated; tool
+  consumption by live OpenCode child not yet verified; no packaged/live tenant run.
+```
+
+## Microsoft 365 & Claude Code surfaces (2026-07-13)
+
+| Item | Status |
+|---|---|
+| Spec | `docs/superpowers/specs/2026-07-13-microsoft-claudecode-surfaces-design.md` |
+| Plan | `docs/superpowers/plans/2026-07-13-microsoft-claudecode-surfaces.md` |
+| Branch | `feature/ms365-claudecode-surfaces` |
+| Microsoft 365 surface | **Complete (honest disconnected shell)** — rail nút `microsoft` mở `section.ms-surface` với segmented "Trợ lý AI" / "Kết nối"; nút đăng nhập `.ms-connect__signin` luôn `disabled`, ghi chú hiển thị rõ "Backend D2 (Microsoft Graph) chưa được tích hợp" |
+| Claude Code surface | **Complete (3-column, shared session)** — rail nút `code` mở `section.cc-surface` với `code-explorer` (tree + SOURCE CONTROL thật), `code-editor` (chỉ đọc + diff review), `cc-panel` (dùng chung phiên hội thoại với Cowork); segmented "Phiên làm việc" / "Cách hoạt động" chuyển sang `cc-onboarding` với 4 bước |
+| Not included | Không có backend D2 (Microsoft Graph) thật; editor Claude Code không ghi tệp; không có nút accept/reject trên diff (theo đúng spec — chỉ xem lại) |
+| Packaged evidence | `reports/ui-shell-v3-commercial-readiness/` — `microsoft-assistant.png`, `microsoft-connect.png`, `code-session.png`, `code-onboarding.png` + `structural-state-check.json` |
+| Verification commands | `scripts\build.bat` → `node tools/verify/ui-shell-v3-production-screenshots.mjs` (exit 0) → `scripts\stop.bat` |
+
+Trong lúc bổ sung 4 capture mới, phát hiện một lỗi có sẵn trong assertion của verifier
+(`tools/verify/ui-shell-v3-production-screenshots.mjs`): hai điều kiện kiểm tra
+"cowork mode phải chỉ hiện view cowork" / "workspace mode phải chỉ hiện view workspace"
+thiếu guard `!settingsOpen`, nên khi Settings đang mở thì assertion tự fail sai. Đã sửa
+bằng cách thêm `!settingsOpen &&` vào cả hai điều kiện, giữ nguyên các điều kiện lân cận
+vốn đã có guard này — không nới lỏng assertion, chỉ sửa đúng lỗi logic khiến kết quả false
+negative.
 
 ## UI Shell V3 commercial readiness remediation (2026-07-13)
 
@@ -180,120 +307,3 @@ Journeys D–L: not completed in the latest run
 ```
 
 Evidence artifact (best full run): `%TEMP%\cghc-freview-artifacts-ubFNmc`
-
-| Stage / journey | Result | Notes |
-|---|---|---|
-| A01–A12 create | PASS | Permission, disk file, review artifact, terminal |
-| B modify | PASS | `modify-me.txt` diff persisted (`review-11`) |
-| C delete | NOT PASS | Model sometimes skips delete tool or uses bash/edit instead |
-| D–L | NOT RUN | Stopped after C failure |
-
-### Product bugs closed in hardening pass
-
-| ID | Issue | Fix |
-|---|---|---|
-| RC2 | Windows 8.3 short path (`NHATLU~1`) did not map to long workspace root → review snapshot failed | `toRelativePath()` folder-segment match |
-| RC4 | Stream watchdog (90s) treated permission wait as stall | Pause watchdog while permission `pending` |
-| RC5 | Before snapshot missing when permission has no `targetPath` | Capture on `tool_call` start via early `filePath` in summary |
-
-### Harness fixes (verifier only)
-
-| ID | Issue | Fix |
-|---|---|---|
-| RC1 | A07 required filename in permission dialog when OpenCode emits empty path | Accept file write/edit permission kinds |
-| RC3 | `waitTerminalAfterPermission` approved without visible dialog | Staged `waitPermissionRequest` + `approveObservedPermission` |
-| — | Review click targeted wrong file row | `clickFileChange(relativePath)` |
-
-### Open verification decision
-
-```text
-Live LLM behavior must not be the sole mechanism used to verify deterministic
-delete/deny/redaction/persistence File Review semantics.
-```
-
-### Limits (configured)
-
-| Limit | Value |
-|---|---|
-| Max snapshot bytes | 64 KiB (`FILE_REVIEW_MAX_SNAPSHOT_BYTES`) |
-| Max preview bytes | 64 KiB (`FILE_REVIEW_MAX_PREVIEW_BYTES`) |
-| Max diff chars | 32 KiB (`FILE_REVIEW_MAX_DIFF_CHARS`) |
-| Max diff lines per side | 500 (`FILE_REVIEW_MAX_DIFF_LINES`) |
-
-### Verification
-
-- `npm run verify:release` PASS (includes file-review unit/router tests, activity-model 8.3 path test).
-- `npm run package:win` PASS.
-- `node tools/verify/file-review-packaged.mjs` — A–B PASS in latest clean rerun; C–L incomplete.
-
-Full L9 / release-candidate verification is **not** complete.
-
-## Commercial UI Foundation and Workspace Shell
-
-### What shipped
-
-- Hybrid `1a Airy + 1b rail` is the active shell direction: 56px product rail,
-  contextual Cowork sidebar, central chat workspace, and right information panel.
-- Typography is standardized on bundled local `Be Vietnam Pro` with Segoe/Noto fallback;
-  no runtime CDN font load is required.
-- Central design tokens now cover semantic background/surface/border/text/accent,
-  status colors, spacing, typography, radius, shadow, and transition.
-- The inline SVG icon system covers Cowork, Dispatch, Gateway, Knowledge,
-  Knowledge Graph, Microsoft 365, Code, Workspace, Folder, File, Attachment,
-  Settings, Permission, Activity, Create, Modify, Delete, Search, Refresh, and
-  collapse/expand affordances.
-- A top-level surface registry defines `cowork`, `dispatch`, `gateway`, `knowledge`,
-  `knowledge-graph`, `microsoft`, and `code`; `cowork` is `available`, D1-D4 surfaces
-  are `awaiting_integration`, and `code` is `planned`.
-- D1-D4 UI contracts exist as passive integration slot interfaces only. No backend
-  adapter, fake production data, or mock provider was added for those surfaces.
-- Minimal Workspace Navigator is implemented as a read-only service-backed tree:
-  direct children only, lazy folder expansion, bounded list size, no recursive scan,
-  and no renderer filesystem access.
-- Workspace file preview supports bounded text/Markdown/JSON/YAML/source-code style
-  text through the existing safe preview boundary. PDF, Office, image, and direct editor
-  are not started.
-- Right information panel now has active tab semantics: Kế hoạch, Hoạt động, Tệp,
-  and Xem lại. Empty states remain honest when there is no runtime data.
-
-### Status constraints
-
-```text
-File Work Review: PARTIAL PASS
-D1-D4: not merged / not implemented
-Minimal Workspace Navigator: read-only implemented
-Direct editor/PDF/Office/image preview: not started
-```
-
-Full live regression remains deferred until after the external integration milestone.
-
-## Next Implementation Slice
-
-Next Agent: Cursor.
-
-Current blocker:
-
-```text
-File Work Review: PARTIAL PASS
-Packaged journeys C–L need a verification redesign split (live-agent vs deterministic product-path).
-```
-
-Next implementation action:
-
-```text
-Receive D1–D4 intake reports per docs/integration/external-systems-integration-readiness.md.
-Do not merge until matrix row is filled and track acceptance gates pass.
-```
-
-## Useful Verification Commands
-
-```powershell
-npm run verify:release
-npm run package:win
-node tools/verify/file-review-packaged.mjs --mode live
-node tools/verify/file-review-packaged.mjs --mode deterministic
-node tools/verify/skills-foundation-packaged.mjs
-node tools/verify/attachment-honesty-packaged.mjs
-node tools/verify/provider-readiness-packaged.mjs
-node tools/verify/ui-shell-v3-production-screenshots.mjs
-```

@@ -26,6 +26,15 @@ export type ProductIconName =
   | "file-delete"
   | "permission"
   | "settings"
+  | "sliders"
+  | "info"
+  | "folder-open"
+  | "pencil"
+  | "trash"
+  | "check"
+  | "save"
+  | "arrow-left"
+  | "more"
   | "activity"
   | "panel"
   | "panel-right-open"
@@ -33,7 +42,13 @@ export type ProductIconName =
   | "paper-plane"
   | "square-pen"
   | "expand"
-  | "collapse";
+  | "collapse"
+  | "sparkle"
+  | "shield"
+  | "history"
+  | "split"
+  | "play"
+  | "git-branch";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 
@@ -58,6 +73,15 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   "file-delete": ["M7 7h10M10 7V5h4v2M9 10l1 8M15 10l-1 8M8 7l1 13h6l1-13"],
   permission: ["M12 4l7 3v5c0 4-2.7 7-7 8-4.3-1-7-4-7-8V7l7-3Z", "M9 12l2 2 4-5"],
   settings: ["M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z", "M4 12h3M17 12h3M12 4v3M12 17v3M6.3 6.3l2.1 2.1M15.6 15.6l2.1 2.1M17.7 6.3l-2.1 2.1M8.4 15.6l-2.1 2.1"],
+  sliders: ["M4 7h10M18 7h2M4 17h2M10 17h10", "M14 4v6M7 14v6"],
+  info: ["M12 11v6", "M12 7h.01", "M4 12a8 8 0 1 0 16 0 8 8 0 0 0-16 0Z"],
+  "folder-open": ["M3 8h7l2 2h9l-2 8H5L3 8Z", "M5 8V6h6l2 2"],
+  pencil: ["M5 19l4-.8L18 9.2 14.8 6 5.8 15 5 19Z", "M13.8 7l3.2 3.2"],
+  trash: ["M7 7h10M10 7V5h4v2M9 10l1 8M15 10l-1 8M8 7l1 13h6l1-13"],
+  check: ["M5 12l4 4L19 6"],
+  save: ["M5 4h12l2 2v14H5V4Z", "M8 4v6h8V4M8 16h8"],
+  "arrow-left": ["M19 12H5", "M11 6l-6 6 6 6"],
+  more: ["M6 12h.01M12 12h.01M18 12h.01"],
   activity: ["M5 12h3l2-5 4 10 2-5h3"],
   panel: ["M4 5h16v14H4V5Z", "M14 5v14"],
   "panel-right-open": ["M4 5h16v14H4V5Z", "M14 5v14", "M10 9l3 3-3 3"],
@@ -66,6 +90,12 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   "square-pen": ["M5 5h10v4M5 5v14h14V9", "M10 14l7-7 2 2-7 7h-2v-2Z"],
   expand: ["M9 6l6 6-6 6"],
   collapse: ["M6 9l6 6 6-6"],
+  sparkle: ["M12 4l1.8 4.6L18.5 10l-4.7 1.4L12 16l-1.8-4.6L5.5 10l4.7-1.4L12 4Z", "M18 15l.9 2.1L21 18l-2.1.9L18 21l-.9-2.1L15 18l2.1-.9L18 15Z"],
+  shield: ["M12 3l7 3v6c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6l7-3Z", "M9.5 12l2 2 3.5-3.5"],
+  history: ["M4 12a8 8 0 1 1 2.3 5.7", "M4 12H2.5M4 12l-1.5 3", "M12 8v4l3 2"],
+  split: ["M5 5h6v14H5zM13 5h6v14h-6z"],
+  play: ["M8 6l10 6-10 6V6Z"],
+  "git-branch": ["M7 5a2 2 0 1 0 0 .1M7 19a2 2 0 1 0 0 .1M17 7a2 2 0 1 0 0 .1", "M7 7v10", "M17 9a6 6 0 0 1-6 6"],
 });
 
 export function createProductIcon(name: ProductIconName, label?: string): SVGSVGElement {

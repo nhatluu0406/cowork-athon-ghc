@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-14"
 ---
 
 # External Systems Integration Readiness (D1–D4)
@@ -13,8 +13,8 @@ decisions.
 Related docs:
 
 - [Current Status](../product/current-status.md)
-- [Cowork GHC Product Plan](../product/cowork-ghc-product-plan.md) — §12 external tracks
-- [Recovery and Modernization Plan](../product/cowork-ghc-recovery-and-modernization-plan.md) — §5 merge order
+- [Product Plan](../product/product-plan.md)
+- [Roadmap](../product/roadmap.md)
 - [POC Acceptance](../quality/poc-acceptance.md)
 - [Known Limitations](../quality/known-limitations.md)
 
@@ -39,15 +39,29 @@ Related docs:
 | Attachment Honesty | **PASS** | |
 | File Work Review | **PARTIAL PASS** | Live Journey A–B PASS; Journey C blocked; D–L incomplete |
 | Commercial UI Product Owner acceptance | **Pending** | V3 production shell ported; packaged screenshots in `reports/ui-shell-v3-production/` await PO review |
-| D1–D4 external tracks | **Not merged** | UI surfaces are `awaiting_integration` registry slots only |
+| D1–D4 external tracks | **UI restored, backends not merged** | Product rail + placeholder surfaces with stable mount IDs (`d1-dispatch-root`, etc.); no fake data |
 | Full L9 / release-candidate regression | **Incomplete** | Deferred to combined integration milestone |
 | Architecture refactor (`app-shell.ts`, snapshot/watchdog → service) | **Deferred** | After combined external integration merge |
 
 ```text
 File Work Review: PARTIAL PASS
-Commercial UI acceptance: FAIL
-D1–D4: not merged
+Commercial UI acceptance: Pending PO
+D1–D4 backends: not merged (UI intake surfaces restored on product rail)
 ```
+
+### UI intake surfaces (2026-07-13)
+
+Product rail exposes Cowork, Dispatch, Gateway, Knowledge, Microsoft 365, and Code. Cowork and Workspace remain work modes inside the Cowork surface — Workspace is **not** a rail item.
+
+| Track | Mount ID | Component slot | Placeholder status |
+|---|---|---|---|
+| D1 | `d1-dispatch-root` | `DispatchIntegrationSlot` | Chờ tích hợp D1 |
+| D2 | `d2-microsoft-root` | `MicrosoftIntegrationSlot` | Chờ tích hợp D2 |
+| D3 | `d3-knowledge-root` | `KnowledgeIntegrationSlot` | Chờ tích hợp D3 |
+| D4 | `d4-gateway-root` | `GatewayIntegrationSlot` | Chờ tích hợp D4 |
+| Code | `code-surface-root` | `CodeIntegrationSlot` | Đã lên kế hoạch |
+
+Registry: `app/ui/src/integration-surface-adapters.ts`. Teams replace placeholder content inside the mount node without changing shell navigation.
 
 ---
 
@@ -119,7 +133,7 @@ Fill this table as teams deliver reports. **TBD** means not yet received.
 | Track | Branch / commit | Based on | Runnable | Tests | Contract | Credentials | Migration | Feature flag | Conflict risk | Merge ready |
 |---|---|---|---|---|---|---|---|---|---|---|
 | **D1** Dispatch / fan-out | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | **High** | **No** |
-| **D2** Microsoft automation | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | **Medium** | **No** |
+| **D2** Microsoft automation | `feature/ms365-connector-sharepoint` @ `d086ecd` | `eaeb3eb` (pre-integration baseline) | Yes — `npm run typecheck` PASS, `npm run build:renderer` PASS | 54/54 MS365 unit tests PASS (10 files); ~20 pre-existing failures across 13 unrelated live/integration/streaming suites (unchanged with flag OFF) | Manual-token connect + Graph search/list/summary/upload documented in spec; loopback tool router (`ms365-tool-router`) token-guarded | Manual token works now; device-code OAuth coded but **gated** (no real Azure app registration/client ID) — no fake "connected" state | None (no new persisted schema for this slice) | `CGHC_MS365_ENABLED`, default **OFF**; with flag off, composition/child env byte-for-byte unchanged | **Medium** | **No — foundation implemented behind flag; not merge-ready as a full live integration** |
 | **D3** Knowledge / RAG / graph | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | **Low / Medium** | **No** |
 | **D4** Advanced LLM gateway | TBD | TBD | TBD | TBD | TBD | TBD | TBD | TBD | **High** | **No** |
 
@@ -194,6 +208,21 @@ Focused acceptance for each track. Full combined milestone tests are in §8.
 | Revocation | Token revoke clears UI state; no stale "connected" badge |
 | Audit | Connector events appear in activity or dedicated audit surface (no secrets) |
 | Packaged journey | Connect → list one drive item → disconnect → relaunch state honest |
+
+**Bằng chứng D2 (2026-07-14, branch `feature/ms365-connector-sharepoint` @ `d086ecd`):**
+
+| Tiêu chí | Bằng chứng |
+|---|---|
+| Auth | Đăng nhập bằng **manual token hoạt động được** (dán token, xác thực qua Graph client); **device-code OAuth đã viết code nhưng bị gate** — chưa có Azure app registration/client ID thật, chưa thể hoàn tất kết nối thật; không hiển thị trạng thái "đã kết nối" giả |
+| Scopes (least-privilege) | `Sites.Read.All`, `Files.ReadWrite.All` |
+| Actions | Một hành động Graph chỉ đọc (search/list/summary trên SharePoint) và một hành động ghi có giới hạn (upload), cả hai đi qua tool dispatch |
+| Permission trên upload | Xác minh ở mức unit: Deny chặn thực sự; upload chỉ chạy sau một quyết định Allow đã ghi nhận. **Chưa xác minh qua một lượt chạy end-to-end thật** |
+| Connector events | Có (qua router/dispatch); chưa thấy trong một phiên chạy live thật |
+| Feature flag | `CGHC_MS365_ENABLED`, **OFF theo mặc định**; flag off → composition và child env không đổi (byte-for-byte, đã review) |
+| Tool advertisement vs. consumption | Service quảng bá endpoint MS365 cho OpenCode child qua `CGHC_MS365_TOOL_ENDPOINT` / `CGHC_MS365_TOKEN` khi flag ON. Việc OpenCode runtime thật có tiêu thụ (consume) các biến này để đăng ký MS365 tool thành tool model-callable **chưa được xác minh end-to-end với một child đang chạy** — hạng mục xác minh còn mở |
+| Packaged / live tenant run | **CHƯA CHẠY** — toàn bộ bằng chứng ở mức unit test; không có lưu lượng Microsoft Graph/SharePoint thật nào được thực thi |
+| Regression | `npm run typecheck` PASS; `npm run build:renderer` PASS; 54/54 MS365 unit test PASS (10 file); ~20 lỗi có sẵn không liên quan trên 13 suite khác (live/integration/streaming), không đổi khi tắt flag |
+| Merge ready | **Không** — đây là nền tảng (foundation) được triển khai phía sau flag, không phải một tích hợp live hoàn chỉnh; chưa sẵn sàng merge vào `integration/d2-microsoft` cho tới khi có xác minh packaged/live và xác minh tool-consumption end-to-end |
 
 ### D3 — Knowledge system (RAG, vector, graph)
 
@@ -348,3 +377,4 @@ Sequential checklist for integration Agent (do not skip steps).
 | Date | Change |
 |---|---|
 | 2026-07-13 | Initial canonical intake doc at baseline `eaeb3eb` / tag `pre-external-integration-2026-07-14` |
+| 2026-07-14 | Filled D2 matrix row and §5 D2 acceptance evidence for `feature/ms365-connector-sharepoint` @ `d086ecd` — foundation implemented behind `CGHC_MS365_ENABLED` (OFF default); manual token works, device-code gated, tool consumption by live OpenCode child unverified, no packaged/live tenant run; **Not merge-ready** |

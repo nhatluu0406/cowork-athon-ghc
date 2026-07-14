@@ -35,11 +35,14 @@ function toolStatus(status: string | undefined): StepStatus {
   }
 }
 
+const APPLY_PATCH_TOOL_NAMES = new Set(["patch", "apply_patch"]);
+
 /** File-writing tools → the EV file-mutation op they represent (create vs in-place edit). */
 const FILE_TOOL_OPS: Readonly<Record<string, FileMutationOp>> = {
   write: "create",
   edit: "edit",
   patch: "edit",
+  apply_patch: "edit",
   multiedit: "edit",
   delete: "delete",
   remove: "delete",
@@ -53,6 +56,33 @@ function toolInputPath(state: RawPart["state"]): string | undefined {
     readString(input, "filePath") ??
     readString(input, "path") ??
     readString(input, "file")
+  );
+}
+
+/** Parse OpenCode `apply_patch` marker lines for the affected relative path + op. */
+export function parseApplyPatchMarker(
+  patchText: string | undefined,
+): { path?: string; operation?: FileMutationOp } {
+  if (patchText === undefined || patchText.trim().length === 0) return {};
+  const deleteMatch = /^\*\*\* Delete File:\s*(.+)$/m.exec(patchText);
+  if (deleteMatch?.[1] !== undefined) {
+    return { path: deleteMatch[1].trim(), operation: "delete" };
+  }
+  const addMatch = /^\*\*\* Add File:\s*(.+)$/m.exec(patchText);
+  if (addMatch?.[1] !== undefined) {
+    return { path: addMatch[1].trim(), operation: "create" };
+  }
+  const updateMatch = /^\*\*\* Update File:\s*(.+)$/m.exec(patchText);
+  if (updateMatch?.[1] !== undefined) {
+    return { path: updateMatch[1].trim(), operation: "edit" };
+  }
+  return {};
+}
+
+function applyPatchMarkerFromState(state: RawPart["state"]): ReturnType<typeof parseApplyPatchMarker> {
+  const input = asRecord(state?.input);
+  return parseApplyPatchMarker(
+    readString(input, "patchText") ?? readString(input, "patch") ?? readString(input, "content"),
   );
 }
 
@@ -74,7 +104,13 @@ function mapStepPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
 function mapToolPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
   const status = toolStatus(part.state?.status);
   const toolName = part.tool ?? "tool";
-  const path = toolInputPath(part.state);
+  let path = toolInputPath(part.state);
+  let op = FILE_TOOL_OPS[toolName];
+  if (APPLY_PATCH_TOOL_NAMES.has(toolName)) {
+    const marker = applyPatchMarkerFromState(part.state);
+    if (marker.path !== undefined) path = marker.path;
+    if (marker.operation !== undefined) op = marker.operation;
+  }
   const summary = path ?? part.state?.title;
   const events: EvEvent[] = [
     {
@@ -87,7 +123,6 @@ function mapToolPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
     },
   ];
 
-  const op = FILE_TOOL_OPS[toolName];
   // Only surface a file mutation once the real tool COMPLETED against a concrete path.
   if (op && path && status === "completed") {
     events.push({ ...alloc(), kind: "file_mutation", operation: op, path });

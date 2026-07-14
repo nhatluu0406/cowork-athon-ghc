@@ -37,12 +37,27 @@ export interface EnabledSkillSnapshot {
   readonly content: string;
 }
 
+export interface SkillDraft {
+  readonly name: string;
+  readonly description: string;
+  readonly version: string;
+  readonly body: string;
+}
+
+export interface SkillCreateDraft extends SkillDraft {
+  readonly id?: string;
+}
+
 export interface SkillCatalog {
   refresh(): Promise<readonly SkillView[]>;
   list(): readonly SkillView[];
   setEnabled(id: string, enabled: boolean): Promise<SkillView>;
   enabledSnapshots(): readonly EnabledSkillSnapshot[];
   preview(id: string): { readonly content: string; readonly truncated: boolean };
+  readContent(id: string): string;
+  createUserSkill(draft: SkillCreateDraft): Promise<SkillView>;
+  updateUserSkill(id: string, draft: SkillDraft): Promise<SkillView>;
+  deleteUserSkill(id: string): Promise<void>;
 }
 
 export interface SkillRoot {

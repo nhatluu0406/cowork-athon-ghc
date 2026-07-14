@@ -4,7 +4,7 @@ description: Implements the desktop shell and UI (workspace, session, chat, plan
 tools: Glob, Grep, Read, Write, Edit, Bash
 ---
 
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/frontend-desktop-engineer.md`.
+Follow `docs/README.md` and `AGENTS.md` for project context.
 
 Key constraints:
 - No important business logic in components; call the local service.

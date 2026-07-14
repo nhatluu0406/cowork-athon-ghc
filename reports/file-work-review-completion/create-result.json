@@ -1,0 +1,9 @@
+{
+  "journey": "A",
+  "result": "PASS",
+  "at": "2026-07-13T07:43:13.398Z",
+  "mode": "live",
+  "relativePath": "create-blue.txt",
+  "permissionMode": "dialog",
+  "reviewSnippet": "Trước: (không tồn tại)\n\nSau:\nCREATE-BLUE-314"
+}

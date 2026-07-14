@@ -94,6 +94,7 @@ textarea,
   -webkit-app-region: no-drag;
 }
 
+/* ── Shell frame: desktop default (>1366px) — inspector is a docked column ── */
 .shell-frame {
   display: grid;
   min-width: 0;
@@ -133,6 +134,7 @@ textarea,
   display: none !important;
 }
 
+/* ── Product rail ── */
 .product-rail {
   grid-area: rail;
   display: flex;
@@ -188,10 +190,8 @@ textarea,
   display: none;
 }
 
-[data-tooltip] {
-  position: relative;
-}
-
+/* ── Tooltip (custom implementation via data-tooltip / JS) ── */
+/* No position:relative on [data-tooltip] — tooltip is fixed-positioned by JS */
 .shell-tooltip {
   position: fixed;
   z-index: 80;
@@ -208,8 +208,42 @@ textarea,
   pointer-events: none;
 }
 
+/* ── Contextual sidebar ── */
 .contextual-sidebar {
   grid-area: sidebar;
+  min-width: 200px;
+}
+
+/* ── Main views ── */
+.workspace-companion-host {
+  grid-area: main;
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.shell-frame[data-work-mode="cowork"] .workspace-companion-host {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell-frame[data-work-mode="workspace"] .workspace-companion-host {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 36%);
+}
+
+.shell-frame[data-work-mode="cowork"] .view--workspace {
+  display: none !important;
+}
+
+.view--cowork,
+.view--workspace,
+.view--knowledge,
+.view--integration,
+.view--microsoft,
+.view--code,
+.view--settings {
+  min-width: 0;
+  min-height: 0;
 }
 
 .view--cowork,
@@ -217,11 +251,22 @@ textarea,
 .view--knowledge,
 .view--integration,
 .view--settings {
-  grid-area: main;
-  min-width: 0;
-  min-height: 0;
+  /* grid-area assigned via host or direct child below */
 }
 
+.shell-frame[data-work-mode="cowork"] .view--cowork {
+  grid-column: 1;
+}
+
+.view--knowledge,
+.view--integration,
+.view--microsoft,
+.view--code,
+.view--settings {
+  grid-area: main;
+}
+
+/* ── Settings surface (full-screen, no modal backdrop) ── */
 .settings-surface {
   display: flex;
   flex-direction: column;
@@ -334,11 +379,154 @@ textarea,
   max-width: 620px;
 }
 
-.inspector-shell {
-  grid-area: inspector;
-  min-width: 0;
+.skills-settings__title {
+  margin: 0 0 6px;
+  font-size: 22px;
+  font-weight: 600;
 }
 
+.skills-settings__intro,
+.skills-settings__status,
+.skills-settings__meta,
+.skills-settings__note,
+.skills-settings__placeholder,
+.skills-settings__empty {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.skills-settings__toolbar {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.skills-settings__search {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.skills-settings__layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 420px;
+}
+
+.skills-settings__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  max-height: 520px;
+  padding-right: 4px;
+}
+
+.skills-settings__item {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.skills-settings__item--active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.skills-settings__item-name {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.skills-settings__item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.skills-settings__editor {
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  padding: 16px;
+  background: var(--surface);
+}
+
+.skills-settings__field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.skills-settings__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.skills-settings__input,
+.skills-settings__textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: var(--paper);
+  font: inherit;
+}
+
+.skills-settings__textarea {
+  resize: vertical;
+  min-height: 220px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  line-height: 1.45;
+}
+
+.skills-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.skills-settings__delete {
+  color: var(--danger, #dc2626);
+}
+
+.skills-settings__error {
+  color: var(--danger, #dc2626);
+  font-size: 13px;
+}
+
+@media (max-width: 1366px) {
+  .skills-settings__layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .skills-settings__list {
+    max-height: 220px;
+  }
+}
+
+/* ── Inspector: docked column on desktop, flex column full height ── */
+.inspector-shell {
+  grid-area: inspector;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+/* ── Drawer scrim (used only for narrow viewports) ── */
 .drawer-scrim {
   position: fixed;
   inset: var(--topbar-h) 0 var(--statusbar-h) 0;
@@ -346,13 +534,19 @@ textarea,
   background: rgba(16, 24, 40, 0.28);
 }
 
-@media (max-width: 1366px) {
+/* ── 1024px: inspector becomes a drawer; desktop/tablet widths keep it docked ── */
+@media (max-width: 1024px) {
   .shell-frame {
-    grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(680px, 1fr);
+    grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr);
     grid-template-areas: "rail sidebar main";
   }
 
-  .shell-frame .inspector-shell:not([hidden]) {
+  .shell-frame .inspector-shell {
+    display: none;
+  }
+
+  .shell-frame.inspector-drawer-open .inspector-shell:not([hidden]) {
+    display: flex;
     position: fixed;
     top: var(--topbar-h);
     right: 0;
@@ -363,6 +557,164 @@ textarea,
   }
 }
 
+/* ── 1366px: tighten companion chat column ── */
+@media (max-width: 1366px) {
+  .shell-frame[data-work-mode="workspace"] .workspace-companion-host {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 40%);
+  }
+}
+
+/* ── 900px: rail + main only, sidebar/inspector as drawers ── */
+.cowork-view--companion {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line-soft);
+  background: var(--surface);
+}
+
+.cowork-view--companion .conv-header {
+  padding: 8px 12px;
+}
+
+.cowork-view--companion .conv-header__title {
+  font-size: 14px;
+}
+
+.cowork-view--companion .conv-header__meta {
+  display: none;
+}
+
+.cowork-view--companion .transcript {
+  flex: 1;
+  min-height: 0;
+}
+
+.cowork-view--companion .composer__hint {
+  display: none;
+}
+
+.view--cowork,
+.view--workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-view__companion-slot {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-companion-pane {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.workspace-companion-pane__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--paper-deep);
+}
+
+.workspace-companion-pane__path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-body);
+}
+
+.workspace-companion-pane__status {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.workspace-companion-pane__save {
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line-warm);
+  border-radius: 8px;
+  background: var(--surface);
+  font-weight: 500;
+}
+
+.workspace-companion-pane__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.workspace-companion-pane__editor {
+  width: 100%;
+  min-height: 100%;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  padding: 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: none;
+}
+
+.workspace-companion-pane__image,
+.workspace-companion-pane__pdf {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  border: 0;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.workspace-companion-pane__pdf {
+  min-height: 480px;
+}
+
+.workspace-companion-pane__docx {
+  max-width: 720px;
+  line-height: 1.6;
+}
+
+.workspace-companion-pane__grid {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.workspace-companion-pane__grid-cell {
+  border: 1px solid var(--line-soft);
+  padding: 0;
+}
+
+.workspace-companion-pane__grid-input {
+  width: 100%;
+  min-width: 72px;
+  border: 0;
+  padding: 6px 8px;
+  font: inherit;
+  background: transparent;
+}
+
+.workspace-companion-pane__empty,
+.workspace-companion-pane__message {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 48px 16px;
+}
+
+.workspace-companion-pane__message--error {
+  color: var(--danger);
+}
+
+/* ── 900px: rail + main only, sidebar/inspector as drawers ── */
 @media (max-width: 900px) {
   .topbar__brand-name {
     display: none;
@@ -389,21 +741,6 @@ textarea,
     box-shadow: 8px 0 28px rgba(16, 24, 40, 0.14);
   }
 
-  .shell-frame .inspector-shell {
-    display: none;
-  }
-
-  .shell-frame.inspector-drawer-open .inspector-shell:not([hidden]) {
-    display: flex;
-    position: fixed;
-    top: var(--topbar-h);
-    right: 0;
-    bottom: var(--statusbar-h);
-    width: min(var(--panel-w), 92vw);
-    z-index: 20;
-    box-shadow: -8px 0 28px rgba(16, 24, 40, 0.14);
-  }
-
   .product-rail__sidebar-toggle {
     display: inline-flex;
   }
@@ -414,7 +751,7 @@ textarea,
   }
 
   .settings-surface__nav {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     border-right: 0;
     border-bottom: 1px solid var(--line-soft);
   }
