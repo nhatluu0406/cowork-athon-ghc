@@ -1,7 +1,6 @@
 import "./setup-dom.js";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { act } from "react";
 import { mountSkillsPanel } from "../src/skills-panel.js";
 import type { ServiceClient, SkillView } from "../src/service-client.js";
 
@@ -40,9 +39,8 @@ function client(skills: readonly SkillView[]): ServiceClient {
 
 test("renders valid and invalid Skills; invalid Skill cannot be enabled", async () => {
   const root = document.createElement("div");
-  await act(async () => {
-    mountSkillsPanel(root, client([VALID, INVALID]), () => {});
-  });
+  mountSkillsPanel(root, client([VALID, INVALID]), () => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(root.querySelectorAll(".skill-card").length, 2);
   assert.match(root.textContent ?? "", /Thiếu YAML/u);
   const invalidButton = root.querySelectorAll<HTMLButtonElement>(".skill-card")[1]!.querySelector("button");
@@ -51,8 +49,7 @@ test("renders valid and invalid Skills; invalid Skill cannot be enabled", async 
 
 test("renders explicit empty state", async () => {
   const root = document.createElement("div");
-  await act(async () => {
-    mountSkillsPanel(root, client([]), () => {});
-  });
+  mountSkillsPanel(root, client([]), () => {});
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.match(root.textContent ?? "", /Chưa có Skill khả dụng/u);
 });

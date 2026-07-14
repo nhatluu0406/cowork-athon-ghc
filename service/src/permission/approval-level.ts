@@ -23,8 +23,6 @@ import type {
  *  - `file_move`     — can overwrite/destroy a target; treated as elevated (defensive).
  * Additive/in-place edits are `standard`:
  *  - `file_create`, `file_edit`.
- *  - `network_access` — a read-only external query (e.g. `m365_knowledge_search`,
- *    REQ-205); not destructive, so it is classified the same as `file_create`/`file_edit`.
  *
  * The `switch` is exhaustive over {@link PermissionActionKind}; adding a kind without a
  * branch is a compile error (see the `never` default), so no kind silently defaults to a
@@ -40,7 +38,6 @@ export function classifyApprovalLevel(kind: PermissionActionKind): ApprovalLevel
       return "elevated";
     case "file_create":
     case "file_edit":
-    case "network_access":
       return "standard";
     default: {
       const exhaustive: never = kind;

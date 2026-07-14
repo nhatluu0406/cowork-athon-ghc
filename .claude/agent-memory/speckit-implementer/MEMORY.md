@@ -1,3 +1,0 @@
-- [env-packaging-limitation](env_packaging_limitation.md) — `npm run package:win` fails in this sandbox (pre-existing, cross-compile artifact)
-- [env-hanging-tests](env_hanging_tests.md) — 3 service test files hang; run targeted tests, not the full glob
-- [m365kg-stack-architecture](m365kg_stack_architecture.md) — orientation map for ADR 0010's bundled M365KG stack code

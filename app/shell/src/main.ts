@@ -44,8 +44,6 @@ import {
   createPersistedSettingsSource,
 } from "./service/persisted-settings-source.js";
 import { loadProjectEnvFile } from "./load-project-env.js";
-import { resolveM365KGStackPaths } from "./service/m365kg-stack-paths.js";
-import { createM365KGStackLaunch, type M365KGStackLaunch } from "./service/m365kg-stack-launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -66,12 +64,6 @@ const RENDERER_DIR = join(here, "..", "..", "ui", "dist");
 
 let lifecycleLogPath = join(DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
 let shellController: ServiceController | null = null;
-/**
- * Additive, optional feature (ADR 0010) — owns the bundled M365KG stack's init+start/stop.
- * Kept fully separate from `shellController`: a failure here must never block the primary
- * Cowork/OpenCode chat experience. `null` until `prepare()` resolves the run-mode paths.
- */
-let m365kgStackLaunch: M365KGStackLaunch | null = null;
 
 function envCredentialImportEnabled(): boolean {
   return !app.isPackaged || process.env["COWORK_GHC_ALLOW_ENV_IMPORT"] === "1";
@@ -94,15 +86,8 @@ function resolveRuntimePaths() {
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
   lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
-  const m365kg = resolveM365KGStackPaths({
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    userData: app.getPath("userData"),
-    devAppRoot: DEV_APP_ROOT,
-  });
   return {
     packaged,
-    m365kg,
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
@@ -243,18 +228,7 @@ void runShellLifecycle({
     if (shellController === null) {
       throw new Error("Shell controller not initialized");
     }
-    const sc = shellController;
-    return {
-      // Only the Cowork/OpenCode service starts here — M365KG is kicked off separately (and
-      // non-blockingly) in `prepare()` below, since it is an additive feature with its own
-      // honest-degrade policy, not a tier of the same onboarding→live start.
-      start: () => sc.start(),
-      // Both owners are stopped on quit so the M365KG child processes are never orphaned.
-      stop: async () => {
-        await sc.stop();
-        await m365kgStackLaunch?.stop();
-      },
-    };
+    return shellController;
   },
   trace: writeStartupTrace,
   prepare: () => {
@@ -263,7 +237,6 @@ void runShellLifecycle({
     }
     const {
       packaged,
-      m365kg,
       settingsFilePath,
       conversationsDir,
       skillsStateFilePath,
@@ -276,10 +249,6 @@ void runShellLifecycle({
       skillRoots,
       packaged,
     );
-    m365kgStackLaunch = createM365KGStackLaunch({ paths: m365kg, log: writeLifecycleLog });
-    // Non-blocking: provisioning/init can take tens of seconds on first launch and must never
-    // delay the main window (T2.2 — minimal feedback is the lifecycle log; see its header note).
-    void m365kgStackLaunch.start();
   },
   onReady: () => {
     if (shellController === null) {
