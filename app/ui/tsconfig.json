@@ -6,9 +6,8 @@
     "outDir": "./tsc-out",
     "tsBuildInfoFile": "./tsc-out/.tsbuildinfo",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": [],
-    "jsx": "react-jsx"
+    "types": []
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "include": ["src/**/*.ts"],
   "references": [{ "path": "../../core/contracts" }, { "path": "../../service" }]
 }

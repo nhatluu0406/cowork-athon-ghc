@@ -26,7 +26,6 @@ import {
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
-import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
 import {
   createPermissionClient,
   type DecidePermissionInput,
@@ -515,14 +514,6 @@ export interface ServiceClient {
    * `already_resolved` outcomes are returned honestly — never a fabricated success.
    */
   decidePermission(input: DecidePermissionInput): Promise<PermissionDecisionResponse>;
-  /** Get the current M365 Knowledge Graph source configuration status (REQ-205). */
-  getKnowledgeStatus(): Promise<KnowledgeStatusView>;
-  /** Configure a new M365 Knowledge Graph source with baseUrl and token (REQ-205). */
-  configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
-  /** Test the configured M365 Knowledge Graph source connection (REQ-205). */
-  testKnowledgeConnection(): Promise<TestResult>;
-  /** Disconnect and clear the M365 Knowledge Graph source configuration (REQ-205). */
-  disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -919,27 +910,5 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,
-
-    getKnowledgeStatus: async () =>
-      (await call<{ status: KnowledgeStatusView }>("/v1/knowledge/status")).status,
-
-    configureKnowledgeSource: async (baseUrl, token) =>
-      (
-        await call<{ status: KnowledgeStatusView }>("/v1/knowledge/configure", {
-          method: "POST",
-          body: JSON.stringify({ baseUrl, token }),
-        })
-      ).status,
-
-    testKnowledgeConnection: async () =>
-      (await call<{ result: TestResult }>("/v1/knowledge/test-connection", {
-        method: "POST",
-        body: "{}",
-      })).result,
-
-    disconnectKnowledgeSource: async () =>
-      (await call<{ status: KnowledgeStatusView }>("/v1/knowledge/connection", {
-        method: "DELETE",
-      })).status,
   };
 }
