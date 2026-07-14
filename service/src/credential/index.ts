@@ -57,3 +57,14 @@ export {
   CredentialRequestError,
   CREDENTIALS_PATH,
 } from "./router.js";
+
+// The `m365-knowledge` credential kind (REQ-205 D4) — additive; same store, new providerId.
+export {
+  M365_KNOWLEDGE_PROVIDER_ID,
+  m365KnowledgeAccount,
+  m365KnowledgeCredentialRef,
+  storeM365KnowledgeToken,
+  hasM365KnowledgeToken,
+  removeM365KnowledgeToken,
+  resolveM365KnowledgeToken,
+} from "./m365-knowledge.js";

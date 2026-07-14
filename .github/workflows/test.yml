@@ -1,0 +1,46 @@
+name: UI Tests
+
+# Rewritten: the old "Frontend Tests" workflow targeted a standalone `src/Frontend` React app
+# (Vitest + Playwright, `npm run lint`/`test:unit`/`test:coverage`/`test:e2e`, Codecov upload).
+# That directory was removed and absorbed into `app/ui` (the Cowork GHC Electron renderer),
+# which does not have lint, coverage, or Playwright scripts — only `typecheck` and `test`
+# (node:test). This workflow runs exactly what `app/ui/package.json` actually supports.
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - "app/ui/**"
+      - "core/contracts/**"
+      - "service/**"
+      - ".github/workflows/test.yml"
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - "app/ui/**"
+      - "core/contracts/**"
+      - "service/**"
+      - ".github/workflows/test.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Run app/ui unit tests
+        run: npm test --workspace @cowork-ghc/ui

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+INPUT=$(cat)
+
+extract_json_value() {
+    echo "$INPUT" |
+    sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" |
+    head -1
+}
+
+TASK_ID=$(extract_json_value taskId)
+
+mkdir -p .specify/session
+
+if [ ! -f .specify/session/session.json ]; then
+
+cat > .specify/session/session.json <<EOF
+{
+  "session_id": "$TASK_ID",
+  "allowed_files": []
+}
+EOF
+
+fi
+
+echo '{
+  "cancel": false,
+  "contextModification": "Session initialized",
+  "errorMessage": ""
+}'

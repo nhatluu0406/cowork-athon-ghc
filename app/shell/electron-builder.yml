@@ -15,6 +15,12 @@
 #
 # Wave C runs the actual `electron-builder` to produce the installer/portable + a packaged smoke
 # test. This file only DECLARES the packaging contract; it is validated by a config parse here.
+#
+# ADR 0010 (M365KG stack bundling) — `llm-svc` (Rust gRPC service), the Go backend
+# (`m365-knowledge-graph`), PostgreSQL, Neo4j, and the Temurin JRE are all bundled in the installer
+# via `extraResources` below, enabling offline-first deployment without requiring downloads at runtime
+# (vendor ZIP files must be pre-downloaded to `vendor/` before build). Migration files and model
+# configs ship with the app (see `app/backend/migrations` and `app/llm-svc/models.yaml`).
 appId: com.coworkghc.desktop
 productName: Cowork GHC
 copyright: Copyright (c) 2026 Cowork GHC
@@ -55,14 +61,42 @@ files:
   - "!**/*.tsbuildinfo"
   - "!**/tsconfig*.json"
 
-# The pinned 157MB OpenCode binary is spawned as a real child process from disk, so it ships
-# OUTSIDE the asar via extraResources → `<resourcesPath>/opencode/opencode.exe`. The packaged
-# shell resolves the binary from `process.resourcesPath` (see packaged-paths.ts).
+# External resources (binaries, config) are spawned as child processes from disk, so they ship
+# OUTSIDE the asar via extraResources → `<resourcesPath>/path`. The packaged shell resolves them
+# from `process.resourcesPath` (see packaged-paths.ts).
 extraResources:
   - from: "node_modules/opencode-ai/bin/opencode.exe"
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  # M365KG stack migrations (ADR 0010) — small (a few KB of `.sql`/`.cypher` text), shipped with
+  # the app itself (not downloaded). `M365KGStackInitializer` reads them from
+  # `<resourcesPath>/m365kg-migrations` in a packaged build (see `m365kg-stack-paths.ts`).
+  - from: "app/backend/migrations"
+    to: "m365kg-migrations"
+  # llm-svc: Rust gRPC service binary and model configuration (bundled with app).
+  # Spawned as child process from `<resourcesPath>/llm-svc/llm-svc.exe`.
+  # See `app/llm-svc/` for source and `app/llm-svc/models.yaml` for model config.
+  - from: "app/llm-svc/target/release/llm-svc.exe"
+    to: "llm-svc/llm-svc.exe"
+  - from: "app/llm-svc/models.yaml"
+    to: "llm-svc/models.yaml"
+  # app/backend: Go backend binary (bundled with app).
+  # Spawned as child process from `<resourcesPath>/m365kg-backend/m365-knowledge-graph.exe`.
+  # See `app/backend/cmd/main.go` for source.
+  - from: "app/backend/bin/m365-knowledge-graph.exe"
+    to: "m365kg-backend/m365-knowledge-graph.exe"
+  # M365KG stack vendor ZIPs (offline-first bundling per ADR 0010) — binaries downloaded from
+  # official sources and pre-downloaded to `vendor/` directory before build. These ship with the
+  # installer, enabling offline deployment. See provisioning.ts for download URLs and verification.
+  # NOTE: `vendor/` is .gitignore'd (large binaries); CI/CD or release builds must pre-populate
+  # these files. On first run, `M365KGStackInitializer` extracts them under `<userData>/m365kg-stack/`.
+  - from: "vendor/postgresql-16.14-windows-x64-binaries.zip"
+    to: "m365kg-vendor/postgresql.zip"
+  - from: "vendor/neo4j-community-5.26.28-windows.zip"
+    to: "m365kg-vendor/neo4j.zip"
+  - from: "vendor/jre-21-windows-x64.zip"
+    to: "m365kg-vendor/jre.zip"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.
