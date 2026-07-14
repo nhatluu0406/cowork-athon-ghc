@@ -13,8 +13,14 @@ import {
 const MAIN_TOKEN = "m".repeat(64);
 
 /** A fake main service: asserts the gateway presents the MAIN token, serves JSON + SSE. */
-function startFakeMain(): Promise<{ server: Server; baseUrl: string; seen: string[] }> {
+function startFakeMain(): Promise<{
+  server: Server;
+  baseUrl: string;
+  seen: string[];
+  decisionBodies: string[];
+}> {
   const seen: string[] = [];
+  const decisionBodies: string[] = [];
   const server = createServer((req, res) => {
     seen.push(`${req.method} ${req.url ?? ""} auth=${req.headers.authorization ?? "none"}`);
     if (req.headers.authorization !== `Bearer ${MAIN_TOKEN}`) {
@@ -35,13 +41,50 @@ function startFakeMain(): Promise<{ server: Server; baseUrl: string; seen: strin
       res.end();
       return;
     }
+    if (url.pathname === "/v1/permission/pending") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          ok: true,
+          data: {
+            pending: [
+              {
+                requestId: "perm-1",
+                sessionId: "s1",
+                approvalLevel: "standard",
+                requestedAt: "2026-07-14T00:00:00.000Z",
+                action: { kind: "file_create", description: "Tao file demo.txt", targetPath: "demo.txt" },
+              },
+            ],
+          },
+        }),
+      );
+      return;
+    }
+    if (req.method === "POST" && url.pathname === "/v1/permission/decision") {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        const raw = Buffer.concat(chunks).toString("utf8");
+        decisionBodies.push(raw);
+        const parsed = JSON.parse(raw) as { decision: string };
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            data: { status: "resolved", decision: parsed.decision, approvalLevel: "standard" },
+          }),
+        );
+      });
+      return;
+    }
     res.writeHead(404, { "content-type": "application/json" });
     res.end(JSON.stringify({ ok: false }));
   });
   return new Promise((resolve) => {
     server.listen({ host: "127.0.0.1", port: 0 }, () => {
       const info = server.address() as AddressInfo;
-      resolve({ server, baseUrl: `http://127.0.0.1:${info.port}`, seen });
+      resolve({ server, baseUrl: `http://127.0.0.1:${info.port}`, seen, decisionBodies });
     });
   });
 }
@@ -180,6 +223,65 @@ test("SSE stream pipes through end-to-end", async () => {
     const text = await res.text();
     assert.match(text, /"kind":"token"/);
     assert.match(text, /"kind":"terminal"/);
+  } finally {
+    await gateway.stop();
+    main.server.close();
+  }
+});
+
+test("permission pending + decision round-trip through the gateway", async () => {
+  const main = await startFakeMain();
+  const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);
+  try {
+    const token = await pairAndGetToken();
+
+    const pending = await fetch(`${gateway.url}/api/permissions`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(pending.status, 200);
+    const pendingBody = (await pending.json()) as {
+      data: { pending: readonly { requestId: string }[] };
+    };
+    assert.equal(pendingBody.data.pending[0]?.requestId, "perm-1");
+
+    const decision = await fetch(`${gateway.url}/api/permissions/decision`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ requestId: "perm-1", decision: "deny" }),
+    });
+    assert.equal(decision.status, 200);
+    const decisionBody = (await decision.json()) as { data: { status: string; decision: string } };
+    assert.equal(decisionBody.data.status, "resolved");
+    assert.equal(decisionBody.data.decision, "deny");
+    // The body crossed verbatim and upstream authenticated with the MAIN token.
+    assert.deepEqual(main.decisionBodies, ['{"requestId":"perm-1","decision":"deny"}']);
+  } finally {
+    await gateway.stop();
+    main.server.close();
+  }
+});
+
+test("POST is allowlisted to the decision route only, and unauthenticated POST is refused", async () => {
+  const main = await startFakeMain();
+  const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);
+  try {
+    const unauth = await fetch(`${gateway.url}/api/permissions/decision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ requestId: "perm-1", decision: "allow" }),
+    });
+    assert.equal(unauth.status, 401);
+
+    const token = await pairAndGetToken();
+    for (const path of ["/api/conversations", "/api/stream", "/v1/permission/decision"]) {
+      const res = await fetch(`${gateway.url}${path}`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: "{}",
+      });
+      assert.equal(res.status, 404, `expected 404 for POST ${path}`);
+    }
+    assert.equal(main.decisionBodies.length, 0);
   } finally {
     await gateway.stop();
     main.server.close();

@@ -59,6 +59,13 @@ export const REMOTE_PWA_HTML = `<!doctype html>
   .hidden { display: none; }
   .row { display: flex; gap: 8px; }
   .row button { width: auto; flex: 1; }
+  .perm { background: #221a10; border: 1px solid #4d3a1a; border-radius: 12px;
+          padding: 14px; margin-bottom: 10px; }
+  .perm .desc { font-weight: 600; margin-bottom: 4px; }
+  .perm .path { font-size: 12px; color: #c9a86a; word-break: break-all; margin-bottom: 10px; }
+  .perm .row button.allow { background: #238636; }
+  .perm .row button.deny { background: #6e2c2c; }
+  .perm .note { font-size: 12px; color: #8a949e; margin-top: 6px; min-height: 1em; }
 </style>
 </head>
 <body>
@@ -67,6 +74,7 @@ export const REMOTE_PWA_HTML = `<!doctype html>
   <span class="sub" id="who"></span>
 </header>
 <main>
+  <section id="permissions"></section>
   <section id="view-pair" class="card hidden">
     <p>Nhập mã pairing hiển thị trên máy tính (mã dùng một lần, hết hạn sau 2 phút).</p>
     <input id="pair-code" placeholder="Mã pairing (8 ký tự)" autocomplete="one-time-code"
@@ -118,6 +126,8 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     token = "";
     sessionStorage.removeItem("cowork-remote-token");
     el("who").textContent = "";
+    if (permTimer) { clearInterval(permTimer); permTimer = null; }
+    el("permissions").innerHTML = "";
     show("view-pair");
   }
 
@@ -273,11 +283,84 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     });
   }
 
+  var permTimer = null;
+
+  function levelVi(level) {
+    var map = { standard: "tiêu chuẩn", elevated: "nâng cao" };
+    return map[level] || level;
+  }
+
+  function decide(requestId, decision, scope, card, note) {
+    var body = { requestId: requestId, decision: decision };
+    if (scope) body.scope = scope;
+    card.querySelectorAll("button").forEach(function (b) { b.disabled = true; });
+    fetch("/api/permissions/decision", {
+      method: "POST",
+      headers: Object.assign({ "content-type": "application/json" }, authHeaders()),
+      body: JSON.stringify(body),
+    })
+      .then(function (res) { return res.json().then(function (j) { return { s: res.status, j: j }; }); })
+      .then(function (r) {
+        var data = r.j && r.j.data;
+        if (r.s === 200 && data && data.status === "resolved") {
+          note.textContent = decision === "allow" ? "Đã cho phép." : "Đã từ chối.";
+          setTimeout(loadPermissions, 600);
+          return;
+        }
+        if (data && data.status === "already_resolved") {
+          note.textContent = "Đã được quyết định ở nơi khác (" + data.decision + ").";
+          setTimeout(loadPermissions, 600);
+          return;
+        }
+        note.textContent = "Yêu cầu không còn tồn tại — làm mới danh sách.";
+        setTimeout(loadPermissions, 600);
+      })
+      .catch(function () {
+        note.textContent = "Không gửi được quyết định — thử lại.";
+        card.querySelectorAll("button").forEach(function (b) { b.disabled = false; });
+      });
+  }
+
+  function loadPermissions() {
+    if (!token) return;
+    api("/api/permissions").then(function (j) {
+      var pending = (j.data && j.data.pending) || [];
+      var wrap = el("permissions");
+      wrap.innerHTML = "";
+      pending.forEach(function (p) {
+        var card = document.createElement("div");
+        card.className = "perm";
+        card.innerHTML =
+          '<div class="desc"></div><div class="path"></div>' +
+          '<div class="row"><button class="allow">Cho phép 1 lần</button>' +
+          '<button class="deny">Từ chối</button></div><div class="note"></div>';
+        card.querySelector(".desc").textContent =
+          "Yêu cầu quyền (" + levelVi(p.approvalLevel) + "): " + p.action.description;
+        card.querySelector(".path").textContent = p.action.targetPath || "";
+        var note = card.querySelector(".note");
+        card.querySelector(".allow").addEventListener("click", function () {
+          decide(p.requestId, "allow", "once", card, note);
+        });
+        card.querySelector(".deny").addEventListener("click", function () {
+          decide(p.requestId, "deny", null, card, note);
+        });
+        wrap.appendChild(card);
+      });
+    }).catch(function () {});
+  }
+
+  function startPermissionPolling() {
+    if (permTimer) clearInterval(permTimer);
+    loadPermissions();
+    permTimer = setInterval(loadPermissions, 3000);
+  }
+
   function enter() {
     api("/api/me").then(function (j) {
       el("who").textContent = (j.data && j.data.device && j.data.device.name) || "";
       show("view-list");
       loadConversations();
+      startPermissionPolling();
     }).catch(function () {});
   }
 
