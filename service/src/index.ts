@@ -208,3 +208,20 @@ export {
   type DiscordTransport,
   type DiscordConfig,
 } from "./remote-gateway/discord/index.js";
+
+export {
+  BUILTIN_AGENTS,
+  createAgentCatalog,
+  createAgentRouter,
+  AgentCatalogError,
+  type AgentCatalog,
+  type AgentDraft,
+} from "./agents/index.js";
+
+export {
+  BUILTIN_TASK_TEMPLATES,
+  createTaskStore,
+  createTaskRouter,
+  TaskStoreError,
+  type TaskStore,
+} from "./tasks/index.js";
