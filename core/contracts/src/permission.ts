@@ -23,6 +23,7 @@ export type PermissionActionKind =
   | "file_delete"
   | "file_move"
   | "command_exec"
+  | "network_access"
   | "ms365_write";
 
 /** What the user is being asked to Allow or Deny (P2 describes action + target). */

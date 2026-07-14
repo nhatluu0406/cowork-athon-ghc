@@ -58,7 +58,7 @@ function validateUrl(url: string): boolean {
   }
 }
 
-async function loadStatus(client: ServiceClient): Promise<KnowledgeStatusView> {
+async function loadStatus(client: Pick<ServiceClient, "getKnowledgeStatus" | "configureKnowledgeSource" | "testKnowledgeConnection" | "disconnectKnowledgeSource">): Promise<KnowledgeStatusView> {
   try {
     return await client.getKnowledgeStatus();
   } catch {

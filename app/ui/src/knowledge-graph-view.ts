@@ -85,15 +85,14 @@ function simulateLayout(
     // Repulsive forces (node-to-node)
     for (let i = 0; i < layoutNodes.length; i++) {
       for (let j = i + 1; j < layoutNodes.length; j++) {
-        const dx = layoutNodes[j].x - layoutNodes[i].x;
-        const dy = layoutNodes[j].y - layoutNodes[i].y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const force = k / (dist * dist);
-
-        layoutNodes[i].vx -= (force * dx) / dist;
-        layoutNodes[i].vy -= (force * dy) / dist;
-        layoutNodes[j].vx += (force * dx) / dist;
-        layoutNodes[j].vy += (force * dy) / dist;
+        const dx = layoutNodes[j]!.x - layoutNodes[i]!.x;
+        const dy = layoutNodes[j]!.y - layoutNodes[i]!.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+        const force = (k * k) / (dist * dist);
+        layoutNodes[i]!.vx -= (force * dx) / dist;
+        layoutNodes[i]!.vy -= (force * dy) / dist;
+        layoutNodes[j]!.vx += (force * dx) / dist;
+        layoutNodes[j]!.vy += (force * dy) / dist;
       }
     }
 
