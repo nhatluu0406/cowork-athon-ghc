@@ -372,19 +372,11 @@ function appendMessage(
   textBox.append(p);
   body.append(textBox);
 
+  // Skills remain persisted for provenance; do not render chips/versions in the visible transcript.
+  void skills;
   const meta = el("div", "msg__meta");
   if (attachments !== undefined && attachments.length > 0) {
     meta.append(renderAttachmentMetaList(attachments));
-  }
-  if (skills !== undefined && skills.length > 0) {
-    const skillWrap = el("div", "msg__skills");
-    for (const skill of skills) {
-      const chip = el("span", "skill-use-chip", `${skill.name} · v${skill.version}`);
-      chip.dataset["tooltip"] = `Kỹ năng · ${skill.source}`;
-      chip.setAttribute("aria-label", `Kỹ năng ${skill.name}, phiên bản ${skill.version}`);
-      skillWrap.append(chip);
-    }
-    meta.append(skillWrap);
   }
   if (meta.childElementCount > 0) body.append(meta);
   row.append(body);
@@ -397,7 +389,8 @@ function renderAttachmentMetaList(attachments: readonly AttachmentMetadata[]): H
   const wrap = el("div", "msg__attachments");
   for (const att of attachments) {
     const chip = el("span", "attachment-chip attachment-chip--historical");
-    chip.title = att.relativePath;
+    chip.dataset["tooltip"] = att.relativePath;
+    chip.removeAttribute("title");
     const status = att.inclusionStatus ?? "included";
     const statusNote =
       status === "included"
@@ -428,7 +421,8 @@ function renderPendingAttachmentChips(
   dom.attachmentChips.hidden = false;
   for (const item of pending) {
     const chip = el("span", `attachment-chip${item.status === "error" ? " attachment-chip--error" : ""}`);
-    chip.title = item.relativePath;
+    chip.removeAttribute("title");
+    chip.dataset["tooltip"] = item.relativePath;
     const trunc =
       item.metadata?.truncated === true ? " (đã cắt)" : "";
     chip.append(
@@ -442,7 +436,7 @@ function renderPendingAttachmentChips(
     remove.addEventListener("click", () => onRemove(item.id));
     chip.append(remove);
     if (item.status === "error" && item.errorMessage !== undefined) {
-      chip.title = item.errorMessage;
+      chip.dataset["tooltip"] = item.errorMessage;
     }
     dom.attachmentChips.append(chip);
   }

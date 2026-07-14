@@ -20,11 +20,44 @@ import type {
   ProviderProfileView,
   UpdateProviderProfileInput,
 } from "./types.js";
+import {
+  computeVerifiedTargetFingerprint,
+  isVerificationCurrent,
+} from "./verification-fingerprint.js";
 
 export class ProviderProfileStoreError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "ProviderProfileStoreError";
+  }
+}
+
+function credentialRevisionOf(entry: PersistedProviderProfile): number {
+  return Math.max(0, Math.floor(entry.credentialRevision ?? 0));
+}
+
+function withoutVerification(entry: PersistedProviderProfile): PersistedProviderProfile {
+  const {
+    lastVerifiedAt: _a,
+    lastVerifiedOk: _b,
+    verifiedTargetFingerprint: _c,
+    ...rest
+  } = entry;
+  void _a;
+  void _b;
+  void _c;
+  return rest;
+}
+
+function assertProfileFields(profile: PersistedProviderProfile): void {
+  if (profile.displayName.length === 0) {
+    throw new ProviderProfileStoreError("displayName must be non-empty.");
+  }
+  if (profile.baseUrl.length === 0) {
+    throw new ProviderProfileStoreError("baseUrl must be non-empty.");
+  }
+  if (profile.modelId.length === 0) {
+    throw new ProviderProfileStoreError("modelId must be non-empty.");
   }
 }
 
@@ -38,12 +71,24 @@ function toProfile(entry: PersistedProviderProfile): ProviderProfile {
     envVar: entry.envVar,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
+    credentialRevision: credentialRevisionOf(entry),
     ...(entry.credentialRef !== undefined ? { credentialRef: entry.credentialRef } : {}),
     ...(entry.presetId !== undefined ? { preset: { presetId: entry.presetId } } : {}),
+    ...(entry.lastVerifiedAt !== undefined ? { lastVerifiedAt: entry.lastVerifiedAt } : {}),
+    ...(entry.lastVerifiedOk !== undefined ? { lastVerifiedOk: entry.lastVerifiedOk } : {}),
+    ...(entry.verifiedTargetFingerprint !== undefined
+      ? { verifiedTargetFingerprint: entry.verifiedTargetFingerprint }
+      : {}),
   };
 }
 
 function toView(profile: ProviderProfile, activeProfileId: string | undefined): ProviderProfileView {
+  const credentialRevision = Math.max(0, Math.floor(profile.credentialRevision ?? 0));
+  const verificationCurrent = isVerificationCurrent(profile.verifiedTargetFingerprint, {
+    baseUrl: profile.baseUrl,
+    modelId: profile.modelId,
+    credentialRevision,
+  });
   return {
     id: profile.id,
     displayName: profile.displayName,
@@ -56,6 +101,13 @@ function toView(profile: ProviderProfile, activeProfileId: string | undefined): 
     ...(profile.credentialRef !== undefined ? { credentialAccount: profile.credentialRef.account } : {}),
     ...(profile.preset !== undefined ? { presetId: profile.preset.presetId } : {}),
     isActive: activeProfileId === profile.id,
+    verificationCurrent,
+    ...(verificationCurrent && profile.lastVerifiedAt !== undefined
+      ? { lastVerifiedAt: profile.lastVerifiedAt }
+      : {}),
+    ...(verificationCurrent && profile.lastVerifiedOk !== undefined
+      ? { lastVerifiedOk: profile.lastVerifiedOk }
+      : {}),
   };
 }
 
@@ -74,6 +126,7 @@ export interface ProviderProfileStore {
   clearActive(): Promise<void>;
   setCredentialRef(id: string, ref: CredentialRef): Promise<ProviderProfile>;
   removeCredentialRef(id: string): Promise<ProviderProfile>;
+  recordConnectionVerification(id: string, ok: boolean, testedAt?: string): Promise<ProviderProfile>;
   replaceProfiles(
     profiles: readonly PersistedProviderProfile[],
     activeProfileId?: string,
@@ -193,22 +246,18 @@ export function createProviderProfileStore(options: ProviderProfileStoreOptions)
       const idx = profiles.findIndex((p) => p.id === id);
       if (idx < 0) throw new ProviderProfileStoreError(`Profile not found: ${id}`);
       const existing = profiles[idx]!;
-      const next: PersistedProviderProfile = {
+      const nextBaseUrl = input.baseUrl !== undefined ? input.baseUrl.trim() : existing.baseUrl;
+      const nextModelId = input.modelId !== undefined ? input.modelId.trim() : existing.modelId;
+      const targetChanged = nextBaseUrl !== existing.baseUrl || nextModelId !== existing.modelId;
+      let next: PersistedProviderProfile = {
         ...existing,
         ...(input.displayName !== undefined ? { displayName: input.displayName.trim() } : {}),
-        ...(input.baseUrl !== undefined ? { baseUrl: input.baseUrl.trim() } : {}),
-        ...(input.modelId !== undefined ? { modelId: input.modelId.trim() } : {}),
+        baseUrl: nextBaseUrl,
+        modelId: nextModelId,
         updatedAt: clock(),
       };
-      if (next.displayName.length === 0) {
-        throw new ProviderProfileStoreError("displayName must be non-empty.");
-      }
-      if (next.baseUrl.length === 0) {
-        throw new ProviderProfileStoreError("baseUrl must be non-empty.");
-      }
-      if (next.modelId.length === 0) {
-        throw new ProviderProfileStoreError("modelId must be non-empty.");
-      }
+      if (targetChanged) next = withoutVerification(next);
+      assertProfileFields(next);
       const updated = [...profiles];
       updated[idx] = next;
       const activeId = readActiveId(store.snapshot());
@@ -257,11 +306,13 @@ export function createProviderProfileStore(options: ProviderProfileStoreOptions)
       const profiles = readProfiles(store.snapshot());
       const idx = profiles.findIndex((p) => p.id === id);
       if (idx < 0) throw new ProviderProfileStoreError(`Profile not found: ${id}`);
-      const next: PersistedProviderProfile = {
-        ...profiles[idx]!,
+      const existing = profiles[idx]!;
+      const next = withoutVerification({
+        ...existing,
         credentialRef: { store: ref.store, account: ref.account },
+        credentialRevision: credentialRevisionOf(existing) + 1,
         updatedAt: clock(),
-      };
+      });
       const updated = [...profiles];
       updated[idx] = next;
       const activeId = readActiveId(store.snapshot());
@@ -275,8 +326,41 @@ export function createProviderProfileStore(options: ProviderProfileStoreOptions)
       const profiles = readProfiles(store.snapshot());
       const idx = profiles.findIndex((p) => p.id === id);
       if (idx < 0) throw new ProviderProfileStoreError(`Profile not found: ${id}`);
-      const { credentialRef: _drop, ...rest } = profiles[idx]!;
-      const next = { ...rest, updatedAt: clock() };
+      const existing = profiles[idx]!;
+      const { credentialRef: _drop, ...rest } = existing;
+      void _drop;
+      const next = withoutVerification({
+        ...rest,
+        credentialRevision: credentialRevisionOf(existing) + 1,
+        updatedAt: clock(),
+      });
+      const updated = [...profiles];
+      updated[idx] = next;
+      const activeId = readActiveId(store.snapshot());
+      const syncLegacy = activeId === id ? next : undefined;
+      await writeProfiles(updated, activeId, syncLegacy);
+      return toProfile(next);
+    },
+
+    async recordConnectionVerification(id, ok, testedAt) {
+      assertValidProfileId(id);
+      const profiles = readProfiles(store.snapshot());
+      const idx = profiles.findIndex((p) => p.id === id);
+      if (idx < 0) throw new ProviderProfileStoreError(`Profile not found: ${id}`);
+      const existing = profiles[idx]!;
+      const at = testedAt ?? clock();
+      const fingerprint = computeVerifiedTargetFingerprint({
+        baseUrl: existing.baseUrl,
+        modelId: existing.modelId,
+        credentialRevision: credentialRevisionOf(existing),
+      });
+      const next: PersistedProviderProfile = {
+        ...existing,
+        lastVerifiedAt: at,
+        lastVerifiedOk: ok,
+        verifiedTargetFingerprint: fingerprint,
+        updatedAt: clock(),
+      };
       const updated = [...profiles];
       updated[idx] = next;
       const activeId = readActiveId(store.snapshot());
