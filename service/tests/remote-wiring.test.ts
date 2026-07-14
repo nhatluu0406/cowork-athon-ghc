@@ -180,6 +180,27 @@ test("flag ON: pair a device and read conversations through the gateway; stop() 
     assert.equal(lateBody.data.status, "already_resolved");
     assert.equal(lateBody.data.decision, "deny");
     assert.equal(live.deps.permissionGate.isAllowed("perm-remote-1"), false);
+
+    // --- Send-prompt from the phone reaches the real child (agent-harness-plan Task 1.2). ---
+    const meta = await live.deps.sessionService.create({ workspaceId: WS, title: "Phone turn" });
+    const promptRes = await fetch(
+      `${remote.url}/api/sessions/${encodeURIComponent(meta.id)}/message`,
+      {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${pairBody.data.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ text: "xin chao tu dien thoai" }),
+      },
+    );
+    assert.equal(promptRes.status, 202);
+    assert.ok(
+      fake.requests.some(
+        (r) => r.method === "POST" && r.path === `/session/${meta.id}/message`,
+      ),
+      "the phone prompt reached the live OpenCode child through gateway -> service -> child",
+    );
   } finally {
     await live.stop();
     await fake.close();

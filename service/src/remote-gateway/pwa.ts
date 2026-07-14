@@ -99,6 +99,11 @@ export const REMOTE_PWA_HTML = `<!doctype html>
       <div id="stream"></div>
       <p class="error" id="detail-error"></p>
     </div>
+    <div class="card" id="composer-card">
+      <input id="composer-input" placeholder="Gửi prompt tới phiên này..." maxlength="4000">
+      <button id="composer-send">Gửi</button>
+      <p class="error" id="composer-note"></p>
+    </div>
   </section>
 </main>
 <script>
@@ -106,6 +111,7 @@ export const REMOTE_PWA_HTML = `<!doctype html>
   "use strict";
   var token = sessionStorage.getItem("cowork-remote-token") || "";
   var streamAbort = null;
+  var currentSessionId = null;
 
   function el(id) { return document.getElementById(id); }
   function show(id) {
@@ -208,6 +214,13 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     show("view-detail");
     el("detail-title").textContent = conv.title || "(chưa đặt tên)";
     el("detail-error").textContent = "";
+    el("composer-note").textContent = "";
+    currentSessionId = conv.runtimeSessionId || null;
+    el("composer-input").disabled = !currentSessionId;
+    el("composer-send").disabled = !currentSessionId;
+    if (!currentSessionId) {
+      el("composer-note").textContent = "Hội thoại chưa có phiên runtime — tạo lượt mới trên desktop.";
+    }
     var stream = el("stream");
     stream.textContent = "";
 
@@ -364,6 +377,35 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     }).catch(function () {});
   }
 
+  function sendPrompt() {
+    var text = el("composer-input").value.trim();
+    var note = el("composer-note");
+    if (!text || !currentSessionId) return;
+    el("composer-send").disabled = true;
+    note.textContent = "";
+    fetch("/api/sessions/" + encodeURIComponent(currentSessionId) + "/message", {
+      method: "POST",
+      headers: Object.assign({ "content-type": "application/json" }, authHeaders()),
+      body: JSON.stringify({ text: text }),
+    })
+      .then(function (res) { return res.json().then(function (j) { return { s: res.status, j: j }; }); })
+      .then(function (r) {
+        if (r.s === 202 && r.j.ok) {
+          el("composer-input").value = "";
+          note.textContent = "Đã gửi — phản hồi sẽ hiện trong stream.";
+          if (currentSessionId) followStream(currentSessionId);
+          return;
+        }
+        var code = (r.j.error && r.j.error.code) || "";
+        if (r.s === 409) { note.textContent = "Phiên đã kết thúc — tạo lượt mới trên desktop."; return; }
+        if (r.s === 503) { note.textContent = "Runtime chưa sẵn sàng."; return; }
+        note.textContent = "Gửi thất bại" + (code ? " (" + code + ")" : "") + ".";
+      })
+      .catch(function () { note.textContent = "Không gọi được gateway."; })
+      .finally(function () { el("composer-send").disabled = !currentSessionId; });
+  }
+
+  el("composer-send").addEventListener("click", sendPrompt);
   el("pair-btn").addEventListener("click", pair);
   el("refresh-btn").addEventListener("click", loadConversations);
   el("logout-btn").addEventListener("click", logout);
