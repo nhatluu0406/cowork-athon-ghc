@@ -27,11 +27,6 @@ import {
   snapshotToPersisted,
   type ActivityPanelDom,
 } from "./activity-panel.js";
-import {
-  createKnowledgePanel,
-  type KnowledgePanelDom,
-  type KnowledgeToolInvocation,
-} from "./knowledge-panel.js";
 import { getShellBridge } from "./bridge.js";
 import {
   createConversationManager,
@@ -818,27 +813,6 @@ function rebuildActivitySnapshot(state: AppState): ActivitySnapshot {
 function refreshActivityUi(state: AppState, dom: AppDom): void {
   state.activitySnapshot = rebuildActivitySnapshot(state);
   renderActivityPanel(dom.activityPanel, state.activitySnapshot);
-  refreshKnowledgePanel(state, dom);
-}
-
-function refreshKnowledgePanel(state: AppState, dom: AppDom): void {
-  // Check if there's a knowledge tool invocation in the current session (T2.7 — US-2 requirement).
-  // Only show the knowledge panel if a knowledge-tool call occurred (no empty-panel affordance).
-
-  // Look for a tool call with toolName = "m365_knowledge_search" in the session
-  const hasKnowledgeToolCall = state.lastView.toolCalls.some(
-    (tc) => tc.toolName === "m365_knowledge_search",
-  );
-
-  if (!hasKnowledgeToolCall) {
-    // No knowledge tool call — placeholder phase 2
-    return;
-  }
-
-  // A knowledge tool invocation exists. For Phase 2, we create the panel container
-  // with a placeholder. The actual knowledge invocation metadata (query, answer, citations)
-  // would be populated in Phase 3 when the service layer provides the full KnowledgeToolResult.
-  // TODO: Phase 3 — mount knowledge panel with invocation data
 }
 
 async function persistActivity(state: AppState): Promise<void> {
@@ -1721,9 +1695,13 @@ function openWorkspaceFileFromCowork(
   renderState(dom, state, handlers);
 }
 
+function createShell(root: HTMLElement): AppDom {
+  return createAppFrame(root);
+}
+
 
 export function mountCoworkApp(root: HTMLElement): void {
-  const dom = createAppFrame(root);
+  const dom = createShell(root);
   const state: AppState = {
     client: null,
     bootstrap: null,

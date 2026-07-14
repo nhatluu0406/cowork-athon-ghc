@@ -1,5 +1,4 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 
 /**
  * Renderer build config. `base: "./"` produces relative asset URLs so the built
@@ -14,7 +13,6 @@ import react from "@vitejs/plugin-react";
  */
 export default defineConfig({
   base: "./",
-  plugins: [react()],
   build: {
     outDir: "dist",
     emptyOutDir: true,

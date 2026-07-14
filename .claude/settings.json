@@ -1,28 +1,10 @@
 {
-  "enableAllProjectMcpServers": true,
-  "enabledMcpjsonServers": [
-    "rad-knowledge"
-  ],
   "enabledPlugins": {
-    "context-mode@context-mode": true,
     "frontend-design@claude-plugins-official": true,
     "feature-dev@claude-plugins-official": true,
     "skill-creator@claude-plugins-official": true,
     "code-simplifier@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "code-review@claude-plugins-official": true
-  },
-  "mcpServers": {
-    "rad-knowledge": {
-      "command": "/usr/bin/node",
-      "args": [
-        "/home/dungpham/MiniRag/mcp-adapter/claude-adapter.js"
-      ],
-      "env": {
-        "RAD_SERVER_URL": "http://localhost:8080",
-        "RAD_API_URL": "http://localhost:8080",
-        "RAD_API_KEY": "gyXBZ75fTouCSgv5VGDYtWqAfVnjQtCjccaHN5eZ8RQ="
-      }
-    }
   }
 }
