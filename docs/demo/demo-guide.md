@@ -1,96 +1,91 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
 # Hướng dẫn demo Cowork GHC
 
-Dùng cho funding/demo review. Acceptance: [demo-acceptance.md](../quality/demo-acceptance.md).
-
-## Chuẩn bị (5 phút)
+## Chuẩn bị
 
 ```bat
+npm install
 scripts\init.bat
+scripts\demo-seed.bat
 scripts\build.bat
-```
-
-Nếu cần profile sạch (giữ API key trong keyring):
-
-```bat
-scripts\demo-reset.bat
 scripts\start.bat
 ```
 
-Cấu hình provider trong **Settings → Nhà cung cấp** hoặc chạy `scripts\set-provider-key.bat`.
+Mở **Settings → Nhà cung cấp**, chọn connection đã lưu hoặc thêm connection mới. Dùng `Hỏi trước` cho permission mode trong buổi demo.
 
-## Hành trình demo
+## Kịch bản đề xuất
 
-### 1. Launch
+### 1. Mở app
 
-Chạy `scripts\start.bat`. Xác nhận màn hình New Chat sạch.
+- New Chat sạch.
+- Chuyển nhanh Light/Dark để giới thiệu visual system.
 
-![New Chat](../demo/screenshots/01-new-chat.png)
+### 2. Provider
 
-### 2. Provider profile
-
-Mở Settings (icon bánh răng). Tạo hoặc chọn profile; nhập API key nếu thiếu; **Kiểm tra kết nối**.
-
-![Provider settings](../demo/screenshots/02-provider-settings.png)
+- Mở danh sách connection.
+- Chỉ hiển thị API token dạng đã cấu hình, không lộ key.
+- Kiểm tra kết nối trước khi chat.
 
 ### 3. Workspace
 
-Chọn workspace từ sidebar. Duyệt file text trong navigator.
+- Mở demo workspace.
+- Chọn một file text/Markdown và xem preview/editor.
+- Chọn PDF để minh họa preview khi packaged acceptance đã PASS.
 
-![Workspace](../demo/screenshots/03-workspace.png)
+### 4. Cowork chat
 
-### 4. Chat + attachment
-
-Prompt mẫu:
-
-```text
-Hãy đọc file đính kèm và tóm tắt nội dung trong 3 gạch đầu dòng.
-```
-
-Đính kèm file `.txt` nhỏ từ workspace (ví dụ `notes.txt`).
-
-### 5. File create + permission
-
-Prompt mẫu:
+Prompt:
 
 ```text
-Tạo file demo-output.txt trong workspace với nội dung "Cowork GHC demo OK" và xác nhận đường dẫn.
+Đọc file notes.md trong workspace và tóm tắt ba điểm quan trọng.
 ```
 
-Chọn **Allow** trên modal permission. Mở File Work Review / inspector để xem diff.
-
-![File Work Review](../demo/screenshots/04-file-work-review.png)
-
-### 6. History + relaunch
-
-- Mở conversation từ sidebar (history).
-- `scripts\stop.bat` rồi `scripts\start.bat`.
-- Xác nhận history còn; startup vẫn New Chat sạch.
-
-## Prompt dự phòng (modify)
+### 5. Create + permission
 
 ```text
-Sửa demo-output.txt: thêm dòng thứ hai "Updated during demo".
+Tạo file demo-output.txt trong workspace với nội dung: Cowork GHC demo OK.
 ```
+
+Kiểm tra:
+
+1. Permission `Tạo tệp` xuất hiện.
+2. Chọn `Cho phép một lần`.
+3. File xuất hiện/refresh trong Workspace.
+4. Assistant chỉ xác nhận sau mutation thật.
+
+### 6. Modify + deny
+
+```text
+Sửa demo-output.txt và thêm dòng: This change should be denied.
+```
+
+Chọn `Từ chối`; file phải giữ nguyên.
+
+### 7. Skills
+
+- Mở Settings → Kỹ năng.
+- Tạo một Skill ngắn, enable, sử dụng trong một lượt, rồi disable/delete nếu cần.
+
+### 8. History / relaunch
+
+- Mở lại conversation.
+- Stop/start app.
+- Xác nhận profile, history và workspace state phù hợp vẫn còn.
+
+## Không demo như capability đã hoàn thành
+
+- D1–D4 backend trước khi team merge.
+- File delete review.
+- Full Office editor.
+- Cloud/multi-user authentication.
 
 ## Kết thúc
 
 ```bat
 scripts\stop.bat
 ```
-
-Kiểm tra không còn orphan `Cowork GHC` / `opencode` process.
-
-## Giới hạn cần nói với reviewer
-
-- D1–D4: **Sắp có** — không demo.
-- File delete trong File Work Review: chưa tin cậy.
-- Skills: chỉ enable/disable local files; chưa editor trong app.
-- Attachments: text only; chưa drag-drop.
-
-Chi tiết: [known-limitations.md](../quality/known-limitations.md).
