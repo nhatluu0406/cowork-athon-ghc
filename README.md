@@ -87,6 +87,51 @@ Chi tiết: `scripts/README.md`. Tài liệu: `docs/README.md`.
 - Key được inject vào tiến trình con qua biến môi trường tại lúc spawn; **không** ghi `auth.json`.
 - **Không commit** `.env`/secret (xem `.gitignore`).
 
+## Slash commands
+
+Gõ trong composer. `/help` liệt kê toàn bộ lệnh đang có.
+
+| Lệnh | Tác dụng |
+|---|---|
+| `/help` | Liệt kê các lệnh được hỗ trợ |
+| `/remote` | Mở panel ghép nối điện thoại (URL + mã + QR). `/remote off` thu hồi mọi thiết bị |
+| `/clear` | Nén lịch sử hội thoại rồi tải lại view từ service |
+| `/compact` | Nén lịch sử hội thoại, giữ nguyên view |
+| `/bug` | Xuất thông tin chẩn đoán của client |
+| `/review` | Sinh prompt review từ các tệp đang mở trong workspace |
+
+Registry nằm ở `app/ui/src/commands/registry.ts` (hàm `createDefaultRegistry`) — thêm lệnh mới bằng
+`registry.register({ name, description, type, handler })`. Hai `type`:
+
+- `client_side` — handler chạy một hành động trong UI, không gửi gì cho LLM.
+- `prompt_template` — handler trả về một chuỗi; chuỗi đó vào composer rồi được gửi như prompt.
+
+`/clear` và `/compact` gọi `POST /v1/conversations/{id}/compact`. Nén là **thao tác phá huỷ**: nó
+thay toàn bộ transcript bằng bản tóm tắt. Provider lỗi thì lệnh báo lỗi và **giữ nguyên lịch sử**.
+
+> **Lưu ý:** slash commands hiện chỉ chạy trên desktop. Registry nằm ở tầng UI nên PWA trên điện
+> thoại gửi thẳng text thô — gõ `/help` trên điện thoại sẽ gửi đúng chữ `/help` cho LLM.
+
+## Dispatch (agents, tasks, fan-out)
+
+Contract và store đã có ở service; **UI surface Dispatch vẫn chờ backend D1**, nên màn hình đó
+không hiển thị dữ liệu D1 giả. Hiện nó dùng làm chỗ **ghép nối điện thoại nhanh** (QR) mà không
+cần gõ `/remote`.
+
+| Endpoint | Tác dụng |
+|---|---|
+| `GET/POST/PUT/DELETE /v1/agents` | Agent catalog: built-in (researcher/implementer/reviewer, read-only) + agent do user tạo |
+| `GET/POST/PUT/DELETE /v1/tasks` | Task template: built-in (`tpl-investigate`, `tpl-implement-verified`, `tpl-fanout-review`) + task do user tạo |
+| `POST /v1/tasks/{id}/instantiate` | Dùng lại template bằng 1 thao tác (1-touch reuse) |
+
+Contract ở `core/contracts/src/dispatch.ts`: `TaskDefinition` / `AgentDefinition` / `LoopPolicy`.
+Permission preset của agent **chỉ được thu hẹp** (`isNarrowingPreset`) — một agent không bao giờ tự
+nới quyền vượt `LIVE_SESSION_PERMISSION_POLICY`. Fan-out chạy với concurrency mặc định 3, cap cứng 5
+(`service/src/dispatchers/fanout.ts`).
+
+Thêm agent/task mới: sửa `service/src/agents/builtins.ts` hoặc `service/src/tasks/builtins.ts` cho
+loại built-in; loại user-local đi qua router CRUD và lưu vào `.runtime/`.
+
 ## Điều khiển từ điện thoại (Remote — tính năng tùy chọn)
 
 Cowork GHC có một **cổng remote** để theo dõi và điều khiển từ điện thoại/trình duyệt khác, tương tự
@@ -111,8 +156,12 @@ $env:CGHC_REMOTE_PORT    = "7777"  # tùy chọn: cố định port (mặc đị
 scripts\start.bat
 ```
 
-Trong app, gõ **`/remote`** ở ô soạn để mở bảng điều khiển: xem địa chỉ mở trên điện thoại, tạo
-**mã ghép nối một lần + QR**, danh sách thiết bị đã ghép, và **thu hồi tất cả** (`/remote off`).
+Có hai chỗ ghép nối, dùng chung một pairing registry:
+
+- Gõ **`/remote`** ở ô soạn → panel overlay: địa chỉ mở trên điện thoại, **mã ghép nối một lần +
+  QR**, danh sách thiết bị đã ghép, **thu hồi tất cả** (`/remote off`).
+- Mở tab **Dispatch** → mục "Truy cập nhanh bằng điện thoại" với cùng QR đó, không cần gõ lệnh.
+  Tab này vẫn báo D1 **chờ tích hợp**; ghép nối điện thoại không liên quan tới backend D1.
 
 Trên điện thoại (cùng Wi-Fi hoặc qua VPN): mở URL gateway → quét QR (tự điền mã) hoặc nhập mã →
 đặt tên thiết bị → **Kết nối**. Sau đó điện thoại có thể:
