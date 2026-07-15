@@ -121,8 +121,58 @@ test("assessSendPreflight allows locally_ready configuration", () => {
   assert.equal(preflight.canSend, true);
 });
 
-test("shouldShowContinuationBanner false for empty first-run state", () => {
+test("historical completed conversation is not composer-locked", () => {
+  const preflight = assessSendPreflight(
+    input({
+      continuationUnlocked: false,
+      conv: {
+        state: {
+          runtimePhase: "idle",
+          activeConversationId: "c1",
+          activeRecord: {
+            id: "c1",
+            title: "Old",
+            workspacePath: "C:\\ws",
+            runtimeSessionId: "rt-old",
+            status: "completed",
+            createdAt: "2026-07-14T00:00:00.000Z",
+            updatedAt: "2026-07-14T00:00:00.000Z",
+            messageCount: 2,
+            messages: [
+              { id: "m1", role: "user", text: "hi", at: "2026-07-14T00:00:00.000Z" },
+              { id: "m2", role: "assistant", text: "yo", at: "2026-07-14T00:00:01.000Z" },
+            ],
+            runtimeTurns: [],
+          },
+        },
+      },
+    }),
+  );
+  assert.equal(preflight.canSend, true);
+  assert.equal(preflight.blockKind, null);
+});
+
+test("shouldShowContinuationBanner stays off for completed history", () => {
   assert.equal(shouldShowContinuationBanner(null, null, "idle"), false);
+  assert.equal(
+    shouldShowContinuationBanner(
+      "c1",
+      {
+        id: "c1",
+        title: "Old",
+        workspacePath: "C:\\ws",
+        runtimeSessionId: "rt",
+        status: "completed",
+        createdAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+        messageCount: 1,
+        messages: [{ id: "m1", role: "user", text: "hi", at: "2026-07-14T00:00:00.000Z" }],
+        runtimeTurns: [],
+      },
+      "idle",
+    ),
+    false,
+  );
 });
 
 test("isBaseUrlLocallyValid rejects garbage", () => {

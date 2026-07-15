@@ -557,6 +557,21 @@ button {
   transform: translateY(-1px);
 }
 
+:root[data-theme="dark"] .composer__box:focus-within {
+  border-color: color-mix(in srgb, var(--cghc-accent) 56%, var(--cghc-border));
+  box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
+}
+
+.composer__input,
+.composer__input:focus,
+.composer__input:focus-visible,
+.composer__input:focus-within {
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 .composer__input {
   min-height: 58px;
   max-height: 180px;
@@ -1451,19 +1466,23 @@ button {
 .msg--user .msg__body {
   width: fit-content;
   min-width: 0;
-  max-width: min(620px, 72%);
+  max-width: min(640px, 72%);
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg--user .msg__text,
 :root[data-theme="dark"] .msg--user .msg__text {
   width: fit-content;
   min-width: 0;
-  padding: 14px 17px !important;
+  max-width: 100%;
+  padding: 10px 14px !important;
   border: 1px solid color-mix(in srgb, var(--cghc-accent) 28%, var(--cghc-border)) !important;
   border-radius: 18px 18px 6px 18px !important;
   background: color-mix(in srgb, var(--cghc-accent-soft) 72%, var(--cghc-surface-elevated)) !important;
   color: var(--cghc-text-primary) !important;
-  box-shadow: var(--cghc-shadow-sm) !important;
+  box-shadow: none !important;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -2015,10 +2034,16 @@ button {
   width: 100%;
   max-width: none;
   margin: 0 0 22px;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg__body {
   min-width: 0;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg--assistant {
@@ -2040,16 +2065,22 @@ button {
 
 .msg--user {
   justify-content: flex-end;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg--user .msg__body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  width: auto;
+  width: fit-content;
   min-width: 0;
-  max-width: min(720px, 76%);
+  max-width: min(640px, 72%);
   margin-left: auto;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 .msg--user .msg__name {
@@ -2058,15 +2089,15 @@ button {
 
 .msg--user .msg__text {
   display: block;
-  width: auto;
-  min-width: min(168px, 100%);
+  width: fit-content;
+  min-width: 0;
   max-width: 100%;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border: 1px solid color-mix(in srgb, var(--cghc-accent) 24%, var(--cghc-border));
   border-radius: 17px 17px 5px 17px;
   background: color-mix(in srgb, var(--cghc-accent-soft) 64%, var(--cghc-surface-elevated)) !important;
   color: var(--cghc-text-primary) !important;
-  box-shadow: var(--cghc-shadow-sm);
+  box-shadow: none;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: normal;
@@ -2115,6 +2146,19 @@ button {
 .composer__input {
   min-height: 54px;
   padding: 16px 17px 7px;
+  border: 0 !important;
+  outline: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.composer__box:focus-within {
+  border-color: color-mix(in srgb, var(--cghc-accent) 48%, var(--cghc-border));
+  box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
+}
+
+:root[data-theme="dark"] .composer__box:focus-within {
+  border-color: color-mix(in srgb, var(--cghc-accent) 56%, var(--cghc-border));
 }
 
 .composer__bar {

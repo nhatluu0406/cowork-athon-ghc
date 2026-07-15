@@ -216,16 +216,9 @@ export function createConversationManager(
       try {
         const record = await (await client()).getConversation(id);
         await syncRecord(record);
-        state.runtimePhase =
-          record.status === "running"
-            ? "running"
-            : record.status === "completed"
-              ? "completed"
-              : record.status === "cancelled"
-                ? "cancelled"
-                : record.status === "errored" || record.status === "interrupted"
-                  ? "failed"
-                  : "idle";
+        // Historical terminal sessions are idle for send: the next prompt starts a new
+        // runtime turn under this conversation id. Keep "running" only for live turns.
+        state.runtimePhase = record.status === "running" ? "running" : "idle";
         await (await client()).patchConversation(id, { lastActive: true });
       } catch {
         state.listError = "Không mở được phiên này.";
