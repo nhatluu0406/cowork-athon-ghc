@@ -18,21 +18,27 @@ pub struct Config {
     pub nlp_mode: NlpMode,
 
     /// llm_api_base_url: Cloud LLM endpoint (read by llm-svc, not Go)
+    #[allow(dead_code)]
     pub llm_api_base_url: Option<String>,
 
     /// llm_api_key: Cloud LLM API key
+    #[allow(dead_code)]
     pub llm_api_key: Option<String>,
 
     /// llm_model: Cloud model name (e.g., "gpt-4o-mini")
+    #[allow(dead_code)]
     pub llm_model: String,
 
     /// brain_local_provider: Local model identifier (modes 2/3)
+    #[allow(dead_code)]
     pub brain_local_provider: String,
 
     /// brain_fallback_to_cloud: Allow cloud fallback in mode 2
+    #[allow(dead_code)]
     pub brain_fallback_to_cloud: bool,
 
     /// models: loaded model configurations (from models.yaml)
+    #[allow(dead_code)]
     pub models: Vec<ModelConfig>,
 
     /// models_yaml_path: path to models.yaml for hot-reload
@@ -194,11 +200,13 @@ impl Config {
     }
 
     /// Get a model configuration by name
+    #[allow(dead_code)]
     pub fn get_model(&self, name: &str) -> Option<&ModelConfig> {
         self.models.iter().find(|m| m.name == name)
     }
 
     /// Get the default model for a given kind
+    #[allow(dead_code)]
     pub fn get_default_model(&self, kind: &str) -> Option<&ModelConfig> {
         self.models
             .iter()
