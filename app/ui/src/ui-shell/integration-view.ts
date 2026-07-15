@@ -1,13 +1,31 @@
 import { getIntegrationSurfaceAdapter } from "../integration-surface-adapters.js";
 import type { ProductSurfaceDefinition } from "../surface-registry.js";
 import { renderRemotePairing, type RemotePairingClient } from "../remote-pairing-view.js";
+import { renderDispatchBoard, type DispatchBoardClient } from "../dispatch-board.js";
 import { el, icon } from "./dom-utils.js";
+
+/** The client surface the Dispatch panel needs: phone pairing + the dispatch board. */
+export type IntegrationSurfaceClient = RemotePairingClient & DispatchBoardClient;
 
 export function createIntegrationView(): HTMLElement {
   const root = el("section", "view view--integration integration-surface");
   root.dataset["view"] = "integration";
   root.hidden = true;
   return root;
+}
+
+/**
+ * The dispatch board: the stored task catalog + live fan-out runs from `/v1/dispatch`. This is
+ * REAL local-service data (agent-harness-plan.md Tasks 4.1/5.1/5.2), not the external D1 backend
+ * — the D1 dependency badge above stays honest about what has not landed.
+ */
+function appendDispatchBoard(mount: HTMLElement, client: DispatchBoardClient): void {
+  const section = el("section", "integration-dispatch");
+  section.append(el("h2", "integration-dispatch__title", "Dispatch nội bộ"));
+  const body = el("div", "integration-dispatch__body", "Đang tải danh sách task…");
+  section.append(body);
+  mount.append(section);
+  void renderDispatchBoard(client, body);
 }
 
 /**
@@ -35,7 +53,7 @@ function appendRemoteQuickAccess(mount: HTMLElement, client: RemotePairingClient
 export function renderIntegrationSurface(
   container: HTMLElement,
   surface: ProductSurfaceDefinition,
-  remoteClient?: RemotePairingClient | null,
+  remoteClient?: IntegrationSurfaceClient | null,
 ): void {
   container.replaceChildren();
   const adapter = getIntegrationSurfaceAdapter(surface.id);
@@ -80,6 +98,7 @@ export function renderIntegrationSurface(
 
   mount.append(card);
   if (surface.id === "dispatch" && remoteClient != null) {
+    appendDispatchBoard(mount, remoteClient);
     appendRemoteQuickAccess(mount, remoteClient);
   }
   container.append(mount);
