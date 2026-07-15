@@ -73,10 +73,12 @@ import {
 } from "./wiring.js";
 import {
   downRuntimeHealth,
+  notAttachedBranchRunner,
   notAttachedRuntimeReplyPort,
   notAttachedSendPrompt,
   notAttachedSessionStore,
 } from "./tier2-seams.js";
+import { createDispatchRunRegistry, createDispatchRouter } from "../dispatchers/index.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
 import { createWorkspaceLocalFileReader } from "./ms365-file-reader.js";
@@ -256,6 +258,15 @@ export async function createCoworkService(
     knownAgentIds: () => agentCatalog.knownIds(),
   });
 
+  // Dispatch runs (Task 5.2 wiring): loop-runner over fan-out groups. Tier 1 mounts the router
+  // with the honest not-attached branch runner (a branch errors truthfully without a child);
+  // the live composition injects the real session-backed runner.
+  const dispatchRuns = createDispatchRunRegistry({
+    resolveAgent: (id) => agentCatalog.get(id),
+    runBranch: options.branchRunner ?? notAttachedBranchRunner(),
+    now,
+  });
+
   // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
   // reads the SAME `process.env` the rest of this module treats as the environment source
   // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
@@ -331,6 +342,7 @@ export async function createCoworkService(
     createSkillRouter(skillCatalog),
     createAgentRouter(agentCatalog),
     createTaskRouter(taskStore),
+    createDispatchRouter({ runs: dispatchRuns, tasks: taskStore }),
     createFileReviewRouter({
       activeWorkspaceRoot: () => {
         const ws = settingsStore.activeWorkspace();
@@ -359,6 +371,7 @@ export async function createCoworkService(
     skillCatalog,
     agentCatalog,
     taskStore,
+    dispatchRuns,
     redactError,
     buildToolPermissionProxy: (guard) =>
       new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),

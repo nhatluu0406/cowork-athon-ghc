@@ -22,6 +22,7 @@
  */
 
 import type { PermissionReply, SessionId, TestResult } from "@cowork-ghc/contracts";
+import type { BranchRunner, BranchRunResult } from "../dispatchers/index.js";
 import type { RuntimeReplyPort } from "../permission/index.js";
 import type { ProviderConnector, StreamHandle } from "../provider/index.js";
 import type {
@@ -105,6 +106,18 @@ export function notAttachedSendPrompt(): SendPrompt {
     send: (_sessionId: SessionId, _text: string): Promise<void> =>
       Promise.reject(new RuntimeNotAttachedError("session.sendPrompt")),
   };
+}
+
+/**
+ * Honest default {@link BranchRunner} (dispatch fan-out, Task 5.2): with no live child a branch
+ * can only report an honest error — the run registry shows the branch as `errored` with this
+ * summary, never a fabricated completed.
+ */
+export function notAttachedBranchRunner(): BranchRunner {
+  return async (): Promise<BranchRunResult> => ({
+    status: "errored",
+    summary: 'OpenCode runtime is not attached; dispatch branches need the live supervisor.',
+  });
 }
 
 /** Honest default {@link ProviderConnector}: an unreachable probe (no runtime), no-op cancel. */
