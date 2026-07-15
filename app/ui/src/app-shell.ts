@@ -58,13 +58,13 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
-import { mountSkillsPanel } from "./skills-panel.js";
 import type { MicrosoftIntegrationView } from "./integration-slots.js";
 import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
+import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
@@ -112,6 +112,7 @@ import { renderKnowledgeTab,
   type KnowledgeTab,
 } from "./ui-shell/knowledge-view.js";
 import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
+import { renderSkillsMcpTab, type SkillsMcpTab } from "./ui-shell/skills-mcp-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
@@ -170,6 +171,7 @@ interface AppState {
   activeSurface: ProductSurfaceId;
   workMode: WorkMode;
   knowledgeTab: KnowledgeTab;
+  skillsMcpTab: SkillsMcpTab;
   serviceLabel: string;
   serviceOk: boolean;
   codeOpenFiles: OpenCodeFile[];
@@ -917,6 +919,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const isKnowledgeSurface = state.activeSurface === "knowledge";
   const isMicrosoftSurface = state.activeSurface === "microsoft";
   const isCodeSurface = state.activeSurface === "code";
+  const isSkillsMcpSurface = state.activeSurface === "skills-mcp";
   const settingsOpen = !dom.settingsSurface.hidden;
   const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
   const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
@@ -936,9 +939,15 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden =
-    settingsOpen || isCoworkSurface || isKnowledgeSurface || isMicrosoftSurface || isCodeSurface;
+    settingsOpen ||
+    isCoworkSurface ||
+    isKnowledgeSurface ||
+    isMicrosoftSurface ||
+    isCodeSurface ||
+    isSkillsMcpSurface;
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
+  dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
@@ -947,6 +956,8 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
+  } else if (isSkillsMcpSurface) {
+    renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
     renderIntegrationSurface(dom.integrationSurface, activeSurface);
   }
@@ -1824,10 +1835,11 @@ async function sendPrompt(
     return;
   }
   if (state.client === null) return;
-  const enabledSkills = await state.client.enabledSkillSnapshots();
 
   const priorMessages = state.conv.state.activeRecord?.messages ?? [];
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, enabledSkills);
+  // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
+  // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
+  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, []);
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
@@ -1910,12 +1922,13 @@ async function sendPrompt(
       if (needsContinuation) {
         await state.conv.startContinuation();
         const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+        // Wave 2: OpenCode native on-demand — same empty-content dispatch as the first attempt.
         const retryPlan = planDispatchPrompt(
           retry.contextMessages,
           snapshots,
           prompt,
           undefined,
-          enabledSkills,
+          [],
         );
         if (!retryPlan.ok) {
           state.currentFileActionIntent = null;
@@ -2072,6 +2085,7 @@ export function mountCoworkApp(root: HTMLElement): void {
     activeSurface: "cowork",
     workMode: "cowork",
     knowledgeTab: "base",
+    skillsMcpTab: "skills",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
     codeOpenFiles: [],
@@ -2135,7 +2149,6 @@ export function mountCoworkApp(root: HTMLElement): void {
       if (id === "cowork") {
         state.workMode = "cowork";
       }
-      dom.skillsPanel.hidden = true;
       renderState(dom, state, handlers);
     });
   }
@@ -2159,8 +2172,21 @@ export function mountCoworkApp(root: HTMLElement): void {
     });
   }
 
+  dom.skillsMcpView.skillsTab.addEventListener("click", () => {
+    state.skillsMcpTab = "skills";
+    renderState(dom, state, handlers);
+  });
+  dom.skillsMcpView.mcpTab.addEventListener("click", () => {
+    state.skillsMcpTab = "mcp";
+    renderState(dom, state, handlers);
+  });
+
+  // Read-only chip: no drawer toggle. Click navigates to the full Kỹ năng & MCP surface.
   dom.skillsButton.addEventListener("click", () => {
-    dom.skillsPanel.hidden = !dom.skillsPanel.hidden;
+    dom.closeSettings();
+    dom.closeDrawers();
+    state.activeSurface = "skills-mcp";
+    renderState(dom, state, handlers);
   });
 
   let featuresMounted = false;
@@ -2169,6 +2195,15 @@ export function mountCoworkApp(root: HTMLElement): void {
   let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
   let codeNavigator: WorkspaceNavigatorHandle | null = null;
   let workspacePicker: WorkspacePickerHandle | null = null;
+  let skillsEnabledCount = 0;
+  let mcpEnabledCount = 0;
+  const updateSkillsMcpChip = (): void => {
+    dom.skillsButton.textContent = `${skillsEnabledCount} Kỹ năng · ${mcpEnabledCount} MCP`;
+    dom.skillsButton.setAttribute(
+      "aria-label",
+      `Mở Kỹ năng & MCP — ${skillsEnabledCount} Kỹ năng, ${mcpEnabledCount} MCP đang bật`,
+    );
+  };
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
     getBootstrap: () => getShellBridge().getBootstrap(),
@@ -2251,15 +2286,69 @@ export function mountCoworkApp(root: HTMLElement): void {
             },
           });
           mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
-          mountSkillsSettingsPanel(dom.settingsSkillsBody, dynamicClient, (skills) => {
-            const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
-            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+          mountSkillsSettingsPanel(dom.skillsMcpView.skillsBody, dynamicClient, (skills) => {
+            skillsEnabledCount = skills.filter((skill) => skill.status === "enabled").length;
+            updateSkillsMcpChip();
           });
-          mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
-            const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
-            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+          const toMcpView = (server: import("./service-client.js").McpServerListItem): import("./mcp-panel.js").McpServerView => ({
+            id: server.id,
+            name: server.name,
+            transport: server.url !== undefined ? "url" : "stdio",
+            ...(server.command !== undefined ? { command: server.command } : {}),
+            ...(server.url !== undefined ? { url: server.url } : {}),
+            hasHeaderSecret: server.hasHeaderSecret,
+            enabled: server.enabled,
+            health:
+              server.connection === "connected"
+                ? "ok"
+                : server.connection === "unavailable"
+                  ? "error"
+                  : "unknown",
+            toolCount: server.toolCount,
+          });
+          const mcpCallbacks: McpPanelCallbacks = {
+            listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
+            createMcpServer: async (input) =>
+              toMcpView(
+                await dynamicClient.createMcpServer({
+                  ...(input.id !== undefined ? { id: input.id } : {}),
+                  name: input.name,
+                  ...(input.transport === "stdio" && input.command !== undefined
+                    ? { command: input.command }
+                    : {}),
+                  ...(input.transport === "url" && input.url !== undefined ? { url: input.url } : {}),
+                  ...(input.headerSecret !== undefined && input.headerSecret.length > 0
+                    ? { headerSecret: input.headerSecret }
+                    : {}),
+                }),
+              ),
+            updateMcpServer: async (id, input) => {
+              const patch: {
+                readonly name?: string;
+                readonly command?: string;
+                readonly url?: string;
+                readonly headerSecret?: string | null;
+              } = {
+                name: input.name,
+                ...(input.headerSecret !== undefined
+                  ? { headerSecret: input.headerSecret.length > 0 ? input.headerSecret : null }
+                  : {}),
+              };
+              const withTransport =
+                input.transport === "stdio" && input.command !== undefined
+                  ? { ...patch, command: input.command }
+                  : input.transport === "url" && input.url !== undefined
+                    ? { ...patch, url: input.url }
+                    : patch;
+              return toMcpView(await dynamicClient.updateMcpServer(id, withTransport));
+            },
+            deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
+            setMcpServerEnabled: async (id, enabled) =>
+              toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+          };
+          mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
+            mcpEnabledCount = servers.filter((server) => server.enabled).length;
+            updateSkillsMcpChip();
           });
           const permissions = createPermissionController({
             client: dynamicClient,
