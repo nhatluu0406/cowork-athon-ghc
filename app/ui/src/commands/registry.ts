@@ -117,18 +117,22 @@ export function createDefaultRegistry(): CommandRegistry {
         ctx.appendAssistantMessage("Không có cuộc trò chuyện nào đang hoạt động.");
         return;
       }
-      ctx.clearChatUI();
-      ctx.appendAssistantMessage("🧹 Đang dọn dẹp giao diện và nén lịch sử cuộc trò chuyện...");
+      // Do not clear before the service confirms. A failed call used to leave the view
+      // empty while the backend still held the full transcript, so the next prompt ran
+      // against a context the user could no longer see.
+      ctx.appendAssistantMessage("🧹 Đang nén lịch sử cuộc trò chuyện...");
       try {
-        const res = await ctx.client.compactConversation(activeId);
-        // Refresh conversation manager record so it loads the compacted messages
-        await ctx.conv.select(activeId);
-        ctx.clearChatUI();
-        ctx.appendAssistantMessage(`✨ Đã nén cuộc trò chuyện thành công.\n\n[Tóm tắt ngữ cảnh trước đó]: ${res.summary}`);
+        await ctx.client.compactConversation(activeId);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Không thể nén cuộc trò chuyện.";
-        ctx.appendAssistantMessage(`⚠️ Giao diện đã được dọn dẹp, nhưng gặp lỗi khi gọi API nén: ${msg}`);
+        ctx.appendAssistantMessage(`❌ Lỗi nén cuộc trò chuyện: ${msg}\n\nLịch sử được giữ nguyên.`);
+        ctx.refreshUI();
+        return;
       }
+      // The service is the source of truth for the compacted transcript: reload it and
+      // render that, rather than clearing and appending a locally-invented summary.
+      ctx.clearChatUI();
+      await ctx.conv.select(activeId);
       ctx.refreshUI();
     },
   });
