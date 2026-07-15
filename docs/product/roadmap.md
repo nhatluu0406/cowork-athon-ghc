@@ -4,43 +4,89 @@ status: "active"
 updated_at: "2026-07-15"
 ---
 
-# Roadmap
+# Roadmap V2 — basic-first, one wave at a time
 
-## NOW — demo-critical happy paths
+## WAVE 0A — Local database, app lock and encrypted credentials
 
-- [ ] Chat cleanup: user/assistant presentation, remove tool and Skill narration
-- [ ] Provider save → test → persist verified state
-- [ ] Provider action simplification and tooltip clipping fixes
-- [ ] PDF packaged preview
-- [ ] Workspace Agent file auto-open / refresh
-- [ ] Inspector Phase 1 product definition and implementation
+- [ ] Add SQLite adapter and migrations.
+- [ ] Implement first-run local account + unlock.
+- [ ] Implement wrapped vault master key and encrypted secret table.
+- [ ] Migrate provider and MS365 keys from Windows Credential Manager.
+- [ ] Move settings/provider profiles/verification state to SQLite.
+- [ ] Remove keyring dependency only after packaged migration PASS.
 
-## NEXT — complete demo operations
+## WAVE 0B — Conversation/session persistence migration
 
-- [ ] OpenAI-compatible model discovery with manual fallback
-- [ ] Detailed logging contract, retention, redaction, and UI
-- [ ] Local telemetry contract, local-only storage, export/clear UI
-- [ ] Local single-user authentication / app lock
-- [ ] Final demo regression and accepted screenshots
+- [ ] Move conversation summaries/messages/provider snapshots to SQLite.
+- [ ] Preserve rename/delete/search/reopen behavior.
+- [ ] Store durable turn summaries, not raw token deltas.
+- [ ] Import existing `.runtime/conversations`.
+- [ ] Keep File Work Review snapshots on filesystem with DB references.
+- [ ] Remove legacy JSON writes after migration PASS.
 
-## LATER — post-demo product hardening
+## WAVE 1 — Chat, Provider UX, Tooltip, Sidebar, Brand and latency truth
 
-- [ ] Rich Office editing beyond current safe preview/edit limits
-- [ ] Permission session/directory policy refinement
-- [ ] Conversation export/import
-- [ ] Diagnostics/support bundle UX
-- [ ] Installer metadata, signing, updater, release channel
-- [ ] Full RC regression
+- [ ] Refine user/assistant message surfaces.
+- [ ] Keep tool/Skill/runtime internals out of visible transcript.
+- [ ] Simplify provider actions and verified state.
+- [ ] Fix tooltip clipping and sidebar spacing.
+- [ ] Render real Cowork logo in topbar/taskbar identity.
+- [ ] Benchmark one chat/create/modify turn by timing stage.
+- [ ] Do not upgrade OpenCode until timing baseline exists.
 
-## WAITING — external teams
+## WAVE 2 — OpenCode compatibility + Kỹ năng & MCP Hub
 
-- [ ] D1 Dispatch backend/UI merge
-- [ ] D2 Microsoft 365 backend/UI merge
-- [ ] D3 Knowledge/RAG/Graph backend/UI merge
-- [ ] D4 Advanced Gateway merge
+- [ ] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
+- [ ] Add `Kỹ năng & MCP` rail surface below Cowork.
+- [ ] Remove Skills from Settings.
+- [ ] Remove Skill/MCP selection from composer.
+- [ ] Show active summary only in Cowork/Workspace.
+- [ ] Use OpenCode native Skill load-on-demand.
+- [ ] Add persistent MCP config and live adapter.
+- [ ] Phase 1 MCP: local/remote + static encrypted API headers, no OAuth.
+
+## WAVE 3 — Provider model discovery
+
+- [ ] Safe OpenAI-compatible `GET /models`.
+- [ ] Searchable combobox.
+- [ ] Manual model ID fallback.
+- [ ] Cache/invalidate by target fingerprint.
+- [ ] Never block save when discovery unsupported.
+
+## WAVE 4 — Workspace PDF and live refresh
+
+- [ ] Packaged PDF preview.
+- [ ] Auto-refresh tree after verified mutation.
+- [ ] Auto-open created/modified file when safe.
+- [ ] Dirty-edit conflict UX.
+- [ ] Explicit current-file context in companion chat.
+
+## WAVE 5 — Inspector Phase 1
+
+- [ ] Kế hoạch.
+- [ ] Hoạt động.
+- [ ] Tệp / File Work Review.
+- [ ] No raw runtime payloads.
+- [ ] Clear loading/error/empty states.
+
+## WAVE 6 — Logging and local telemetry
+
+- [ ] Detailed local structured logs with rotation/redaction.
+- [ ] Local-only aggregate telemetry.
+- [ ] Export/clear actions.
+- [ ] No network telemetry.
+- [ ] Diagnostics documentation and acceptance.
+
+## WAITING
+
+- [ ] D1 Dispatch integration.
+- [ ] D2 Microsoft 365 product acceptance.
+- [ ] D3 Knowledge/RAG integration.
+- [ ] D4 Gateway integration.
 
 ## DEFERRED
 
-- [ ] File Work Review delete on current OpenCode tool surface
-- [ ] Web/Next.js
-- [ ] Cloud multi-user authentication
+- [ ] MCP OAuth token ownership.
+- [ ] Cloud/multi-user authentication.
+- [ ] Full Office editing.
+- [ ] Web/Next.js.
