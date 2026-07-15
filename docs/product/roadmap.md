@@ -8,12 +8,12 @@ updated_at: "2026-07-15"
 
 ## WAVE 0A — Local database, app lock and encrypted credentials
 
-- [ ] Add SQLite adapter and migrations.
-- [ ] Implement first-run local account + unlock.
-- [ ] Implement wrapped vault master key and encrypted secret table.
-- [ ] Migrate provider and MS365 keys from Windows Credential Manager.
-- [ ] Move settings/provider profiles/verification state to SQLite.
-- [ ] Remove keyring dependency only after packaged migration PASS.
+- [x] Add SQLite adapter and migrations.
+- [x] Implement first-run local account + unlock.
+- [x] Implement wrapped vault master key and encrypted secret table.
+- [x] Migrate provider and MS365 keys from Windows Credential Manager.
+- [x] Move settings/provider profiles/verification state to SQLite.
+- [x] Remove keyring dependency only after packaged migration PASS.
 
 ## WAVE 0B — Conversation/session persistence migration
 

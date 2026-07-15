@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-07-15
 ---
 
@@ -7,9 +7,13 @@ date: 2026-07-15
 
 ## Context
 
-Cowork GHC currently persists settings/conversations as JSON and stores provider/MS365 credentials in Windows Credential Manager. The product direction now requires one local database for application state and local authentication, without Windows Credential Manager.
+Cowork GHC previously persisted settings/conversations as JSON and stored provider/MS365
+credentials in Windows Credential Manager. The product direction requires one local database
+for application state and local authentication, without Windows Credential Manager as the
+long-term credential home.
 
-Electron 33 embeds Node 20, so the built-in `node:sqlite` module is unavailable in the current shell runtime.
+Electron 33 embeds Node 20, so the built-in `node:sqlite` module is unavailable in the current
+shell runtime.
 
 ## Decision
 
@@ -19,11 +23,11 @@ Use a service-owned SQLite database at:
 <Electron userData>/cowork-ghc.db
 ```
 
-Use a pinned `better-sqlite3` adapter in the service/main process.
+Use a pinned `better-sqlite3` adapter in the service/main process (no ORM).
 
 Secrets are encrypted before insertion:
 
-- password-derived key: `crypto.scrypt`;
+- password-derived key: `crypto.scrypt` (N=16384, r=8, p=1);
 - random vault master key;
 - wrapped master key: AES-256-GCM;
 - secret records: AES-256-GCM with unique nonce and AAD;
@@ -55,21 +59,22 @@ mcp_secret_refs
 ## Conversation policy
 
 Persist user-visible messages and durable summaries. Do not persist raw token deltas or the entire SSE stream.
+Wave 0A does **not** migrate conversations (Wave 0B).
 
 ## Migration
 
 1. Create DB and schema.
-2. Import non-secret JSON state.
+2. Import non-secret JSON state into SQLite; rename file to `.migrated-backup`.
 3. After user creates/unlocks local account, import keyring credentials into encrypted vault.
-4. Verify target records.
+4. Verify target records (decrypt round-trip).
 5. Delete old keyring entries only after explicit successful migration.
-6. Rename old JSON state to `.migrated-backup` for one version; remove in later cleanup.
+6. Remove `@napi-rs/keyring` dependency/packaging after migration tests PASS.
 
 ## Consequences
 
 Positive:
 
-- transactional search/rename/delete;
+- transactional search/rename/delete foundation;
 - one schema version;
 - local user ownership;
 - encrypted secret storage;
@@ -80,3 +85,15 @@ Costs:
 - native SQLite addon must be packaged for Electron;
 - password reset without recovery loses encrypted secrets;
 - migration requires focused Windows packaged acceptance.
+
+## Acceptance (Wave 0A)
+
+- [x] SQLite adapter + explicit migrations at `<userData>/cowork-ghc.db`.
+- [x] First-run local username/password setup + unlock.
+- [x] Wrapped vault master key + encrypted `secrets` table.
+- [x] Settings / provider profiles / verification state in SQLite.
+- [x] Provider + MS365 secret migration with verify-then-delete and rollback on failure.
+- [x] Renderer never receives DB handle, password verifier, vault key, or raw secret.
+- [x] Focused storage/auth/credential tests PASS.
+- [x] Packaged native SQLite loads (`app.asar.unpacked/.../better_sqlite3.node`).
+- [ ] Operator: packaged setup → provider key → relaunch → unlock.
