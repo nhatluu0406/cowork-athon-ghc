@@ -177,9 +177,23 @@ export function providerStatus(
     }
     if (connectionTestState === "ok") {
       return {
-        label: `${subject} · Sẵn sàng`,
+        label: `${subject} · Đã kiểm tra`,
         detail: `${profile.modelId} · khoá API đã cấu hình.`,
         ok: true,
+      };
+    }
+    if (profile.verificationCurrent && profile.lastVerifiedOk === true) {
+      return {
+        label: `${subject} · Đã kiểm tra`,
+        detail: `${profile.modelId} · đã xác minh${profile.lastVerifiedAt !== undefined ? ` · ${profile.lastVerifiedAt}` : ""}.`,
+        ok: true,
+      };
+    }
+    if (profile.verificationCurrent && profile.lastVerifiedOk === false) {
+      return {
+        label: `${subject} · Kết nối thất bại`,
+        detail: "Lần kiểm tra gần nhất thất bại — mở cài đặt để sửa rồi thử lại.",
+        ok: false,
       };
     }
     return {
@@ -243,7 +257,7 @@ export function providerStatus(
   }
   if (connectionTestState === "ok") {
     return {
-      label: `${subject} · Sẵn sàng`,
+      label: `${subject} · Đã kiểm tra`,
       detail: `${model.modelID} · khoá API đã cấu hình.`,
       ok: true,
     };

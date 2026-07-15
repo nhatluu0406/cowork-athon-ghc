@@ -105,3 +105,70 @@ test("first-configured source falls through to the next when earlier ones yield 
   const chain = createFirstConfiguredSource([() => Promise.resolve(null), source(reader())]);
   assert.ok(await chain());
 });
+
+test("reads onboarding settings from SQLite when settings.json was migrated away", async () => {
+  const { mkdtempSync, rmSync, existsSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { db } = await import("@cowork-ghc/service");
+
+  const root = mkdtempSync(join(tmpdir(), "cghc-persist-sqlite-"));
+  const dbPath = join(root, "cowork-ghc.db");
+  const missingJson = join(root, ".runtime", "settings.json");
+  const workspace = mkdtempSync(join(tmpdir(), "cghc-ws-sqlite-"));
+
+  const database = db.openSqliteDatabase({ filePath: dbPath });
+  try {
+    db.runMigrations(database);
+    const document = {
+      version: 3,
+      general: { theme: "system", verboseLogging: false, telemetryEnabled: false },
+      providers: [
+        {
+          providerId: "custom-openai-compat",
+          baseUrl: "https://api.deepseek.com/v1",
+          envVar: "DEEPSEEK_API_KEY",
+          credentialRef: CRED_REF,
+        },
+      ],
+      modelPreference: {
+        default: { providerID: "custom-openai-compat", modelID: "deepseek-chat" },
+      },
+      providerProfiles: [],
+      providerProfilesMigrated: true,
+      activeWorkspace: { rootPath: workspace },
+    };
+    db.createSettingsRepository(database).setJson(
+      db.SETTINGS_DOCUMENT_KEY,
+      JSON.stringify(document),
+      new Date().toISOString(),
+    );
+  } finally {
+    db.closeSqliteDatabase(database);
+  }
+
+  assert.equal(existsSync(missingJson), false);
+
+  const launchSource = createPersistedSettingsSource({
+    settingsFilePath: missingJson,
+    dbPath,
+    allowedOrigins: ["app://cowork"],
+    binPath: "C:/bin/opencode.exe",
+    makeCredentialStore,
+  });
+
+  try {
+    const config = (await launchSource()) as LiveLaunchConfig;
+    assert.ok(config, "SQLite vault settings must assemble a live launch config");
+    assert.equal(config.workspaceRoot, workspace);
+    assert.equal(config.provider.kind, "custom");
+    if (config.provider.kind === "custom") {
+      assert.equal(config.provider.baseUrl, "https://api.deepseek.com/v1");
+      assert.equal(config.provider.model, "deepseek-chat");
+      assert.deepEqual(config.provider.credentialRef, CRED_REF);
+    }
+    assert.equal(config.service?.dbPath, dbPath);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(workspace, { recursive: true, force: true });
+  }
+});

@@ -66,6 +66,7 @@ test("providerStatus treats an untested active profile as warning, not healthy",
         updatedAt: "2026-07-14T00:00:00.000Z",
         credentialConfigured: true,
         isActive: true,
+        verificationCurrent: false,
       },
     ],
     activeProfileId: "deepseek-main",
@@ -73,6 +74,32 @@ test("providerStatus treats an untested active profile as warning, not healthy",
   const copy = providerStatus(settings, "unknown");
   assert.equal(copy.label, "DeepSeek · Chưa kiểm tra");
   assert.equal(copy.ok, false);
+});
+
+test("providerStatus trusts persisted verificationCurrent after restart", () => {
+  const settings: SettingsView = {
+    ...baseSettings(),
+    providerProfiles: [
+      {
+        id: "deepseek-main",
+        displayName: "DeepSeek",
+        providerType: "deepseek",
+        baseUrl: "https://api.deepseek.com/v1",
+        modelId: "deepseek-chat",
+        createdAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+        credentialConfigured: true,
+        isActive: true,
+        verificationCurrent: true,
+        lastVerifiedOk: true,
+        lastVerifiedAt: "2026-07-15T12:00:00.000Z",
+      },
+    ],
+    activeProfileId: "deepseek-main",
+  };
+  const copy = providerStatus(settings, "unknown");
+  assert.equal(copy.label, "DeepSeek · Đã kiểm tra");
+  assert.equal(copy.ok, true);
 });
 
 test("providerStatus reports missing credential separately from local service", () => {

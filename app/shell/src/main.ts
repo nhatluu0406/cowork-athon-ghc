@@ -17,7 +17,7 @@
  */
 
 import { app, BrowserWindow, Menu, protocol, session } from "electron";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +37,10 @@ import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
 import { resolvePackagedPaths } from "./service/packaged-paths.js";
+import {
+  CoworkDataPathError,
+  resolveCoworkDataPaths,
+} from "./service/cowork-data-paths.js";
 import { createSettingsOnlyStartService } from "./service/tiered-start-service.js";
 import { createHealthVerifiedStartService } from "./service/wait-for-health.js";
 import {
@@ -77,25 +81,37 @@ function resolveRuntimePaths() {
     userData: app.getPath("userData"),
     devAppRoot: DEV_APP_ROOT,
   });
-  const runtimeRoot = packaged.runtimeRoot ?? DEV_APP_ROOT;
-  const settingsFilePath = join(runtimeRoot, ".runtime", "settings.json");
-  const conversationsDir = join(runtimeRoot, ".runtime", "conversations");
-  const skillsStateFilePath = join(runtimeRoot, ".runtime", "skills-enabled.json");
-  // ADR 0007: service-owned SQLite lives at <userData>/cowork-ghc.db (not under .runtime/).
-  const dbPath = join(app.getPath("userData"), "cowork-ghc.db");
+  const dataPaths = resolveCoworkDataPaths({
+    isPackaged: app.isPackaged,
+    repoRoot: DEV_APP_ROOT,
+    ...(process.env["LOCALAPPDATA"] !== undefined
+      ? { localAppData: process.env["LOCALAPPDATA"] }
+      : {}),
+  });
+  // Writable app root owns settings/conversations beside `data/` (never beside the .exe).
+  const appDataRoot = dirname(dataPaths.dataRoot);
+  const settingsFilePath = join(appDataRoot, "settings.json");
+  const conversationsDir = join(appDataRoot, "conversations");
+  const skillsStateFilePath = join(appDataRoot, "skills-enabled.json");
+  const dbPath = dataPaths.databasePath;
+  maybeMigrateLegacyDatabase(join(app.getPath("userData"), "cowork-ghc.db"), dbPath);
   const userSkillsRoot =
-    process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() ||
-    join(runtimeRoot, ".runtime", "skills");
+    process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() || join(appDataRoot, "skills");
   const builtInSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
-  lifecycleLogPath = join(runtimeRoot, ".runtime", "service-lifecycle.log");
+  lifecycleLogPath = join(appDataRoot, "service-lifecycle.log");
+  mkdirSync(conversationsDir, { recursive: true });
+  if (process.env["COWORK_GHC_VERBOSE_LOGGING"] === "1") {
+    writeStartupTrace(`database_path:${dbPath}`);
+  }
   return {
     packaged,
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
     dbPath,
+    dataPaths,
     skillRoots: [
       { path: builtInSkillsRoot, source: "built_in" as const },
       { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
@@ -174,6 +190,21 @@ app.on("window-all-closed", () => {
   }
 });
 
+function maybeMigrateLegacyDatabase(legacyPath: string, nextPath: string): void {
+  if (existsSync(nextPath) || !existsSync(legacyPath)) return;
+  try {
+    mkdirSync(dirname(nextPath), { recursive: true });
+    copyFileSync(legacyPath, nextPath);
+    for (const suffix of ["-wal", "-shm"] as const) {
+      const side = `${legacyPath}${suffix}`;
+      if (existsSync(side)) copyFileSync(side, `${nextPath}${suffix}`);
+    }
+    writeStartupTrace(`database_migrated_from_legacy:${legacyPath}`);
+  } catch {
+    // Best-effort; startup continues with a fresh DB if copy fails.
+  }
+}
+
 /**
  * The persistent settings file is resolved AFTER `app.whenReady()` so Electron's final
  * `userData` path is used (import-time `getPath("userData")` is not stable in packaged apps).
@@ -247,22 +278,30 @@ void runShellLifecycle({
     if (envCredentialImportEnabled()) {
       loadProjectEnvFile(DEV_APP_ROOT);
     }
-    const {
-      packaged,
-      settingsFilePath,
-      conversationsDir,
-      skillsStateFilePath,
-      dbPath,
-      skillRoots,
-    } = resolveRuntimePaths();
-    shellController = createShellController(
-      settingsFilePath,
-      conversationsDir,
-      skillsStateFilePath,
-      dbPath,
-      skillRoots,
-      packaged,
-    );
+    try {
+      const {
+        packaged,
+        settingsFilePath,
+        conversationsDir,
+        skillsStateFilePath,
+        dbPath,
+        skillRoots,
+      } = resolveRuntimePaths();
+      shellController = createShellController(
+        settingsFilePath,
+        conversationsDir,
+        skillsStateFilePath,
+        dbPath,
+        skillRoots,
+        packaged,
+      );
+    } catch (error) {
+      if (error instanceof CoworkDataPathError) {
+        writeStartupTrace(`data_path_error:${error.message}`);
+        throw error;
+      }
+      throw error;
+    }
   },
   onReady: () => {
     if (shellController === null) {

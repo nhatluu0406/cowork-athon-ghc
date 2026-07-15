@@ -486,10 +486,21 @@
   min-height: 44px;
   max-height: 140px;
   padding: 12px 14px;
+  border: 0;
   outline: none;
+  background: transparent;
+  box-shadow: none;
   overflow: auto;
   color: var(--text-strong);
   white-space: pre-wrap;
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer__input:empty::before {

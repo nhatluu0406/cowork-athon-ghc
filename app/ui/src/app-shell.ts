@@ -91,6 +91,7 @@ import {
   mapTerminalToRuntimePhase,
   type ResolvedFinalText,
 } from "./session-finalization.js";
+import { shouldShowProcessing } from "./turn-ui-state.js";
 import { createTurnTimingTracker, type TurnTimingTracker } from "./turn-timing.js";
 import { createProductIcon } from "./product-icons.js";
 import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
@@ -167,6 +168,10 @@ interface AppState {
   codeOpenFiles: OpenCodeFile[];
   codeActiveKey: string | null;
   permissionMode: PermissionMode;
+  /** Conversation that owns the current processing indicator (`Đang xử lý`). */
+  processingConversationId: string | null;
+  /** Optimistic user bubble awaiting service acknowledgement. */
+  pendingUserRow: HTMLElement | null;
 }
 
 type AppDom = AppFrameDom;
@@ -364,9 +369,11 @@ function appendMessage(
   historical = false,
   attachments?: readonly AttachmentMetadata[],
   skills?: readonly SkillUseMetadata[],
+  options?: { readonly pending?: boolean },
 ): HTMLElement {
   dom.emptyState.hidden = true;
-  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
+  const pendingClass = options?.pending === true ? " msg--pending" : "";
+  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}${pendingClass}`);
   if (role === "assistant") row.append(el("div", "msg__avatar", "AI"));
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
@@ -387,6 +394,24 @@ function appendMessage(
   dom.transcriptInner.insertBefore(row, dom.thinking);
   dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
   return row;
+}
+
+function confirmPendingUserMessage(row: HTMLElement | null): void {
+  if (row === null) return;
+  row.classList.remove("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+}
+
+function attachSendRetry(
+  row: HTMLElement,
+  onRetry: () => void,
+): void {
+  row.classList.add("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+  const retry = el("button", "msg__retry", "Thử lại") as HTMLButtonElement;
+  retry.type = "button";
+  retry.addEventListener("click", () => onRetry());
+  row.querySelector(".msg__body")?.append(retry);
 }
 
 function renderAttachmentMetaList(attachments: readonly AttachmentMetadata[]): HTMLElement {
@@ -962,7 +987,11 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "running" ||
     phase === "cancelling" ||
     state.activeWorkspace === null;
-  dom.thinking.hidden = phase !== "running" && phase !== "starting" && phase !== "cancelling";
+  dom.thinking.hidden = !shouldShowProcessing({
+    activeConversationId: state.conv.state.activeConversationId,
+    processingConversationId: state.processingConversationId,
+    runtimePhase: phase,
+  });
   dom.sendButton.disabled =
     locked ||
     phase === "starting" ||
@@ -991,6 +1020,12 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
     applyThemePreference(state.settings.general.theme);
+    const active = state.settings.providerProfiles?.find((p) => p.isActive);
+    if (active?.verificationCurrent === true && active.lastVerifiedOk === true) {
+      state.connectionTestState = "ok";
+    } else if (active?.verificationCurrent === true && active.lastVerifiedOk === false) {
+      state.connectionTestState = "failed";
+    }
   } catch {
     state.settings = null;
   }
@@ -1169,6 +1204,10 @@ async function finalizeConversationTurn(
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.continuationUnlocked = true;
+  if (state.processingConversationId === state.conv.state.activeConversationId) {
+    state.processingConversationId = null;
+  }
+  state.pendingUserRow = null;
   renderState(dom, state, handlers);
 }
 
@@ -1292,7 +1331,8 @@ async function ensureRuntimeSession(
   if (plan.action === "reuse") {
     state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
     bindEvStream(state, dom, handlers, plan.runtimeSessionId);
-    state.conv.state.runtimePhase = "ready";
+    state.conv.state.runtimePhase =
+      state.processingConversationId !== null ? "starting" : "ready";
     return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
   }
 
@@ -1311,7 +1351,9 @@ async function ensureRuntimeSession(
   });
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
-  state.conv.state.runtimePhase = "ready";
+  // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
+  state.conv.state.runtimePhase =
+    state.processingConversationId !== null ? "starting" : "ready";
   bindEvStream(state, dom, handlers, meta.id);
   renderState(dom, state, handlers);
   return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
@@ -1335,6 +1377,8 @@ async function switchConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
@@ -1347,6 +1391,47 @@ async function switchConversation(
   restoreComposerDraft(state, dom, id);
   renderState(dom, state, handlers);
   dom.composerInput.focus();
+}
+
+async function ensureDraftConversation(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+  await refreshSettings(state, dom, handlers);
+  if (state.activeWorkspace === null) throw new Error("Chọn workspace trước.");
+  if (state.conv.state.activeConversationId !== null) return;
+
+  const reusableDraft = state.conv.state.summaries.find(
+    (summary) =>
+      summary.status === "draft" &&
+      summary.messageCount === 0 &&
+      summary.workspacePath === state.activeWorkspace,
+  );
+  if (reusableDraft !== undefined) {
+    await state.conv.select(reusableDraft.id);
+    return;
+  }
+
+  const model = state.settings?.defaultModel;
+  const activeProfile = state.settings?.providerProfiles?.find((p) => p.isActive);
+  const providerSnapshot =
+    activeProfile !== undefined
+      ? {
+          profileId: activeProfile.id,
+          displayName: activeProfile.displayName,
+          providerType: activeProfile.providerType,
+          modelId: activeProfile.modelId,
+          baseUrl: activeProfile.baseUrl,
+        }
+      : undefined;
+  await state.conv.createNew(
+    state.activeWorkspace,
+    model?.providerID,
+    model?.modelID,
+    providerSnapshot,
+  );
 }
 
 async function newConversation(
@@ -1387,6 +1472,8 @@ async function newConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
@@ -1583,98 +1670,134 @@ async function sendPrompt(
     window.alert(dispatchPlan.message);
     return;
   }
-  if (state.conv.state.activeConversationId === null) {
-    await newConversation(state, dom, handlers);
-  }
-  if (state.client === null || state.conv.state.activeConversationId === null) return;
 
-  const { runtimeSessionId } = await ensureRuntimeSession(
-    state,
-    dom,
-    readiness,
-    handlers,
-  );
-
-  resetLiveActivity(state);
-  state.currentFileActionIntent = detectFileActionIntent(prompt);
-  state.fileVerificationTasks.clear();
-  state.turnTiming.reset();
-  const includedMetadata = dispatchPlan.includedMetadata;
-  appendMessage(
-    dom,
-    "user",
-    prompt,
-    false,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  state.activeAssistant = appendMessage(dom, "assistant", "");
-  const pendingCleared = state.pendingAttachments;
+  // Optimistic UX: clear composer immediately, then ensure a conversation so processing can bind.
   if (promptOverride === undefined) {
     setComposerText(dom.composerInput, "");
   }
   if (!skipAttachments) {
     state.pendingAttachments = [];
   }
-  if (promptOverride === undefined) {
-    state.composerDrafts.delete(state.conv.state.activeConversationId);
-  }
-  await state.conv.recordUserMessage(
-    prompt,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  await state.conv.markLastActive();
-  state.conv.state.runtimePhase = "running";
-  state.continuationUnlocked = true;
-  recordAttachmentActivity(state, includedMetadata, []);
-  renderState(dom, state, handlers);
 
-  const dispatchText = dispatchPlan.text;
+  try {
+    if (state.conv.state.activeConversationId === null) {
+      await ensureDraftConversation(state, dom, handlers);
+    }
+    if (state.client === null || state.conv.state.activeConversationId === null) {
+      throw new Error("Không tạo được cuộc trò chuyện.");
+    }
+    state.processingConversationId = state.conv.state.activeConversationId;
+    if (promptOverride === undefined) {
+      state.composerDrafts.delete(state.conv.state.activeConversationId);
+    }
 
-  const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
-  state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
-  if (!result.accepted) {
-    state.pendingAttachments = pendingCleared;
-    if (result.reason === "session_completed") {
-      await state.conv.startContinuation();
-      const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-      const retryPlan = planDispatchPrompt(
-        retry.contextMessages,
-        snapshots,
-        prompt,
-        undefined,
-        enabledSkills,
-      );
-      if (!retryPlan.ok) {
+    const includedMetadata = dispatchPlan.includedMetadata;
+    state.pendingUserRow = appendMessage(
+      dom,
+      "user",
+      prompt,
+      false,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+      { pending: true },
+    );
+    state.activeAssistant = appendMessage(dom, "assistant", "");
+    state.assistantText = "";
+    state.conv.state.runtimePhase = "starting";
+    renderState(dom, state, handlers);
+
+    const { runtimeSessionId } = await ensureRuntimeSession(
+      state,
+      dom,
+      readiness,
+      handlers,
+    );
+
+    resetLiveActivity(state);
+    state.currentFileActionIntent = detectFileActionIntent(prompt);
+    state.fileVerificationTasks.clear();
+    state.turnTiming.reset();
+    await state.conv.recordUserMessage(
+      prompt,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+    );
+    confirmPendingUserMessage(state.pendingUserRow);
+    state.pendingUserRow = null;
+    await state.conv.markLastActive();
+    state.conv.state.runtimePhase = "running";
+    state.continuationUnlocked = true;
+    recordAttachmentActivity(state, includedMetadata, []);
+    renderState(dom, state, handlers);
+
+    const dispatchText = dispatchPlan.text;
+    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
+    if (!result.accepted) {
+      if (result.reason === "session_completed") {
+        await state.conv.startContinuation();
+        const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+        const retryPlan = planDispatchPrompt(
+          retry.contextMessages,
+          snapshots,
+          prompt,
+          undefined,
+          enabledSkills,
+        );
+        if (!retryPlan.ok) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(state, retryPlan.message);
+          renderState(dom, state, handlers);
+          return;
+        }
+        const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
+        if (!second.accepted) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(state, "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
+        }
+      } else {
         state.currentFileActionIntent = null;
         state.fileVerificationTasks.clear();
+        state.processingConversationId = null;
         await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", retryPlan.message);
-        renderState(dom, state, handlers);
-        return;
+        updateAssistantBubble(
+          state,
+          result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.",
+        );
+        if (state.pendingUserRow === null) {
+          const lastUser = [...dom.transcriptInner.querySelectorAll(".msg--user")].at(-1) as
+            | HTMLElement
+            | undefined;
+          if (lastUser !== undefined) {
+            attachSendRetry(lastUser, () => {
+              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+            });
+          }
+        }
       }
-      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
-      if (!second.accepted) {
-        state.currentFileActionIntent = null;
-        state.fileVerificationTasks.clear();
-        await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
-      }
-    } else {
-      state.currentFileActionIntent = null;
-      state.fileVerificationTasks.clear();
-      await state.conv.setRuntimePhase("failed");
-      appendMessage(
-        dom,
-        "assistant",
-        result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.",
-      );
+      renderState(dom, state, handlers);
+      return;
+    }
+    refreshActivityUi(state, dom);
+  } catch (error) {
+    state.processingConversationId = null;
+    await state.conv.setRuntimePhase("failed").catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Không gửi được yêu cầu.";
+    updateAssistantBubble(state, message);
+    const pendingRow = state.pendingUserRow;
+    if (pendingRow !== null) {
+      attachSendRetry(pendingRow, () => {
+        void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+      });
     }
     renderState(dom, state, handlers);
-    return;
   }
-  refreshActivityUi(state, dom);
 }
 
 async function cancelRun(
@@ -1765,6 +1888,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     codeOpenFiles: [],
     codeActiveKey: null,
     permissionMode: readPermissionMode(),
+    processingConversationId: null,
+    pendingUserRow: null,
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);

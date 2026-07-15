@@ -1062,8 +1062,19 @@ button:disabled {
   max-height: 190px;
   overflow: auto;
   padding: 14px 16px;
+  border: 0;
   outline: none;
+  background: transparent;
+  box-shadow: none;
   white-space: pre-wrap;
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer__input:empty::before {
@@ -1993,6 +2004,18 @@ textarea,
   min-height: 54px;
   max-height: 190px;
   line-height: 1.55;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer-preflight {
@@ -2391,7 +2414,19 @@ body {
 .composer__input {
   min-height: 64px;
   padding: 16px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-strong);
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer__input:empty::before {
@@ -2449,7 +2484,7 @@ body {
   border-radius: 16px;
 }
 
-/* Local app lock (ADR 0007) — minimal gate, token-styled */
+/* Local app lock (ADR 0007) ? minimal gate, token-styled */
 .app-lock {
   position: fixed;
   inset: 0;

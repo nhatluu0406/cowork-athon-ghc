@@ -552,8 +552,10 @@ button {
 }
 
 .composer__box:focus-within {
-  border-color: color-mix(in srgb, var(--cghc-accent) 48%, var(--cghc-border));
-  box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
+  border-color: color-mix(in srgb, var(--cghc-accent) 40%, var(--cghc-border));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--cghc-accent) 22%, transparent),
+    var(--cghc-shadow-md);
   transform: translateY(-1px);
 }
 
@@ -562,9 +564,22 @@ button {
   max-height: 180px;
   padding: 18px 18px 8px;
   overflow-y: auto;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
   color: var(--cghc-text-primary);
   font-size: 15px;
   line-height: 1.55;
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer__input:empty::before {
@@ -1309,6 +1324,49 @@ button {
   right: 18px;
   bottom: calc(var(--statusbar-h) + 18px);
   z-index: 130;
+  max-width: min(420px, calc(100vw - 36px));
+  margin: 0;
+  padding: 11px 14px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 12px;
+  background: var(--cghc-surface-elevated);
+  color: var(--cghc-text-secondary);
+  box-shadow: var(--cghc-shadow-md);
+}
+
+.msg--pending {
+  opacity: 0.92;
+  animation: cghc-msg-in 140ms ease-out;
+}
+
+.msg__retry {
+  margin-top: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 10px;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.msg__retry:hover {
+  border-color: var(--cghc-accent);
+  color: var(--cghc-accent);
+}
+
+@keyframes cghc-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 0.92;
+    transform: translateY(0);
+  }
+}
   max-width: min(420px, calc(100vw - 36px));
   margin: 0;
   padding: 11px 14px;
@@ -2131,6 +2189,18 @@ button {
 .composer__input {
   min-height: 54px;
   padding: 16px 17px 7px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+}
+
+.composer__input:focus,
+.composer__input:focus-visible {
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .composer__bar {
@@ -2871,6 +2941,10 @@ button {
 .cowork-view--companion .composer__input {
   min-height: 46px;
   padding: 13px 13px 5px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .cowork-view--companion .composer__bar {
