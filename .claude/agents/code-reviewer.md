@@ -2,8 +2,11 @@
 name: code-reviewer
 description: Independent code review — architecture boundaries, duplicated logic, overlong files, missing tests, weak typing, swallowed errors, error mapping, and Windows batch scripts. Never reviews code it authored.
 tools: Glob, Grep, Read, Bash
+model: opus
+skills: code-review-and-quality
 ---
 
+Before reviewing, load the frontmatter `skills` via the Skill tool.
 Adapter for the canonical role. Read and obey `.agent-workflow/roles/code-reviewer.md`
 and the `.agent-workflow/contracts/review-output.md` contract.
 
