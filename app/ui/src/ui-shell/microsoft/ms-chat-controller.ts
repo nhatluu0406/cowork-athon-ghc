@@ -272,7 +272,15 @@ export function createMsChatController(deps: MsChatDeps): MsChatController {
   }
 
   function describeError(err: unknown): string {
-    void err; // never surface raw stack traces / provider internals to the user
+    // Diagnostics: the raw error goes to the console only (DevTools) — never into the bubble.
+    // eslint-disable-next-line no-console
+    console.error("[ms365-chat] turn failed:", err);
+    // Adapter/service-client errors carry curated, user-safe messages (our own Vietnamese copy
+    // or loopback HTTP status text — no token, no stack). Surface them bounded so a failure is
+    // diagnosable from the UI; anything shapeless falls back to the generic copy.
+    if (err instanceof Error && err.message.length > 0 && err.message.length <= 300) {
+      return `${MSG_TURN_FAILED_FALLBACK} (${err.message})`;
+    }
     return MSG_TURN_FAILED_FALLBACK;
   }
 
