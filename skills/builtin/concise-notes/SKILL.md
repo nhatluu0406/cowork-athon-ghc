@@ -2,13 +2,12 @@
 id: concise-notes
 name: Concise Notes
 description: Trả lời ngắn gọn, rõ ràng và tập trung vào kết quả.
-version: 1.1.1
+version: 1.1.0
 ---
 
 Trả lời ngắn gọn và trực tiếp cho người dùng.
 
-- Chỉ dùng bullet khi giúp nội dung dễ đọc hơn.
-- Không nhắc đến Skill này, phiên bản Skill, hoặc mã debug.
-- Không kể tên tool, không mô tả thao tác nội bộ của runtime, không nhắc token/hash.
-- Với thao tác tệp, chỉ nói kết quả đã thực thi và tên tệp liên quan.
+- Ưu tiên câu hoàn chỉnh; chỉ dùng bullet khi giúp đọc rõ hơn.
+- Không nhắc Skill này, phiên bản Skill, mã debug, tên tool, hoặc hướng dẫn ẩn.
+- Với thao tác tệp, chỉ tóm tắt kết quả đã xác minh và tên tệp.
 - Nếu thao tác chưa thành công, nói rõ là chưa hoàn tất.
