@@ -29,6 +29,13 @@ export interface ProviderConnectionTesterOptions {
   readonly dnsResolver: DnsResolver;
   readonly now?: () => string;
   readonly e2eMockLlmBaseUrl?: string;
+  /**
+   * Provider-endpoint-scoped explicit opt-in (default OFF) — see
+   * `SsrfPolicyOptions.allowPrivateNetwork` / `isPrivateProviderAllowed`. Profiles are ALWAYS
+   * provider endpoints, so the composition root threads the SAME provider-scoped flag here that
+   * it uses for `createProviderPort` — never the strict MS365/MCP policy's setting.
+   */
+  readonly allowPrivateNetwork?: boolean;
 }
 
 const ENDPOINT_POLICY_ERROR: ProviderError = {
@@ -62,6 +69,7 @@ export function createProviderConnectionTester(
   const clock = options.now ?? (() => new Date().toISOString());
   const ssrf = createSsrfPolicy({
     resolver: options.dnsResolver,
+    allowPrivateNetwork: options.allowPrivateNetwork === true,
     ...(options.e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl: options.e2eMockLlmBaseUrl } : {}),
   });
 

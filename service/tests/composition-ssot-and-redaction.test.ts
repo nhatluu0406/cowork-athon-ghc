@@ -9,7 +9,10 @@
  *  2. FIX-5.2 (sec MEDIUM): permission fail-closed TIMEOUT auto-deny blocks the mutation + audits.
  *  3. FIX-3 (sec LOW): a Deny with the DEFAULT not-attached (REJECTING) reply port never surfaces
  *     as an unhandled rejection / 500 — the mutation is still blocked and the deny audited.
- *  4. FIX-5.4: a persisted `base_url` is NOT auto-loaded into the SSRF-guarded port at boot.
+ *  4. FIX-5.4: a persisted `base_url` is never loaded UNVALIDATED into the SSRF-guarded port at
+ *     boot — it is always re-validated through the SAME SSRF policy first. (Worded this way,
+ *     not "is not auto-loaded": a persisted URL that PASSES SSRF IS auto-loaded — see the BOOT
+ *     resilience test below — the invariant is "never unvalidated", not "never loaded".)
  *  5. FIX-5.5: value-based redaction is wired into the LIVE session-stream path.
  *
  * No live OpenCode, no network egress, no real secrets: every fs/DNS touch is injected and the
@@ -33,6 +36,7 @@ import {
   type DnsResolver,
   type ResolvedAddress,
 } from "../src/provider/index.js";
+import { createProviderProfileStore } from "../src/provider-profiles/index.js";
 import { createWorkspaceGuard, grantWorkspace, type WorkspaceFsProbe } from "../src/workspace/index.js";
 import type {
   CreateSessionInput,
@@ -294,20 +298,24 @@ test("FIX-3: a Deny over the DEFAULT rejecting reply port blocks the write witho
   }
 });
 
-test("FIX-5.4: a persisted base_url is NOT auto-loaded into the SSRF-guarded port at boot", async () => {
+test("FIX-5.4: a persisted base_url is never loaded UNVALIDATED into the SSRF-guarded port at boot", async () => {
   const settingsFs = memorySettingsFs();
-  // Seed the persisted settings with a base_url (as an earlier run would have left it).
+  // Seed the persisted settings with a base_url (as an earlier run would have left it). Its
+  // hostname resolves to a DISALLOWED address below, so this test proves the refused case; the
+  // BOOT-resilience test further down proves the invariant is "never unvalidated" (not "never
+  // loaded") by seeding a base_url that PASSES SSRF and observing it IS auto-loaded.
   const seed = await openSettingsStore({ fs: settingsFs });
   await seed.setProviderBaseUrl(CUSTOM_OPENAI_COMPAT_ID, "https://persisted.example.test/v1");
 
   const { running, deps } = await startCoworkService(baseOptions({ settingsFs }));
   const token = running.clientToken;
   try {
-    // Boot must NOT trust a persisted base_url: the port has none until re-set via the SSRF guard.
+    // Boot must NOT trust a persisted base_url unvalidated: the port has none until it passes the
+    // SAME SSRF-guarded path (re-set here, or auto-seeded at boot when it already resolves public).
     assert.equal(
       deps.providerPort.baseUrlFor(CUSTOM_OPENAI_COMPAT_ID),
       undefined,
-      "a persisted base_url is not loaded/used until re-validated through the SSRF-guarded path",
+      "a persisted base_url is never loaded UNVALIDATED — it must pass the SSRF-guarded path first",
     );
     // GET /v1/settings still reports the persisted value (the store keeps it) — but the PORT does not.
     const view = await boundedFetch(`${running.baseUrl}/v1/settings`, { headers: authHeaders(token) });
@@ -406,6 +414,83 @@ test("BOOT resilience: a persisted base_url whose hostname now resolves PRIVATE 
       headers: authHeaders(running.clientToken),
     });
     assert.equal(view.status, 200);
+  } finally {
+    await running.service.stop();
+  }
+});
+
+test("CGHC_SSRF_ALLOW_PRIVATE_PROVIDER opt-in: with the flag set, boot SEEDS a private-resolving persisted base_url (default OFF elsewhere)", async () => {
+  // Part 2 (PO decision 2026-07-15): the explicit, default-OFF opt-in for provider endpoints.
+  // `compose-service.ts` reads `process.env.CGHC_SSRF_ALLOW_PRIVATE_PROVIDER` directly (mirroring
+  // every other env-driven switch in this module, e.g. `isMs365Enabled`), so this test sets/
+  // restores the real env var around the boot call, exactly like `tests/ms365-child-env.test.ts`.
+  const settingsFs = memorySettingsFs();
+  const seed = await openSettingsStore({ fs: settingsFs });
+  await seed.setProviderBaseUrl(CUSTOM_OPENAI_COMPAT_ID, "https://intranet-resolved.example.test/v1");
+
+  process.env.CGHC_SSRF_ALLOW_PRIVATE_PROVIDER = "1";
+  try {
+    const { running, deps } = await startCoworkService(
+      baseOptions({
+        settingsFs,
+        dnsResolver: fakeResolver({
+          "intranet-resolved.example.test": { address: "192.168.11.1", family: 4 },
+        }),
+      }),
+    );
+    try {
+      // With the opt-in ON, the private-resolving persisted URL now PASSES the provider-scoped
+      // SSRF policy at boot, so seedFromSettings actually configures the endpoint (no skip).
+      assert.equal(
+        deps.providerPort.baseUrlFor(CUSTOM_OPENAI_COMPAT_ID),
+        "https://intranet-resolved.example.test/v1",
+        "the opt-in lets a private-resolving endpoint be seeded — the port now HOLDS it",
+      );
+      const view = await boundedFetch(`${running.baseUrl}/v1/settings`, {
+        headers: authHeaders(running.clientToken),
+      });
+      assert.equal(view.status, 200);
+    } finally {
+      await running.service.stop();
+    }
+  } finally {
+    delete process.env.CGHC_SSRF_ALLOW_PRIVATE_PROVIDER;
+  }
+});
+
+test("BOOT resilience: an active PROFILE whose base_url now resolves PRIVATE must not kill the service (syncActiveProfile catch)", async () => {
+  // Security-review fix #2/#4: the OTHER boot-time SSRF-refusal path — `syncActiveProfile` inside
+  // `createCoworkService` — must ALSO be narrowed to catch only SsrfBlockedError (not a bare
+  // catch), and must not lock the user out of Settings when the ACTIVE PROFILE's persisted
+  // base_url resolves to a private address (the same split-horizon-DNS scenario as the
+  // seedFromSettings BOOT-resilience test above, but exercised via the provider-profiles path).
+  const settingsFs = memorySettingsFs();
+  const seedStore = await openSettingsStore({ fs: settingsFs });
+  const seedProfiles = createProviderProfileStore({ store: seedStore, now: () => "2026-07-15T00:00:00.000Z" });
+  // The FIRST created profile auto-becomes active.
+  await seedProfiles.create({
+    displayName: "Intranet",
+    providerType: "custom-openai-compat",
+    baseUrl: "https://intranet-resolved.example.test/v1",
+    modelId: "test-model",
+  });
+
+  const { running, deps } = await startCoworkService(
+    baseOptions({
+      settingsFs,
+      dnsResolver: fakeResolver({
+        "intranet-resolved.example.test": { address: "192.168.11.1", family: 4 },
+      }),
+    }),
+  );
+  try {
+    // Boot SUCCEEDED — `syncActiveProfile`'s refusal was caught and skipped, not left to escape
+    // as a bare-catch-swallowed-anything or (worse) an uncaught boot failure.
+    assert.equal(deps.providerPort.baseUrlFor(CUSTOM_OPENAI_COMPAT_ID), undefined);
+    const view = await boundedFetch(`${running.baseUrl}/v1/settings`, {
+      headers: authHeaders(running.clientToken),
+    });
+    assert.equal(view.status, 200, "Settings stay reachable — no lockout via the profile-sync path either");
   } finally {
     await running.service.stop();
   }

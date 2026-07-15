@@ -12,11 +12,8 @@ import type { SettingsStore } from "../diagnostics/index.js";
 import {
   createHttpConnector,
   createProviderPort,
-  createSsrfPolicy,
   providerEnvSpec,
   isCustomEndpoint,
-  readE2eMockLlmBaseUrl,
-  type DnsResolver,
   type ProviderConnector,
   type ProviderPort,
   type SsrfPolicy,
@@ -29,17 +26,16 @@ export interface HttpConnectorBundle {
   readonly bindActiveModelResolver: (resolver: () => ModelRef | undefined) => void;
 }
 
-/** Wire the SSRF policy, provider port, and HTTP probe connector (lazy credential lookup). */
+/**
+ * Wire the provider port + HTTP probe connector (lazy credential lookup) over an ALREADY-BUILT
+ * {@link SsrfPolicy} — the caller (composition root) decides strict vs the provider-scoped
+ * private-network opt-in; this factory never constructs its own policy.
+ */
 export function createHttpConnectorBundle(
   credentialService: CredentialService,
   settingsStore: SettingsStore,
-  dnsResolver: DnsResolver,
+  ssrf: SsrfPolicy,
 ): HttpConnectorBundle {
-  const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
-  const ssrf = createSsrfPolicy({
-    resolver: dnsResolver,
-    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
-  });
   let activeModelFor: () => ModelRef | undefined = () => undefined;
   let port!: ProviderPort;
   const connector = createHttpConnector({

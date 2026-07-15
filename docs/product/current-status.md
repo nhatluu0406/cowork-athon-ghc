@@ -712,6 +712,67 @@ thứ đó trong lúc đang live PHẢI force reconnect thì thay đổi mới c
   `connectLive()` không tham số — vẫn hợp lệ (tham số optional) và không được đưa vào phạm vi cờ
   dirty vì nó không dùng `AppState`.
 
+## SSRF boot-lockout hardening + `CGHC_SSRF_ALLOW_PRIVATE_PROVIDER` opt-in (2026-07-15)
+
+**Bối cảnh:** commit 68d5109 đã sửa để service (Tier 1) sống sót khi một `base_url` provider đã
+lưu không còn qua được SSRF policy lúc boot (ví dụ mạng công ty FPT dùng split-horizon DNS khiến
+`mkp-api.fptcloud.com` resolve ra IP nội bộ `192.168.11.1` sau khi đổi mạng). Một review bảo mật
+độc lập (verdict APPROVE WITH FIXES) tìm thêm 4 follow-up; PO đã duyệt (2026-07-15) một cờ opt-in
+tường minh, mặc định TẮT, để cho phép endpoint provider trỏ vào mạng nội bộ khi người dùng chủ
+động bật.
+
+**Phần 1 — sửa các follow-up của review bảo mật:**
+- **Packaged live-boot lockout:** shell (`app/shell/src/service/tiered-start-service.ts`) trước
+  đây RETHROW `SsrfBlockedError` từ `buildLiveCoworkOptions` — nghĩa là app đóng gói không khởi
+  động được service NÀO cả (kể cả settings-only), khoá luôn màn hình Settings. Đã thêm
+  `SsrfBlockedError` vào danh sách fallback: rơi về settings-only (fail-closed — không spawn
+  child, không giữ endpoint chưa xác thực).
+- **Thu hẹp 2 bare catch:** `service/src/composition/compose-service.ts` (`syncActiveProfile` và
+  `seedFromSettings`) giờ chỉ bắt đúng `SsrfBlockedError` (`if (!(err instanceof
+  SsrfBlockedError)) throw err;`) — lỗi khác vẫn làm boot thất bại trung thực thay vì bị nuốt.
+- **Log cảnh báo đã redact:** mỗi catch site log một dòng `console.warn` chỉ chứa lý do +
+  hostname/IP bị từ chối (không secret) — ví dụ `[boot] provider endpoint skipped: ...`.
+- **Test + wording:** thêm test boot cho đường `syncActiveProfile` (active profile với base_url
+  resolve về IP nội bộ); sửa lại tiêu đề/comment của test FIX-5.4 — bất biến đúng là "một
+  base_url đã lưu không bao giờ được nạp CHƯA XÁC THỰC" (không phải "không bao giờ được nạp" —
+  một URL lưu sẵn mà PASS SSRF thì VẪN được tự nạp).
+
+**Phần 2 — opt-in mạng nội bộ cho endpoint provider (mặc định TẮT):**
+- Cờ môi trường mới: `CGHC_SSRF_ALLOW_PRIVATE_PROVIDER` (đọc qua
+  `isPrivateProviderAllowed(process.env)` trong `service/src/provider/ssrf-policy.ts`) — chỉ ON
+  khi giá trị đúng bằng `"1"` hoặc `"true"`, mọi giá trị khác (kể cả không đặt) đều OFF, giống
+  style `isMs365Enabled`.
+- **Phạm vi: CHỈ endpoint provider.** `SsrfPolicyOptions.allowPrivateNetwork` khi `true` chỉ nới
+  lỏng class IP `private` (RFC-1918) — `loopback` (trừ khi `loopbackEscape` bật riêng),
+  `link_local`, và `cloud_metadata` vẫn bị chặn tuyệt đối; yêu cầu `https` không đổi.
+  `compose-service.ts` dựng MỘT policy `ssrf` (strict, dùng cho MS365 Graph client, device-code
+  provider, và extension/MCP registry) và MỘT policy `providerSsrf` riêng (đọc cờ trên, dùng cho
+  `createProviderPort`/`createHttpConnectorBundle`). `provider-connection-tester.ts` (test-connection
+  cho provider profiles) và `live-launch.ts` (`buildLiveCoworkOptions`, validate base_url custom
+  trước khi spawn) cũng được truyền cùng cờ này — vì cả hai đều là đường endpoint-provider.
+- **Lý do:** mạng nội bộ FPT dùng split-horizon DNS khiến hostname provider công ty resolve ra IP
+  RFC-1918 — nếu không có cờ này, người dùng trên mạng đó không thể dùng provider nội bộ dù đã
+  cấu hình đúng. PO quyết định 2026-07-15: chấp nhận rủi ro này CHỈ khi người dùng chủ động bật
+  cờ môi trường (không phải mặc định, không phải qua UI/body request).
+
+### Bằng chứng đã xác minh (verified)
+
+- `service/tests/provider-ssrf.test.ts` — `isPrivateProviderAllowed` on/off; `allowPrivateNetwork`
+  cho phép `private` nhưng vẫn chặn `link_local`/`cloud_metadata`/loopback/http.
+- `service/tests/composition-ssot-and-redaction.test.ts` — boot sống sót qua cả 2 đường
+  (`seedFromSettings` và `syncActiveProfile`) khi base_url đã lưu resolve về IP nội bộ; test cờ
+  env bật → base_url nội bộ ĐƯỢC seed vào port lúc boot.
+- `app/shell/tests/tiered-start-service.test.ts` — `SsrfBlockedError` fallback về settings-only
+  vô điều kiện (không cần `fallbackOnLiveSpawnFailure`).
+- `npm run typecheck` (root `tsc -b`) — pass.
+
+### Giới hạn trung thực (honesty limitations)
+
+- Chưa chạy packaged live verification trên mạng FPT thật để xác nhận cờ giải quyết đúng sự cố
+  gốc (192.168.11.1) end-to-end — mới có bằng chứng unit/composition-level với DNS resolver giả.
+- Cờ là toàn-cục cho cả process (không theo từng profile) — nếu người dùng có cả provider công
+  khai lẫn provider nội bộ, TẤT CẢ provider endpoint đều được nới lỏng khi cờ bật.
+
 ## Microsoft 365 & Claude Code surfaces (2026-07-13)
 
 | Item | Status |

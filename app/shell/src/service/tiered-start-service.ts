@@ -16,14 +16,21 @@
  * (pick a workspace, enter a key, configure a provider/model). Actually starting the live runtime
  * stays a separate, user-gated step (the "Connect" action → a service restart into the live path).
  *
- * The fallback is keyed on the typed {@link ServiceLaunchNotConfiguredError} ONLY — any other live
- * failure (a real misconfiguration, a spawn error) still propagates so the ServiceController
- * records it honestly. The Tier-1 fallback and the live path share the SAME absolute
- * `settingsFilePath`, so a provider/model the user saves during onboarding is the same persisted
- * state the subsequent live launch reads.
+ * The fallback is keyed on the typed {@link ServiceLaunchNotConfiguredError} ONLY, plus (when
+ * `fallbackOnLiveSpawnFailure` is set) {@link RuntimeSpawnError} and the SSRF boot-lockout case
+ * (security-review follow-up): a persisted provider `base_url` can start passing SSRF policy at
+ * save time and later fail it (e.g. split-horizon corporate DNS re-resolves the hostname to a
+ * private IP after a network change) — `buildLiveCoworkOptions` re-validates it on every boot and
+ * throws `SsrfBlockedError`. Without this case the shell RETHROWS it and the packaged app never
+ * starts ANY service (not even settings-only) — a full Settings lockout, worse than the composed
+ * service's own boot-resilience fix (68d5109) because the shell layer sits in front of it. Any
+ * OTHER live failure (a real misconfiguration, an unrelated spawn error) still propagates so the
+ * ServiceController records it honestly. The Tier-1 fallback and the live path share the SAME
+ * absolute `settingsFilePath`, so a provider/model the user saves during onboarding is the same
+ * persisted state the subsequent live launch reads.
  */
 
-import { startCoworkService, RuntimeSpawnError } from "@cowork-ghc/service";
+import { startCoworkService, RuntimeSpawnError, SsrfBlockedError } from "@cowork-ghc/service";
 
 import type { StartService, StartedService } from "./service-controller.js";
 import { ServiceLaunchNotConfiguredError } from "./launch-config.js";
@@ -97,6 +104,14 @@ export function createTieredStartService(
         return settingsOnly();
       }
       if (options.fallbackOnLiveSpawnFailure === true && err instanceof RuntimeSpawnError) {
+        return settingsOnly();
+      }
+      // SSRF boot-lockout (security-review follow-up): a persisted provider base_url that no
+      // longer passes the SSRF policy (e.g. corporate split-horizon DNS now resolves it to a
+      // private IP) makes `buildLiveCoworkOptions` throw this typed error on EVERY boot attempt.
+      // Fail closed but not dark: fall back to settings-only (no child spawned, no endpoint
+      // held) so the user can still reach Settings and fix/clear the offending URL.
+      if (err instanceof SsrfBlockedError) {
         return settingsOnly();
       }
       throw err;

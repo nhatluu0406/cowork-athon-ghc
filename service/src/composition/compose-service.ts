@@ -32,7 +32,9 @@ import {
   createProviderPort,
   createProviderRouter,
   createSsrfPolicy,
+  isPrivateProviderAllowed,
   readE2eMockLlmBaseUrl,
+  SsrfBlockedError,
 } from "../provider/index.js";
 import {
   createProviderConnectionTester,
@@ -165,19 +167,31 @@ export async function createCoworkService(
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  // The STRICT policy: used for MS365 (Graph client, device-code auth) and the extension/MCP
+  // registry below. Never loosened by CGHC_SSRF_ALLOW_PRIVATE_PROVIDER — that flag is scoped to
+  // provider endpoints only (PO decision 2026-07-15).
   const ssrf = createSsrfPolicy({
     resolver: dnsResolver,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
+  // The PROVIDER-scoped policy: identical to `ssrf` except it honors the explicit
+  // CGHC_SSRF_ALLOW_PRIVATE_PROVIDER opt-in (default OFF) so a provider base_url resolving to an
+  // RFC-1918 address (e.g. corporate split-horizon DNS) can be allowed when the user opts in.
+  // link_local/cloud_metadata/scheme rules are unaffected either way (enforced inside the policy).
+  const providerSsrf = createSsrfPolicy({
+    resolver: dnsResolver,
+    allowPrivateNetwork: isPrivateProviderAllowed(process.env),
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
   });
 
   // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
   const httpBundle =
     options.connector === undefined
-      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver)
+      ? createHttpConnectorBundle(credentialService, baseSettingsStore, providerSsrf)
       : undefined;
   const providerPort =
     options.connector !== undefined
-      ? createProviderPort({ ssrf, connector: options.connector })
+      ? createProviderPort({ ssrf: providerSsrf, connector: options.connector })
       : httpBundle!.providerPort;
 
   const modelConfig = createModelConfigService({
@@ -196,19 +210,26 @@ export async function createCoworkService(
   });
   try {
     await profileRuntimeBridge.syncActiveProfile();
-  } catch {
+  } catch (err) {
     // BOOT resilience: the active profile's persisted base_url may no longer pass the SSRF
     // policy (e.g. the network's DNS now resolves the hostname to a private address after a
     // VPN/network change). Refusing to START would lock the user out of the Settings screen
     // needed to fix it. Skip the sync: the port holds no unvalidated endpoint, the provider
     // surfaces honestly as unverified/not-ready, and the profiles router still propagates the
-    // same error to the user on an explicit runtime re-test/switch.
+    // same error to the user on an explicit runtime re-test/switch. Only THIS typed refusal is
+    // swallowed (security-review fix) — any other failure (a real bug in the bridge/store) must
+    // still fail boot loudly rather than silently limp along.
+    if (!(err instanceof SsrfBlockedError)) throw err;
+    // One-line, redacted: SsrfBlockedError.message never carries a credential, only the
+    // refused reason + hostname/IP (non-secret).
+    console.warn("[boot] active profile endpoint skipped:", err.message);
   }
 
   const profileConnectionTester = createProviderConnectionTester({
     credentials: credentialService,
     dnsResolver,
     now,
+    allowPrivateNetwork: isPrivateProviderAllowed(process.env),
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
   });
 
@@ -456,7 +477,7 @@ async function seedFromSettings(
     if (provider.baseUrl !== undefined) {
       try {
         await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
-      } catch {
+      } catch (err) {
         // A persisted base_url that no longer passes the SSRF policy (e.g. the network's DNS now
         // resolves the hostname to a private address — split-horizon/VPN change) must NOT kill
         // the whole service at boot: that locks the user out of the very Settings screen needed
@@ -464,6 +485,11 @@ async function seedFromSettings(
         // the provider honestly surfaces as "not configured/unverified" until the user re-tests
         // or edits it in Settings. The persisted value itself is left untouched, and the
         // credential ref below still seeds so a later re-test in Settings works immediately.
+        // Only THIS typed refusal is swallowed (security-review fix) — any other failure still
+        // propagates so a real bug is never silently hidden.
+        if (!(err instanceof SsrfBlockedError)) throw err;
+        // One-line, redacted (see note above): reason + non-secret hostname/IP only.
+        console.warn("[boot] provider endpoint skipped:", err.message);
       }
     }
     if (provider.credentialRef !== undefined) {

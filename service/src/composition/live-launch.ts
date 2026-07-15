@@ -43,6 +43,7 @@ import type { CredentialService, CredentialInjectionRequest } from "../credentia
 import { resolveInjections } from "../credential/index.js";
 import {
   createSsrfPolicy,
+  isPrivateProviderAllowed,
   type DnsResolver,
   readE2eMockLlmBaseUrl,
 } from "../provider/index.js";
@@ -263,10 +264,13 @@ async function resolveProvider(
   if (!model) throw new LiveLaunchConfigError("Custom provider requires a model.");
 
   // SSRF-validate the base URL at the execution boundary (reuse the outbound provider policy). A
-  // private/loopback/http target is refused with a typed SsrfBlockedError before any spawn.
+  // loopback/http target is refused with a typed SsrfBlockedError before any spawn; a private
+  // (RFC-1918) target is refused too UNLESS the user explicitly opted in via
+  // CGHC_SSRF_ALLOW_PRIVATE_PROVIDER (provider endpoints only — see `isPrivateProviderAllowed`).
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
   const policy = createSsrfPolicy({
     resolver: dnsResolver ?? defaultDnsResolver(),
+    allowPrivateNetwork: isPrivateProviderAllowed(process.env),
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
   });
   await policy.assertAllowed(baseUrl);

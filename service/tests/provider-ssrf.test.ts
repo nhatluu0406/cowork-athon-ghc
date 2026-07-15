@@ -19,6 +19,7 @@ import {
   createSsrfPolicy,
   classifyIpv6,
   SsrfBlockedError,
+  isPrivateProviderAllowed,
   productionLoopbackEscape,
   resolveLoopbackEscape,
   ReleaseGuardrailError,
@@ -230,5 +231,76 @@ test("TEST-MODE (development) escape relaxes ONLY loopback — private/metadata 
   await assert.rejects(
     () => metaPort.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://y.mock/v1" }),
     (err: unknown) => err instanceof SsrfBlockedError && err.reason === "cloud_metadata",
+  );
+});
+
+// ---- CGHC_SSRF_ALLOW_PRIVATE_PROVIDER opt-in (default OFF, PO decision 2026-07-15) ---------
+//
+// Scope: this flag affects ONLY the `private` (RFC-1918) IP class. loopback stays gated by
+// `loopbackEscape` exactly as before; link_local and cloud_metadata are NEVER allowed by this
+// flag; https is still required for a non-loopback target.
+
+function privatePort(resolver: DnsResolver, allowPrivateNetwork: boolean) {
+  const ssrf = createSsrfPolicy({ resolver, allowPrivateNetwork });
+  return createProviderPort({ ssrf, connector: connector() });
+}
+
+test("isPrivateProviderAllowed: OFF by default and for any value other than exact '1'/'true'", () => {
+  assert.equal(isPrivateProviderAllowed({}), false);
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: "0" }), false);
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: "false" }), false);
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: "yes" }), false);
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: undefined }), false);
+});
+
+test("isPrivateProviderAllowed: ON only for exact '1' or 'true'", () => {
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: "1" }), true);
+  assert.equal(isPrivateProviderAllowed({ CGHC_SSRF_ALLOW_PRIVATE_PROVIDER: "true" }), true);
+});
+
+test("allowPrivateNetwork=false (default): a private-resolving host is still refused", async () => {
+  const port = privatePort(staticResolver("192.168.11.1"), false);
+  await assert.rejects(
+    () => port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://intranet.example/v1" }),
+    (err: unknown) => err instanceof SsrfBlockedError && err.reason === "private",
+  );
+});
+
+test("allowPrivateNetwork=true: a private-resolving https host is now ALLOWED", async () => {
+  const port = privatePort(staticResolver("192.168.11.1"), true);
+  await port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://intranet.example/v1" });
+  assert.equal(port.baseUrlFor(CUSTOM_OPENAI_COMPAT_ID), "https://intranet.example/v1");
+});
+
+test("allowPrivateNetwork=true: http on a private host is STILL refused (scheme rule unchanged)", async () => {
+  const port = privatePort(staticResolver("192.168.11.1"), true);
+  await assert.rejects(
+    () => port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "http://intranet.example/v1" }),
+    (err: unknown) => err instanceof SsrfBlockedError && err.reason === "scheme_not_https",
+  );
+});
+
+test("allowPrivateNetwork=true: link-local stays blocked (flag never touches link_local)", async () => {
+  const port = privatePort(staticResolver("169.254.10.20"), true);
+  await assert.rejects(
+    () => port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://link-local.example/v1" }),
+    (err: unknown) => err instanceof SsrfBlockedError && err.reason === "link_local",
+  );
+});
+
+test("allowPrivateNetwork=true: cloud-metadata stays blocked (flag never touches cloud_metadata)", async () => {
+  const port = privatePort(staticResolver("169.254.169.254"), true);
+  await assert.rejects(
+    () => port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://metadata.example/v1" }),
+    (err: unknown) => err instanceof SsrfBlockedError && err.reason === "cloud_metadata",
+  );
+});
+
+test("allowPrivateNetwork=true: loopback is UNAFFECTED — still refused unless loopbackEscape is separately on", async () => {
+  const ssrf = createSsrfPolicy({ resolver: staticResolver("127.0.0.1"), allowPrivateNetwork: true });
+  const port = createProviderPort({ ssrf, connector: connector() });
+  await assert.rejects(
+    () => port.configureEndpoint(CUSTOM_OPENAI_COMPAT_ID, { baseUrl: "https://localhost.example/v1" }),
+    (err: unknown) => err instanceof SsrfBlockedError && err.reason === "loopback",
   );
 });
