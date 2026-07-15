@@ -1,0 +1,237 @@
+name: Manual Trigger - Full Package Build with Tests
+
+# Manual workflow to build, test, and package Cowork GHC with real M365KG stack (Go backend, Rust llm-svc,
+# PostgreSQL, Neo4j). Runs all tests (Go unit, Rust, Node.js) + integration tests against real DB stack,
+# then generates Windows installer (NSIS) and portable executable via electron-builder.
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        required: true
+        description: ログレベル
+        default: warning
+
+jobs:
+  test-go:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Install protoc (required by backend gRPC)
+        run: choco install protobuf -y
+
+      - name: Run Go unit tests
+        run: |
+          cd app/backend
+          go test -v -race -cover ./...
+        shell: pwsh
+
+  test-rust:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc (required by llm-svc's tonic-build)
+        run: choco install protobuf -y
+
+      - name: Cache cargo registry/build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            app/llm-svc/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
+
+      - name: Run Rust tests
+        run: |
+          cd app/llm-svc
+          cargo test --lib --bins --tests
+
+  test-node:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Typecheck all workspaces
+        run: npx tsc -b
+
+      - name: Run Node.js tests
+        run: npm test
+
+  test-integration:
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install protoc
+        run: choco install protobuf -y
+
+      - name: Install PostgreSQL server (via Chocolatey)
+        run: choco install postgresql16 -y --params '/Password:m365kg_dev_password'
+
+      - name: Install Neo4j server (via Chocolatey)
+        run: choco install neo4j-community -y
+
+      - name: Cache cargo registry/build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            app/llm-svc/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Run M365KG integration tests
+        shell: bash
+        run: ./scripts/system-test/run.sh
+        env:
+          DATABASE_URL: "postgres://m365kg:m365kg_dev_password@localhost:5432/m365kg?sslmode=disable"
+          NEO4J_PASSWORD: "m365kg_dev_password"
+
+      - name: Collect logs on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "--- PostgreSQL log ---"
+          Get-Content "C:\tmp\m365kg-systest-postgres.log" -ErrorAction SilentlyContinue | Select-Object -Last 200
+          Write-Host "--- Neo4j event logs ---"
+          Get-EventLog -LogName Application -Source "Neo4j" -ErrorAction SilentlyContinue | Select-Object -Last 50
+
+  build-package:
+    runs-on: windows-latest
+    needs: [test-go, test-rust, test-node, test-integration]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install protoc
+        run: choco install protobuf -y
+
+      - name: Build Go backend binary
+        run: |
+          cd app/backend
+          go build -o bin/m365-knowledge-graph.exe ./cmd
+        shell: pwsh
+
+      - name: Build Rust llm-svc binary (release)
+        run: |
+          cd app/llm-svc
+          cargo build --release --bin llm-svc
+        shell: pwsh
+
+      - name: Create vendor directory and download DB/runtime binaries
+        run: |
+          mkdir -p vendor
+          
+          Write-Host "Downloading PostgreSQL 16.14 Windows x64 binaries..."
+          curl.exe -L -o vendor/postgresql-16.14-windows-x64-binaries.zip `
+            "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-windows-x64-binaries.zip"
+          
+          Write-Host "Downloading Neo4j Community 5.26 Windows..."
+          curl.exe -L -o vendor/neo4j-community-5.26.28-windows.zip `
+            "https://dist.neo4j.org/neo4j-community-5.26.28-windows.zip"
+          
+          Write-Host "Downloading Temurin JRE 21 Windows x64..."
+          curl.exe -L -o vendor/jre-21-windows-x64.zip `
+            "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.7%2B6/OpenJDK21U-jre_x64_windows_hotspot_21.0.7_6.zip"
+          
+          Write-Host "Vendor binaries downloaded successfully"
+        shell: pwsh
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Build renderer (React/Vite)
+        run: npm run build:renderer
+
+      - name: Build shell (Electron main + preload bundles)
+        run: npm run build:shell
+
+      - name: Package Electron app (NSIS installer + portable)
+        run: npx electron-builder --win --config app/shell/electron-builder.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts (installer, portable, vendor assets)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowork-ghc-windows-package
+          path: |
+            dist-app/
+            vendor/
+          retention-days: 30
+
+      - name: Verify package contents
+        run: |
+          Write-Host "=== Packaged Artifacts ==="
+          Get-ChildItem -Path "dist-app" -Recurse | Select-Object FullName | Format-Table -AutoSize
+          Write-Host "=== Vendor Binaries ==="
+          Get-ChildItem -Path "vendor" | Select-Object Name, @{Name="Size(MB)";Expression={[math]::Round($_.Length/1MB, 2)}}
+        shell: pwsh
