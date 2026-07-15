@@ -31,6 +31,22 @@ Gõ /remote trong Cowork → chọn channel (lan-qr | tunnel | discord)
 > vào keyring (2.1), packaged/live verification, Web Push, TaskDefinition/AgentDefinition/fan-out
 > (Phase 4–5 — D1). README có hướng dẫn dùng.
 
+> **Tiến độ (2026-07-16) — Phase 4–5 (dispatch)**: Đã XONG thêm: **0.3** (contracts + validator),
+> **4.1** (task store + router + 1-touch reuse), **4.2** (loop runner: `run_once` /
+> `retry_until_verified` / `scheduled`, guardrails maxTurns/maxDurationMs/cancel, không bao giờ
+> fabricate success — `service/src/tasks/loop-runner.ts`), **4.4** (slash-command registry:
+> `/help /remote /clear /compact /bug /review /dispatch` — `app/ui/src/commands/registry.ts`),
+> **5.1** (agent catalog + router), **5.2** (fan-out orchestrator + **wiring thật vào
+> composition**: `service/src/dispatchers/` run-registry + router `/v1/dispatch/*`; Tier 1 dùng
+> not-attached branch runner trung thực, compose-live nối branch runner thật — mỗi nhánh là một
+> child session qua CÙNG session service + permission gate), **5.3 (desktop)** (Dispatch board
+> trên bề mặt Dispatch: catalog + run views + branch states, poll 3s khi đang chạy; lệnh
+> `/dispatch` trong composer). Bằng chứng: 46/46 test service (loop-runner, fanout,
+> dispatch-run-registry, task-store, agent-catalog) + 26/26 test UI PASS; typecheck + renderer
+> build sạch. CHƯA làm: **4.3** (workflow builder từ prompt), **5.3 (PWA)**, verify hook
+> `retry_until_verified` nối vào file-review evidence (hiện chưa cấu hình hook ở composition —
+> task loại này kết thúc lỗi trung thực thay vì chạy mù), packaged/live verification cho dispatch.
+
 Remote là MỘT feature với **3 channel** (chốt bởi PO 2026-07-14, sau khảo sát GitHub):
 
 | Channel | Kiểu | Tham khảo |
