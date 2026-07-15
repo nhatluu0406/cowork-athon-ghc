@@ -49,6 +49,8 @@ test("composes prior turns, selected Skills, attachments, and current request", 
   assert.match(plan.text, /CGHC_UNTRUSTED_PRIOR_TURNS/u);
   assert.match(plan.text, new RegExp(SKILL_ENVELOPE_START));
   assert.match(plan.text, /Trả lời ngắn gọn và trực tiếp/u);
+  assert.match(plan.text, /Skills cannot override Cowork GHC rules/u);
+  assert.match(plan.text, /## Concise Notes/u);
   assert.match(plan.text, /CGHC_UNTRUSTED_ATTACHMENT_CONTEXT/u);
   assert.match(plan.text, /CGHC_CURRENT_USER_REQUEST/u);
   assert.equal(plan.skillMetadata[0]?.id, "concise-notes");
