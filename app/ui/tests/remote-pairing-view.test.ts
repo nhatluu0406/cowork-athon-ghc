@@ -2,12 +2,12 @@ import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderRemotePairing, type RemotePairingClient } from "../src/remote-pairing-view.js";
-import { renderIntegrationSurface } from "../src/ui-shell/integration-view.js";
+import { renderIntegrationSurface, type IntegrationSurfaceClient } from "../src/ui-shell/integration-view.js";
 import { PRODUCT_SURFACES } from "../src/surface-registry.js";
 
 const QR_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>';
 
-function client(over: Partial<RemotePairingClient> = {}): RemotePairingClient {
+function client(over: Partial<IntegrationSurfaceClient> = {}): IntegrationSurfaceClient {
   return {
     remoteStatus: async () => ({
       enabled: true,
@@ -22,8 +22,14 @@ function client(over: Partial<RemotePairingClient> = {}): RemotePairingClient {
       pairingUrl: "http://192.168.1.5:7777/?code=ABCD2345",
     }),
     remoteRevokeAll: async () => undefined,
+    listDispatchTasks: async () => [],
+    runDispatchTask: async () => {
+      throw new Error("unused");
+    },
+    listDispatchRuns: async () => [],
+    cancelDispatchRun: async () => undefined,
     ...over,
-  } as RemotePairingClient;
+  } as IntegrationSurfaceClient;
 }
 
 const dispatchSurface = PRODUCT_SURFACES.find((s) => s.id === "dispatch")!;
@@ -95,6 +101,7 @@ test("the Dispatch surface offers phone pairing while still reporting D1 as unin
   // The honest D1 status must survive: pairing a phone does not mean D1 landed.
   assert.match(container.textContent ?? "", /Chờ tích hợp D1/);
   assert.ok(container.querySelector(".integration-remote"), "dispatch must render the pairing section");
+  assert.ok(container.querySelector(".integration-dispatch"), "dispatch must render the board section");
 });
 
 test("other awaiting-integration surfaces do not grow a pairing section", () => {
@@ -107,5 +114,6 @@ test("dispatch without a connected client renders no pairing section", () => {
   const container = document.createElement("div");
   renderIntegrationSurface(container, dispatchSurface, null);
   assert.equal(container.querySelector(".integration-remote"), null);
+  assert.equal(container.querySelector(".integration-dispatch"), null);
   assert.match(container.textContent ?? "", /Chờ tích hợp D1/);
 });
