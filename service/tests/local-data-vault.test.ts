@@ -39,8 +39,8 @@ import { defaultSettings } from "../src/diagnostics/settings-types.js";
 test("migrations apply initial_local_vault idempotently", () => {
   const db = openMemorySqliteDatabase();
   const first = runMigrations(db);
-  assert.deepEqual(first, [1]);
-  assert.deepEqual(appliedMigrationIds(db), [1]);
+  assert.deepEqual(first, [1, 2]);
+  assert.deepEqual(appliedMigrationIds(db), [1, 2]);
   const second = runMigrations(db);
   assert.deepEqual(second, []);
   closeSqliteDatabase(db);
