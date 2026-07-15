@@ -33,6 +33,7 @@ import {
   createProviderRouter,
   createSsrfPolicy,
   readE2eMockLlmBaseUrl,
+  SsrfBlockedError,
 } from "../provider/index.js";
 import {
   createProviderConnectionTester,
@@ -114,6 +115,10 @@ export async function createCoworkService(
   options: CoworkServiceOptions = {},
 ): Promise<CoworkService> {
   const now = options.now ?? (() => new Date().toISOString());
+  // Redacted, non-secret boot diagnostics (LOW-1 from the 2026-07-16 SSRF-brick review):
+  // a skipped persisted endpoint must leave a trace, never a silent swallow.
+  const bootDiagnostic =
+    options.onBootDiagnostic ?? ((line: string) => console.warn(`[cowork-service] ${line}`));
 
   // --- Cross-cutting: the ONE value-based scrubber + the composed EV redactor. ---
   // Composition = value-based scrub (real seeded key values) THEN shape sanitize. The scrubber
@@ -164,14 +169,22 @@ export async function createCoworkService(
   if (httpBundle !== undefined) {
     httpBundle.bindActiveModelResolver(() => modelConfig.activeModelFor() ?? undefined);
   }
-  await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
+  await seedFromSettings(baseSettingsStore, providerPort, modelConfig, bootDiagnostic);
 
   const profileRuntimeBridge = createProfileRuntimeBridge({
     profiles: providerProfileStore,
     port: providerPort,
     modelConfig,
   });
-  await profileRuntimeBridge.syncActiveProfile();
+  // Boot must survive a persisted active profile the SSRF policy refuses (same degradation
+  // contract as seedFromSettings below): the endpoint stays unconfigured; the user repairs it
+  // in settings. Runtime profile switches still surface the typed refusal via the router.
+  try {
+    await profileRuntimeBridge.syncActiveProfile();
+  } catch (err) {
+    if (!(err instanceof SsrfBlockedError)) throw err;
+    bootDiagnostic(`boot_active_profile_endpoint_skipped (${err.reason})`);
+  }
 
   const profileConnectionTester = createProviderConnectionTester({
     credentials: credentialService,
@@ -399,6 +412,7 @@ async function seedFromSettings(
   store: Awaited<ReturnType<typeof openSettingsStore>>,
   providerPort: ReturnType<typeof createProviderPort>,
   modelConfig: ReturnType<typeof createModelConfigService>,
+  bootDiagnostic: (line: string) => void,
 ): Promise<void> {
   const defaultModel = store.defaultModel();
   if (defaultModel !== undefined) {
@@ -406,7 +420,16 @@ async function seedFromSettings(
   }
   for (const provider of store.listProviderSettings()) {
     if (provider.baseUrl !== undefined) {
-      await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      // A persisted endpoint the SSRF policy refuses must not abort startup (it bricked the
+      // app: even the settings-only onboarding tier died, so the user could never repair the
+      // config). Degrade to "endpoint not configured"; the policy still blocks it everywhere
+      // at runtime, and the provider UI shows the unconfigured state honestly.
+      try {
+        await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      } catch (err) {
+        if (!(err instanceof SsrfBlockedError)) throw err;
+        bootDiagnostic(`boot_provider_endpoint_skipped: ${provider.providerId} (${err.reason})`);
+      }
     }
     if (provider.credentialRef !== undefined) {
       providerPort.configureCredential(provider.providerId, provider.credentialRef);
