@@ -31,6 +31,7 @@ import type { ExtensionRegistry } from "../extensions/index.js";
 import type { SkillCatalog, SkillRoot } from "../skills/index.js";
 import type { AgentCatalog } from "../agents/index.js";
 import type { TaskStore } from "../tasks/index.js";
+import type { BranchRunner, DispatchRunRegistry } from "../dispatchers/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
 
@@ -90,6 +91,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * RuntimeNotAttachedError so the message route honestly reports `runtime_not_attached`.
    */
   readonly sendPrompt?: SendPrompt;
+  /**
+   * Per-branch dispatch execution (fan-out, Task 5.2). Default: an honest not-attached runner —
+   * a branch errors truthfully without a live child. The live composition injects the real
+   * session-backed runner.
+   */
+  readonly branchRunner?: BranchRunner;
 
   /**
    * Extra token-guarded routers mounted after the built-ins (e.g. the flag-gated `/v1/remote`
@@ -120,6 +127,8 @@ export interface CoworkServiceDeps {
   readonly agentCatalog: AgentCatalog;
   /** Persisted TaskDefinition store (agent-harness-plan.md Task 4.1). */
   readonly taskStore: TaskStore;
+  /** Live dispatch runs — loop-runner over fan-out groups (Task 5.2 wiring). */
+  readonly dispatchRuns: DispatchRunRegistry;
   /**
    * The runtime-extension layer (CGHC-026): skill registry (RE1), MCP lifecycle (RE2), workflow
    * templates (RE4) over ONE extension-state source of truth with RE5 failure isolation. Wired
