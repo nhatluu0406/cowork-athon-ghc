@@ -6,7 +6,7 @@
  * 2. After unlock, copy keyring secrets into encrypted `secrets` (verify, then delete keyring).
  * 3. Rename JSON to `.migrated-backup` only after a successful import.
  *
- * Conversation JSON is intentionally NOT migrated in Wave 0A.
+ * Conversation JSON migration lives in Wave 0B (`conversation-json-migration.ts`).
  */
 
 import { existsSync, readFileSync, renameSync } from "node:fs";

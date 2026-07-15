@@ -82,3 +82,13 @@ export {
   type JsonSettingsMigrationResult,
   type KeyringMigrationResult,
 } from "./legacy-migration.js";
+export {
+  migrateJsonConversationsToSqlite,
+  META_JSON_CONVERSATIONS_MIGRATED,
+  type JsonConversationsMigrationResult,
+} from "./conversation-json-migration.js";
+export {
+  createSqliteConversationStore,
+  persistConversationRecord,
+  META_LAST_ACTIVE_CONVERSATION,
+} from "./sqlite-conversation-store.js";
