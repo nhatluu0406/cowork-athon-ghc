@@ -80,6 +80,8 @@ export interface CoworkShellBridge {
   readonly connectLive: () => Promise<ConnectLiveResult>;
   /** Synchronize the native title-bar overlay with the renderer theme. */
   readonly setWindowTheme: (theme: WindowTheme) => Promise<void>;
+  /** Open or close Electron DevTools for the main window (Settings → Chung). */
+  readonly setDevToolsEnabled: (enabled: boolean) => Promise<void>;
 }
 
 /** Global key under which the preload exposes {@link CoworkShellBridge} on `window`. */

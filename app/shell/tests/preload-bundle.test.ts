@@ -66,7 +66,7 @@ test("running the bundle exposes EXACTLY the narrow bridge under the contract ke
   const [call] = calls;
   assert.ok(call);
   assert.equal(call.key, COWORK_SHELL_BRIDGE_KEY);
-  assert.deepEqual(Object.keys(call.api).sort(), ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "setWindowTheme"]);
+  assert.deepEqual(Object.keys(call.api).sort(), ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "setDevToolsEnabled", "setWindowTheme"]);
 });
 
 test("the bundled bridge leaks no raw ipcRenderer or generic passthrough", async () => {

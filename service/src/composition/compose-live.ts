@@ -63,6 +63,11 @@ export interface LiveCoworkServiceOptions {
   readonly workspaceId: WorkspaceId;
   /** Tier 1 bind options + seams (settingsFs, credentialStore, dnsResolver, …). */
   readonly service?: CoworkServiceOptions;
+  /**
+   * Bind the live supervisor injection path to the composed credential service (ADR 0007 vault).
+   * Called after `createCoworkService` and before `supervisor.start`.
+   */
+  readonly attachCredentialService?: (service: CoworkServiceDeps["credentialService"]) => void;
   /** Optional loopback bearer token if the child is configured with auth (default: none). */
   readonly authToken?: string;
   /** Per-request HTTP bound for the adapters (default 15s). */
@@ -147,6 +152,7 @@ export async function startLiveCoworkService(
 
   // Bring up the child (real health round-trip), seed the scrubber, open the socket, THEN start
   // the `/event` pump (the child is ready, so `/event` is reachable).
+  options.attachCredentialService?.(composed.deps.credentialService);
   const identity = await supervisor.start(startSpec);
   try {
     if (options.seedScrubber !== undefined) {
