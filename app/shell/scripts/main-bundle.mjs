@@ -16,8 +16,8 @@
  * package `type`, which is exactly what Node recommends for a CJS file under a `module` package.
  *
  * EXTERNAL (left as a bare runtime `require`) ONLY:
- *   - `electron`      — provided by the Electron host, never inlined.
- *   - `@napi-rs/keyring` — a native `.node` addon that CANNOT be bundled; it is shipped unpacked
+ *   - `electron`         — provided by the Electron host, never inlined.
+ *   - `better-sqlite3`   — native `.node` addon that CANNOT be bundled; shipped unpacked
  *     from the asar (electron-builder `asarUnpack`) and `require`d from disk at runtime.
  *
  * After this runs, `grep "@cowork-ghc" dist/main.cjs` finds NOTHING (all workspace code is inlined)
@@ -34,8 +34,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const shellRoot = resolve(here, "..");
 
-/** Modules that MUST stay a runtime `require`: the Electron host + the native keyring addon. */
-export const MAIN_EXTERNALS = ["electron", "@napi-rs/keyring"];
+/** Modules that MUST stay a runtime `require`: Electron host + native SQLite addon. */
+export const MAIN_EXTERNALS = ["electron", "better-sqlite3"];
 
 /**
  * esbuild resolves bare `./x.js` specifiers to disk as-is, but the TypeScript sources use NodeNext
