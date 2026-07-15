@@ -517,6 +517,22 @@ export interface ServiceClient {
    * `already_resolved` outcomes are returned honestly — never a fabricated success.
    */
   decidePermission(input: DecidePermissionInput): Promise<PermissionDecisionResponse>;
+  /** Local app lock status (ADR 0007). Never returns secrets. */
+  authStatus(): Promise<
+    | { readonly state: "needs_setup" }
+    | { readonly state: "locked"; readonly username: string }
+    | { readonly state: "unlocked"; readonly username: string; readonly userId: string }
+  >;
+  authSetup(username: string, password: string): Promise<{
+    readonly state: "unlocked";
+    readonly username: string;
+    readonly userId: string;
+  }>;
+  authUnlock(username: string, password: string): Promise<{
+    readonly state: "unlocked";
+    readonly username: string;
+    readonly userId: string;
+  }>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -913,5 +929,22 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,
+
+    authStatus: () =>
+      call<
+        | { readonly state: "needs_setup" }
+        | { readonly state: "locked"; readonly username: string }
+        | { readonly state: "unlocked"; readonly username: string; readonly userId: string }
+      >("/v1/auth/status"),
+    authSetup: (username, password) =>
+      call<{ readonly state: "unlocked"; readonly username: string; readonly userId: string }>(
+        "/v1/auth/setup",
+        { method: "POST", body: JSON.stringify({ username, password }) },
+      ),
+    authUnlock: (username, password) =>
+      call<{ readonly state: "unlocked"; readonly username: string; readonly userId: string }>(
+        "/v1/auth/unlock",
+        { method: "POST", body: JSON.stringify({ username, password }) },
+      ),
   };
 }
