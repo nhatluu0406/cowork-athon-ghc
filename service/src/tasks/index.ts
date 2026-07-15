@@ -17,3 +17,14 @@ export {
   TASK_ITEM_PATH,
   TASK_INSTANTIATE_PATH,
 } from "./router.js";
+export {
+  startLoopRun,
+  type AttemptExecutor,
+  type AttemptResult,
+  type AttemptStatus,
+  type LoopOutcome,
+  type LoopRun,
+  type LoopRunnerOptions,
+  type LoopTerminal,
+  type VerificationHook,
+} from "./loop-runner.js";
