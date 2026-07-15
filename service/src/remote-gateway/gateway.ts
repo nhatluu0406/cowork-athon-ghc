@@ -103,13 +103,27 @@ function sendError(res: ServerResponse, status: number, code: string, message: s
   sendJson(res, status, { ok: false, error: { code, message } });
 }
 
+/**
+ * A forwarded id segment must be inert. Testing the RAW pathname for "/" is not enough: the
+ * main router decodes a `{id}` segment only AFTER splitting on "/", so `..%2Fvictim` survives
+ * a raw-slash check here and arrives there as the real path `../victim`. Reject any segment
+ * that is percent-encoded or carries path syntax, so the id we forward cannot mean a path.
+ */
+function isInertIdSegment(segment: string): boolean {
+  if (segment.length === 0 || segment.length > 128) return false;
+  if (segment.includes("/") || segment.includes("\\")) return false;
+  if (segment.includes("%")) return false;
+  if (segment.includes("..")) return false;
+  return true;
+}
+
 /** Explicit remote-path → main-path allowlist (GET). Anything else is 404, never forwarded. */
 function resolveProxyTarget(pathname: string): string | undefined {
   if (pathname === "/api/conversations") return "/v1/conversations";
   if (pathname.startsWith("/api/conversations/")) {
     const rest = pathname.slice("/api/conversations/".length);
     // Exactly one extra segment (a conversation id) — no deeper paths are forwarded.
-    if (rest.length > 0 && !rest.includes("/")) return `/v1/conversations/${rest}`;
+    if (isInertIdSegment(rest)) return `/v1/conversations/${rest}`;
     return undefined;
   }
   if (pathname === "/api/snapshot") return "/v1/session/stream/snapshot";
@@ -128,8 +142,8 @@ function resolvePostProxyTarget(pathname: string): string | undefined {
   if (pathname === "/api/permissions/decision") return "/v1/permission/decision";
   if (pathname.startsWith("/api/sessions/") && pathname.endsWith("/message")) {
     const middle = pathname.slice("/api/sessions/".length, -"/message".length);
-    // Exactly one path segment (the session id) between the fixed prefix and suffix.
-    if (middle.length > 0 && !middle.includes("/")) return `/v1/session/${middle}/message`;
+    // Exactly one inert path segment (the session id) between the fixed prefix and suffix.
+    if (isInertIdSegment(middle)) return `/v1/session/${middle}/message`;
   }
   return undefined;
 }
