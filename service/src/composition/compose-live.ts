@@ -59,6 +59,8 @@ import {
   readDiscordConfig,
   type DiscordAdapter,
 } from "../remote-gateway/discord/index.js";
+import { createLiveBranchRunner } from "../dispatchers/index.js";
+import { RuntimeNotAttachedError } from "./tier2-seams.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -160,6 +162,30 @@ export async function startLiveCoworkService(
         ]
       : [];
 
+  // Real dispatch branch runner (Task 5.2 wiring): one fan-out branch = one REAL child session
+  // through the SAME session service, prompt seam, and permission gate as the desktop UI. The
+  // deps are late-bound: a branch can only run after the service below is assembled, so the
+  // closure reading `liveDeps` is safe — and errors honestly if ever hit earlier.
+  let liveDeps: CoworkServiceDeps | null = null;
+  const requireDeps = (): CoworkServiceDeps => {
+    if (liveDeps === null) throw new RuntimeNotAttachedError("dispatch.branch");
+    return liveDeps;
+  };
+  const branchRunner = createLiveBranchRunner({
+    createSession: async ({ title }) => {
+      const meta = await requireDeps().sessionService.create({ workspaceId, title });
+      return { id: meta.id };
+    },
+    sendPrompt: (sessionId, text) => sendPrompt.send(sessionId, text),
+    terminal: (sessionId) => {
+      const view = requireDeps().sessionService.view(sessionId);
+      if (view === undefined) return undefined;
+      if (view.terminal === null) return null;
+      return { state: view.terminal };
+    },
+    cancelSession: (sessionId) => requireDeps().sessionService.cancel(sessionId),
+  });
+
   // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).
   const composed = await createCoworkService({
     ...(options.service ?? {}),
@@ -170,7 +196,9 @@ export async function startLiveCoworkService(
     runtimeReply,
     connector,
     sendPrompt,
+    branchRunner,
   });
+  liveDeps = composed.deps;
 
   const workspaceGrant = grantWorkspace({ rootPath: workspaceId });
   const permissionProxy = composed.deps.buildToolPermissionProxy(createWorkspaceGuard(workspaceGrant));
