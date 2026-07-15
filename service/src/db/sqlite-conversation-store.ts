@@ -226,12 +226,28 @@ export function createSqliteConversationStore(
     const turns = (listTurns.all(id) as Array<{ documentJson: string }>).map((t) =>
       parseTurn(t.documentJson),
     );
-    return {
-      ...shell,
+    // Rebuild with exactOptionalPropertyTypes: omit absent optionals (do not spread `undefined`).
+    const record: ConversationRecord = {
+      id: shell.id,
+      title: shell.title,
+      workspacePath: shell.workspacePath,
+      runtimeSessionId: shell.runtimeSessionId,
+      status: shell.status,
+      createdAt: shell.createdAt,
+      updatedAt: shell.updatedAt,
       messageCount: messages.length,
       messages,
+      ...(shell.providerId !== undefined ? { providerId: shell.providerId } : {}),
+      ...(shell.modelId !== undefined ? { modelId: shell.modelId } : {}),
+      ...(shell.parentId !== undefined ? { parentId: shell.parentId } : {}),
+      ...(shell.model !== undefined ? { model: shell.model } : {}),
+      ...(shell.providerSnapshot !== undefined
+        ? { providerSnapshot: shell.providerSnapshot }
+        : {}),
+      ...(shell.activity !== undefined ? { activity: shell.activity } : {}),
       ...(turns.length > 0 ? { runtimeTurns: turns } : {}),
     };
+    return record;
   }
 
   function writeRecord(record: ConversationRecord): void {
