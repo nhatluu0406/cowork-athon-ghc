@@ -58,7 +58,13 @@ import {
 import { ToolPermissionProxy } from "../files/index.js";
 import { createExtensionRegistry } from "../extensions/index.js";
 import { createSessionService, createSessionRouter, SessionRequestError } from "../session/index.js";
-import { createConversationStore, createConversationRouter } from "../conversation/index.js";
+import {
+  createConversationStore,
+  createConversationRouter,
+  createSqliteConversationStore,
+  migrateJsonConversationsToSqlite,
+} from "../conversation/index.js";
+import type { ConversationStore } from "../conversation/store.js";
 import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
@@ -330,10 +336,26 @@ export async function createCoworkService(
 
   const recentWorkspaces = createRecentWorkspaces();
 
-  const conversationStore = createConversationStore({
-    rootDir: options.conversationsDir ?? DEFAULT_CONVERSATIONS_DIR,
-    now,
-  });
+  const conversationsDir = options.conversationsDir ?? DEFAULT_CONVERSATIONS_DIR;
+  let conversationStore: ConversationStore;
+  if (sqliteDatabase !== undefined) {
+    const appMeta = createAppMetaRepository(sqliteDatabase);
+    migrateJsonConversationsToSqlite({
+      conversationsDir,
+      db: sqliteDatabase,
+      appMeta,
+    });
+    conversationStore = createSqliteConversationStore({
+      db: sqliteDatabase,
+      appMeta,
+      now,
+    });
+  } else {
+    conversationStore = createConversationStore({
+      rootDir: conversationsDir,
+      now,
+    });
+  }
   await conversationStore.recoverStaleRunning();
 
   const skillCatalog = await createSkillCatalog({
