@@ -28,6 +28,18 @@ Rules:
 - If an action fails or cannot be performed, say clearly what did not happen and what the user can do next.
 </cowork-ghc>`;
 
+/**
+ * MS365 orchestration rules, prepended ONLY when MS365 is connected (zero budget cost
+ * otherwise). Mode enforcement is server-side; these rules shape model behavior on top.
+ */
+export const MS365_ORCHESTRATION_POLICY = `[MS365 ORCHESTRATION — BẮT BUỘC KHI DÙNG TOOL MICROSOFT 365]
+1. Tìm-trước, hỏi-nếu-mơ-hồ: trước khi thao tác trên plan/list/chat/site có tên do user nêu, PHẢI gọi tool list/discovery tương ứng để xác nhận tồn tại. Nếu có nhiều kết quả khớp, hoặc không rõ user muốn tìm kiếm hay hành động, DỪNG LẠI và hỏi lại user trong hội thoại — không tự đoán.
+2. Trước khi thực hiện chuỗi từ 2 tool call trở lên, công bố kế hoạch các bước sẽ làm (dùng todo list của runtime nếu có, tối thiểu là liệt kê bước bằng text trong chat), cập nhật trạng thái từng bước khi chạy.
+3. Đọc-trước-khi-sửa: trước khi edit/delete một task Planner, đọc task đó để lấy etag mới nhất.
+4. Tác vụ lặp cùng loại trên nhiều đối tượng (vd tạo task cho nhiều người) → dùng planner_create_tasks (batch, tối đa 20). Nếu tool trả lỗi manual_mode: chuyển sang tạo lẻ từng task bằng planner_create_task và nói rõ với user vì sao có nhiều lần xác nhận.
+5. KHÔNG BAO GIỜ báo một hành động Microsoft 365 thành công khi tool trả lỗi hoặc bị từ chối — thuật lại đúng lỗi và cách khắc phục cho user.
+[/MS365 ORCHESTRATION]`;
+
 export type AttachmentInclusionStatus =
   | "selected"
   | "included"
@@ -85,9 +97,11 @@ export function planDispatchPrompt(
   userPrompt: string,
   maxChars: number = DISPATCH_MAX_CHARS,
   skills: readonly EnabledSkillSnapshot[] = [],
+  ms365Connected: boolean = false,
 ): DispatchPlan {
   const userBlock = buildUserBlock(userPrompt);
   const skillContext = assembleSkillContext(skills);
+  const ms365Block = ms365Connected ? MS365_ORCHESTRATION_POLICY : "";
   const entries: AttachmentDispatchEntry[] = attachments.map((s) => ({
     relativePath: s.metadata.relativePath,
     filename: s.metadata.filename,
@@ -97,6 +111,7 @@ export function planDispatchPrompt(
   const fixedChars =
     COWORK_SYSTEM_PROMPT.length +
     2 +
+    (ms365Block.length > 0 ? ms365Block.length + 2 : 0) +
     userBlock.length +
     (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
   if (fixedChars > maxChars - 200) {
@@ -113,6 +128,7 @@ export function planDispatchPrompt(
   if (attachments.length === 0) {
     const prior = assembleTranscriptContext(priorMessages, maxChars - fixedChars - 4);
     const parts: string[] = [COWORK_SYSTEM_PROMPT];
+    if (ms365Block.length > 0) parts.push(ms365Block);
     if (prior.text.length > 0) parts.push(prior.text);
     if (skillContext.text.length > 0) parts.push(skillContext.text);
     parts.push(userBlock);
@@ -183,6 +199,7 @@ export function planDispatchPrompt(
   }
 
   const parts: string[] = [COWORK_SYSTEM_PROMPT];
+  if (ms365Block.length > 0) parts.push(ms365Block);
   if (prior.text.length > 0) parts.push(prior.text);
   if (skillContext.text.length > 0) parts.push(skillContext.text);
   if (attachmentAssembly.text.length > 0) parts.push(attachmentAssembly.text);

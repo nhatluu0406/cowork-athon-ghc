@@ -1,62 +1,254 @@
-import type { MicrosoftIntegrationView } from "../../integration-slots.js";
+import type {
+  Ms365ViewData,
+  Ms365DeviceBeginResult,
+  Ms365DevicePollResult,
+  Ms365SiteView,
+} from "../../service-client.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
+import { renderDevicePendingCard } from "./ms-connect-device.js";
 
-/** Scopes the connector will request once D2 lands — capability description, not data. */
-export const MS365_REQUESTED_SCOPES: readonly { readonly scope: string; readonly note: string }[] = [
-  { scope: "User.Read", note: "Đọc hồ sơ người dùng cơ bản" },
-  { scope: "Mail.ReadWrite", note: "Đọc và soạn thư Outlook" },
-  { scope: "Mail.Send", note: "Gửi thư (luôn qua thẻ phê duyệt)" },
-  { scope: "Calendars.ReadWrite", note: "Xem và tạo sự kiện lịch" },
-  { scope: "Files.Read.All", note: "Đọc tệp OneDrive/SharePoint" },
-  { scope: "Sites.Read.All", note: "Đọc site SharePoint" },
-  { scope: "Tasks.ReadWrite", note: "Đọc và cập nhật task Planner" },
-  { scope: "ChannelMessage.Send", note: "Đăng tin nhắn Teams (cần phê duyệt)" },
-  { scope: "offline_access", note: "Duy trì kết nối giữa các phiên" },
-];
+/** Chú thích tiếng Việt cho các scope đã biết; scope lạ hiển thị không chú thích. */
+const MS365_SCOPE_NOTES: Readonly<Record<string, string>> = {
+  "Files.ReadWrite.All": "Đọc và tải tệp lên OneDrive/SharePoint",
+  "Sites.ReadWrite.All": "Site + SharePoint Lists (đọc/ghi)",
+  "Mail.Read": "Đọc thư Outlook (không gửi)",
+  "Tasks.ReadWrite": "Đọc và cập nhật task Planner",
+  "Chat.ReadWrite": "Chat Teams của bạn (đọc/gửi)",
+  "Team.ReadBasic.All": "Danh sách team đã tham gia",
+  "Channel.ReadBasic.All": "Danh sách channel",
+  "ChannelMessage.Read.All": "Đọc tin nhắn channel",
+  "ChannelMessage.Send": "Đăng tin nhắn channel (cần phê duyệt)",
+};
 
-export function renderMsConnect(container: HTMLElement, view: MicrosoftIntegrationView): void {
+/** Minimal service-client slice the connect view needs (structural — real ServiceClient satisfies it). */
+export interface Ms365ConnectClient {
+  connectMs365Token(token: string): Promise<Ms365ViewData>;
+  fetchMs365View(): Promise<Ms365ViewData>;
+  beginMs365Device(): Promise<Ms365DeviceBeginResult>;
+  pollMs365Device(): Promise<Ms365DevicePollResult>;
+  disconnectMs365(): Promise<Ms365ViewData>;
+  listMs365Sites(): Promise<readonly Ms365SiteView[]>;
+  setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+}
+
+export interface RenderMsConnectDeps {
+  readonly view: Ms365ViewData;
+  readonly client: Ms365ConnectClient;
+  readonly onViewChange: (view: Ms365ViewData) => void;
+  /** Poll interval in ms; defaults to 5000. Injectable so tests don't wait on a real 5s timer. */
+  readonly pollIntervalMs?: number;
+}
+
+type LocalMode = "idle" | "device_pending";
+
+interface ViewState {
+  mode: LocalMode;
+  deviceCode: string | null;
+  verificationUri: string | null;
+  pollTimer: ReturnType<typeof setInterval> | null;
+  pollInFlight: boolean;
+}
+
+/** Per-container local state so a re-render can find and clear any prior poll timer. */
+const stateByContainer = new WeakMap<HTMLElement, ViewState>();
+
+export function renderMsConnect(container: HTMLElement, deps: RenderMsConnectDeps): void {
+  const prior = stateByContainer.get(container);
+  if (prior?.pollTimer !== null && prior?.pollTimer !== undefined) clearInterval(prior.pollTimer);
+
+  const state: ViewState = {
+    mode: "idle",
+    deviceCode: null,
+    verificationUri: null,
+    pollTimer: null,
+    pollInFlight: false,
+  };
+  stateByContainer.set(container, state);
+
+  paint(container, deps, state);
+}
+
+function paint(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewState): void {
   container.replaceChildren();
   const wrap = el("div", "ms-connect");
-  if (view.connectionState !== "connected") {
-    wrap.append(renderSignInCard());
+  if (deps.view.connectionState === "connected") {
+    wrap.append(renderConnectedSummary(deps));
+  } else if (state.mode === "device_pending" && state.deviceCode !== null && state.verificationUri !== null) {
+    wrap.append(renderDevicePendingCard(state.deviceCode, state.verificationUri));
   } else {
-    wrap.append(renderConnectedSummary(view));
+    wrap.append(renderSignInCard(container, deps, state));
   }
   container.append(wrap);
 }
 
-function renderSignInCard(): HTMLElement {
+function renderSignInCard(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewState): HTMLElement {
   const card = el("section", "ms-card ms-connect__signin-card");
   const logoWrap = el("div", "ms-connect__logo");
   logoWrap.append(createMicrosoftLogo(34));
   const signIn = el("button", "ms-connect__signin", "Đăng nhập với Microsoft") as HTMLButtonElement;
   signIn.type = "button";
-  signIn.disabled = true;
-  const note = el(
-    "p",
-    "ms-connect__note",
-    "Backend D2 (Microsoft Graph) chưa được tích hợp. Nút đăng nhập sẽ được kích hoạt khi backend được merge.",
-  );
+  signIn.disabled = false;
+
+  const noteSlot = el("p", "ms-connect__note", "");
+  noteSlot.hidden = true;
+
+  signIn.addEventListener("click", () => {
+    signIn.disabled = true;
+    void deps.client.beginMs365Device().then((result) => {
+      if ("error" in result) {
+        noteSlot.textContent = "Cần app registration — nhờ IT cấu hình CGHC_MS365_CLIENT_ID.";
+        noteSlot.hidden = false;
+        signIn.disabled = true;
+        return;
+      }
+      state.mode = "device_pending";
+      state.deviceCode = result.userCode;
+      state.verificationUri = result.verificationUri;
+      paint(container, deps, state);
+      startPolling(container, deps, state);
+    }).catch(() => {
+      noteSlot.textContent = "Không thể bắt đầu đăng nhập. Kiểm tra kết nối và thử lại.";
+      noteSlot.hidden = false;
+      signIn.disabled = false;
+    });
+  });
+
   const scopeTitle = el("h3", "ms-section-label", "Quyền sẽ xin khi kết nối");
   const scopeList = el("ul", "ms-scope-list");
-  for (const item of MS365_REQUESTED_SCOPES) {
+  for (const scope of deps.view.scopes) {
     const li = el("li", "ms-scope-list__item");
-    li.append(el("code", "ms-scope-list__scope", item.scope), el("span", "ms-scope-list__note", item.note));
+    li.append(el("code", "ms-scope-list__scope", scope), el("span", "ms-scope-list__note", MS365_SCOPE_NOTES[scope] ?? ""));
     scopeList.append(li);
   }
   const oauthNote = el(
     "p",
     "ms-connect__oauth-note",
-    "Đăng nhập dùng OAuth loopback; token được lưu trong Windows Credential Manager, không nằm trong trạng thái UI.",
+    "Đăng nhập dùng OAuth loopback; token chỉ giữ trong bộ nhớ phiên làm việc (in-memory), không ghi ra đĩa và không nằm trong trạng thái UI.",
   );
-  card.append(logoWrap, el("h2", "ms-card__title", "Kết nối Microsoft 365"), signIn, note, scopeTitle, scopeList, oauthNote);
+
+  const manual = renderManualFallback(container, deps, state);
+
+  card.append(
+    logoWrap,
+    el("h2", "ms-card__title", "Kết nối Microsoft 365"),
+    signIn,
+    noteSlot,
+    manual,
+    scopeTitle,
+    scopeList,
+    oauthNote,
+  );
   return card;
 }
 
-function renderConnectedSummary(view: MicrosoftIntegrationView): HTMLElement {
+function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewState): HTMLElement {
+  const wrap = el("div", "ms-connect__manual");
+  const toggle = el("button", "ms-connect__manual-toggle", "Kết nối thủ công bằng token") as HTMLButtonElement;
+  toggle.type = "button";
+  const body = el("div", "ms-connect__manual-body");
+  body.hidden = true;
+
+  // A real Graph access token is a long JWT, so use a full-width multi-line textarea rather than
+  // a short single-line input. `autocomplete`/`spellcheck` off; the value is never serialized to
+  // the DOM/attributes and is cleared on success.
+  const input = el("textarea", "ms-connect__manual-input") as HTMLTextAreaElement;
+  input.rows = 3;
+  input.placeholder = "Dán access token (Bearer) tại đây";
+  input.setAttribute("aria-label", "Token Microsoft 365");
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.classList.add("ms-connect__manual-input--masked");
+
+  const submit = el("button", "ms-connect__manual-submit", "Kết nối bằng token") as HTMLButtonElement;
+  submit.type = "button";
+  const errorSlot = el("p", "ms-connect__manual-error", "");
+  errorSlot.hidden = true;
+
+  toggle.addEventListener("click", () => {
+    body.hidden = !body.hidden;
+  });
+
+  submit.addEventListener("click", () => {
+    const token = input.value.trim();
+    if (token.length === 0) return;
+    submit.disabled = true;
+    void deps.client
+      .connectMs365Token(token)
+      .then((view) => {
+        input.value = "";
+        deps.onViewChange(view);
+      })
+      .catch(() => {
+        input.value = "";
+        errorSlot.textContent = "Không thể kết nối bằng token này. Kiểm tra lại và thử lại.";
+        errorSlot.hidden = false;
+      })
+      .finally(() => {
+        submit.disabled = false;
+      });
+  });
+
+  body.append(input, submit, errorSlot);
+  wrap.append(toggle, body);
+  return wrap;
+}
+
+function startPolling(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewState): void {
+  const intervalMs = deps.pollIntervalMs ?? 5000;
+  const tick = (): void => {
+    if (state.pollInFlight) return;
+    state.pollInFlight = true;
+    void deps.client
+      .pollMs365Device()
+      .then((result) => {
+        if (result.status === "connected" && result.view !== undefined) {
+          stopPolling(state);
+          state.mode = "idle";
+          state.deviceCode = null;
+          state.verificationUri = null;
+          deps.onViewChange(result.view);
+        } else if (result.status === "expired") {
+          stopPolling(state);
+          state.mode = "idle";
+          state.deviceCode = null;
+          state.verificationUri = null;
+          paint(container, deps, state);
+          const wrap = container.querySelector(".ms-connect");
+          if (wrap !== null) wrap.append(el("p", "ms-connect__expired-note", "Mã đã hết hạn, thử lại."));
+        }
+        // "pending" keeps polling.
+      })
+      .catch(() => {
+        stopPolling(state);
+        state.mode = "idle";
+        state.deviceCode = null;
+        state.verificationUri = null;
+        paint(container, deps, state);
+        const wrap = container.querySelector(".ms-connect");
+        if (wrap !== null) wrap.append(el("p", "ms-connect__poll-error-note", "Không thể xác nhận đăng nhập, thử lại."));
+      })
+      .finally(() => {
+        state.pollInFlight = false;
+      });
+  };
+  state.pollTimer = setInterval(tick, intervalMs);
+}
+
+function stopPolling(state: ViewState): void {
+  if (state.pollTimer !== null) {
+    clearInterval(state.pollTimer);
+    state.pollTimer = null;
+  }
+}
+
+function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {
+  const view = deps.view;
   const card = el("section", "ms-card ms-connect__summary");
-  card.append(el("h2", "ms-card__title", "Microsoft 365"), el("span", "ms-pill ms-pill--ok", "Đã kết nối"));
+  const header = el("div", "ms-connect__summary-header");
+  header.append(el("h2", "ms-card__title", "Microsoft 365"), el("span", "ms-pill ms-pill--ok", "Đã kết nối"));
+  card.append(header);
+
   const services = el("div", "ms-service-grid");
   for (const service of view.services) {
     const item = el("div", "ms-service-card");
@@ -66,8 +258,102 @@ function renderConnectedSummary(view: MicrosoftIntegrationView): HTMLElement {
     );
     services.append(item);
   }
-  const scopeList = el("div", "ms-granted-scopes");
-  for (const scope of view.scopes) scopeList.append(el("code", "ms-scope-pill", scope));
-  card.append(el("h3", "ms-section-label", "Dịch vụ khả dụng"), services, el("h3", "ms-section-label", "Quyền đã cấp"), scopeList);
+  card.append(el("h3", "ms-section-label", "Dịch vụ khả dụng"), services);
+
+  // Real granted permissions decoded from the connected account's token (scp/roles).
+  card.append(el("h3", "ms-section-label", "Quyền đang có trên tài khoản này"));
+  if (view.scopes.length > 0) {
+    const scopeList = el("div", "ms-granted-scopes");
+    for (const scope of view.scopes) scopeList.append(el("code", "ms-scope-pill", scope));
+    card.append(scopeList);
+  } else {
+    card.append(el("p", "ms-connect__scopes-empty", "Không đọc được danh sách quyền từ token này."));
+  }
+
+  const disconnect = el("button", "ms-connect__disconnect", "Ngắt kết nối") as HTMLButtonElement;
+  disconnect.type = "button";
+  const disconnectError = el("p", "ms-connect__disconnect-error", "");
+  disconnectError.hidden = true;
+  disconnect.addEventListener("click", () => {
+    disconnect.disabled = true;
+    void deps.client
+      .disconnectMs365()
+      .then((next) => {
+        deps.onViewChange(next);
+      })
+      .catch(() => {
+        disconnectError.textContent = "Không thể ngắt kết nối, thử lại.";
+        disconnectError.hidden = false;
+        disconnect.disabled = false;
+      });
+  });
+  card.append(disconnect, disconnectError);
+  card.append(renderSiteScopeSection(deps));
   return card;
+}
+
+/**
+ * "Phạm vi tìm kiếm SharePoint" — lists the sites visible to the connected account, each with
+ * a keyboard-navigable toggle. Loads on mount via `listMs365Sites()` and re-renders in place
+ * from the refreshed list returned by `setMs365SiteEnabled` — no token/secret ever enters this
+ * DOM, only id/displayName/webUrl/enabled (CGHC MS365 Site Scope, Task 7).
+ */
+function renderSiteScopeSection(deps: RenderMsConnectDeps): HTMLElement {
+  const wrap = el("div", "ms-sites");
+  wrap.append(el("h3", "ms-section-label", "Phạm vi tìm kiếm SharePoint"));
+
+  const list = el("div", "ms-sites__list");
+  const status = el("p", "ms-sites__status", "Đang tải danh sách site…");
+  wrap.append(status, list);
+
+  const paintSites = (sites: readonly Ms365SiteView[]): void => {
+    status.hidden = true;
+    list.replaceChildren();
+    if (sites.length === 0) {
+      status.textContent = "Không tìm thấy site SharePoint nào.";
+      status.hidden = false;
+      return;
+    }
+    for (const site of sites) {
+      list.append(renderSiteRow(deps, site, paintSites));
+    }
+  };
+
+  void deps.client
+    .listMs365Sites()
+    .then(paintSites)
+    .catch(() => {
+      status.textContent = "Không thể tải danh sách site, thử lại sau.";
+    });
+
+  return wrap;
+}
+
+function renderSiteRow(
+  deps: RenderMsConnectDeps,
+  site: Ms365SiteView,
+  onRefresh: (sites: readonly Ms365SiteView[]) => void,
+): HTMLElement {
+  const row = el("label", "ms-sites__row");
+  row.append(el("span", "ms-sites__name", site.displayName));
+
+  const toggle = el("input", "ms-sites__toggle") as HTMLInputElement;
+  toggle.type = "checkbox";
+  toggle.checked = site.enabled;
+  toggle.setAttribute("aria-label", site.displayName);
+
+  toggle.addEventListener("change", () => {
+    const next = toggle.checked;
+    toggle.disabled = true;
+    void deps.client
+      .setMs365SiteEnabled(site.id, next)
+      .then(onRefresh)
+      .catch(() => {
+        toggle.checked = !next;
+        toggle.disabled = false;
+      });
+  });
+
+  row.append(toggle);
+  return row;
 }

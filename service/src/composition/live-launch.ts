@@ -181,12 +181,16 @@ export async function buildLiveCoworkOptions(
   // these via `input.service`, reuse them as-is (never silently override a caller's choice).
   const ms365Enabled = isMs365Enabled(process.env);
   const servicePlan = ms365Enabled ? await resolveServiceBindPlan(input) : undefined;
+  // Task 2 (P5.5): the child gets a token scoped to ONLY /v1/ms365/tool-call — never the full
+  // client token that guards every route — so a leaked/compromised child cannot call anything
+  // else on the boundary. Minted with the SAME generator as clientToken (never persisted).
+  const ms365ToolToken = ms365Enabled ? generateClientToken() : undefined;
   const baseEnv = ms365Enabled
     ? {
         ...(input.baseEnv ?? {}),
         CGHC_MS365_ENABLED: "1",
         CGHC_MS365_TOOL_ENDPOINT: ms365ToolEndpointUrl(servicePlan!),
-        CGHC_MS365_TOKEN: servicePlan!.clientToken,
+        CGHC_MS365_TOKEN: ms365ToolToken!,
       }
     : input.baseEnv;
 
@@ -200,6 +204,11 @@ export async function buildLiveCoworkOptions(
     ...(input.host !== undefined ? { host: input.host } : {}),
     ...(baseEnv !== undefined ? { baseEnv } : {}),
     ...(providerConfig !== undefined ? { providerConfig } : {}),
+    // Task 2 (P5.5) fix: the scoped MS365 tool token is baked into baseEnv above as
+    // CGHC_MS365_TOKEN — it must ALSO be masked in the log-safe spawn snapshot, same as any
+    // provider key. One source of truth: `secretValues`/`redactedEnvSnapshot` in
+    // `@cowork-ghc/runtime` (never a second ad-hoc redaction list).
+    ...(ms365ToolToken !== undefined ? { extraSecretValues: [ms365ToolToken] } : {}),
   };
 
   // FIX-6: seed the SHARED value-scrubber via deps.credentialService (which registers the resolved
@@ -213,10 +222,19 @@ export async function buildLiveCoworkOptions(
   };
 
   // When MS365 is enabled, the returned `service` options pin the SAME host/port/clientToken that
-  // were advertised to the child above (so the service binds where the child was told to look);
-  // otherwise `input.service` is passed through untouched (baseline unaffected when the flag is off).
+  // were advertised to the child above (so the service binds where the child was told to look),
+  // AND register `ms365ToolToken` as valid ONLY for MS365_TOOL_CALL_PATH — the token actually
+  // handed to the child (CGHC_MS365_TOKEN above) grants it nothing else on the boundary; otherwise
+  // `input.service` is passed through untouched (baseline unaffected when the flag is off).
   const service = servicePlan
-    ? { ...(input.service ?? {}), ...servicePlan }
+    ? {
+        ...(input.service ?? {}),
+        ...servicePlan,
+        pathScopedTokens: [
+          ...(input.service?.pathScopedTokens ?? []),
+          { token: ms365ToolToken!, paths: [MS365_TOOL_CALL_PATH] },
+        ],
+      }
     : input.service;
 
   return {

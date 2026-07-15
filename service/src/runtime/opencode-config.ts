@@ -11,6 +11,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPENAI_COMPATIBLE_NPM, isValidEnvName } from "@cowork-ghc/runtime";
 import { isE2eMockLlmUrl } from "../provider/e2e-mock-llm.js";
+import { TOOL_NAMES as MS365_TOOL_NAMES } from "../ms365/ms365-tool-router.js";
 
 /** Non-secret provider definition for the child's `opencode.json`. */
 export interface OpencodeProviderConfig {
@@ -44,6 +45,18 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   webfetch: "deny",
   websearch: "deny",
 });
+
+/**
+ * The MS365 tool names are pre-approved (`"allow"`) only when the gate flag is on for this
+ * launch. The connect/scope/write-mode gate (Ms365Connector, SiteScopeService, WriteModeStore)
+ * remains the real authority over what the tools can do server-side; this policy entry only
+ * spares the user a per-call OpenCode permission prompt for tools the boundary already gates.
+ */
+function permissionPolicy(ms365Enabled: boolean): Record<string, string> {
+  if (!ms365Enabled) return LIVE_SESSION_PERMISSION_POLICY;
+  const allowEntries = Object.fromEntries(MS365_TOOL_NAMES.map((n) => [n, "allow"]));
+  return { ...LIVE_SESSION_PERMISSION_POLICY, ...allowEntries };
+}
 
 function assertSafeBaseUrl(baseUrl: string): void {
   if (isE2eMockLlmUrl(baseUrl)) return;
@@ -102,9 +115,12 @@ function buildProvider(config: OpencodeProviderConfig): Record<string, unknown> 
 }
 
 /** Build the non-secret project config. A provider block is optional for built-in providers. */
-export function buildOpencodeConfig(config?: OpencodeProviderConfig): Record<string, unknown> {
+export function buildOpencodeConfig(
+  config?: OpencodeProviderConfig,
+  ms365Enabled = false,
+): Record<string, unknown> {
   const permission = {
-    ...LIVE_SESSION_PERMISSION_POLICY,
+    ...permissionPolicy(ms365Enabled),
     ...(config?.permission ?? {}),
   };
 
@@ -127,8 +143,9 @@ export function writeOpencodeConfig(
   configDir: string,
   config?: OpencodeProviderConfig,
   forbiddenSecret?: string,
+  ms365Enabled = false,
 ): string {
-  const serialized = JSON.stringify(buildOpencodeConfig(config), null, 2);
+  const serialized = JSON.stringify(buildOpencodeConfig(config, ms365Enabled), null, 2);
   if (forbiddenSecret && forbiddenSecret.length > 0 && serialized.includes(forbiddenSecret)) {
     throw new Error("Refusing to write opencode.json: it unexpectedly contains the key value.");
   }

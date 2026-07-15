@@ -13,6 +13,7 @@
  */
 
 import { mkdirSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import {
   assertPinnedVersion,
   buildLaunchSpec,
@@ -24,6 +25,8 @@ import type { RuntimeHealth } from "../session/seams.js";
 import { nodeChildSpawner, type ChildSpawner, type SupervisedChild } from "./child-spawner.js";
 import { fetchHealthProbe, netPortChecker, win32ProcessTimesProbe, type HealthProbe, type PortChecker, type ProcessTimesProbe } from "./probes.js";
 import { writeOpencodeConfig } from "./opencode-config.js";
+import { writeMs365Plugin, seedMs365PluginDeps } from "./ms365-plugin-file.js";
+import { isMs365Enabled } from "../ms365/index.js";
 import { clearRuntimeState, writeRuntimeState } from "./runtime-state.js";
 import { awaitReady, waitForExit } from "./lifecycle-wait.js";
 import type { OpencodeSupervisorOptions, SupervisorStartSpec } from "./supervisor-types.js";
@@ -110,6 +113,7 @@ export class OpencodeSupervisor implements RuntimeHealth {
         providerKeys: injections,
         ...(spec.host !== undefined ? { host: spec.host } : {}),
         ...(spec.baseEnv !== undefined ? { baseEnv: spec.baseEnv } : {}),
+        ...(spec.extraSecretValues !== undefined ? { extraSecretValues: spec.extraSecretValues } : {}),
       });
 
       if (!(await this.portChecker(launch.host, launch.port))) {
@@ -126,7 +130,16 @@ export class OpencodeSupervisor implements RuntimeHealth {
       const forbidden = spec.providerConfig
         ? injections.find((i) => i.envVar === spec.providerConfig?.envVar)?.value
         : undefined;
-      writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden);
+      const ms365Enabled = isMs365Enabled(spec.baseEnv ?? {});
+      writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden, ms365Enabled);
+      if (ms365Enabled) {
+        writeMs365Plugin(spec.configDir, forbidden);
+        seedMs365PluginDeps(
+          spec.configDir,
+          resolve(dirname(spec.binPath), "..", ".."),
+          (m) => this.log(m),
+        );
+      }
 
       const child = this.spawner.spawn(launch.command, launch.args, {
         cwd: launch.cwd,

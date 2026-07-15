@@ -10,8 +10,51 @@
 .ms-card__title { font-size: 17px; font-weight: 600; color: #1a2332; margin: 10px 0 6px; }
 .ms-card__copy { font-size: 14px; line-height: 1.6; color: #4b5565; margin: 0 0 14px; }
 .ms-assistant { display: flex; flex-direction: column; flex: 1; max-width: 840px; width: 100%; margin: 0 auto; padding: 24px 16px 0; }
-.ms-assistant__transcript { flex: 1; display: flex; align-items: center; justify-content: center; }
+.ms-assistant__transcript { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+.ms-assistant__transcript--empty { align-items: center; justify-content: center; }
+.ms-assistant__transcript--list { align-items: stretch; justify-content: flex-start; gap: 10px; padding-bottom: 8px; }
 .ms-assistant__empty { text-align: center; max-width: 420px; }
+.ms-assistant__placeholder { font-size: 13px; color: var(--cghc-text-muted, #9aa4b2); text-align: center; }
+.ms-assistant__error-banner {
+  margin: 8px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  color: #b3261e;
+  background: #fdecea;
+  border: 1px solid #f5c6c2;
+}
+
+/* Transcript bubbles — role/pending/error states rendered from ms-chat-controller state. */
+.ms-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.ms-bubble--user {
+  align-self: flex-end;
+  background: var(--cghc-accent, #e85d1a);
+  color: var(--cghc-accent-contrast, #fff);
+  border-bottom-right-radius: 4px;
+}
+.ms-bubble--assistant {
+  align-self: flex-start;
+  background: var(--cghc-surface-muted, #f1f3f6);
+  color: var(--cghc-text-primary, #1a2332);
+  border-bottom-left-radius: 4px;
+}
+.ms-bubble--pending { opacity: .85; }
+.ms-bubble__pending-marker { font-size: 11.5px; color: inherit; opacity: .75; }
+.ms-bubble--error {
+  align-self: flex-start;
+  background: #fdecea;
+  color: #b3261e;
+  border: 1px solid #f5c6c2;
+}
 .ms-assistant__connect-cta { background: #e85d1a; color: #fff; border: 0; border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
 .ms-assistant__connect-cta:hover { background: #d1500f; }
 .ms-composer { padding: 16px 0 20px; background: linear-gradient(transparent, #f7f8fa 30%); }
@@ -22,6 +65,18 @@
 .ms-composer__row { display: flex; gap: 8px; align-items: flex-end; }
 .ms-composer__input { flex: 1; border: 1px solid #e2e6ec; border-radius: 14px; padding: 10px 14px; font: inherit; font-size: 14px; resize: none; background: #fff; }
 .ms-composer__send { width: 34px; height: 34px; border-radius: 10px; border: 0; background: #e85d1a; color: #fff; cursor: pointer; }
+.ms-composer__cancel {
+  border: 1px solid var(--cghc-border, #e2e6ec);
+  background: var(--cghc-surface-muted, #f1f3f6);
+  color: var(--cghc-text-primary, #1a2332);
+  border-radius: 10px;
+  padding: 0 14px;
+  height: 34px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ms-composer__cancel:hover { background: var(--cghc-surface-hover, #e6e9ee); }
 .ms-composer__hint { text-align: center; font-size: 11px; color: #9aa4b2; margin: 10px 0 0; }
 .ms-connect { max-width: 1080px; width: 100%; margin: 0 auto; padding: 24px 16px; }
 .ms-connect__signin-card { max-width: 460px; margin: 40px auto; text-align: center; }
@@ -41,3 +96,111 @@
 .ms-service-card__state { font-size: 12px; color: #6b7585; }
 .ms-granted-scopes { display: flex; flex-wrap: wrap; gap: 6px; }
 .ms-scope-pill { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 12px; background: #f1f3f6; border-radius: 999px; padding: 3px 10px; color: #1a2332; }
+
+/* ── Connect card controls: theme-synced (design tokens), one auth path shown at a time ── */
+.ms-connect__signin {
+  display: block;
+  width: 100%;
+  background: var(--cghc-accent);
+  color: var(--cghc-accent-contrast);
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.ms-connect__signin:hover:not(:disabled) { background: var(--cghc-accent-hover); }
+.ms-connect__signin:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Manual token block: the second auth path, revealed by its toggle button. */
+.ms-connect__manual { margin-top: 10px; }
+.ms-connect__manual-toggle {
+  display: block;
+  width: 100%;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  border: 1px solid var(--cghc-border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.ms-connect__manual-toggle:hover { background: var(--cghc-surface-hover); border-color: var(--cghc-border-strong); }
+.ms-connect__manual-body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.ms-connect__manual-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 72px;
+  resize: vertical;
+  font-family: "Cascadia Code", ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--cghc-text-primary);
+  background: var(--cghc-surface);
+  border: 1px solid var(--cghc-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.ms-connect__manual-input--masked {
+  -webkit-text-security: disc;
+}
+.ms-connect__manual-input:focus {
+  outline: none;
+  border-color: var(--cghc-accent);
+  box-shadow: 0 0 0 3px var(--cghc-accent-soft);
+}
+.ms-connect__manual-submit {
+  align-self: flex-start;
+  background: var(--cghc-accent);
+  color: var(--cghc-accent-contrast);
+  border: 0;
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.ms-connect__manual-submit:hover:not(:disabled) { background: var(--cghc-accent-hover); }
+.ms-connect__manual-submit:disabled { opacity: 0.55; cursor: not-allowed; }
+.ms-connect__manual-error { font-size: 12px; color: #c0392b; margin: 2px 0 0; }
+
+/* Connected summary: real granted scopes + explicit disconnect. */
+.ms-connect__summary-header { display: flex; align-items: center; gap: 10px; }
+.ms-connect__scopes-empty { font-size: 12px; color: var(--cghc-text-muted); margin: 4px 0 0; }
+.ms-connect__disconnect {
+  margin-top: 18px;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  border: 1px solid var(--cghc-border);
+  border-radius: 10px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+.ms-connect__disconnect:hover:not(:disabled) { background: var(--cghc-surface-hover); border-color: var(--cghc-border-strong); }
+.ms-connect__disconnect:disabled { opacity: 0.55; cursor: not-allowed; }
+.ms-connect__disconnect-error { font-size: 12px; color: #c0392b; margin: 6px 0 0; }
+
+/* Site-scope toggles: per-site SharePoint search inclusion (MS365 Site Scope, Task 7). */
+.ms-sites { margin-top: 18px; }
+.ms-sites__status { font-size: 12px; color: var(--cghc-text-muted); margin: 4px 0; }
+.ms-sites__list { display: flex; flex-direction: column; gap: 2px; }
+.ms-sites__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--cghc-border);
+  cursor: pointer;
+}
+.ms-sites__row:last-child { border-bottom: 0; }
+.ms-sites__name { font-size: 13px; color: var(--cghc-text-primary); }
+.ms-sites__toggle { width: 16px; height: 16px; cursor: pointer; accent-color: var(--cghc-accent); }

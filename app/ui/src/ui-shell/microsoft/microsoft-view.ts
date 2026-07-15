@@ -1,8 +1,9 @@
-import type { MicrosoftIntegrationView } from "../../integration-slots.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
 import { renderMsAssistant } from "./ms-assistant-view.js";
-import { renderMsConnect } from "./ms-connect-view.js";
+import { renderMsConnect, type Ms365ConnectClient } from "./ms-connect-view.js";
+import type { Ms365ViewData } from "../../service-client.js";
+import type { MsChatController } from "./ms-chat-controller.js";
 
 export type MicrosoftTab = "assistant" | "connect";
 
@@ -12,7 +13,20 @@ export interface MicrosoftViewDom {
   readonly tabAssistant: HTMLButtonElement;
   readonly tabConnect: HTMLButtonElement;
   msTab: MicrosoftTab;
-  lastView: MicrosoftIntegrationView | null;
+  lastView: Ms365ViewData | null;
+  lastDeps: MicrosoftSurfaceDeps | null;
+}
+
+/** Dependencies the connect/assistant tabs need from the host shell. */
+export interface MicrosoftSurfaceDeps {
+  readonly client: Ms365ConnectClient;
+  readonly onViewChange: (view: Ms365ViewData) => void;
+  /** MS365 tab chat controller — owned by app-shell, survives replaceChildren (Task 1). */
+  readonly chat: MsChatController;
+  readonly onSend: (prompt: string) => void;
+  readonly onCancel: () => void;
+  /** Root of the write-mode pill (Task 3); mounted into the composer row when provided. */
+  readonly writeModePill?: HTMLElement;
 }
 
 export function createMicrosoftView(): MicrosoftViewDom {
@@ -34,10 +48,18 @@ export function createMicrosoftView(): MicrosoftViewDom {
   const body = el("div", "ms-surface__body");
   root.append(header, body);
 
-  const dom: MicrosoftViewDom = { root, body, tabAssistant, tabConnect, msTab: "assistant", lastView: null };
+  const dom: MicrosoftViewDom = {
+    root,
+    body,
+    tabAssistant,
+    tabConnect,
+    msTab: "assistant",
+    lastView: null,
+    lastDeps: null,
+  };
   const select = (tab: MicrosoftTab): void => {
     dom.msTab = tab;
-    if (dom.lastView !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView);
+    if (dom.lastView !== null && dom.lastDeps !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView, dom.lastDeps);
   };
   tabAssistant.addEventListener("click", () => select("assistant"));
   tabConnect.addEventListener("click", () => select("connect"));
@@ -62,12 +84,13 @@ function segmentedButton(label: string, active: boolean): HTMLButtonElement {
   return button;
 }
 
-export function renderMicrosoftSurface(dom: MicrosoftViewDom, view: MicrosoftIntegrationView): void {
+export function renderMicrosoftSurface(dom: MicrosoftViewDom, view: Ms365ViewData, deps: MicrosoftSurfaceDeps): void {
   dom.lastView = view;
-  renderMicrosoftSurfaceInternal(dom, view);
+  dom.lastDeps = deps;
+  renderMicrosoftSurfaceInternal(dom, view, deps);
 }
 
-function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: MicrosoftIntegrationView): void {
+function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: Ms365ViewData, deps: MicrosoftSurfaceDeps): void {
   const assistantActive = dom.msTab === "assistant";
   dom.tabAssistant.classList.toggle("ms-segmented__item--active", assistantActive);
   dom.tabConnect.classList.toggle("ms-segmented__item--active", !assistantActive);
@@ -77,10 +100,14 @@ function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: MicrosoftIn
     renderMsAssistant(dom.body, view, {
       onOpenConnect: () => {
         dom.msTab = "connect";
-        renderMicrosoftSurfaceInternal(dom, view);
+        renderMicrosoftSurfaceInternal(dom, view, deps);
       },
+      chat: deps.chat,
+      onSend: deps.onSend,
+      onCancel: deps.onCancel,
+      ...(deps.writeModePill !== undefined ? { writeModePill: deps.writeModePill } : {}),
     });
   } else {
-    renderMsConnect(dom.body, view);
+    renderMsConnect(dom.body, { view, client: deps.client, onViewChange: deps.onViewChange });
   }
 }

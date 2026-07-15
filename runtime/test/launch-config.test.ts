@@ -95,6 +95,22 @@ test("env-map redaction is whole-value scoped (documents the M3 boundary)", () =
   assert.equal(envMapContainsNoSecret({ CMDLINE: `serve --key ${secret}` }, [secret]), true);
 });
 
+test("extraSecretValues are redacted in the snapshot even though they are not a providerKeys injection", () => {
+  const scopedToken = "ms365-scoped-token-abcdef0123456789";
+  const spec = buildLaunchSpec({
+    ...structuredInputs(),
+    baseEnv: { PATH: "/usr/bin", CGHC_MS365_TOKEN: scopedToken },
+    extraSecretValues: [scopedToken],
+  });
+  const snapshot = redactedEnvSnapshot(spec);
+  assert.equal(snapshot["CGHC_MS365_TOKEN"], "<redacted>");
+  assert.ok(envMapContainsNoSecret(snapshot, [scopedToken]), "scoped token must not survive redaction");
+  assert.ok(
+    !JSON.stringify(snapshot).includes(scopedToken),
+    "the raw token value must never appear in the redacted snapshot string",
+  );
+});
+
 function structuredInputs() {
   return {
     binPath: "opencode",

@@ -78,25 +78,55 @@ import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./t
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
 import { createWorkspaceLocalFileReader } from "./ms365-file-reader.js";
 import {
+  createDeviceCodeProvider,
   createHttpGraphClient,
+  createListsService,
   createManualTokenProvider,
   createMs365Connector,
   createMs365Router,
+  createMs365SessionScope,
+  createOutlookService,
+  createPlannerService,
   createSharePointService,
+  createSiteScopeFilePersistence,
+  createSiteScopeService,
+  createSiteScopeStore,
+  createTeamsService,
+  createWriteModeFilePersistence,
+  createWriteModeStore,
   isMs365Enabled,
+  readMs365DeviceConfig,
 } from "../ms365/index.js";
 
 /**
- * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
- * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
- * summary, upload). No extra scope is requested.
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface. Least-privilege, matching the
+ * tool surface: Files.ReadWrite.All for SharePoint file ops; Sites.ReadWrite.All for site/Lists
+ * access (P3 Lists CRUD needs write — ReadWrite supersedes the earlier Sites.Read.All, so it
+ * REPLACES it rather than sitting alongside); Mail.Read for the Outlook read-only tools (P1 — no
+ * send/reply, so no Mail.ReadWrite/Mail.Send); Tasks.ReadWrite for Planner CRUD (P2 — plans read
+ * via /me/planner/plans, so no Group.Read.All); Teams messaging (P4): Chat.ReadWrite (list/read/
+ * send the user's own chats + members — NOT Chat.ReadWrite.All), Team.ReadBasic.All +
+ * Channel.ReadBasic.All (list joined teams/channels), ChannelMessage.Read.All (read channel
+ * messages), ChannelMessage.Send (post). Add a scope here only when a new tool surface needs it.
  */
-const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
+const MS365_SCOPES: readonly string[] = [
+  "Files.ReadWrite.All",
+  "Sites.ReadWrite.All",
+  "Mail.Read",
+  "Tasks.ReadWrite",
+  "Chat.ReadWrite",
+  "Team.ReadBasic.All",
+  "Channel.ReadBasic.All",
+  "ChannelMessage.Read.All",
+  "ChannelMessage.Send",
+];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
 const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
+const ms365SiteScopeFilePath = ".runtime/ms365-site-scope.json";
+const ms365WriteModeFilePath = ".runtime/ms365-write-mode.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -245,25 +275,70 @@ export async function createCoworkService(
   // `undefined` and NOTHING below is constructed or mounted — the baseline is byte-for-byte
   // unaffected. The SAME `ssrf` policy instance built above (line ~105) is reused here; no
   // second SsrfPolicy is created.
+  //
+  // Device-code auth (Task 3): when `readMs365DeviceConfig` finds `CGHC_MS365_CLIENT_ID` set,
+  // build a device-code provider (reusing the SAME `ssrf` policy instance above — no second
+  // SsrfPolicy) and pass it into the connector's `device` dep so device-code login is
+  // available. When the env vars are absent, no `device` dep is passed and the connector
+  // reports `not_configured` for the device-code auth source, matching Task 1's contract.
   const ms365Router = isMs365Enabled(process.env)
-    ? (() => {
-        const ms365Manual = createManualTokenProvider({ credentials: credentialService });
+    ? await (async () => {
+        const ms365Manual = createManualTokenProvider();
+        const ms365DeviceConfig = readMs365DeviceConfig(process.env);
+        const ms365Device =
+          ms365DeviceConfig !== null
+            ? createDeviceCodeProvider({
+                ssrf,
+                config: { clientId: ms365DeviceConfig.clientId, tenant: ms365DeviceConfig.tenant, scopes: MS365_SCOPES },
+              })
+            : undefined;
         const ms365Connector = createMs365Connector({
           manual: ms365Manual,
           makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
+          ...(ms365Device !== undefined ? { device: ms365Device } : {}),
+        });
+        const siteScopeStore = await createSiteScopeStore({
+          persistence: createSiteScopeFilePersistence(ms365SiteScopeFilePath),
+        });
+        const siteScope = createSiteScopeService({ connector: ms365Connector, store: siteScopeStore });
+        const writeModeStore = await createWriteModeStore({
+          persistence: createWriteModeFilePersistence(ms365WriteModeFilePath),
         });
         const sharepoint = createSharePointService({
           connector: ms365Connector,
           files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
+          siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
         });
+        const outlook = createOutlookService({ connector: ms365Connector });
+        const planner = createPlannerService({ connector: ms365Connector });
+        const lists = createListsService({
+          connector: ms365Connector,
+          siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
+        });
+        const teams = createTeamsService({ connector: ms365Connector });
+        // Session gating (P5.5 Task 5, PO decision 2026-07-14): in-memory, NOT persisted —
+        // sessions are ephemeral per app run. Only the Microsoft 365 tab registers a session
+        // id here (via the route below); every other session is fail-closed in
+        // `handleToolCall`.
+        const sessionScope = createMs365SessionScope();
         return createMs365Router({
           connector: ms365Connector,
           scopes: MS365_SCOPES,
+          siteScope,
+          writeMode: writeModeStore,
+          sessionScope,
           tools: {
             sharepoint,
+            siteScope: { listJoinedSites: () => siteScope.listJoinedSites() },
+            outlook,
+            planner,
+            lists,
+            teams,
             connectionState: () => ms365Connector.connectionState(),
             gate: permissionGate,
             now,
+            writeMode: () => writeModeStore.mode(),
+            sessionAllowed: (sessionId) => sessionScope.isAllowed(sessionId),
           },
         });
       })()

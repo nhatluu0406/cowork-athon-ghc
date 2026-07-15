@@ -342,6 +342,37 @@ export interface ClearSessionModelResult {
   readonly defaultModel: ModelRef | null;
 }
 
+/** MS365 integration state and connected services (Task 4: MS365 UI wiring). */
+export interface Ms365ViewData {
+  readonly connectionState: string;
+  readonly services: readonly { readonly id: string; readonly label: string; readonly connected: boolean }[];
+  readonly scopes: readonly string[];
+  readonly actionHistory: readonly { readonly label: string; readonly source: string; readonly at?: string }[];
+  readonly error?: string;
+}
+
+/** Batch write-mode for MS365 write operations: manual confirms each write; auto approves once. */
+export type Ms365WriteMode = "manual" | "auto";
+
+/** A SharePoint site the connected MS365 account can see, with its search-scope toggle. */
+export interface Ms365SiteView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly webUrl: string;
+  readonly enabled: boolean;
+}
+
+/** Result of initiating MS365 device-code flow. */
+export type Ms365DeviceBeginResult =
+  | { readonly userCode: string; readonly verificationUri: string; readonly expiresInSec: number }
+  | { readonly error: "not_configured" };
+
+/** Result of polling MS365 device-code status. */
+export interface Ms365DevicePollResult {
+  readonly status: "pending" | "connected" | "expired";
+  readonly view?: Ms365ViewData;
+}
+
 /**
  * Client-side failure code: either a real {@link BoundaryErrorCode} from the service's
  * error envelope, or `"protocol_mismatch"` when the envelope's protocol tag does not match
@@ -517,6 +548,26 @@ export interface ServiceClient {
    * `already_resolved` outcomes are returned honestly — never a fabricated success.
    */
   decidePermission(input: DecidePermissionInput): Promise<PermissionDecisionResponse>;
+  /** Connect an MS365 account using a Bearer token. */
+  connectMs365Token(token: string): Promise<Ms365ViewData>;
+  /** Fetch the current MS365 connection state and services. */
+  fetchMs365View(): Promise<Ms365ViewData>;
+  /** Begin MS365 device-code authentication flow. */
+  beginMs365Device(): Promise<Ms365DeviceBeginResult>;
+  /** Poll the status of an MS365 device-code flow. */
+  pollMs365Device(): Promise<Ms365DevicePollResult>;
+  /** Disconnect the current MS365 session; returns the fresh (disconnected) view. */
+  disconnectMs365(): Promise<Ms365ViewData>;
+  /** List SharePoint sites visible to the connected account, with their search-scope toggle. */
+  listMs365Sites(): Promise<readonly Ms365SiteView[]>;
+  /** Enable/disable a site for search scope; returns the refreshed site list. */
+  setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+  /** Đọc chế độ ghi hàng loạt MS365 hiện tại. */
+  fetchMs365WriteMode(): Promise<{ mode: Ms365WriteMode }>;
+  /** Đổi chế độ ghi hàng loạt MS365 (nguồn sự thật ở service). */
+  setMs365WriteMode(mode: Ms365WriteMode): Promise<{ mode: Ms365WriteMode }>;
+  /** Grant/revoke the MS365 tool session-scope allowlist for a single OpenCode session. */
+  setMs365SessionScope(sessionId: string, enabled: boolean): Promise<{ allowed: boolean }>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -913,5 +964,52 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,
+
+    connectMs365Token: async (token) =>
+      call<Ms365ViewData>("/v1/ms365/connect", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+
+    fetchMs365View: () => call<Ms365ViewData>("/v1/ms365/view"),
+
+    beginMs365Device: () =>
+      call<Ms365DeviceBeginResult>("/v1/ms365/device/begin", {
+        method: "POST",
+      }),
+
+    pollMs365Device: () =>
+      call<Ms365DevicePollResult>("/v1/ms365/device/poll", {
+        method: "POST",
+      }),
+
+    disconnectMs365: () =>
+      call<Ms365ViewData>("/v1/ms365/disconnect", {
+        method: "POST",
+      }),
+
+    listMs365Sites: async () =>
+      (await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites")).sites,
+
+    setMs365SiteEnabled: async (siteId, enabled) =>
+      (
+        await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites/toggle", {
+          method: "POST",
+          body: JSON.stringify({ siteId, enabled }),
+        })
+      ).sites,
+
+    fetchMs365WriteMode: () => call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode"),
+    setMs365WriteMode: (mode) =>
+      call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      }),
+
+    setMs365SessionScope: (sessionId, enabled) =>
+      call<{ allowed: boolean }>("/v1/ms365/session-scope", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, enabled }),
+      }),
   };
 }

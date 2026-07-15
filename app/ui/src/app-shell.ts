@@ -59,8 +59,11 @@ import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { mountSkillsPanel } from "./skills-panel.js";
-import type { MicrosoftIntegrationView } from "./integration-slots.js";
-import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
+import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
+import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
+import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
+import { buildMsChatDispatch, toMsChatStreamView } from "./ui-shell/microsoft/ms-chat-adapters.js";
+import { createMs365WriteModeControl, type Ms365WriteModeControl } from "./ui-shell/ms365-write-mode-control.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
@@ -80,7 +83,7 @@ import {
   totalValidBytes,
   type PendingAttachment,
 } from "./attachment-pending.js";
-import type { AttachmentMetadata, SkillUseMetadata } from "./service-client.js";
+import type { AttachmentMetadata, SkillUseMetadata, Ms365ViewData } from "./service-client.js";
 import {
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
@@ -113,12 +116,27 @@ import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 
-const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
+const MS_DISCONNECTED_VIEW: Ms365ViewData = Object.freeze({
   connectionState: "disconnected",
   services: [],
   scopes: [],
   actionHistory: [],
 });
+
+/**
+ * A client stub used only before the real service client is ready. Every method rejects so a
+ * click during that brief window surfaces an honest error instead of a silently-fabricated
+ * success — the disconnected sign-in button is only truly wired once `state.client` exists.
+ */
+const NULL_MS365_CLIENT: Ms365ConnectClient = {
+  connectMs365Token: () => Promise.reject(new Error("service_not_ready")),
+  fetchMs365View: () => Promise.reject(new Error("service_not_ready")),
+  beginMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  pollMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  disconnectMs365: () => Promise.reject(new Error("service_not_ready")),
+  listMs365Sites: () => Promise.reject(new Error("service_not_ready")),
+  setMs365SiteEnabled: () => Promise.reject(new Error("service_not_ready")),
+};
 
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
@@ -163,6 +181,21 @@ interface AppState {
   codeOpenFiles: OpenCodeFile[];
   codeActiveKey: string | null;
   permissionMode: PermissionMode;
+  msView: Ms365ViewData;
+  msViewFetched: boolean;
+  /**
+   * MS365 tab chat controller (P5.6). Lives alongside `msView` so it survives the
+   * `replaceChildren()` re-render of the Microsoft surface body. Wired with the real send-flow
+   * (session create -> scope grant -> stream -> send) via `wireMsChatDeps` once `readiness` is
+   * available (Task 3).
+   */
+  msChat: MsChatController;
+  /**
+   * Write-mode pill relocated into the MS365 tab composer (P5.6 Task 3) — replaces the old
+   * cowork-composer instance. Only rendered into `MicrosoftSurfaceDeps.writeModePill` while
+   * MS365 is connected; hidden state has no user-visible pill anywhere.
+   */
+  msWriteModePill: Ms365WriteModeControl;
 }
 
 type AppDom = AppFrameDom;
@@ -244,6 +277,128 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       },
     },
   );
+}
+
+/**
+ * Fetch the MS365 view once per client so the cowork composer + dispatch prompt know the
+ * real connection state even before the Microsoft surface is opened.
+ */
+function ensureMs365ViewFetched(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  if (state.client === null || state.msViewFetched) return;
+  state.msViewFetched = true;
+  void state.client
+    .fetchMs365View()
+    .then((view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      renderState(dom, state, handlers);
+    })
+    .catch(() => {
+      // Keep the last known (disconnected) view; the connect card still lets the user retry.
+    });
+}
+
+/** Shows the MS365 tab composer's write-mode pill only while MS365 is connected, seeded from
+ * the service (one source of truth). Errors hide the pill — never show a mode we could not
+ * read. Relocated here from the cowork composer (P5.6 Task 3) — the main chat's session is
+ * never registered in the MS365 session scope, so it has nothing meaningful to show. */
+async function refreshMsTabWriteModePill(state: AppState): Promise<void> {
+  const control = state.msWriteModePill;
+  if (state.client === null || state.msView.connectionState !== "connected") {
+    control.setVisible(false);
+    return;
+  }
+  try {
+    const { mode } = await state.client.fetchMs365WriteMode();
+    control.setMode(mode);
+    control.setVisible(true);
+  } catch {
+    control.setVisible(false);
+  }
+}
+
+/**
+ * Renders the Microsoft 365 surface bound to the real service client. Fetches the current
+ * connection view once per client (not on every re-render) so the connect view never starts
+ * from a fabricated "disconnected" default when a real connection already exists.
+ */
+// Rebound on every renderMicrosoftSurfaceBound call so the chat controller's onStateChange
+// (bound once, at state-init time, before `dom`/`handlers` exist) can trigger a re-render on
+// each state mutation without capturing a stale dom/handlers pair.
+let msChatRerender: (() => void) | null = null;
+
+function renderMicrosoftSurfaceBound(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  ensureMs365ViewFetched(dom, state, handlers);
+  msChatRerender = () => renderState(dom, state, handlers);
+  const connected = state.msView.connectionState === "connected";
+  const deps: MicrosoftSurfaceDeps = {
+    client: state.client ?? NULL_MS365_CLIENT,
+    onViewChange: (view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      if (view.connectionState !== "connected") {
+        void state.msChat.onDisconnected();
+      }
+      renderState(dom, state, handlers);
+    },
+    chat: state.msChat,
+    onSend: (prompt) => void state.msChat.send(prompt),
+    onCancel: () => void state.msChat.cancel(),
+    ...(connected ? { writeModePill: state.msWriteModePill.root } : {}),
+  };
+  renderMicrosoftSurface(dom.microsoftView, state.msView, deps);
+}
+
+/**
+ * Real MS365 tab chat deps (P5.6 Task 3) — wires the send-flow to the live service client:
+ * `createSession` -> `setMs365SessionScope(id, true)` -> `startEvStream` -> `sendSessionMessage`.
+ * `startStream` keeps its own tab-local `EvStreamHandle`; it never touches `state.stream` (the
+ * main chat's stream) so the two surfaces stay fully independent (per design doc §2).
+ */
+function createMsChatDeps(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  readiness: ReturnType<typeof createReadinessController>,
+): MsChatDeps {
+  return {
+    preflight: () => {
+      const result = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+      return { canSend: result.canSend, message: result.message };
+    },
+    workspaceId: () => state.activeWorkspace,
+    createSession: async (input) => {
+      const client = await ensureLive(state, readiness);
+      return client.createSession({ workspaceId: input.workspaceId, title: input.title });
+    },
+    setSessionScope: async (sessionId, enabled) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.setMs365SessionScope(sessionId, enabled);
+    },
+    sendMessage: async (sessionId, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      return state.client.sendSessionMessage(sessionId, text);
+    },
+    cancelSession: async (sessionId) => {
+      if (state.client === null) return;
+      await state.client.cancelSession(sessionId);
+    },
+    startStream: (sessionId, onView) => {
+      const bootstrap = state.bootstrap;
+      if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) {
+        return { stop: () => {} };
+      }
+      const handle = startEvStream({
+        baseUrl: bootstrap.serviceBaseUrl,
+        clientToken: bootstrap.clientToken,
+        sessionId,
+        onView: (view) => onView(toMsChatStreamView(view)),
+      });
+      return { stop: () => handle.stop() };
+    },
+    buildDispatch: buildMsChatDispatch,
+    onStateChange: () => msChatRerender?.(),
+  };
 }
 
 async function loadCodePreview(state: AppState, relativePath: string, body: HTMLElement): Promise<void> {
@@ -888,7 +1043,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
   } else if (isMicrosoftSurface) {
-    renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
+    renderMicrosoftSurfaceBound(dom, state, handlers);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
   } else if (!isCoworkSurface) {
@@ -1551,7 +1706,11 @@ async function sendPrompt(
   const enabledSkills = await state.client.enabledSkillSnapshots();
 
   const priorMessages = state.conv.state.activeRecord?.messages ?? [];
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, enabledSkills);
+  // P5.5 Task 5 (session gating, PO decision 2026-07-14): the main chat's session is never
+  // registered in the MS365 session scope, so it must not advertise MS365 tool orchestration
+  // even when connected. `planDispatchPrompt` still supports the flag (P5.6 will pass it from
+  // the Microsoft 365 tab's own composer); this call site stops enabling it.
+  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, enabledSkills, false);
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
@@ -1616,6 +1775,7 @@ async function sendPrompt(
         prompt,
         undefined,
         enabledSkills,
+        false,
       );
       if (!retryPlan.ok) {
         state.currentFileActionIntent = null;
@@ -1731,6 +1891,26 @@ export function mountCoworkApp(root: HTMLElement): void {
     codeOpenFiles: [],
     codeActiveKey: null,
     permissionMode: readPermissionMode(),
+    msView: MS_DISCONNECTED_VIEW,
+    msViewFetched: false,
+    // Real send-flow deps are wired just below, once `readiness` exists (createMsChatDeps
+    // needs it for ensureLive). Until then this fails closed with an honest message rather
+    // than silently doing nothing — no send is possible before mountCoworkApp finishes wiring.
+    msChat: createMsChatController({
+      preflight: () => ({
+        canSend: false,
+        message: "Ứng dụng đang khởi động — vui lòng thử lại sau giây lát.",
+      }),
+      workspaceId: () => null,
+      createSession: () => Promise.reject(new Error("ms365 chat not wired yet")),
+      setSessionScope: () => Promise.resolve(),
+      sendMessage: () => Promise.resolve({ accepted: false, reason: "not_wired" }),
+      cancelSession: () => Promise.resolve(),
+      startStream: () => ({ stop: () => {} }),
+      buildDispatch: (_prior, prompt) => ({ ok: true, text: prompt }),
+      onStateChange: () => msChatRerender?.(),
+    }),
+    msWriteModePill: createMs365WriteModeControl(),
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);
@@ -1815,6 +1995,7 @@ export function mountCoworkApp(root: HTMLElement): void {
     createClient: (baseUrl, clientToken) => {
       state.bootstrap = { serviceBaseUrl: baseUrl, clientToken };
       state.client = createServiceClient(baseUrl, clientToken);
+      ensureMs365ViewFetched(dom, state, handlers);
       return state.client;
     },
     onState: (readinessState) => {
@@ -1993,6 +2174,11 @@ export function mountCoworkApp(root: HTMLElement): void {
     },
   });
 
+  // Real MS365 tab chat deps (P5.6 Task 3) replace the fail-closed bootstrap placeholder now
+  // that `readiness` (needed by `createSession`'s ensureLive) exists. `state.msChat` is read
+  // live everywhere it's used, so reassigning the controller instance here is safe.
+  state.msChat = createMsChatController(createMsChatDeps(state, dom, handlers, readiness));
+
   dom.newConversationButton.addEventListener("click", () => {
     void newConversation(state, dom, handlers).catch((error) => {
       appendMessage(dom, "assistant", safeError(error));
@@ -2061,6 +2247,17 @@ export function mountCoworkApp(root: HTMLElement): void {
       appendMessage(dom, "assistant", safeError(error));
       renderState(dom, state, handlers);
     });
+  });
+  state.msWriteModePill.root.addEventListener("ms365-write-mode-toggle", (event) => {
+    const requested = (event as CustomEvent<import("./service-client.js").Ms365WriteMode>).detail;
+    const client = state.client;
+    if (client === null) return;
+    void client
+      .setMs365WriteMode(requested)
+      .then(({ mode }) => state.msWriteModePill.setMode(mode))
+      .catch(() => {
+        // Giữ mode cũ — route lỗi thì không đổi nhãn (không render trạng thái giả).
+      });
   });
   dom.composerInput.addEventListener("input", () => renderState(dom, state, handlers));
   dom.composerInput.addEventListener("keydown", (event) => {

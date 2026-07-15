@@ -11,7 +11,9 @@
  */
 import type { AuthSource, TokenProvider } from "./token-provider.js";
 import type { GraphClient } from "./graph-client.js";
+import type { DeviceCodePrompt } from "./device-code-provider.js";
 import { Ms365Error } from "./ms365-errors.js";
+import { decodeTokenScopes } from "./token-scopes.js";
 
 export type Ms365ConnectionState =
   | "disconnected"
@@ -27,6 +29,11 @@ export interface Ms365Connector {
   graph(): GraphClient;
   source(): AuthSource | null;
   lastError(): string | null;
+  beginDeviceCode(): Promise<DeviceCodePrompt>;
+  pollDeviceCode(): Promise<"pending" | "connected" | "expired">;
+  deviceConfigured(): boolean;
+  /** The permissions the connected account actually holds (decoded from the token's `scp`/`roles`). Empty when not connected. */
+  grantedScopes(): readonly string[];
 }
 
 export interface Ms365ConnectorDeps {
@@ -34,9 +41,23 @@ export interface Ms365ConnectorDeps {
     provider: TokenProvider;
     connect(token: string): Promise<void>;
   };
+  device?: {
+    provider: TokenProvider;
+    begin(): Promise<DeviceCodePrompt>;
+    poll(): Promise<"pending" | "connected">;
+  };
   makeGraph: (getToken: () => Promise<string>) => GraphClient;
   /** Defaults to a lightweight `GET /me` probe. Errors propagate to the caller unchanged. */
   verify?: (graph: GraphClient) => Promise<void>;
+}
+
+function notConfiguredError(): Ms365Error {
+  return new Ms365Error(
+    "not_configured",
+    "Chưa cấu hình client ID Microsoft.",
+    "Nhờ IT cấp app registration rồi đặt CGHC_MS365_CLIENT_ID.",
+    false,
+  );
 }
 
 async function defaultVerify(graph: GraphClient): Promise<void> {
@@ -57,13 +78,30 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
   let state: Ms365ConnectionState = "disconnected";
   let activeSource: AuthSource | null = null;
   let error: string | null = null;
+  // Permissions the connected account actually holds, decoded from the active token's scp/roles
+  // claims after a successful verify. Reset whenever the connection is not established.
+  let grantedScopeList: string[] = [];
+
+  /** Decode the active provider's token scopes for display (never stores/logs the token). */
+  async function captureGrantedScopes(): Promise<void> {
+    try {
+      const token = await activeProvider.getAccessToken();
+      grantedScopeList = decodeTokenScopes(token);
+    } catch {
+      grantedScopeList = [];
+    }
+  }
+
+  // Tracks which provider (manual or device) is currently backing `graph()`. Defaults to the
+  // manual provider so `graph()` behaves exactly as before when device-code is never used.
+  let activeProvider: TokenProvider = deps.manual.provider;
 
   // Built lazily / on connect, always resolving the token from the active provider so a
   // mid-session token refresh (or re-connect) is picked up transparently on the next call.
   let cachedGraph: GraphClient | null = null;
 
   function getToken(): Promise<string> {
-    return deps.manual.provider.getAccessToken();
+    return activeProvider.getAccessToken();
   }
 
   function graph(): GraphClient {
@@ -93,6 +131,7 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
     async connectWithToken(token: string): Promise<void> {
       state = "connecting";
       error = null;
+      activeProvider = deps.manual.provider;
 
       await deps.manual.connect(token);
       // Rebuild the graph client so it is bound to the freshly-connected provider.
@@ -103,7 +142,9 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
         state = "connected";
         activeSource = deps.manual.provider.source;
         error = null;
+        await captureGrantedScopes();
       } catch (err) {
+        grantedScopeList = [];
         if (err instanceof Ms365Error && err.kind === "auth_expired") {
           state = "needs_reconnect";
           activeSource = null;
@@ -118,10 +159,71 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
 
     async disconnect(): Promise<void> {
       await deps.manual.provider.clear();
+      if (deps.device !== undefined) await deps.device.provider.clear();
       state = "disconnected";
       activeSource = null;
       error = null;
       cachedGraph = null;
+      activeProvider = deps.manual.provider;
+      grantedScopeList = [];
+    },
+
+    grantedScopes(): readonly string[] {
+      return grantedScopeList;
+    },
+
+    deviceConfigured(): boolean {
+      return deps.device !== undefined;
+    },
+
+    async beginDeviceCode(): Promise<DeviceCodePrompt> {
+      if (deps.device === undefined) {
+        throw notConfiguredError();
+      }
+      state = "connecting";
+      error = null;
+      return await deps.device.begin();
+    },
+
+    async pollDeviceCode(): Promise<"pending" | "connected" | "expired"> {
+      if (deps.device === undefined) {
+        throw notConfiguredError();
+      }
+      const device = deps.device;
+      const r = await device.poll();
+      if (r === "pending") {
+        return "pending";
+      }
+
+      // r === "connected": the device-code token exchange succeeded; bind graph() to the
+      // device provider and verify it against Graph before declaring the connector connected.
+      activeProvider = device.provider;
+      cachedGraph = deps.makeGraph(getToken);
+
+      try {
+        await verify(cachedGraph);
+        state = "connected";
+        activeSource = device.provider.source;
+        error = null;
+        await captureGrantedScopes();
+        return "connected";
+      } catch (err) {
+        grantedScopeList = [];
+        if (err instanceof Ms365Error && err.kind === "auth_expired") {
+          state = "disconnected";
+          activeSource = null;
+          error = null;
+          return "expired";
+        }
+        // Non-auth_expired verify failure (e.g. graph_error, network failure): the connector's
+        // state is now "error", so the return value must never claim "connected" — that would
+        // let a caller trust a success return while connectionState() disagrees. Throw instead
+        // so the caller either gets a valid status or an exception, never both signals at once.
+        state = "error";
+        activeSource = null;
+        error = safeErrorMessage(err);
+        throw err;
+      }
     },
   };
 }
