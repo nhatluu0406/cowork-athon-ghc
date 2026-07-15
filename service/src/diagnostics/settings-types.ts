@@ -27,6 +27,8 @@ export interface GeneralSettings {
   readonly verboseLogging: boolean;
   /** Whether local, non-secret telemetry is enabled. */
   readonly telemetryEnabled: boolean;
+  /** Open Electron DevTools when true (shell applies; persisted for next launch). */
+  readonly devtoolsEnabled: boolean;
 }
 
 /**
@@ -102,6 +104,7 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = Object.freeze({
   theme: "system",
   verboseLogging: false,
   telemetryEnabled: false,
+  devtoolsEnabled: false,
 });
 
 /** A fresh, valid settings document. Used on first run and as the SD5 safe default. */

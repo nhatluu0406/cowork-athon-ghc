@@ -825,8 +825,9 @@ button:disabled {
   box-shadow: inset 3px 0 0 var(--warn);
 }
 
+/* Completed conversations must NOT look selected ? only --active owns highlight. */
 .history-item--historical:not(.history-item--active) {
-  background: var(--surface-elevated, var(--surface));
+  background: transparent;
 }
 
 .history-item__title {
@@ -1028,10 +1029,14 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 2px 0 8px;
+  margin: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.62;
 }
 
 .thinking[hidden] {

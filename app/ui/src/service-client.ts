@@ -128,6 +128,7 @@ export interface GeneralSettingsView {
   readonly theme: ThemePreference;
   readonly verboseLogging: boolean;
   readonly telemetryEnabled: boolean;
+  readonly devtoolsEnabled: boolean;
 }
 
 /**

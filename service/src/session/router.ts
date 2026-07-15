@@ -181,6 +181,12 @@ export function createSessionRouter(
             const meta = await sessionService.create(input);
             return { status: 201, data: { session: meta } };
           } catch (err) {
+            if (isRuntimeNotAttached(err)) {
+              return {
+                status: 503,
+                data: { accepted: false, reason: "runtime_not_attached" },
+              };
+            }
             if (isRuntimeUnavailable(err)) {
               return runtimeUnavailableResult();
             }
