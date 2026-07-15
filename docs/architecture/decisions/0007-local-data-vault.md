@@ -59,7 +59,7 @@ mcp_secret_refs
 ## Conversation policy
 
 Persist user-visible messages and durable summaries. Do not persist raw token deltas or the entire SSE stream.
-Wave 0A does **not** migrate conversations (Wave 0B).
+Wave 0B stores conversations / messages / runtime turns / attachment metadata / file-review *references* in SQLite; workspace files and review snapshot bodies remain on the filesystem. Legacy `conversations/` JSON is imported idempotently then renamed to `.migrated-backup`.
 
 ## Migration
 

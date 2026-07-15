@@ -4,23 +4,23 @@ status: "active"
 updated_at: "2026-07-16"
 ---
 
-# Trạng thái hiện tại — Wave 0A stabilize; Wave 0B next
+# Trạng thái hiện tại — Wave 0B conversation SQLite
 
-Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD và MS365 source foundation. Wave 0A (local SQLite + app lock + encrypted vault) đã land trên `feature/local-data-vault`. Conversation persistence vẫn JSON cho đến Wave 0B.
+Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD và MS365 source foundation. Wave 0A (local SQLite + app lock + encrypted vault) đã land. Wave 0B chuyển conversation persistence sang SQLite.
 
 ## Current truth
 
 | Capability | Status | Note |
 |---|---|---|
-| Cowork chat | WORKS — Wave 0A stabilize | Optimistic bubble + progressive streaming. Hot path: skip `connectLive` only after live attach succeeded (health alone is settings-only-safe). First send no longer hits Internal boundary via not-attached create. Model wait remains dominant. DevTools in Settings → Chung. Dispatch budget 48k chars. |
+| Cowork chat | WORKS — Wave 0A stabilize | Optimistic bubble + progressive streaming. Live attach gated; DevTools in Settings → Chung. |
 | Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
 | Provider profiles | WORKS — BASIC | `Lưu & kiểm tra` persists verification fingerprint; status bar shows `Đã kiểm tra` after success / relaunch. |
-| Local database | WORKS — Wave 0A | Packaged: `%LOCALAPPDATA%\Cowork GHC\data\cowork-ghc.db`. Dev: `<repo>\.runtime\data\cowork-ghc.db`. Override: `COWORK_GHC_RUNTIME_ROOT`. |
+| Local database | WORKS — Wave 0A + 0B | Packaged: `%LOCALAPPDATA%\Cowork GHC\data\cowork-ghc.db`. Dev: `<repo>\.runtime\data\cowork-ghc.db`. |
 | Local app authentication | WORKS — Wave 0A | First-run username/password + unlock; master key in memory only. |
-| Conversations | WORKS — JSON | Packaged settings-only + live share `%LOCALAPPDATA%\Cowork GHC\conversations` (was split to Roaming `.runtime` on live → empty history). Wave 0B migrates to SQLite. |
+| Conversations | WORKS — SQLite (Wave 0B) | Summaries/messages/provider snapshots/durable turns/attachment metadata + file-review refs in DB. Idempotent import from `conversations/` JSON → `.migrated-backup`; SQLite is sole source after import. No raw token deltas / SSE. |
 | Skills CRUD | WORKS — BASIC | Currently Settings + full prompt injection; planned separate surface/on-demand. |
 | MCP | FOUNDATION ONLY | In-memory registry, no mounted router/live adapter/UI. |
-| OpenCode | PINNED 1.17.11 | Compatibility test planned for 1.18.1/1.17.20. Do not change in Wave 0A. |
+| OpenCode | PINNED 1.17.11 | Compatibility test planned for 1.18.1/1.17.20. |
 | MS365 | SOURCE PRESENT | Tokens migrate into the same encrypted vault after unlock. |
 | Inspector | PARTIAL | Phase 1 planned. |
 | Logging/telemetry | PARTIAL | Toggles exist; full contract pending. |
