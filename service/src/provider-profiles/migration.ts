@@ -98,7 +98,13 @@ export async function migrateLegacySettingsToProfiles(
     legacy?.credentialRef !== undefined &&
     legacy.credentialRef.account !== credentialAccountForProfile(profileDraft.id)
   ) {
-    const secret = await credentialStore.get(legacy.credentialRef.account);
+    let secret: string | null = null;
+    try {
+      secret = await credentialStore.get(legacy.credentialRef.account);
+    } catch {
+      // Vault may be locked at boot; leave the legacy ref and migrate after unlock.
+      secret = null;
+    }
     if (secret !== null && secret.length > 0) {
       const nextAccount = credentialAccountForProfile(profileDraft.id);
       await credentialStore.set(nextAccount, secret);
