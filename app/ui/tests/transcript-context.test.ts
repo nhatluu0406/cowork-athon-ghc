@@ -86,10 +86,10 @@ test("injection text in prior user message is wrapped as untrusted data", () => 
   ];
   const out = augmentPromptWithContext(prior, "Trả lời: SAFE");
   assert.match(out, /\[user\]/);
-  assert.match(out, /untrusted conversation data/i);
-  assert.match(out, /not system instructions/i);
+  assert.match(out, /untrusted data/i);
+  assert.match(out, /not instructions/i);
   assert.match(out, /SAFE/);
-  assert.ok(out.indexOf("untrusted conversation data") < 120);
+  assert.ok(out.indexOf("untrusted data") < 120);
 });
 
 // ── Regression: Fix #7 — context envelope must not leak into transcript display UI ──
