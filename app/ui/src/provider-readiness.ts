@@ -8,7 +8,6 @@ import type { ConversationRecord } from "./service-client.js";
 import type { SettingsView } from "./service-client.js";
 import type { ReadinessState } from "./readiness-controller.js";
 import type { RuntimePhase } from "./conversation-controller.js";
-import { needsContinuation } from "./conversation-controller.js";
 import { PROVIDER_PRESETS } from "./provider-presets.js";
 
 const DEEPSEEK_MODELS = [
@@ -403,17 +402,12 @@ export function assessSendPreflight(input: ProviderReadinessInput): SendPrefligh
 }
 
 export function shouldShowContinuationBanner(
-  activeConversationId: string | null,
-  record: ConversationRecord | null,
-  runtimePhase: RuntimePhase,
+  _activeConversationId: string | null,
+  _record: ConversationRecord | null,
+  _runtimePhase: RuntimePhase,
 ): boolean {
-  if (activeConversationId === null) return false;
-  if (record === null || record.messages.length === 0) return false;
-  if (!needsContinuation(record)) return false;
-  if (runtimePhase === "running" || runtimePhase === "starting" || runtimePhase === "cancelling") {
-    return false;
-  }
-  return true;
+  // Historical conversations continue on the next send — no banner gate.
+  return false;
 }
 
 export function buildReadinessInput(
@@ -434,12 +428,9 @@ export function buildReadinessInput(
 ): ProviderReadinessInput {
   const record = state.conv.state.activeRecord;
   const phase = state.conv.state.runtimePhase;
-  const composerLocked =
-    phase !== "running" &&
-    phase !== "starting" &&
-    phase !== "cancelling" &&
-    needsContinuation(record) &&
-    !state.continuationUnlocked;
+  // Continuation is transparent: the runtime planner opens a new turn under the same
+  // conversation id. Never lock the composer for historical/completed sessions.
+  void state.continuationUnlocked;
 
   return {
     localServiceReady,
@@ -448,7 +439,7 @@ export function buildReadinessInput(
     runtimePhase: phase,
     activeConversationId: state.conv.state.activeConversationId,
     activeRecord: record,
-    composerLocked,
+    composerLocked: false,
     connectionTestState: state.connectionTestState,
   };
 }
