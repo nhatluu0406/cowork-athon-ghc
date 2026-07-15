@@ -9,7 +9,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-import { credential, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/service";
+import { credential, db, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
 
 import type { LiveLaunchConfig, LiveLaunchSource } from "./live-launch-resolver.js";
@@ -131,8 +131,43 @@ function isUsableWorkspaceRoot(rootPath: string): boolean {
   }
 }
 
+/**
+ * Load a read-only settings snapshot from the SQLite vault (ADR 0007).
+ * Returns null when the DB file is missing or has no settings document yet.
+ */
+async function openSqliteSettingsReader(dbPath: string): Promise<PersistedSettingsReader | null> {
+  if (!existsSync(dbPath)) return null;
+  const database = db.openSqliteDatabase({ filePath: dbPath, readonly: true });
+  try {
+    const settingsRepo = db.createSettingsRepository(database);
+    const raw = settingsRepo.getJson(db.SETTINGS_DOCUMENT_KEY);
+    if (raw === null) return null;
+    // Snapshot into an in-memory SettingsFs so the DB handle can close before callers read.
+    const fs = {
+      async read(): Promise<string | undefined> {
+        return raw;
+      },
+      async write(): Promise<void> {
+        throw new Error("Persisted settings launch reader is read-only.");
+      },
+    };
+    return await diagnostics.openSettingsStore({ fs });
+  } finally {
+    db.closeSqliteDatabase(database);
+  }
+}
+
 async function openReader(options: PersistedSettingsSourceOptions): Promise<PersistedSettingsReader> {
   if (options.makeSettingsReader !== undefined) return options.makeSettingsReader();
+
+  // After Wave 0A, settings live in SQLite; settings.json may be renamed to `.migrated-backup`.
+  // Reading only the JSON path made live transition report "not configured" despite a working
+  // provider in the vault — which then failed permission polls after Connect.
+  if (options.dbPath !== undefined) {
+    const fromSqlite = await openSqliteSettingsReader(options.dbPath);
+    if (fromSqlite !== null) return fromSqlite;
+  }
+
   const store = await diagnostics.openSettingsStore({
     fs: diagnostics.createNodeSettingsFs(options.settingsFilePath),
   });

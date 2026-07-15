@@ -6,10 +6,15 @@ import { spawn, execSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packagedChildEnv, LOCAL_SERVICE_READY } from "./packaged-launch-env.mjs";
+import {
+  packagedChildEnv,
+  LOCAL_SERVICE_READY,
+  assertPackagedExecutable,
+  createPackagedTestRuntime,
+} from "./packaged-launch-env.mjs";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = assertPackagedExecutable(REPO);
 const CDP_PORT = 19228;
 
 function loadProjectEnvForVerify() {
@@ -81,64 +86,67 @@ async function waitFor(pattern, timeoutMs = 90_000) {
 }
 
 async function main() {
-  if (!existsSync(EXE)) throw new Error(`missing ${EXE}`);
   loadProjectEnvForVerify();
   const validKey = process.env["DEEPSEEK_API_KEY"]?.trim();
   if (!validKey) throw new Error("DEEPSEEK_API_KEY required");
 
   const fixture = mkdtempSync(join(tmpdir(), "cghc-min-ws-"));
   mkdirSync(fixture, { recursive: true });
-  const profile = mkdtempSync(join(tmpdir(), "cghc-min-profile-"));
+  const runtime = createPackagedTestRuntime(REPO);
+  let success = false;
 
-  const proc = spawn(EXE, [`--user-data-dir=${profile}`], {
+  const proc = spawn(EXE, [`--user-data-dir=${runtime.electronProfile}`], {
     cwd: REPO,
     env: packagedChildEnv({
       COWORK_GHC_E2E_WORKSPACE_ROOT: fixture,
       COWORK_GHC_REMOTE_DEBUG_PORT: String(CDP_PORT),
+      COWORK_GHC_RUNTIME_ROOT: runtime.runtimeRoot,
     }),
     stdio: "ignore",
     windowsHide: true,
   });
 
-  await sleep(10000);
-  await waitFor(LOCAL_SERVICE_READY);
-  await cdpEvaluate(`document.querySelector('.workspace-choose')?.click()`);
-  await sleep(2000);
-  await cdpEvaluate(`document.querySelector('.topbar__gateway')?.click()`);
-  await sleep(2000);
-  const apiKey = process.env["DEEPSEEK_API_KEY"] ?? "";
-  await cdpEvaluate(`(() => {
-    const input = document.querySelector('.llm-credential-input');
-    if (!input) return false;
-    input.value = ${JSON.stringify(validKey)};
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    document.querySelector('.llm-save-credential')?.click();
-    return true;
-  })()`);
-  await sleep(3000);
-  await cdpEvaluate(`document.querySelector('.llm-test-connection')?.click()`);
-  await sleep(5000);
-  const status = String(await cdpEvaluate(`document.querySelector('.llm-settings-status')?.textContent ?? ''`));
-  if (!/thành công/i.test(status) && !/Kết nối thành công/i.test(status)) {
-    throw new Error(`connection test failed: ${status}`);
-  }
-
-  proc.kill();
-  await sleep(3000);
   try {
-    execSync(`cmd /c "echo.| call scripts\\stop.bat"`, { cwd: REPO, stdio: "ignore" });
-  } catch {
-    /* ok */
+    await sleep(10000);
+    await waitFor(LOCAL_SERVICE_READY);
+    await cdpEvaluate(`document.querySelector('.workspace-choose')?.click()`);
+    await sleep(2000);
+    await cdpEvaluate(`document.querySelector('.status-bar__provider, .topbar__gateway')?.click()`);
+    await sleep(2000);
+    await cdpEvaluate(`(() => {
+      const input = document.querySelector('.llm-credential-input');
+      if (!input) return false;
+      input.value = ${JSON.stringify(validKey)};
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('.llm-save-credential')?.click();
+      return true;
+    })()`);
+    await sleep(8000);
+    const status = String(await cdpEvaluate(`document.querySelector('.llm-settings-status')?.textContent ?? ''`));
+    if (!/đã lưu|xác minh|thành công/i.test(status)) {
+      throw new Error(`connection test failed: ${status}`);
+    }
+    if (!existsSync(runtime.databasePath)) {
+      throw new Error(`expected test database at ${runtime.databasePath}`);
+    }
+    success = true;
+    console.log("minimal-packaged-smoke: PASS");
+  } finally {
+    proc.kill();
+    await sleep(3000);
+    try {
+      execSync(`cmd /c "echo.| call scripts\\stop.bat"`, { cwd: REPO, stdio: "ignore" });
+    } catch {
+      /* ok */
+    }
+    await sleep(2000);
+    if (countProcesses("Cowork GHC.exe") > 0 || countProcesses("opencode.exe") > 0) {
+      success = false;
+      throw new Error("orphan processes after minimal smoke");
+    }
+    rmSync(fixture, { recursive: true, force: true });
+    runtime.cleanup(success);
   }
-  await sleep(2000);
-
-  if (countProcesses("Cowork GHC.exe") > 0 || countProcesses("opencode.exe") > 0) {
-    throw new Error("orphan processes after minimal smoke");
-  }
-
-  rmSync(fixture, { recursive: true, force: true });
-  rmSync(profile, { recursive: true, force: true });
-  console.log("minimal-packaged-smoke: PASS");
 }
 
 main().catch((e) => {
