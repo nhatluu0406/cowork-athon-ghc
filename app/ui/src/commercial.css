@@ -168,11 +168,11 @@ button {
 }
 
 .topbar__brand-mark {
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #ff7845, #e64d12);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 5px 14px rgba(237,90,31,.22);
+  display: block;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  filter: drop-shadow(0 5px 12px rgba(237, 90, 31, 0.22));
 }
 
 .topbar__brand-name {
@@ -555,21 +555,6 @@ button {
   border-color: color-mix(in srgb, var(--cghc-accent) 48%, var(--cghc-border));
   box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
   transform: translateY(-1px);
-}
-
-:root[data-theme="dark"] .composer__box:focus-within {
-  border-color: color-mix(in srgb, var(--cghc-accent) 56%, var(--cghc-border));
-  box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
-}
-
-.composer__input,
-.composer__input:focus,
-.composer__input:focus-visible,
-.composer__input:focus-within {
-  border: 0 !important;
-  outline: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
 }
 
 .composer__input {
@@ -2146,19 +2131,6 @@ button {
 .composer__input {
   min-height: 54px;
   padding: 16px 17px 7px;
-  border: 0 !important;
-  outline: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.composer__box:focus-within {
-  border-color: color-mix(in srgb, var(--cghc-accent) 48%, var(--cghc-border));
-  box-shadow: var(--cghc-glow), var(--cghc-shadow-md);
-}
-
-:root[data-theme="dark"] .composer__box:focus-within {
-  border-color: color-mix(in srgb, var(--cghc-accent) 56%, var(--cghc-border));
 }
 
 .composer__bar {
