@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OPENCODE_PIN } from "@cowork-ghc/runtime";
 import { OpencodeSupervisor } from "../src/runtime/supervisor.js";
 import type { OpencodeProviderConfig } from "../src/runtime/opencode-config.js";
 import {
@@ -42,7 +43,7 @@ test("secret scan: the planted key is env-only — absent from opencode.json, .r
     root,
     resolveInjections: fakeResolver([{ envVar: ENV_VAR, value: PLANTED }]).resolve,
     spawner,
-    healthProbe: toggleHealthProbe("v1.17.11").probe,
+    healthProbe: toggleHealthProbe(OPENCODE_PIN).probe,
     processTimesProbe: fixedTimesProbe(),
     portChecker: fixedPortChecker(true),
     log: (l) => logs.push(l),
