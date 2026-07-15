@@ -14,7 +14,7 @@ import { createServer, type Server } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PinMismatchError } from "@cowork-ghc/runtime";
+import { OPENCODE_PIN, PinMismatchError } from "@cowork-ghc/runtime";
 import { OpencodeSupervisor, type SupervisorStartSpec } from "../src/runtime/supervisor.js";
 import { readRuntimeState } from "../src/runtime/runtime-state.js";
 import {
@@ -63,7 +63,7 @@ test("start: dirs made before spawn, key injected env-only, identity + .runtime 
     root,
     resolveInjections: fakeResolver([KEY]).resolve,
     spawner,
-    healthProbe: toggleHealthProbe("v1.17.11").probe,
+    healthProbe: toggleHealthProbe(OPENCODE_PIN).probe,
     processTimesProbe: fixedTimesProbe(),
     portChecker: fixedPortChecker(true),
     log: (l) => logs.push(l),
@@ -87,7 +87,7 @@ test("start: dirs made before spawn, key injected env-only, identity + .runtime 
     assert.equal(identity.pid, 4321);
     assert.equal(identity.port, PORT);
     assert.equal(identity.host, "127.0.0.1");
-    assert.equal(identity.runtimeVersion, "v1.17.11");
+    assert.equal(identity.runtimeVersion, OPENCODE_PIN);
     assert.equal(sup.isAlive(), true);
     assert.equal(sup.baseUrl, `http://127.0.0.1:${PORT}`);
     assert.deepEqual(sup.identity, identity);
@@ -97,7 +97,7 @@ test("start: dirs made before spawn, key injected env-only, identity + .runtime 
     assert.ok(persisted);
     assert.equal(persisted?.pid, 4321);
     assert.equal(persisted?.port, PORT);
-    assert.equal(persisted?.runtimeVersion, "v1.17.11");
+    assert.equal(persisted?.runtimeVersion, OPENCODE_PIN);
 
     // No log line leaked the key value; the env snapshot is redacted.
     const joined = logs.join("\n");
@@ -116,7 +116,7 @@ test("stop: terminates the child, clears the record, is idempotent", async () =>
     root,
     resolveInjections: fakeResolver([KEY]).resolve,
     spawner: recordingSpawner(child).spawner,
-    healthProbe: toggleHealthProbe("v1.17.11").probe,
+    healthProbe: toggleHealthProbe(OPENCODE_PIN).probe,
     processTimesProbe: fixedTimesProbe(),
     portChecker: fixedPortChecker(true),
     pollIntervalMs: 5,
@@ -143,7 +143,7 @@ test("one owner: a second start() without stop() is refused", async () => {
     root,
     resolveInjections: fakeResolver([KEY]).resolve,
     spawner: freshSpawner,
-    healthProbe: toggleHealthProbe("v1.17.11").probe,
+    healthProbe: toggleHealthProbe(OPENCODE_PIN).probe,
     processTimesProbe: fixedTimesProbe(),
     portChecker: fixedPortChecker(true),
     pollIntervalMs: 5,
@@ -246,7 +246,7 @@ test("negative: a busy port fails typed before any spawn", async () => {
     root,
     resolveInjections: fakeResolver([KEY]).resolve,
     spawner,
-    healthProbe: toggleHealthProbe("v1.17.11").probe,
+    healthProbe: toggleHealthProbe(OPENCODE_PIN).probe,
     processTimesProbe: fixedTimesProbe(),
     portChecker: fixedPortChecker(false),
     pollIntervalMs: 5,
@@ -268,7 +268,7 @@ test("readiness: the default fetch health probe drives a real /global/health ser
       server = createServer((req, res) => {
         if (req.url === "/global/health") {
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ healthy: true, version: "v1.17.11" }));
+          res.end(JSON.stringify({ healthy: true, version: OPENCODE_PIN }));
           return;
         }
         res.writeHead(404).end();

@@ -19,7 +19,7 @@ import type { PermissionReply } from "@cowork-ghc/contracts";
 import type { RuntimeReplyPort } from "../permission/index.js";
 import type { OpencodeHttp } from "./opencode-client.js";
 
-/** OpenCode v1.17.11 reply vocabulary (POST /permission/{id}/reply). */
+/** OpenCode permission reply vocabulary (POST /permission/{id}/reply). */
 type OpencodeReplyValue = "once" | "always" | "reject";
 
 function mapOpencodeReply(reply: PermissionReply): OpencodeReplyValue {
