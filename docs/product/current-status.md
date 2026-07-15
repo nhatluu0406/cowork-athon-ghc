@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-14"
+updated_at: "2026-07-16"
 ---
 
 # Trạng thái hiện tại
@@ -86,6 +86,28 @@ request create file
 3. **LAN mode chưa mã hóa transport** — chỉ dùng demo; TLS + cert pinning là slice sau.
 4. Device token in-memory per-launch — restart app thì điện thoại pair lại.
 5. Chưa có packaged verification cho slice này (dev-run only).
+
+## Dispatch nội bộ: loop runner + fan-out runs + board + slash commands (2026-07-16)
+
+| Item | Status |
+|---|---|
+| Plan | `agent-harness-plan.md` — Phase 4–5 (Tasks 4.2, 5.2 wiring, 5.3 desktop, 4.4 bổ sung `/dispatch`) |
+| Loop runner (Task 4.2) | `service/src/tasks/loop-runner.ts` — `run_once` / `retry_until_verified` / `scheduled`; guardrails maxTurns + maxDurationMs (abort attempt đang chạy), cancel; success có verify chỉ khi hook xác nhận evidence — guardrail stop là `exhausted`, không bao giờ là `completed` giả |
+| Dispatch runs (Task 5.2 wiring) | `service/src/dispatchers/` — run-registry (loop trên fan-out group, view secret-free, bounded history) + router token-guarded `/v1/dispatch/*` (run task đã lưu, list/get/cancel run) + live branch runner (mỗi nhánh = một child session thật qua CÙNG session service, prompt seam và MỘT permission gate; Tier 1 dùng not-attached runner trung thực) |
+| Dispatch board (Task 5.3 desktop) | Bề mặt Dispatch render catalog task (badge built-in/user, loop mode, hình fan-out) + run views live (status, attempts, verified, branch states) poll 3s chỉ khi đang chạy; badge "Chờ tích hợp D1" giữ nguyên trung thực |
+| Slash command | `/dispatch` (list) · `/dispatch run <task-id>` · `/dispatch runs` · `/dispatch cancel <run-id>`; cú pháp sai bị từ chối với hướng dẫn |
+| Verified | typecheck service + UI exit 0; renderer build exit 0; 46/46 test service (loop-runner 15, dispatch-run-registry 13, fanout 8, task-store 5, agent-catalog 5) + 26/26 test UI PASS; suite compose-live-wiring / live-launch / remote-wiring vẫn PASS |
+
+### Giới hạn trung thực (dispatch slice)
+
+1. **Chưa có packaged/live verification**: bằng chứng ở mức unit/integration với fake seams;
+   chưa chạy fan-out với OpenCode child + LLM thật.
+2. **`retry_until_verified` chưa nối verify hook ở composition** (file-review/disk evidence là
+   slice sau) — task loại này kết thúc **lỗi trung thực** ("requires a verification hook") thay
+   vì retry mù; `run_once` và `scheduled` hoạt động đầy đủ.
+3. **Task 4.3 (workflow builder từ prompt) và 5.3 phần PWA chưa làm.**
+4. Branch prompt ghép system prompt của agent vào đầu message (child seam chưa có slot system
+   prompt per-session).
 
 ## MS365 connector + SharePoint slice — D2 (2026-07-14)
 
