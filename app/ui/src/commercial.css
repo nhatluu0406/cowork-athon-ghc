@@ -395,6 +395,7 @@ button {
 .view--workspace,
 .view--knowledge,
 .view--integration,
+.view--skills-mcp,
 .settings-surface {
   background:
     radial-gradient(circle at 48% 0%, color-mix(in srgb, var(--cghc-accent) 3%, transparent), transparent 38%),
@@ -903,6 +904,30 @@ button {
 
 .settings-surface__tab--active {
   border-color: color-mix(in srgb, var(--cghc-accent) 25%, var(--cghc-border));
+  background: var(--cghc-accent-soft);
+  color: var(--cghc-accent);
+}
+
+/* Kỹ năng & MCP hub tabs — same visual language as settings-surface tabs. */
+.skills-mcp-tabs__btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 10px 10px 0 0;
+  background: transparent;
+  color: var(--cghc-text-muted);
+  font-weight: 600;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.skills-mcp-tabs__btn:hover {
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+}
+
+.skills-mcp-tabs__btn--active {
+  border-color: color-mix(in srgb, var(--cghc-accent) 25%, var(--cghc-border));
+  border-bottom-color: transparent;
   background: var(--cghc-accent-soft);
   color: var(--cghc-accent);
 }

@@ -29,6 +29,7 @@ import type { ConversationStore } from "../conversation/index.js";
 import type { SessionStreamHub } from "../server/session-stream-hub.js";
 import type { ExtensionRegistry } from "../extensions/index.js";
 import type { SkillCatalog, SkillRoot } from "../skills/index.js";
+import type { McpStore } from "../db/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
 import type { LocalAuthService, SqliteDatabase } from "../db/index.js";
@@ -141,6 +142,12 @@ export interface CoworkServiceDeps {
    * CGHC-028); no HTTP router is mounted for this POC.
    */
   readonly extensions: ExtensionRegistry;
+  /**
+   * MCP Phase 1 SQLite persistence (Wave 2B). Present only when a database is open; the router
+   * is mounted alongside it. Absent (in-memory settings, no `dbPath`), MCP is registry-only —
+   * no relaunch persistence and no HTTP router.
+   */
+  readonly mcpStore?: McpStore;
   /** The composed VALUE-scrub-then-shape-sanitize redactor fed into every EV mapper. */
   readonly redactError: (message: string) => string;
   /**
