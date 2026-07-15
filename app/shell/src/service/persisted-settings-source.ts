@@ -2,20 +2,8 @@
  * Production {@link LiveLaunchSource} that assembles a live launch from the PERSISTED settings the
  * user entered during onboarding (first-run onboarding fix) — no launch env vars required.
  *
- * The onboarding flow (Tier-1 settings-only service) writes the granted workspace root, a custom
- * OpenAI-compatible provider (`baseUrl` + `envVar` + bound credential handle), and the default model
- * into `.runtime/settings.json`. This source reads THAT SAME file and, when a coherent + complete
- * selection is present, returns the {@link LiveLaunchConfig} `buildLiveCoworkOptions` needs so the
- * shell can restart into the live path (spawn OpenCode) on the user-gated "Connect".
- *
- * Honest by construction: it returns `null` (never throws) whenever the config is incomplete — no
- * workspace granted, no default model, or the default model's provider has no bound key / base URL /
- * env var — so the tiered start falls back to the onboarding (settings-only) service. It reads the
- * settings file fresh on every call, so a restart after the user saves new settings picks them up.
- *
- * SECRET DISCIPLINE: it reads only the NON-secret credential account handle from settings; the key
- * value never appears here — it is resolved into the child ENV at the supervisor boundary. The ONE
- * keyring store it opens is shared into `service.credentialStore` (the "one store" invariant).
+ * SECRET DISCIPLINE: reads only non-secret credential handles. The encrypted vault (ADR 0007)
+ * owns secret values after unlock; `dbPath` is shared with the Tier-1 onboarding service.
  */
 
 import { existsSync, statSync } from "node:fs";
@@ -25,6 +13,7 @@ import { credential, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/serv
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
 
 import type { LiveLaunchConfig, LiveLaunchSource } from "./live-launch-resolver.js";
+import { peekRememberedUnlock, rememberUnlock } from "./session-unlock.js";
 
 /** The minimal read surface this source needs from the persistent settings store (testable seam). */
 export interface PersistedSettingsReader {
@@ -41,6 +30,8 @@ export interface PersistedSettingsReader {
 export interface PersistedSettingsSourceOptions {
   /** Absolute path to the persistent settings file (shared with the Tier-1 onboarding service). */
   readonly settingsFilePath: string;
+  /** Absolute path to the local SQLite database (ADR 0007). */
+  readonly dbPath: string;
   /** Explicit pinned OpenCode binary path (packaged) — forwarded to `buildLiveCoworkOptions`. */
   readonly binPath?: string;
   /** App install root used to default the binary path (dev). */
@@ -55,7 +46,7 @@ export interface PersistedSettingsSourceOptions {
     readonly source: "built_in" | "user_local";
     readonly createIfMissing?: boolean;
   }[];
-  /** Open the ONE credential store (default: the OS keyring). Injectable for tests. */
+  /** Test-only: inject a credential store instead of the vault-owned default. */
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
   /** Open the persistent settings reader (default: the real Node settings store). Injectable. */
   readonly makeSettingsReader?: () => Promise<PersistedSettingsReader>;
@@ -73,14 +64,12 @@ export function createPersistedSettingsSource(
     const reader = await openReader(options);
 
     const workspace = reader.activeWorkspace();
-    if (workspace === undefined) return null; // no workspace granted yet → not configured
+    if (workspace === undefined) return null;
     if (!isUsableWorkspaceRoot(workspace.rootPath)) return null;
 
     const model = reader.defaultModel();
-    if (model === undefined) return null; // no default model chosen yet
+    if (model === undefined) return null;
 
-    // The active provider is the one backing the default model. It must be a complete custom
-    // OpenAI-compatible selection: a bound key handle + a base URL + the injection env var name.
     const provider = reader.listProviderSettings().find((p) => p.providerId === model.providerID);
     if (
       provider === undefined ||
@@ -91,16 +80,17 @@ export function createPersistedSettingsSource(
       return null;
     }
 
-    const store = options.makeCredentialStore
-      ? await options.makeCredentialStore()
-      : await credential.createKeyringStore();
-    const credentialService = credential.createCredentialService({ store });
-
     const e2eMockBaseUrl = readE2eMockLlmBaseUrl();
+    const autoUnlock = peekRememberedUnlock();
+    const injectedStore = options.makeCredentialStore
+      ? await options.makeCredentialStore()
+      : undefined;
 
     return {
       workspaceRoot: workspace.rootPath,
-      credentialService,
+      ...(injectedStore !== undefined
+        ? { credentialService: credential.createCredentialService({ store: injectedStore }) }
+        : {}),
       provider: {
         kind: "custom",
         providerId: provider.providerId,
@@ -109,11 +99,12 @@ export function createPersistedSettingsSource(
         envVar: provider.envVar,
         credentialRef: provider.credentialRef,
       },
-      // The credential service + the composed service MUST read the SAME store (one store). The live
-      // service also needs the renderer's origin allowed and the SAME settings file the UI writes.
       service: {
-        credentialStore: store,
+        dbPath: options.dbPath,
         settingsFilePath: options.settingsFilePath,
+        ...(injectedStore !== undefined ? { credentialStore: injectedStore } : {}),
+        ...(autoUnlock !== null ? { autoUnlock } : {}),
+        rememberUnlock,
         ...(options.runtimeRoot !== undefined
           ? { conversationsDir: join(options.runtimeRoot, ".runtime", "conversations") }
           : {}),
@@ -140,25 +131,22 @@ function isUsableWorkspaceRoot(rootPath: string): boolean {
   }
 }
 
-/** Open the settings reader: the injected fake in tests, else the real Node settings store. */
 async function openReader(options: PersistedSettingsSourceOptions): Promise<PersistedSettingsReader> {
-  if (options.makeSettingsReader) return options.makeSettingsReader();
-  return diagnostics.openSettingsStore({
+  if (options.makeSettingsReader !== undefined) return options.makeSettingsReader();
+  const store = await diagnostics.openSettingsStore({
     fs: diagnostics.createNodeSettingsFs(options.settingsFilePath),
   });
+  return store;
 }
 
 /**
- * Compose several {@link LiveLaunchSource}s: return the first one that yields a config. Used to try
- * the persisted-settings source first, then the launch-env source (bounded tests) as a fallback.
+ * Compose sources in priority order; first non-null wins.
  */
-export function createFirstConfiguredSource(
-  sources: readonly LiveLaunchSource[],
-): LiveLaunchSource {
-  return async (): Promise<LiveLaunchConfig | null> => {
+export function createFirstConfiguredSource(sources: readonly LiveLaunchSource[]): LiveLaunchSource {
+  return async () => {
     for (const source of sources) {
       const config = await source();
-      if (config !== null && config !== undefined) return config;
+      if (config !== null) return config;
     }
     return null;
   };
