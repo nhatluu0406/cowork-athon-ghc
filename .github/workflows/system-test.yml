@@ -117,7 +117,9 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
 
       - name: Install Node dependencies
-        run: npm ci
+        run: |
+          npm cache clean --force
+          npm ci
 
       - name: Run the real M365KG system-test environment
         run: ./scripts/system-test/run.sh
