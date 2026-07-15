@@ -257,6 +257,9 @@ void runShellLifecycle({
     installAppProtocol(protocol, RENDERER_DIR);
     installCsp(session.defaultSession);
     Menu.setApplicationMenu(null);
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.coworkghc.desktop");
+    }
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
     // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
     // now re-resolves the persisted config). Stop+start are each idempotent + own the child.
