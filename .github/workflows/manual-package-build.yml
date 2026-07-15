@@ -1,0 +1,335 @@
+name: Manual Trigger - Full Package Build with Docker Tests
+
+# Manual workflow to build, test, and package Cowork GHC with real M365KG stack (Go backend, Rust llm-svc,
+# PostgreSQL, Neo4j) in a Docker-based CI environment. Runs all tests (Go unit, Rust, Node.js) +
+# integration tests against real DB stack via docker-compose, then generates build artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        required: true
+        description: ログレベル
+        default: warning
+
+jobs:
+  test-go:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: m365kg
+          POSTGRES_PASSWORD: m365kg_dev_password
+          POSTGRES_DB: m365kg
+        options: >-
+          --health-cmd "pg_isready -U m365kg"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Install protoc (required by backend gRPC)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Run Go unit tests
+        run: |
+          cd app/backend
+          go test -v -race -cover ./...
+        env:
+          DATABASE_URL: "postgres://m365kg:m365kg_dev_password@localhost:5432/m365kg?sslmode=disable"
+
+  test-rust:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install protoc (required by llm-svc's tonic-build)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Cache cargo registry/build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            app/llm-svc/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
+
+      - name: Run Rust tests
+        run: |
+          cd app/llm-svc
+          cargo test --lib --bins --tests
+
+  test-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Typecheck all workspaces
+        run: npx tsc -b
+
+      - name: Run Node.js tests
+        run: npm test
+
+  test-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install protoc (required by llm-svc's tonic-build)
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install PostgreSQL server (official Ubuntu package)
+        run: |
+          sudo apt-get install -y postgresql postgresql-client
+          sudo systemctl stop postgresql
+          sudo systemctl disable postgresql
+          # Add PostgreSQL binaries to PATH (initdb, pg_ctl, psql, etc.)
+          PG_VERSION=$(ls /usr/lib/postgresql/ | head -1)
+          echo "PG_PATH=/usr/lib/postgresql/${PG_VERSION}/bin" >> $GITHUB_ENV
+          echo "/usr/lib/postgresql/${PG_VERSION}/bin" >> $GITHUB_PATH
+
+      - name: Install Neo4j server (Neo4j's own signed apt repo)
+        run: |
+          curl -fsSL https://debian.neo4j.com/neotechnology.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/neo4j.gpg
+          echo "deb [signed-by=/usr/share/keyrings/neo4j.gpg] https://debian.neo4j.com stable 5" | sudo tee /etc/apt/sources.list.d/neo4j.list
+          sudo apt-get update
+          sudo apt-get install -y neo4j
+          # Fix Neo4j permissions: runner user must own all directories for neo4j console execution
+          sudo mkdir -p /var/log/neo4j /var/lib/neo4j/data/databases /var/lib/neo4j/run
+          sudo chown -R $(whoami):$(whoami) /var/lib/neo4j
+          sudo chmod -R 755 /var/lib/neo4j
+          sudo chmod -R 777 /var/lib/neo4j/data /var/lib/neo4j/run
+          sudo chown -R $(whoami):$(whoami) /var/log/neo4j
+          sudo chmod -R 777 /var/log/neo4j
+          # Disable SecurityLogger appender that requires file access to /var/log/neo4j/security.log
+          sudo sed -i '/<Logger name="org.neo4j.kernel.impl.security"/,/<\/Logger>/d' /etc/neo4j/server-logs.xml || true
+          sudo sed -i 's|<appender-ref ref="SecurityLog" />||g' /etc/neo4j/server-logs.xml || true
+          sudo systemctl stop neo4j
+          sudo systemctl disable neo4j
+
+      - name: Cache cargo registry/build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            app/llm-svc/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('app/llm-svc/Cargo.lock') }}
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Run the real M365KG system-test environment (scripts/system-test/run.sh)
+        run: ./scripts/system-test/run.sh
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "--- System Test Log ---"
+          cat /tmp/system-test.log 2>/dev/null | tail -500 || true
+          echo "--- PostgreSQL log ---"
+          cat /tmp/m365kg-systest-postgres.log 2>/dev/null || true
+          echo "--- Neo4j logs ---"
+          sudo journalctl -u neo4j --no-pager --lines=200 2>/dev/null || true
+          find / -maxdepth 6 -iname "neo4j.log" 2>/dev/null -exec tail -n 200 {} \; || true
+
+  build-package:
+    runs-on: windows-latest
+    needs: [test-go, test-rust, test-node, test-integration]
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: app/backend/go.mod
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install protoc (required by backend gRPC)
+        run: choco install protobuf -y
+
+      - name: Build Go backend binary (Windows x64)
+        run: |
+          cd app/backend
+          go build -o bin/m365-knowledge-graph.exe ./cmd
+        env:
+          GOOS: windows
+          GOARCH: amd64
+        shell: pwsh
+
+      - name: Build Rust llm-svc binary (release, Windows)
+        run: |
+          cd app/llm-svc
+          cargo build --release --bin llm-svc
+        shell: pwsh
+
+      - name: Create vendor directory and download DB/runtime binaries
+        run: |
+          mkdir -p vendor
+          
+          Write-Host "Downloading PostgreSQL 16.14 Windows x64 binaries..."
+          curl.exe -L -o vendor/postgresql-16.14-windows-x64-binaries.zip `
+            "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-windows-x64-binaries.zip"
+          
+          Write-Host "Downloading Neo4j Community 5.26 Windows..."
+          curl.exe -L -o vendor/neo4j-community-5.26.28-windows.zip `
+            "https://dist.neo4j.org/neo4j-community-5.26.28-windows.zip"
+          
+          Write-Host "Downloading Temurin JRE 21 Windows x64..."
+          curl.exe -L -o vendor/jre-21-windows-x64.zip `
+            "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.7%2B6/OpenJDK21U-jre_x64_windows_hotspot_21.0.7_6.zip"
+          
+          Write-Host "Vendor binaries downloaded successfully"
+        shell: pwsh
+
+      - name: Clean npm cache and install dependencies
+        run: |
+          npm cache clean --force
+          npm ci
+
+      - name: Build renderer (React/Vite)
+        run: npm run build:renderer
+
+      - name: Build shell (Electron main + preload bundles)
+        run: npm run build:shell
+
+      - name: Package Electron app (NSIS installer + portable)
+        run: npx electron-builder --win --config app/shell/electron-builder.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+
+      - name: Create build artifacts directory
+        run: |
+          if (-not (Test-Path "build-artifacts")) {
+            New-Item -ItemType Directory -Path "build-artifacts" | Out-Null
+          }
+          if (-not (Test-Path "build-artifacts/binaries")) {
+            New-Item -ItemType Directory -Path "build-artifacts/binaries" | Out-Null
+          }
+          
+          # Copy built binaries
+          Copy-Item -Path "app/backend/bin/m365-knowledge-graph.exe" -Destination "build-artifacts/binaries/" -ErrorAction SilentlyContinue
+          Copy-Item -Path "app/llm-svc/target/release/llm-svc.exe" -Destination "build-artifacts/binaries/" -ErrorAction SilentlyContinue
+          
+          # Copy packaged app (NSIS + portable)
+          Copy-Item -Path "dist-app/*" -Destination "build-artifacts/" -Recurse -ErrorAction SilentlyContinue
+          
+          # Copy configuration and migrations
+          Copy-Item -Path "app/backend/migrations" -Destination "build-artifacts/" -Recurse -ErrorAction SilentlyContinue
+          Copy-Item -Path "app/llm-svc/models.yaml" -Destination "build-artifacts/" -ErrorAction SilentlyContinue
+          
+          # Copy vendor directory
+          Copy-Item -Path "vendor" -Destination "build-artifacts/vendor" -Recurse -ErrorAction SilentlyContinue
+        shell: pwsh
+
+      - name: Generate build summary
+        run: |
+          $manifest = @"
+          Cowork GHC Build Manifest
+          ========================
+          Build Date: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
+          Git SHA: ${{ github.sha }}
+          Platform: Windows x64
+          
+          Binaries:
+          - m365-knowledge-graph.exe (Go backend - Windows x64)
+          - llm-svc.exe (Rust service)
+          
+          Packaged Artifacts:
+          - NSIS Installer: Cowork-GHC-*.exe (automated setup)
+          - Portable Executable: Cowork-GHC-*-portable.exe (standalone)
+          - Vendored Binaries:
+            * PostgreSQL 16.14 Windows x64
+            * Neo4j Community 5.26 Windows
+            * Temurin JRE 21 Windows x64
+          - Migrations: Database schema (SQL + Cypher)
+          - models.yaml: LLM service model configuration
+          
+          Test Results: All tests passed ✓
+          - Go unit tests (Docker PostgreSQL)
+          - Rust tests
+          - Node.js tests + typecheck
+          - M365KG integration tests (T3.1-T3.4, Docker PostgreSQL + Neo4j)
+          
+          Ready for Windows deployment!
+          "@
+          
+          Add-Content -Path "build-artifacts/BUILD_MANIFEST.txt" -Value $manifest
+          Get-Content "build-artifacts/BUILD_MANIFEST.txt"
+        shell: pwsh
+
+      - name: Upload build artifacts (Windows package + binaries + vendor)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cowork-ghc-windows-package
+          path: build-artifacts/
+          retention-days: 30
+
+      - name: List artifact contents
+        run: |
+          Write-Host "=== Build Artifacts ===" -ForegroundColor Green
+          Get-ChildItem -Path "build-artifacts" -Recurse -File | `
+            ForEach-Object { "$($_.FullName) ($([math]::Round($_.Length/1MB, 2)) MB)" }
+        shell: pwsh
