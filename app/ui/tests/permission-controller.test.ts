@@ -433,3 +433,81 @@ test("read-only mode denies a mutation request without opening the modal", async
   assert.deepEqual(decisions, [{ requestId: "req-42", decision: "deny" }]);
   assert.equal(container.querySelector(".permission-backdrop"), null);
 });
+
+// ---- Service-readiness gating (settings-only -> live transition window) ----------------------
+
+test("isServiceReady=false: refresh skips the poll entirely — no client call, no failure count, no toast", async () => {
+  const fake = makeFake();
+  const container = document.createElement("div");
+  document.body.append(container);
+  let ready = false;
+  const failingClient = {
+    listPendingPermissions: async (): Promise<readonly PendingPermissionView[]> => {
+      throw new Error("dead socket");
+    },
+    decidePermission: fake.client.decidePermission,
+  };
+  const controller = createPermissionController({
+    client: failingClient,
+    container,
+    isServiceReady: () => ready,
+  });
+
+  // Many refreshes during the transition: gated — never touches the client, never toasts.
+  await controller.refresh();
+  await controller.refresh();
+  await controller.refresh();
+  await controller.refresh();
+  const note = container.querySelector(".permission-note");
+  assert.ok(note !== null);
+  assert.equal((note as HTMLElement).hidden, true, "no transport toast during a gated transition");
+
+  // Service becomes ready → polls flow again (real client now succeeds).
+  ready = true;
+  const okClient = {
+    listPendingPermissions: async (): Promise<readonly PendingPermissionView[]> => [],
+    decidePermission: fake.client.decidePermission,
+  };
+  const controller2 = createPermissionController({
+    client: okClient,
+    container,
+    isServiceReady: () => ready,
+  });
+  await controller2.refresh();
+  assert.equal((note as HTMLElement).hidden, true);
+  controller.stop();
+  controller2.stop();
+  container.remove();
+});
+
+test("transport toast appears after 3 real failures and is retracted when the poll recovers", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  let fail = true;
+  const client = {
+    listPendingPermissions: async (): Promise<readonly PendingPermissionView[]> => {
+      if (fail) throw new Error("boom");
+      return [];
+    },
+    decidePermission: async (): Promise<PermissionDecisionResponse> => ({
+      status: "resolved",
+      decision: "deny",
+      approvalLevel: "standard",
+    }),
+  };
+  const controller = createPermissionController({ client, container, isServiceReady: () => true });
+
+  await controller.refresh();
+  await controller.refresh();
+  const note = container.querySelector(".permission-note") as HTMLElement;
+  assert.equal(note.hidden, true, "below the 3-failure threshold: no toast yet");
+  await controller.refresh();
+  assert.equal(note.hidden, false, "3rd consecutive failure shows the toast");
+  assert.match(note.textContent ?? "", /Không tải được yêu cầu quyền/);
+
+  fail = false; // transport recovers
+  await controller.refresh();
+  assert.equal(note.hidden, true, "recovered poll retracts the stale toast");
+  controller.stop();
+  container.remove();
+});

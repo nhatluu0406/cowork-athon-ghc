@@ -58,6 +58,13 @@ export interface PermissionControllerDeps {
   readonly visibility?: PermissionControllerVisibility;
   /** Current product permission mode selected in the composer. */
   readonly getMode?: () => PermissionMode;
+  /**
+   * Service readiness gate. While false (e.g. the one-time settings-only → live restart swaps
+   * the loopback service for a few seconds), polls are SKIPPED entirely — a transitioning
+   * service is a normal state, not a transport failure, so it must not count toward the
+   * failure toast. Defaults to always-ready.
+   */
+  readonly isServiceReady?: () => boolean;
   /** Fired when a pending permission is shown (read-only history seed). */
   readonly onPending?: (request: PendingPermissionView) => void;
   /** Fired after a decision POST returns (resolved / already_resolved). */
@@ -115,6 +122,9 @@ export function createPermissionController(
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
   let consecutivePollFailures = 0;
+  // True while the note is showing the transport-failure toast, so a recovered poll can retract
+  // it (setNote is shared with decision-outcome notes, which must not be clobbered).
+  let transportNoteShown = false;
   const announced = new Set<string>();
 
   const setNote = (text: string): void => {
@@ -221,14 +231,26 @@ export function createPermissionController(
 
   async function refresh(): Promise<void> {
     if (deciding) return; // a decision + its follow-up refresh is already reconciling
+    if (deps.isServiceReady !== undefined && !deps.isServiceReady()) {
+      // The service is transitioning (settings-only → live restart swaps port+token for a few
+      // seconds). That is a NORMAL state: skip the poll instead of hammering a dead socket, and
+      // never let it count toward — or display — the transport-failure toast.
+      return;
+    }
     let pending: readonly PendingPermissionView[];
     try {
       pending = await deps.client.listPendingPermissions();
       consecutivePollFailures = 0;
+      if (transportNoteShown) {
+        // The transport recovered — retract the stale failure toast immediately.
+        transportNoteShown = false;
+        clearNote();
+      }
     } catch {
       // Keep any current modal, but do not hide a broken permission transport indefinitely.
       consecutivePollFailures += 1;
       if (consecutivePollFailures >= 3) {
+        transportNoteShown = true;
         setNote("Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.");
       }
       return;

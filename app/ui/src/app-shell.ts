@@ -1397,7 +1397,15 @@ async function ensureLive(
   state: AppState,
   readiness: ReturnType<typeof createReadinessController>,
 ): Promise<ServiceClient> {
-  await getShellBridge().connectLive(connectLiveOptsFor(state.liveConfigDirty));
+  const outcome = await getShellBridge().connectLive(connectLiveOptsFor(state.liveConfigDirty));
+  if (outcome.restarted) {
+    // The old service (and its port+token) is GONE. Drop the dead client immediately so every
+    // per-call consumer (dynamicClient: permission poll, navigators, …) fails fast with the
+    // clean "Service chưa sẵn sàng." instead of fetching a dead socket, and flip readiness so
+    // readiness-gated polls pause until the new handshake lands (awaitLiveClient → retry()).
+    state.client = null;
+    state.localServiceReady = false;
+  }
   const client = await awaitLiveClient(state, readiness);
   const bootstrap = await getShellBridge().getBootstrap();
   if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) throw new Error("Shell chưa cung cấp kết nối live.");
@@ -2111,6 +2119,10 @@ export function mountCoworkApp(root: HTMLElement): void {
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            // Gate the poll on service readiness: during the one-time settings-only → live
+            // restart the old socket is dead for a few seconds — a normal transition, not a
+            // transport failure toast.
+            isServiceReady: () => state.localServiceReady,
             getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
