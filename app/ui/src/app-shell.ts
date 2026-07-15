@@ -1863,19 +1863,8 @@ export function mountCoworkApp(root: HTMLElement): void {
         const client = state.client;
         void (async () => {
           await ensureAppUnlocked(dom.root, client);
-          await refreshSettings(state, dom, handlers);
-          await state.conv.refreshList().then(async () => {
-            if (!conversationRestored && state.conv.state.activeConversationId === null) {
-              // PO fix #6: start with a clean new-chat slate.
-              // History is loaded into the sidebar list but no conversation is auto-opened.
-              // User must click a history item to load it. continuationBanner must not appear on startup.
-              // We do NOT call state.conv.select() here; leave activeConversationId null so
-              // the composer starts fresh. A persisted conversation is created only when the
-              // first message is sent (conversation-controller handles that path).
-              conversationRestored = true;
-            }
-            renderState(dom, state, handlers);
-          });
+          // Mount Settings/workspace features immediately after unlock so a refresh failure
+          // cannot leave Settings → Nhà cung cấp permanently empty.
           if (!featuresMounted) {
             featuresMounted = true;
             workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
@@ -2033,6 +2022,19 @@ export function mountCoworkApp(root: HTMLElement): void {
             void showFilePreview(dom.activityPanel, state.client, change);
           });
           }
+          await refreshSettings(state, dom, handlers);
+          await state.conv.refreshList().then(async () => {
+            if (!conversationRestored && state.conv.state.activeConversationId === null) {
+              // PO fix #6: start with a clean new-chat slate.
+              // History is loaded into the sidebar list but no conversation is auto-opened.
+              // User must click a history item to load it. continuationBanner must not appear on startup.
+              // We do NOT call state.conv.select() here; leave activeConversationId null so
+              // the composer starts fresh. A persisted conversation is created only when the
+              // first message is sent (conversation-controller handles that path).
+              conversationRestored = true;
+            }
+            renderState(dom, state, handlers);
+          });
         })();
       }
     },
