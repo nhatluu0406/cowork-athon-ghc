@@ -15,7 +15,7 @@ Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD v
 | Cowork chat | WORKS / NEEDS PERFORMANCE CHECK | Streaming/tool flow exists; measure stage latency before runtime change. |
 | Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
 | Provider profiles | WORKS — BASIC | Settings + profiles/verification mirrored in SQLite; secrets in encrypted vault. |
-| Local database | WORKS — Wave 0A | `<userData>/cowork-ghc.db` via pinned `better-sqlite3`. |
+| Local database | WORKS — Wave 0A | `<userData>/cowork-ghc.db` via pinned `better-sqlite3` rebuilt for Electron ABI on `package:win`. |
 | Local app authentication | WORKS — Wave 0A | First-run username/password + unlock; master key in memory only. |
 | Conversations | WORKS — JSON | Wave 0B migrates to SQLite. |
 | Skills CRUD | WORKS — BASIC | Currently Settings + full prompt injection; planned separate surface/on-demand. |
