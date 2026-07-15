@@ -36,6 +36,7 @@ import {
 } from "./conversation-controller.js";
 import { createReadinessController, type ReadinessState } from "./readiness-controller.js";
 import {
+  assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
   localServiceStatus,
@@ -91,7 +92,12 @@ import {
   mapTerminalToRuntimePhase,
   type ResolvedFinalText,
 } from "./session-finalization.js";
-import { createTurnTimingTracker, type TurnTimingTracker } from "./turn-timing.js";
+import { shouldShowProcessing } from "./turn-ui-state.js";
+import {
+  createTurnTimingTracker,
+  TURN_PERF_DEMO_ENABLED,
+  type TurnTimingTracker,
+} from "./turn-timing.js";
 import { createProductIcon } from "./product-icons.js";
 import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
 import { createAppFrame, type AppFrameDom } from "./ui-shell/create-app-frame.js";
@@ -109,10 +115,13 @@ import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+/** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
+let permissionRefreshNow: (() => void) | null = null;
 
 const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
   connectionState: "disconnected",
@@ -166,6 +175,16 @@ interface AppState {
   codeOpenFiles: OpenCodeFile[];
   codeActiveKey: string | null;
   permissionMode: PermissionMode;
+  /** Conversation that owns the current processing indicator (`Đang xử lý`). */
+  processingConversationId: string | null;
+  /** Optimistic user bubble awaiting service acknowledgement. */
+  pendingUserRow: HTMLElement | null;
+  /**
+   * True only after a successful user-gated `connectLive` (OpenCode attached).
+   * Settings-only bootstrap also answers `GET /v1/health`, so health alone must NOT
+   * skip connect — that path hits not-attached session create → Internal boundary.
+   */
+  liveAttached: boolean;
 }
 
 type AppDom = AppFrameDom;
@@ -276,8 +295,21 @@ function shortPath(path: string): string {
 }
 
 function safeError(error: unknown): string {
-  if (error instanceof ServiceClientError) return sanitizeErrorMessage(error.message);
-  if (error instanceof Error) return sanitizeErrorMessage(error.message);
+  if (error instanceof ServiceClientError) {
+    if (error.code === "internal" || /internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    if (error.code === "runtime_unavailable" || error.code === "runtime_not_attached") {
+      return "Runtime chưa sẵn sàng. Đợi local service / OpenCode khởi động rồi gửi lại.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
+  if (error instanceof Error) {
+    if (/internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
   return "Có lỗi xảy ra.";
 }
 
@@ -363,9 +395,11 @@ function appendMessage(
   historical = false,
   attachments?: readonly AttachmentMetadata[],
   skills?: readonly SkillUseMetadata[],
+  options?: { readonly pending?: boolean },
 ): HTMLElement {
   dom.emptyState.hidden = true;
-  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
+  const pendingClass = options?.pending === true ? " msg--pending" : "";
+  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}${pendingClass}`);
   if (role === "assistant") row.append(el("div", "msg__avatar", "AI"));
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
@@ -386,6 +420,24 @@ function appendMessage(
   dom.transcriptInner.insertBefore(row, dom.thinking);
   dom.transcriptInner.parentElement?.scrollTo({ top: dom.transcriptInner.scrollHeight });
   return row;
+}
+
+function confirmPendingUserMessage(row: HTMLElement | null): void {
+  if (row === null) return;
+  row.classList.remove("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+}
+
+function attachSendRetry(
+  row: HTMLElement,
+  onRetry: () => void,
+): void {
+  row.classList.add("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+  const retry = el("button", "msg__retry", "Thử lại") as HTMLButtonElement;
+  retry.type = "button";
+  retry.addEventListener("click", () => onRetry());
+  row.querySelector(".msg__body")?.append(retry);
 }
 
 function renderAttachmentMetaList(attachments: readonly AttachmentMetadata[]): HTMLElement {
@@ -961,7 +1013,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "running" ||
     phase === "cancelling" ||
     state.activeWorkspace === null;
-  dom.thinking.hidden = phase !== "running" && phase !== "starting" && phase !== "cancelling";
+  syncProcessingIndicator(dom, state);
   dom.sendButton.disabled =
     locked ||
     phase === "starting" ||
@@ -990,34 +1042,95 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
     applyThemePreference(state.settings.general.theme);
+    void getShellBridge()
+      .setDevToolsEnabled(state.settings.general.devtoolsEnabled)
+      .catch(() => undefined);
+    const active = state.settings.providerProfiles?.find((p) => p.isActive);
+    if (active?.verificationCurrent === true && active.lastVerifiedOk === true) {
+      state.connectionTestState = "ok";
+    } else if (active?.verificationCurrent === true && active.lastVerifiedOk === false) {
+      state.connectionTestState = "failed";
+    }
   } catch {
     state.settings = null;
   }
   renderState(dom, state, handlers);
 }
 
-async function awaitLiveClient(
-  state: AppState,
-  readiness: ReturnType<typeof createReadinessController>,
-): Promise<ServiceClient> {
-  readiness.retry();
-  for (let i = 0; i < 120; i += 1) {
-    if (state.client !== null) {
-      try {
-        await state.client.health();
-        return state.client;
-      } catch {
-        // Service may still be restarting into live mode.
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Không kết nối lại được local service.");
-}
-
 function updateAssistantBubble(state: AppState, text: string): void {
   const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
   if (assistant !== null) assistant.textContent = text;
+  if (text.trim().length > 0 && state.activeAssistant !== null) {
+    state.activeAssistant.classList.remove("msg--awaiting");
+    const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");
+    if (thinking !== null) {
+      thinking.hidden = true;
+      const host = state.activeAssistant.closest(".transcript__inner");
+      if (host !== null) host.append(thinking);
+    }
+    state.turnTiming.mark("FIRST_PAINT");
+  }
+}
+
+/** Keep the processing indicator under the live assistant label when the bubble is still empty. */
+function syncProcessingIndicator(dom: AppDom, state: AppState): void {
+  const show = shouldShowProcessing({
+    activeConversationId: state.conv.state.activeConversationId,
+    processingConversationId: state.processingConversationId,
+    runtimePhase: state.conv.state.runtimePhase,
+  });
+  const awaiting =
+    show &&
+    state.activeAssistant !== null &&
+    (state.assistantText.trim().length === 0);
+
+  for (const row of dom.transcriptInner.querySelectorAll(".msg--awaiting")) {
+    if (row !== state.activeAssistant) row.classList.remove("msg--awaiting");
+  }
+
+  if (!show) {
+    dom.thinking.hidden = true;
+    state.activeAssistant?.classList.remove("msg--awaiting");
+    if (dom.thinking.parentElement !== dom.transcriptInner) {
+      dom.transcriptInner.append(dom.thinking);
+    }
+    return;
+  }
+
+  dom.thinking.hidden = false;
+  if (awaiting && state.activeAssistant !== null) {
+    state.activeAssistant.classList.add("msg--awaiting");
+    const body = state.activeAssistant.querySelector(".msg__body");
+    if (body !== null && dom.thinking.parentElement !== body) {
+      body.append(dom.thinking);
+    }
+    return;
+  }
+
+  state.activeAssistant?.classList.remove("msg--awaiting");
+  if (dom.thinking.parentElement !== dom.transcriptInner) {
+    dom.transcriptInner.append(dom.thinking);
+  }
+}
+
+/**
+ * Composer keystrokes must not rebuild the session list / status chrome.
+ * That full renderState path was the main input lag on the packaged app.
+ */
+function syncComposerChrome(dom: AppDom, state: AppState): void {
+  saveComposerDraft(state, dom);
+  const locked = isComposerLocked(state);
+  const phase = state.conv.state.runtimePhase;
+  const readinessInput = buildReadinessInput(state.localServiceReady, state);
+  const sendPreflight = assessSendPreflight(readinessInput);
+  const composerText = textFromComposer(dom.composerInput);
+  renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+  dom.sendButton.disabled =
+    locked ||
+    phase === "starting" ||
+    phase === "running" ||
+    phase === "cancelling" ||
+    composerText.length === 0;
 }
 
 function stopStreamWatchdog(state: AppState): void {
@@ -1143,11 +1256,6 @@ async function finalizeConversationTurn(
   setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
   state.turnTiming.mark("FINAL_RESPONSE");
-  const timingReport = state.turnTiming.report();
-  if (state.settings?.general.verboseLogging === true) {
-    (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
-      timingReport;
-  }
 
   const phase =
     terminal === "completed"
@@ -1168,7 +1276,15 @@ async function finalizeConversationTurn(
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.continuationUnlocked = true;
+  if (state.processingConversationId === state.conv.state.activeConversationId) {
+    state.processingConversationId = null;
+  }
+  state.pendingUserRow = null;
   renderState(dom, state, handlers);
+  state.turnTiming.mark("FINAL_UI");
+  const timingReport = state.turnTiming.report();
+  (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
+    timingReport;
 }
 
 function stopStream(state: AppState): void {
@@ -1188,6 +1304,22 @@ function bindEvStream(
   if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) return;
   stopStream(state);
   state.streamSessionId = sessionId;
+  let activityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleActivityRefresh = (immediate = false): void => {
+    if (immediate) {
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
+      refreshActivityUi(state, dom);
+      return;
+    }
+    if (activityRefreshTimer !== null) return;
+    activityRefreshTimer = setTimeout(() => {
+      activityRefreshTimer = null;
+      refreshActivityUi(state, dom);
+    }, 32);
+  };
   state.stream = startEvStream({
     baseUrl: bootstrap.serviceBaseUrl,
     clientToken: bootstrap.clientToken,
@@ -1196,13 +1328,15 @@ function bindEvStream(
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
-      refreshActivityUi(state, dom);
+      // Tokens are frequent — debounce Inspector rebuild. Tool/file/plan events paint ASAP.
+      scheduleActivityRefresh(event.kind !== "token");
       if (event.kind === "token" && event.delta.length > 0) {
         state.turnTiming.mark("FIRST_TOKEN");
       }
       if (event.kind === "tool_call") {
         if (event.status === "running") {
           state.turnTiming.mark("TOOL_REQUEST", event.toolName);
+          permissionRefreshNow?.();
           void captureBeforeOnToolStart(state, event);
         } else if (event.status === "completed" || event.status === "errored" || event.status === "cancelled") {
           state.turnTiming.mark("TOOL_FINISHED", event.toolName);
@@ -1223,22 +1357,33 @@ function bindEvStream(
     onView: (view) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
+      const displayText = sanitizeAssistantForDisplay(view.text);
       if (view.text.trim().length > 0) {
         state.turnTiming.mark("FIRST_TOKEN");
       }
       state.lastView = view;
       state.assistantText = view.text;
-      updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
+      // Paint only when there is user-visible text. Internal/Skill-only deltas must not
+      // count as FIRST_PAINT — otherwise a long tool/permission wait is mislabeled as UI.
+      if (displayText.trim().length > 0) {
+        updateAssistantBubble(state, displayText);
+      }
       setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
-      refreshActivityUi(state, dom);
       if (view.terminal !== null) {
+        scheduleActivityRefresh(true);
         void finalizeConversationTurn(state, dom, view, handlers, sessionId);
         return;
       }
-      renderState(dom, state, handlers);
+      // Streaming tokens: update the bubble only. Full shell re-render thrashing is the main
+      // jank source; composer/cancel were already set when the turn started.
+      scheduleActivityRefresh(false);
     },
     onError: (message) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
       stopStreamWatchdog(state);
       void state.conv.setRuntimePhase("failed");
       appendMessage(dom, "assistant", message);
@@ -1246,18 +1391,59 @@ function bindEvStream(
     },
   });
   startStreamWatchdog(state, dom, sessionId, handlers);
+  state.turnTiming.mark("STREAM_BOUND", sessionId);
 }
 
 async function ensureLive(
   state: AppState,
   readiness: ReturnType<typeof createReadinessController>,
 ): Promise<ServiceClient> {
+  // Fast path only after a prior connectLive succeeded. Settings-only also passes health().
+  if (
+    state.liveAttached &&
+    state.client !== null &&
+    state.bootstrap?.serviceBaseUrl &&
+    state.bootstrap.clientToken
+  ) {
+    try {
+      await state.client.health();
+      return state.client;
+    } catch {
+      state.liveAttached = false;
+      // Fall through to a real reconnect.
+    }
+  }
+
   await getShellBridge().connectLive();
-  const client = await awaitLiveClient(state, readiness);
-  const bootstrap = await getShellBridge().getBootstrap();
-  if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) throw new Error("Shell chưa cung cấp kết nối live.");
-  state.bootstrap = bootstrap;
-  return client;
+  readiness.retry();
+  // Adopt the post-restart bootstrap immediately. Health-checking the pre-restart base URL
+  // (connection refused) was burning ~2–3s before first token and spamming permission polls.
+  for (let i = 0; i < 120; i += 1) {
+    try {
+      const bootstrap = await getShellBridge().getBootstrap();
+      if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) {
+        throw new Error("bootstrap incomplete");
+      }
+      const changed =
+        state.client === null ||
+        state.bootstrap?.serviceBaseUrl !== bootstrap.serviceBaseUrl ||
+        state.bootstrap?.clientToken !== bootstrap.clientToken;
+      if (changed) {
+        state.bootstrap = bootstrap;
+        state.client = createServiceClient(bootstrap.serviceBaseUrl, bootstrap.clientToken);
+      }
+      const client = state.client;
+      if (client === null) throw new Error("client missing");
+      await client.health();
+      state.liveAttached = true;
+      return client;
+    } catch {
+      // Service may still be restarting into live mode.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  state.liveAttached = false;
+  throw new Error("Không kết nối lại được local service.");
 }
 
 async function ensureRuntimeSession(
@@ -1269,7 +1455,8 @@ async function ensureRuntimeSession(
   if (state.client === null) throw new Error("Service chưa sẵn sàng.");
   await refreshSettings(state, dom, handlers);
 
-  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  // Turn already claimed (`runtimePhase = "starting"`); only re-check config readiness.
+  const preflight = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
     throw new Error(preflight.message);
@@ -1289,31 +1476,46 @@ async function ensureRuntimeSession(
   const plan = await planRuntimeTurn(state.client, record);
 
   if (plan.action === "reuse") {
-    state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
-    bindEvStream(state, dom, handlers, plan.runtimeSessionId);
-    state.conv.state.runtimePhase = "ready";
-    return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+    // Never reuse a session that this UI already saw go terminal — OpenCode single-turn finality.
+    if (state.lastView.sessionId === plan.runtimeSessionId && state.lastView.terminal !== null) {
+      await state.conv.startContinuation();
+    } else {
+      state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
+      if (state.lastView.terminal !== null) {
+        await state.conv.startContinuation();
+      } else {
+        bindEvStream(state, dom, handlers, plan.runtimeSessionId);
+        state.conv.state.runtimePhase =
+          state.processingConversationId !== null ? "starting" : "ready";
+        return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+      }
+    }
   }
 
   state.conv.state.runtimePhase = "starting";
   renderState(dom, state, handlers);
   const client = await ensureLive(state, readiness);
 
-  if (record.runtimeSessionId !== null) {
+  const activeRecord = state.conv.state.activeRecord;
+  if (activeRecord?.runtimeSessionId !== null && activeRecord !== null) {
     await state.conv.startContinuation();
   }
 
   const meta = await client.createSession({
     workspaceId: state.activeWorkspace,
-    title: record.title,
+    title: (state.conv.state.activeRecord ?? record).title,
     model,
   });
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
-  state.conv.state.runtimePhase = "ready";
+  // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
+  state.conv.state.runtimePhase =
+    state.processingConversationId !== null ? "starting" : "ready";
   bindEvStream(state, dom, handlers, meta.id);
   renderState(dom, state, handlers);
-  return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
+  const contextMessages =
+    plan.action === "new_turn" ? plan.priorMessages : (state.conv.state.activeRecord?.messages ?? record.messages);
+  return { runtimeSessionId: meta.id, contextMessages };
 }
 
 async function switchConversation(
@@ -1334,6 +1536,8 @@ async function switchConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
@@ -1346,6 +1550,47 @@ async function switchConversation(
   restoreComposerDraft(state, dom, id);
   renderState(dom, state, handlers);
   dom.composerInput.focus();
+}
+
+async function ensureDraftConversation(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+  await refreshSettings(state, dom, handlers);
+  if (state.activeWorkspace === null) throw new Error("Chọn workspace trước.");
+  if (state.conv.state.activeConversationId !== null) return;
+
+  const reusableDraft = state.conv.state.summaries.find(
+    (summary) =>
+      summary.status === "draft" &&
+      summary.messageCount === 0 &&
+      summary.workspacePath === state.activeWorkspace,
+  );
+  if (reusableDraft !== undefined) {
+    await state.conv.select(reusableDraft.id);
+    if (state.conv.state.activeConversationId === reusableDraft.id) return;
+  }
+
+  const model = state.settings?.defaultModel;
+  const activeProfile = state.settings?.providerProfiles?.find((p) => p.isActive);
+  const providerSnapshot =
+    activeProfile !== undefined
+      ? {
+          profileId: activeProfile.id,
+          displayName: activeProfile.displayName,
+          providerType: activeProfile.providerType,
+          modelId: activeProfile.modelId,
+          baseUrl: activeProfile.baseUrl,
+        }
+      : undefined;
+  await state.conv.createNew(
+    state.activeWorkspace,
+    model?.providerID,
+    model?.modelID,
+    providerSnapshot,
+  );
 }
 
 async function newConversation(
@@ -1386,6 +1631,8 @@ async function newConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
@@ -1560,6 +1807,9 @@ async function sendPrompt(
 
   if (isComposerLocked(state)) return;
 
+  state.turnTiming.reset();
+  state.turnTiming.mark("SEND_START", `${prompt.length}c`);
+
   const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
@@ -1582,98 +1832,160 @@ async function sendPrompt(
     window.alert(dispatchPlan.message);
     return;
   }
-  if (state.conv.state.activeConversationId === null) {
-    await newConversation(state, dom, handlers);
-  }
-  if (state.client === null || state.conv.state.activeConversationId === null) return;
+  state.turnTiming.mark("PREPARE_DONE", `dispatch=${dispatchPlan.text.length}c`);
 
-  const { runtimeSessionId } = await ensureRuntimeSession(
-    state,
-    dom,
-    readiness,
-    handlers,
-  );
+  try {
+    // Ensure a conversation before clearing the composer so a failed draft create keeps the prompt.
+    if (state.conv.state.activeConversationId === null) {
+      await ensureDraftConversation(state, dom, handlers);
+    }
+    if (state.client === null || state.conv.state.activeConversationId === null) {
+      throw new Error("Không tạo được cuộc trò chuyện.");
+    }
 
-  resetLiveActivity(state);
-  state.currentFileActionIntent = detectFileActionIntent(prompt);
-  state.fileVerificationTasks.clear();
-  state.turnTiming.reset();
-  const includedMetadata = dispatchPlan.includedMetadata;
-  appendMessage(
-    dom,
-    "user",
-    prompt,
-    false,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  state.activeAssistant = appendMessage(dom, "assistant", "");
-  const pendingCleared = state.pendingAttachments;
-  if (promptOverride === undefined) {
-    setComposerText(dom.composerInput, "");
-  }
-  if (!skipAttachments) {
-    state.pendingAttachments = [];
-  }
-  if (promptOverride === undefined) {
-    state.composerDrafts.delete(state.conv.state.activeConversationId);
-  }
-  await state.conv.recordUserMessage(
-    prompt,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  await state.conv.markLastActive();
-  state.conv.state.runtimePhase = "running";
-  state.continuationUnlocked = true;
-  recordAttachmentActivity(state, includedMetadata, []);
-  renderState(dom, state, handlers);
+    if (promptOverride === undefined) {
+      setComposerText(dom.composerInput, "");
+    }
+    if (!skipAttachments) {
+      state.pendingAttachments = [];
+    }
 
-  const dispatchText = dispatchPlan.text;
+    state.processingConversationId = state.conv.state.activeConversationId;
+    if (promptOverride === undefined) {
+      state.composerDrafts.delete(state.conv.state.activeConversationId);
+    }
 
-  const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
-  state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
-  if (!result.accepted) {
-    state.pendingAttachments = pendingCleared;
-    if (result.reason === "session_completed") {
-      await state.conv.startContinuation();
-      const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-      const retryPlan = planDispatchPrompt(
-        retry.contextMessages,
-        snapshots,
-        prompt,
-        undefined,
-        enabledSkills,
-      );
-      if (!retryPlan.ok) {
+    const includedMetadata = dispatchPlan.includedMetadata;
+    state.pendingUserRow = appendMessage(
+      dom,
+      "user",
+      prompt,
+      false,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+      { pending: true },
+    );
+    state.activeAssistant = appendMessage(dom, "assistant", "");
+    state.assistantText = "";
+    state.conv.state.runtimePhase = "starting";
+    renderState(dom, state, handlers);
+    state.turnTiming.mark("OPTIMISTIC_UI");
+
+    const { runtimeSessionId } = await ensureRuntimeSession(
+      state,
+      dom,
+      readiness,
+      handlers,
+    );
+    state.turnTiming.mark("RUNTIME_READY", runtimeSessionId);
+
+    resetLiveActivity(state);
+    state.currentFileActionIntent = detectFileActionIntent(prompt);
+    state.fileVerificationTasks.clear();
+    await state.conv.recordUserMessage(
+      prompt,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+    );
+    confirmPendingUserMessage(state.pendingUserRow);
+    state.pendingUserRow = null;
+    await state.conv.markLastActive();
+    state.conv.state.runtimePhase = "running";
+    state.continuationUnlocked = true;
+    recordAttachmentActivity(state, includedMetadata, []);
+    renderState(dom, state, handlers);
+
+    const dispatchText = dispatchPlan.text;
+    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    if (result.accepted) {
+      state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
+    }
+    permissionRefreshNow?.();
+    const needsContinuation =
+      !result.accepted &&
+      (result.reason === "session_completed" ||
+        ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
+          state.lastView.terminal !== null));
+    if (!result.accepted) {
+      if (needsContinuation) {
+        await state.conv.startContinuation();
+        const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+        const retryPlan = planDispatchPrompt(
+          retry.contextMessages,
+          snapshots,
+          prompt,
+          undefined,
+          enabledSkills,
+        );
+        if (!retryPlan.ok) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(state, retryPlan.message);
+          renderState(dom, state, handlers);
+          return;
+        }
+        const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
+        if (second.accepted) {
+          state.turnTiming.mark("PROMPT_ACCEPTED", "retry-ok");
+        }
+        permissionRefreshNow?.();
+        if (!second.accepted) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(
+            state,
+            second.reason === "runtime_not_attached" || second.reason === "runtime_unavailable"
+              ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+              : `Không gửi được yêu cầu (${second.reason}).`,
+          );
+        }
+      } else {
         state.currentFileActionIntent = null;
         state.fileVerificationTasks.clear();
+        state.processingConversationId = null;
         await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", retryPlan.message);
-        renderState(dom, state, handlers);
-        return;
+        updateAssistantBubble(
+          state,
+          result.reason === "runtime_not_attached" || result.reason === "runtime_unavailable"
+            ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+            : `Không gửi được yêu cầu (${result.reason}).`,
+        );
+        if (state.pendingUserRow === null) {
+          const lastUser = [...dom.transcriptInner.querySelectorAll(".msg--user")].at(-1) as
+            | HTMLElement
+            | undefined;
+          if (lastUser !== undefined) {
+            attachSendRetry(lastUser, () => {
+              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+            });
+          }
+        }
       }
-      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
-      if (!second.accepted) {
-        state.currentFileActionIntent = null;
-        state.fileVerificationTasks.clear();
-        await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
-      }
+      renderState(dom, state, handlers);
+      return;
+    }
+    refreshActivityUi(state, dom);
+  } catch (error) {
+    state.processingConversationId = null;
+    await state.conv.setRuntimePhase("failed").catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Không gửi được yêu cầu.";
+    if (state.activeAssistant !== null) {
+      updateAssistantBubble(state, message);
     } else {
-      state.currentFileActionIntent = null;
-      state.fileVerificationTasks.clear();
-      await state.conv.setRuntimePhase("failed");
-      appendMessage(
-        dom,
-        "assistant",
-        result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.",
-      );
+      appendMessage(dom, "assistant", message);
+    }
+    const pendingRow = state.pendingUserRow;
+    if (pendingRow !== null) {
+      attachSendRetry(pendingRow, () => {
+        void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+      });
     }
     renderState(dom, state, handlers);
-    return;
   }
-  refreshActivityUi(state, dom);
 }
 
 async function cancelRun(
@@ -1747,7 +2059,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     finalizingTurn: false,
     finalizedRuntimeSessions: new Set(),
     turnTiming: createTurnTimingTracker({
-      enabled: () => state.settings?.general.verboseLogging === true,
+      enabled: () =>
+        TURN_PERF_DEMO_ENABLED || state.settings?.general.verboseLogging === true,
       log: (line) => console.info(line),
     }),
     currentFileActionIntent: null,
@@ -1764,6 +2077,9 @@ export function mountCoworkApp(root: HTMLElement): void {
     codeOpenFiles: [],
     codeActiveKey: null,
     permissionMode: readPermissionMode(),
+    processingConversationId: null,
+    pendingUserRow: null,
+    liveAttached: false,
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);
@@ -1798,6 +2114,17 @@ export function mountCoworkApp(root: HTMLElement): void {
         renderState(dom, state, handlers);
       })();
     },
+  };
+
+  const baseCloseSettings = dom.closeSettings;
+  const baseOpenSettings = dom.openSettings;
+  dom.closeSettings = () => {
+    baseCloseSettings();
+    renderState(dom, state, handlers);
+  };
+  dom.openSettings = () => {
+    baseOpenSettings();
+    renderState(dom, state, handlers);
   };
 
   for (const [id, button] of dom.surfaceButtons) {
@@ -1859,39 +2186,31 @@ export function mountCoworkApp(root: HTMLElement): void {
       dom.serviceDetail.textContent = copy.detail;
       state.localServiceReady = readinessState.phase === "ready";
       if (readinessState.phase === "ready" && state.client !== null) {
-        void refreshSettings(state, dom, handlers);
-        void state.conv.refreshList().then(async () => {
-          if (!conversationRestored && state.conv.state.activeConversationId === null) {
-            // PO fix #6: start with a clean new-chat slate.
-            // History is loaded into the sidebar list but no conversation is auto-opened.
-            // User must click a history item to load it. continuationBanner must not appear on startup.
-            // We do NOT call state.conv.select() here; leave activeConversationId null so
-            // the composer starts fresh. A persisted conversation is created only when the
-            // first message is sent (conversation-controller handles that path).
-            conversationRestored = true;
-          }
-          renderState(dom, state, handlers);
-        });
-        if (!featuresMounted) {
-          featuresMounted = true;
-          workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
-            bridge: getShellBridge(),
-            client: dynamicClient,
-            onActivated: (rootPath) => {
-              state.activeWorkspace = rootPath;
-              void refreshSettings(state, dom, handlers);
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
-            onDeactivated: () => {
-              state.activeWorkspace = null;
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
-          });
-          workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
+        const client = state.client;
+        void (async () => {
+          await ensureAppUnlocked(dom.root, client);
+          // Mount Settings/workspace features immediately after unlock so a refresh failure
+          // cannot leave Settings → Nhà cung cấp permanently empty.
+          if (!featuresMounted) {
+            featuresMounted = true;
+            workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
+              bridge: getShellBridge(),
+              client: dynamicClient,
+              onActivated: (rootPath) => {
+                state.activeWorkspace = rootPath;
+                void refreshSettings(state, dom, handlers);
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+              onDeactivated: () => {
+                state.activeWorkspace = null;
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+            });
+            workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onChooseWorkspace: () => void workspacePicker?.choose(),
@@ -1945,6 +2264,8 @@ export function mountCoworkApp(root: HTMLElement): void {
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            // Discover permission ASAP — workspace_auto still needs the poll to see pending.
+            pollIntervalMs: 100,
             getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
@@ -2001,6 +2322,9 @@ export function mountCoworkApp(root: HTMLElement): void {
               void persistActivity(state);
             },
           });
+          permissionRefreshNow = () => {
+            void permissions.refresh();
+          };
           permissions.start();
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
@@ -2028,7 +2352,21 @@ export function mountCoworkApp(root: HTMLElement): void {
             openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanionHandle, relativePath);
             void showFilePreview(dom.activityPanel, state.client, change);
           });
-        }
+          }
+          await refreshSettings(state, dom, handlers);
+          await state.conv.refreshList().then(async () => {
+            if (!conversationRestored && state.conv.state.activeConversationId === null) {
+              // PO fix #6: start with a clean new-chat slate.
+              // History is loaded into the sidebar list but no conversation is auto-opened.
+              // User must click a history item to load it. continuationBanner must not appear on startup.
+              // We do NOT call state.conv.select() here; leave activeConversationId null so
+              // the composer starts fresh. A persisted conversation is created only when the
+              // first message is sent (conversation-controller handles that path).
+              conversationRestored = true;
+            }
+            renderState(dom, state, handlers);
+          });
+        })();
       }
     },
   });
@@ -2102,7 +2440,7 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => renderState(dom, state, handlers));
+  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
     if (event.key === "Enter" && !event.shiftKey) {

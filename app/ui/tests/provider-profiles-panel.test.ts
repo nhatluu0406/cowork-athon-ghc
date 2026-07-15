@@ -63,7 +63,7 @@ test("provider form exposes one primary Lưu & kiểm tra action plus overflow m
   assert.match(root.querySelector(".provider-profiles__primary")?.textContent ?? "", /Lưu & kiểm tra/u);
   assert.equal(root.querySelectorAll(".llm-test-connection").length, 0);
   assert.ok(root.querySelector(".provider-profiles__overflow-toggle"));
-  assert.match(root.querySelector(".provider-profiles__test-status")?.textContent ?? "", /Đã xác minh/u);
+  assert.match(root.querySelector(".provider-profiles__test-status")?.textContent ?? "", /Đã kiểm tra/u);
 
   root.querySelector<HTMLButtonElement>(".provider-profiles__overflow-toggle")!.click();
   const items = [...root.querySelectorAll(".provider-profiles__overflow-item")].map((n) => n.textContent);

@@ -91,8 +91,12 @@ export type LiveProviderSelection = BuiltInProviderSelection | CustomProviderSel
 export interface BuildLiveCoworkInput {
   /** Absolute workspace root — becomes both the `workspaceId` and the child `cwd`. */
   readonly workspaceRoot: string;
-  /** The ONE credential service (its store MUST match `service.credentialStore`). */
-  readonly credentialService: CredentialService;
+  /**
+   * Optional credential service for supervisor injection. When omitted,
+   * `startLiveCoworkService` attaches `deps.credentialService` (vault) before
+   * `supervisor.start` so injection and Tier 1 share one store.
+   */
+  readonly credentialService?: CredentialService;
   readonly provider: LiveProviderSelection;
   /** Absolute path to the pinned OpenCode binary. Default: resolved under {@link appRoot}. */
   readonly binPath?: string;
@@ -160,10 +164,21 @@ export async function buildLiveCoworkOptions(
     { ref: input.provider.credentialRef, spec },
   ];
 
-  // The supervisor resolves the handle to a child-env injection at launch (env only). It reads the
-  // input credential service, which MUST wrap the SAME store as service.credentialStore (one store).
-  const resolveForSupervisor: ResolveInjections = (requests) =>
-    resolveInjections(input.credentialService, requests);
+  // The supervisor resolves the handle to a child-env injection at launch (env only). Prefer the
+  // composed vault-backed credential service (attached in startLiveCoworkService) so injection
+  // and Tier 1 share ONE store. A caller-supplied service remains supported for tests.
+  let attachedResolve: ResolveInjections | null =
+    input.credentialService !== undefined
+      ? (requests) => resolveInjections(input.credentialService!, requests)
+      : null;
+  const resolveForSupervisor: ResolveInjections = (requests) => {
+    if (attachedResolve === null) {
+      throw new LiveLaunchConfigError(
+        "Credential injection is not attached. startLiveCoworkService must bind deps.credentialService before supervisor.start.",
+      );
+    }
+    return attachedResolve(requests);
+  };
 
   const supervisor = new OpencodeSupervisor({
     root: runtimeRoot,
@@ -224,6 +239,9 @@ export async function buildLiveCoworkOptions(
     startSpec,
     workspaceId: workspaceRoot,
     seedScrubber,
+    attachCredentialService: (service: CredentialService) => {
+      attachedResolve = (requests) => resolveInjections(service, requests);
+    },
     ...(service !== undefined ? { service } : {}),
     ...(input.now !== undefined ? { now: input.now } : {}),
   };

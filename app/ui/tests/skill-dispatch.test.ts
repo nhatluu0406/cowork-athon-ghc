@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { DISPATCH_MAX_CHARS } from "../src/attachment-limits.js";
 import { COWORK_SYSTEM_PROMPT, planDispatchPrompt } from "../src/dispatch-plan.js";
 import { SKILL_ENVELOPE_END, SKILL_ENVELOPE_START } from "../src/skill-context.js";
 import { sanitizeAssistantForDisplay } from "../src/assistant-output.js";
@@ -40,7 +41,7 @@ test("composes prior turns, selected Skills, attachments, and current request", 
     [{ id: "m1", role: "user", text: "prior", at: "2026-07-12T00:00:00.000Z" }],
     [attachment("ATTACHMENT-VIOLET")],
     "current request",
-    12_000,
+    DISPATCH_MAX_CHARS,
     [skill("Trả lời ngắn gọn và trực tiếp.")],
   );
   assert.equal(plan.ok, true);
@@ -76,7 +77,7 @@ test("disabled/no Skills emits no Skill envelope or provenance", () => {
 });
 
 test("Skill content is transport-only while metadata is separately available", () => {
-  const plan = planDispatchPrompt([], [], "visible prompt", 12_000, [skill("RAW-SKILL-CONTENT")]);
+  const plan = planDispatchPrompt([], [], "visible prompt", DISPATCH_MAX_CHARS, [skill("RAW-SKILL-CONTENT")]);
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
   assert.match(plan.text, /RAW-SKILL-CONTENT/u);

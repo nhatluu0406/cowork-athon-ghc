@@ -115,7 +115,13 @@ export function createPermissionController(
   // WHY it failed (recovery). Cleared when the user attempts a fresh decision for that request.
   let lastError: { readonly requestId: string; readonly message: string } | null = null;
   let consecutivePollFailures = 0;
+  let lastPollAttemptAt = 0;
+  let transportErrorShown = false;
+  let backoffTimer: unknown = null;
   const announced = new Set<string>();
+  const TRANSPORT_ERROR_NOTE =
+    "Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.";
+  const BACKOFF_MS = 3_000;
 
   const setNote = (text: string): void => {
     note.textContent = text;
@@ -124,6 +130,12 @@ export function createPermissionController(
   const clearNote = (): void => {
     note.textContent = "";
     note.hidden = true;
+  };
+  const clearTransportErrorNote = (): void => {
+    if (!transportErrorShown) return;
+    transportErrorShown = false;
+    // Only clear when the toast is still the transport-error copy — do not wipe decision notes.
+    if (note.textContent === TRANSPORT_ERROR_NOTE) clearNote();
   };
 
   const closeModal = (): void => {
@@ -221,15 +233,33 @@ export function createPermissionController(
 
   async function refresh(): Promise<void> {
     if (deciding) return; // a decision + its follow-up refresh is already reconciling
+    lastPollAttemptAt = Date.now();
     let pending: readonly PendingPermissionView[];
     try {
       pending = await deps.client.listPendingPermissions();
+      // Poll succeeded again (e.g. after settings→live restart). Drop the sticky transport toast
+      // that consecutive failures may have raised; otherwise chat can work while the note lingers.
       consecutivePollFailures = 0;
+      clearTransportErrorNote();
+      // Resume the fast interval after a backoff pause.
+      if (polling && !visibility.isHidden() && timerHandle === null) {
+        startInterval();
+      }
     } catch {
       // Keep any current modal, but do not hide a broken permission transport indefinitely.
       consecutivePollFailures += 1;
       if (consecutivePollFailures >= 3) {
-        setNote("Không tải được yêu cầu quyền. Hãy kiểm tra local service rồi thử lại.");
+        setNote(TRANSPORT_ERROR_NOTE);
+        transportErrorShown = true;
+        // Stop the 100ms hammer. One delayed retry only — avoids net::ERR_CONNECTION_REFUSED spam.
+        stopInterval();
+        if (polling && backoffTimer === null) {
+          backoffTimer = setTimeout(() => {
+            backoffTimer = null;
+            if (!polling || visibility.isHidden()) return;
+            void refresh();
+          }, BACKOFF_MS);
+        }
       }
       return;
     }
@@ -252,6 +282,12 @@ export function createPermissionController(
     if (timerHandle !== null) {
       clearIntervalFn(timerHandle);
       timerHandle = null;
+    }
+  };
+  const clearBackoff = (): void => {
+    if (backoffTimer !== null) {
+      clearTimeout(backoffTimer as ReturnType<typeof setTimeout>);
+      backoffTimer = null;
     }
   };
 
@@ -282,6 +318,7 @@ export function createPermissionController(
       polling = false;
       visibility.removeVisibilityListener(onVisibility);
       stopInterval();
+      clearBackoff();
       closeModal();
     },
   };

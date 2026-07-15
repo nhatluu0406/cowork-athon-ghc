@@ -62,7 +62,13 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
   );
   const thinking = el("div", "thinking");
   thinking.hidden = true;
-  thinking.append(el("span", "thinking__dots", "..."), el("span", "thinking__label", "Đang xử lý"));
+  thinking.setAttribute("role", "status");
+  thinking.setAttribute("aria-live", "polite");
+  thinking.setAttribute("aria-label", "Đang xử lý");
+  const dots = el("span", "thinking__dots");
+  dots.setAttribute("aria-hidden", "true");
+  dots.append(el("span", "thinking__dot"), el("span", "thinking__dot"), el("span", "thinking__dot"));
+  thinking.append(dots, el("span", "thinking__label", "Đang xử lý"));
   transcriptInner.append(emptyState, thinking);
   transcript.append(transcriptInner);
 
