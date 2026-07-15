@@ -1,7 +1,7 @@
 /**
  * CGHC-028 Wave C (packaging-completeness) — the Electron MAIN is delivered as ONE self-contained
- * CJS bundle that INLINES every `@cowork-ghc/*` workspace module and leaves ONLY `electron` +
- * `better-sqlite3` as runtime externals.
+ * CJS bundle that INLINES every `@cowork-ghc/*` workspace module and leaves ONLY `electron`,
+ * `better-sqlite3`, and `@napi-rs/keyring` as runtime externals.
  */
 
 import assert from "node:assert/strict";
@@ -36,6 +36,15 @@ test("every @cowork-ghc/* workspace module is inlined (no bare workspace require
 test("better-sqlite3 stays an external require (native addon cannot be bundled)", async () => {
   const code = await bundleText();
   assert.match(code, /require\("better-sqlite3"\)|import\("better-sqlite3"\)/, "sqlite is a runtime external");
+});
+
+test("@napi-rs/keyring stays an external require (native addon for legacy migration)", async () => {
+  const code = await bundleText();
+  assert.match(
+    code,
+    /require\("@napi-rs\/keyring"\)|import\("@napi-rs\/keyring"\)/,
+    "keyring is a runtime external",
+  );
 });
 
 test("import.meta.url is shimmed for CJS so appRoot/renderer paths resolve at runtime", async () => {

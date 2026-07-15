@@ -344,11 +344,15 @@ export interface ClearSessionModelResult {
 
 /**
  * Client-side failure code: either a real {@link BoundaryErrorCode} from the service's
- * error envelope, or `"protocol_mismatch"` when the envelope's protocol tag does not match
- * {@link BOUNDARY_PROTOCOL_VERSION} (a drifted/wrong wire contract we refuse rather than
- * silently accept).
+ * error envelope, `"protocol_mismatch"` when the envelope's protocol tag does not match
+ * {@link BOUNDARY_PROTOCOL_VERSION}, or a client-synthesized code when a success envelope
+ * reports an unusable runtime (e.g. create session accepted:false).
  */
-export type ServiceClientErrorCode = BoundaryErrorCode | "protocol_mismatch";
+export type ServiceClientErrorCode =
+  | BoundaryErrorCode
+  | "protocol_mismatch"
+  | "runtime_unavailable"
+  | "runtime_not_attached";
 
 /** Error surfaced by the client; carries a stable, non-secret code. */
 export class ServiceClientError extends Error {
@@ -747,11 +751,22 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         body: JSON.stringify({ sessionId }),
       }),
 
-    createSession: async (input) =>
-      (await call<{ session: SessionMeta }>("/v1/session", {
+    createSession: async (input) => {
+      const data = await call<{
+        session?: SessionMeta;
+        accepted?: boolean;
+        reason?: string;
+      }>("/v1/session", {
         method: "POST",
         body: JSON.stringify(input),
-      })).session,
+      });
+      if (data.session !== undefined) return data.session;
+      const reason = data.reason === "runtime_not_attached" ? "runtime_not_attached" : "runtime_unavailable";
+      throw new ServiceClientError(
+        reason,
+        "Runtime chưa sẵn sàng. Thử lại sau khi local service khởi động xong.",
+      );
+    },
 
     sendSessionMessage: async (sessionId, text) => {
       const data = await call<{

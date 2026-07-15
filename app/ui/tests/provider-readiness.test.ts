@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SettingsView } from "../src/service-client.js";
 import {
+  assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
   isBaseUrlLocallyValid,
@@ -143,9 +144,47 @@ test("assessSendPreflight blocks malformed base URL locally", () => {
   assert.equal(preflight.blockKind, "base_url_invalid");
 });
 
-test("assessSendPreflight allows locally_ready configuration", () => {
-  const preflight = assessSendPreflight(input());
-  assert.equal(preflight.canSend, true);
+test("assessSendPreflight blocks runtime busy phases", () => {
+  const busy = assessSendPreflight(
+    input({
+      conv: {
+        state: {
+          runtimePhase: "starting",
+          activeConversationId: "c1",
+          activeRecord: null,
+        },
+      },
+    }),
+  );
+  assert.equal(busy.canSend, false);
+  assert.equal(busy.blockKind, "runtime_busy");
+});
+
+test("assessConfigPreflight allows mid-send starting phase so ensureRuntimeSession can proceed", () => {
+  const midSend = assessConfigPreflight(
+    input({
+      conv: {
+        state: {
+          runtimePhase: "starting",
+          activeConversationId: "c1",
+          activeRecord: null,
+        },
+      },
+    }),
+  );
+  assert.equal(midSend.canSend, true);
+  assert.equal(midSend.blockKind, null);
+});
+
+test("assessConfigPreflight still blocks missing credential", () => {
+  const settings = baseSettings();
+  const noCred: SettingsView = {
+    ...settings,
+    providers: [{ providerId: "custom-openai-compat", hasCredential: false }],
+  };
+  const preflight = assessConfigPreflight(input({ settings: noCred }));
+  assert.equal(preflight.canSend, false);
+  assert.equal(preflight.blockKind, "credential_missing");
 });
 
 test("historical completed conversation is not composer-locked", () => {

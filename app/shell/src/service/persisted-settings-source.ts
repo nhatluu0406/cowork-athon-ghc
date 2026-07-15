@@ -7,7 +7,6 @@
  */
 
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
 
 import { credential, db, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
@@ -36,8 +35,13 @@ export interface PersistedSettingsSourceOptions {
   readonly binPath?: string;
   /** App install root used to default the binary path (dev). */
   readonly appRoot?: string;
-  /** Writable per-launch `.runtime/` root (packaged: userData). */
+  /** Writable per-launch `.runtime/` root (packaged: userData). OpenCode scratch only. */
   readonly runtimeRoot?: string;
+  /**
+   * Absolute conversation store directory. MUST match the settings-only tier path
+   * (`%LOCALAPPDATA%\Cowork GHC\conversations` packaged) or history vanishes on live connect.
+   */
+  readonly conversationsDir?: string;
   /** Browser origins the live loopback service must allow (the renderer's `app://cowork`). */
   readonly allowedOrigins?: readonly string[];
   readonly skillsStateFilePath?: string;
@@ -105,8 +109,8 @@ export function createPersistedSettingsSource(
         ...(injectedStore !== undefined ? { credentialStore: injectedStore } : {}),
         ...(autoUnlock !== null ? { autoUnlock } : {}),
         rememberUnlock,
-        ...(options.runtimeRoot !== undefined
-          ? { conversationsDir: join(options.runtimeRoot, ".runtime", "conversations") }
+        ...(options.conversationsDir !== undefined
+          ? { conversationsDir: options.conversationsDir }
           : {}),
         ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
         ...(options.skillsStateFilePath !== undefined

@@ -239,15 +239,16 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   dom.openSettings = openSettings;
   dom.closeSettings = closeSettings;
 
-  topbar.settingsButton.addEventListener("click", openSettings);
-  statusBar.provider.addEventListener("click", openSettings);
-  cowork.providerControl.root.addEventListener("click", openSettings);
-  cowork.composerPreflightCta.addEventListener("click", openSettings);
-  cowork.emptyStateCta.addEventListener("click", openSettings);
-  settingsSurface.closeButton.addEventListener("click", closeSettings);
-  settingsSurface.backButton.addEventListener("click", closeSettings);
+  // Route through `dom.*` so app-shell can wrap open/close and re-render layout chrome.
+  topbar.settingsButton.addEventListener("click", () => dom.openSettings());
+  statusBar.provider.addEventListener("click", () => dom.openSettings());
+  cowork.providerControl.root.addEventListener("click", () => dom.openSettings());
+  cowork.composerPreflightCta.addEventListener("click", () => dom.openSettings());
+  cowork.emptyStateCta.addEventListener("click", () => dom.openSettings());
+  settingsSurface.closeButton.addEventListener("click", () => dom.closeSettings());
+  settingsSurface.backButton.addEventListener("click", () => dom.closeSettings());
   settingsSurface.root.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSettings();
+    if (event.key === "Escape") dom.closeSettings();
   });
 
   const isSidebarDrawerViewport = (): boolean => window.matchMedia("(max-width: 900px)").matches;

@@ -38,7 +38,8 @@ test("planDispatchPrompt always prepends the Cowork GHC system prompt", () => {
     assert.match(plan.text, /You are Cowork GHC/u);
     assert.match(plan.text, /filesystem tools/i);
     assert.match(plan.text, /Never claim a file action succeeded/i);
-    assert.match(plan.text, /Reply in the user's language/i);
+    assert.match(plan.text, /Match the user's language/i);
+    assert.match(plan.text, /reply entirely in Vietnamese/i);
     assert.match(plan.text, /CGHC_CURRENT_USER_REQUEST/u);
     assert.doesNotMatch(plan.text, /contentHash|SKILL-CYAN|COWORK GHC ACTION CONTRACT|COWORK_RUNTIME_ACTION_POLICY/u);
   }

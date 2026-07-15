@@ -69,6 +69,27 @@ test("assembles a complete custom-provider live config from persisted onboarding
   assert.equal(config.service?.credentialStore, fakeStore);
 });
 
+test("live launch keeps the same conversationsDir as the settings-only tier", async () => {
+  const conversationsDir = "C:/x/conversations";
+  const src = createPersistedSettingsSource({
+    settingsFilePath: "C:/x/.runtime/settings.json",
+    dbPath: "C:/x/cowork-ghc.db",
+    conversationsDir,
+    runtimeRoot: "C:/x/userData",
+    allowedOrigins: ["app://cowork"],
+    binPath: "C:/bin/opencode.exe",
+    makeSettingsReader: () => Promise.resolve(reader()),
+    makeCredentialStore,
+  });
+  const config = (await src()) as LiveLaunchConfig;
+  assert.ok(config);
+  assert.equal(
+    config.service?.conversationsDir,
+    conversationsDir,
+    "must not silently switch to userData/.runtime/conversations on live connect",
+  );
+});
+
 test("returns null when no workspace is granted", async () => {
   assert.equal(await source(reader({ workspace: undefined }))(), null);
 });
