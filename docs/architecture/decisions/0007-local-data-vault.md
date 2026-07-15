@@ -95,5 +95,6 @@ Costs:
 - [x] Provider + MS365 secret migration with verify-then-delete and rollback on failure.
 - [x] Renderer never receives DB handle, password verifier, vault key, or raw secret.
 - [x] Focused storage/auth/credential tests PASS.
-- [x] Packaged native SQLite loads (`app.asar.unpacked/.../better_sqlite3.node`).
+- [x] Packaged native SQLite loads under Electron ABI (`rebuild:native:electron` +
+  `app.asar.unpacked/.../better_sqlite3.node`; verified by `npm run verify:native-sqlite`).
 - [ ] Operator: packaged setup → provider key → relaunch → unlock.

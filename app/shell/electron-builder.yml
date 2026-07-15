@@ -66,6 +66,11 @@ extraResources:
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.
+#
+# Keep `signAndEditExecutable: false` on developer Windows: enabling it downloads winCodeSign
+# and fails extracting Darwin symlinks without SeCreateSymbolicLinkPrivilege / Developer Mode.
+# Exe icon + VERSIONINFO are applied instead by `afterPack` → `scripts/after-pack-win-icon.cjs`
+# via `@electron/rcedit` (Explorer then shows cowork-ghc.ico on Cowork GHC.exe).
 win:
   icon: app/shell/assets/cowork-ghc.ico
   target:
@@ -73,6 +78,15 @@ win:
     - portable
   signAndEditExecutable: false
 forceCodeSigning: false
+
+# Apply branding icon to the unpacked main EXE after pack (see note above).
+afterPack: app/shell/scripts/after-pack-win-icon.cjs
+
+# Rebuild native addons (better-sqlite3) for the packaged Electron ABI. The repo's Node (>=22)
+# prebuild is ABI-incompatible with Electron 33 (NODE_MODULE_VERSION 130 vs 137); packaging
+# without this leaves a blank Settings → Nhà cung cấp surface because the vault service fails to
+# start. `package:win` also runs an explicit `@electron/rebuild` pass before electron-builder.
+npmRebuild: true
 
 nsis:
   oneClick: false
