@@ -87,6 +87,72 @@ test("conversation router creates, lists, patches, and deletes", async () => {
   await rm(dir, { recursive: true, force: true });
 });
 
+test("compaction preserves a message appended while the summary was being produced", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cghc-conv-window-"));
+  const store = createConversationStore({ rootDir: dir, now: NOW });
+  const created = await store.create({ workspacePath: "C:/fixture/ws" });
+
+  await store.appendMessage(created.id, { role: "user", text: "old turn" });
+  const snapshot = await store.get(created.id);
+  const boundaryId = snapshot!.messages.at(-1)!.id;
+
+  // The compaction round-trip is in flight; a streaming turn lands in the meantime.
+  await store.appendMessage(created.id, { role: "assistant", text: "arrived mid-compaction" });
+
+  const compacted = await store.compact(created.id, "tóm tắt", boundaryId);
+
+  // The summary replaces only what was summarized; the late message survives after it.
+  assert.equal(compacted.messages.length, 2);
+  assert.match(compacted.messages[0]!.text, /tóm tắt/);
+  assert.equal(compacted.messages[1]!.text, "arrived mid-compaction");
+  assert.equal(compacted.messageCount, 2);
+
+  // The index must agree with the record, not report a stale count.
+  const listed = await store.list();
+  assert.equal(listed.find((c) => c.id === created.id)?.messageCount, 2);
+
+  await rm(dir, { recursive: true, force: true });
+});
+
+test("compaction refuses to drop history when its boundary message is gone", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cghc-conv-boundary-"));
+  const store = createConversationStore({ rootDir: dir, now: NOW });
+  const created = await store.create({ workspacePath: "C:/fixture/ws" });
+  await store.appendMessage(created.id, { role: "user", text: "keep me" });
+
+  await assert.rejects(
+    () => store.compact(created.id, "tóm tắt", "00000000-0000-0000-0000-000000000000"),
+    /refusing to drop history/,
+  );
+
+  const after = await store.get(created.id);
+  assert.equal(after?.messages.length, 1);
+  assert.equal(after?.messages[0]?.text, "keep me");
+
+  await rm(dir, { recursive: true, force: true });
+});
+
+test("concurrent writes to one conversation never publish truncated json", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cghc-conv-race-"));
+  const store = createConversationStore({ rootDir: dir, now: NOW });
+  const created = await store.create({ workspacePath: "C:/fixture/ws" });
+
+  // A shared temp filename would let one rename publish another's half-written bytes.
+  await Promise.all(
+    Array.from({ length: 12 }, (_, i) =>
+      store.appendMessage(created.id, { role: "user", text: `msg ${i}` }),
+    ),
+  );
+
+  // The record must still parse — that is what a torn write destroys.
+  const after = await store.get(created.id);
+  assert.ok(after, "record must still be readable after concurrent writes");
+  assert.ok(after.messages.length >= 1);
+  await store.list();
+
+  await rm(dir, { recursive: true, force: true });
+});
+
 test("conversation router compacts a conversation history", async () => {
   const dir = await mkdtemp(join(tmpdir(), "cghc-conv-compact-"));
   const store = createConversationStore({ rootDir: dir, now: NOW });

@@ -28,7 +28,12 @@ export interface ConversationStore {
   patch(id: string, patch: ConversationPatch): Promise<ConversationRecord>;
   setActivity(id: string, activity: PersistedActivitySnapshot): Promise<ConversationRecord>;
   appendMessage(id: string, message: AppendMessageInput): Promise<ConversationRecord>;
-  compact(id: string, summary: string): Promise<ConversationRecord>;
+  /**
+   * Replace the transcript with `summary`. `throughMessageId` is the last message the
+   * caller summarized: messages after it are preserved. Omit it only when no concurrent
+   * append is possible — omitting it replaces the whole transcript.
+   */
+  compact(id: string, summary: string, throughMessageId?: string): Promise<ConversationRecord>;
   delete(id: string): Promise<boolean>;
   recoverStaleRunning(): Promise<number>;
   getLastActiveId(): Promise<string | null>;
@@ -51,10 +56,74 @@ function summaryOf(record: ConversationRecord): ConversationSummary {
   return { ...summary, messageCount: record.messages.length };
 }
 
+/**
+ * Serializes work per key. Concurrent writes to one path are not safe on Windows: two
+ * renames onto the same target race and one fails with EPERM. Writes to a given file are
+ * therefore queued rather than overlapped.
+ */
+function createKeyedQueue(): <T>(key: string, fn: () => Promise<T>) => Promise<T> {
+  const tails = new Map<string, Promise<unknown>>();
+  return <T>(key: string, fn: () => Promise<T>): Promise<T> => {
+    const prior = tails.get(key) ?? Promise.resolve();
+    // Run regardless of whether the prior write settled or threw — a failed write must not
+    // wedge the queue for this path.
+    const run = prior.then(fn, fn);
+    // The tail must never reject, or every later caller would inherit that rejection.
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    tails.set(key, tail);
+    void tail.then(() => {
+      if (tails.get(key) === tail) tails.delete(key);
+    });
+    return run;
+  };
+}
+
+const writeQueue = createKeyedQueue();
+
+const RENAME_RETRY_DELAYS_MS = [5, 15, 40, 100];
+
+function isTransientWindowsRenameError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  return code === "EPERM" || code === "EACCES" || code === "EBUSY";
+}
+
+/**
+ * Windows refuses a rename onto a target that any handle still has open, so a concurrent
+ * reader (or a virus scanner touching the file) surfaces as a transient EPERM/EACCES/EBUSY
+ * rather than a real failure. Retry briefly before giving up; the write queue already
+ * removes writer-writer races, so what remains is short-lived reader interference.
+ */
+async function renameWithRetry(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const delay = RENAME_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined || !isTransientWindowsRenameError(error)) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
+/**
+ * The temp name must also be unique per call: two writes sharing one temp file would let
+ * the first rename publish the other's half-written bytes.
+ */
 async function atomicWriteJson(path: string, value: unknown): Promise<void> {
-  const tmp = `${path}.tmp`;
-  await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-  await rename(tmp, path);
+  await writeQueue(path, async () => {
+    const tmp = `${path}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+      await renameWithRetry(tmp, path);
+    } catch (error) {
+      await unlink(tmp).catch(() => undefined);
+      throw error;
+    }
+  });
 }
 
 export function createConversationStore(options: ConversationStoreOptions): ConversationStore {
@@ -280,37 +349,36 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
       });
     },
 
-    async compact(id, summary) {
-      const record = await readRecord(id);
-      if (record === undefined) throw new Error("Conversation not found");
+    async compact(id, summary, throughMessageId) {
+      return mutate(id, (record) => {
+        // Summarizing costs an LLM round-trip, so messages can land while it runs. Only the
+        // messages the caller actually summarized may be replaced; anything appended after
+        // its snapshot must survive, or a turn that completed mid-compaction is destroyed
+        // and is absent from the summary too.
+        let tail: readonly ConversationMessage[] = [];
+        if (throughMessageId !== undefined) {
+          const cut = record.messages.findIndex((m) => m.id === throughMessageId);
+          if (cut < 0) {
+            throw new Error("Compaction boundary message no longer exists; refusing to drop history.");
+          }
+          tail = record.messages.slice(cut + 1);
+        }
 
-      const prefix = "[Ngữ cảnh cuộc trò chuyện trước — dùng để trả lời nhất quán; không lặp lại nguyên văn trừ khi được hỏi.]";
-      const suffix = "[Hết ngữ cảnh — trả lời yêu cầu mới bên dưới.]";
-      const msgText = `${prefix}\n- Lịch sử hội thoại cũ đã được dọn dẹp và nén lại thành tóm tắt:\n${summary}\n${suffix}`;
+        const prefix = "[Ngữ cảnh cuộc trò chuyện trước — dùng để trả lời nhất quán; không lặp lại nguyên văn trừ khi được hỏi.]";
+        const suffix = "[Hết ngữ cảnh — trả lời yêu cầu mới bên dưới.]";
+        const msgText = `${prefix}\n- Lịch sử hội thoại cũ đã được dọn dẹp và nén lại thành tóm tắt:\n${summary}\n${suffix}`;
 
-      const at = clock();
-      const summaryMessage: ConversationMessage = {
-        id: randomUUID(),
-        role: "assistant",
-        text: msgText,
-        at,
-      };
+        const at = clock();
+        const summaryMessage: ConversationMessage = {
+          id: randomUUID(),
+          role: "assistant",
+          text: msgText,
+          at,
+        };
 
-      const updated: ConversationRecord = {
-        ...record,
-        messages: [summaryMessage],
-        updatedAt: at,
-      };
-
-      await writeRecord(updated);
-
-      const index = await readIndex();
-      const next = index.conversations.map((c) =>
-        c.id === id ? { ...c, messageCount: 1, updatedAt: at } : c,
-      );
-      await writeIndex(next);
-
-      return updated;
+        const messages = [summaryMessage, ...tail];
+        return { ...record, messages, messageCount: messages.length, updatedAt: at };
+      });
     },
 
     async delete(id) {
