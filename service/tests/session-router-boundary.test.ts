@@ -305,6 +305,58 @@ test("create session maps duck-typed unreachable to 503 without Internal boundar
   }
 });
 
+test("create session maps runtime_not_attached to 503 without Internal boundary", async () => {
+  const { createService } = await import("../src/server/http-service.js");
+  const { createSessionRouter } = await import("../src/session/router.js");
+  const { initialSessionView } = await import("../src/execution/index.js");
+
+  const service = createService();
+  service.mount(
+    createSessionRouter(
+      {
+        create: async () => {
+          throw Object.assign(new Error("not attached"), { code: "runtime_not_attached" });
+        },
+        list: async () => [],
+        continueSession: async () => {
+          throw new Error("unused");
+        },
+        rename: async () => {
+          throw new Error("unused");
+        },
+        view: () => initialSessionView("x"),
+        status: () => "ready" as const,
+        apply: () => initialSessionView("x"),
+        bindStream: () => undefined,
+        cancel: async () => undefined,
+      } as never,
+      {
+        send: async () => undefined,
+      },
+    ),
+  );
+  const address = await service.start();
+  try {
+    const created = await fetch(`http://${address.host}:${address.port}/v1/session`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${service.clientToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ workspaceId: WS }),
+    });
+    assert.equal(created.status, 503);
+    const body = (await created.json()) as {
+      data?: { reason?: string };
+      error?: { message?: string };
+    };
+    assert.equal(body.data?.reason, "runtime_not_attached");
+    assert.notEqual(body.error?.message, "Internal boundary error.");
+  } finally {
+    await service.stop();
+  }
+});
+
 test("FIX-1 message to a live session → 202 (reaches send seam); to a terminal session → honest 409", async () => {
   const sent: Array<{ id: string; text: string }> = [];
   const recordingSendPrompt: SendPrompt = {

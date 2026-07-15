@@ -93,7 +93,11 @@ import {
   type ResolvedFinalText,
 } from "./session-finalization.js";
 import { shouldShowProcessing } from "./turn-ui-state.js";
-import { createTurnTimingTracker, type TurnTimingTracker } from "./turn-timing.js";
+import {
+  createTurnTimingTracker,
+  TURN_PERF_DEMO_ENABLED,
+  type TurnTimingTracker,
+} from "./turn-timing.js";
 import { createProductIcon } from "./product-icons.js";
 import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
 import { createAppFrame, type AppFrameDom } from "./ui-shell/create-app-frame.js";
@@ -175,6 +179,12 @@ interface AppState {
   processingConversationId: string | null;
   /** Optimistic user bubble awaiting service acknowledgement. */
   pendingUserRow: HTMLElement | null;
+  /**
+   * True only after a successful user-gated `connectLive` (OpenCode attached).
+   * Settings-only bootstrap also answers `GET /v1/health`, so health alone must NOT
+   * skip connect — that path hits not-attached session create → Internal boundary.
+   */
+  liveAttached: boolean;
 }
 
 type AppDom = AppFrameDom;
@@ -1032,6 +1042,9 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
     applyThemePreference(state.settings.general.theme);
+    void getShellBridge()
+      .setDevToolsEnabled(state.settings.general.devtoolsEnabled)
+      .catch(() => undefined);
     const active = state.settings.providerProfiles?.find((p) => p.isActive);
     if (active?.verificationCurrent === true && active.lastVerifiedOk === true) {
       state.connectionTestState = "ok";
@@ -1042,25 +1055,6 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
     state.settings = null;
   }
   renderState(dom, state, handlers);
-}
-
-async function awaitLiveClient(
-  state: AppState,
-  readiness: ReturnType<typeof createReadinessController>,
-): Promise<ServiceClient> {
-  readiness.retry();
-  for (let i = 0; i < 120; i += 1) {
-    if (state.client !== null) {
-      try {
-        await state.client.health();
-        return state.client;
-      } catch {
-        // Service may still be restarting into live mode.
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Không kết nối lại được local service.");
 }
 
 function updateAssistantBubble(state: AppState, text: string): void {
@@ -1074,6 +1068,7 @@ function updateAssistantBubble(state: AppState, text: string): void {
       const host = state.activeAssistant.closest(".transcript__inner");
       if (host !== null) host.append(thinking);
     }
+    state.turnTiming.mark("FIRST_PAINT");
   }
 }
 
@@ -1261,11 +1256,6 @@ async function finalizeConversationTurn(
   setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
   state.turnTiming.mark("FINAL_RESPONSE");
-  const timingReport = state.turnTiming.report();
-  if (state.settings?.general.verboseLogging === true) {
-    (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
-      timingReport;
-  }
 
   const phase =
     terminal === "completed"
@@ -1291,6 +1281,10 @@ async function finalizeConversationTurn(
   }
   state.pendingUserRow = null;
   renderState(dom, state, handlers);
+  state.turnTiming.mark("FINAL_UI");
+  const timingReport = state.turnTiming.report();
+  (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
+    timingReport;
 }
 
 function stopStream(state: AppState): void {
@@ -1363,12 +1357,17 @@ function bindEvStream(
     onView: (view) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
+      const displayText = sanitizeAssistantForDisplay(view.text);
       if (view.text.trim().length > 0) {
         state.turnTiming.mark("FIRST_TOKEN");
       }
       state.lastView = view;
       state.assistantText = view.text;
-      updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
+      // Paint only when there is user-visible text. Internal/Skill-only deltas must not
+      // count as FIRST_PAINT — otherwise a long tool/permission wait is mislabeled as UI.
+      if (displayText.trim().length > 0) {
+        updateAssistantBubble(state, displayText);
+      }
       setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
       if (view.terminal !== null) {
         scheduleActivityRefresh(true);
@@ -1392,18 +1391,59 @@ function bindEvStream(
     },
   });
   startStreamWatchdog(state, dom, sessionId, handlers);
+  state.turnTiming.mark("STREAM_BOUND", sessionId);
 }
 
 async function ensureLive(
   state: AppState,
   readiness: ReturnType<typeof createReadinessController>,
 ): Promise<ServiceClient> {
+  // Fast path only after a prior connectLive succeeded. Settings-only also passes health().
+  if (
+    state.liveAttached &&
+    state.client !== null &&
+    state.bootstrap?.serviceBaseUrl &&
+    state.bootstrap.clientToken
+  ) {
+    try {
+      await state.client.health();
+      return state.client;
+    } catch {
+      state.liveAttached = false;
+      // Fall through to a real reconnect.
+    }
+  }
+
   await getShellBridge().connectLive();
-  const client = await awaitLiveClient(state, readiness);
-  const bootstrap = await getShellBridge().getBootstrap();
-  if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) throw new Error("Shell chưa cung cấp kết nối live.");
-  state.bootstrap = bootstrap;
-  return client;
+  readiness.retry();
+  // Adopt the post-restart bootstrap immediately. Health-checking the pre-restart base URL
+  // (connection refused) was burning ~2–3s before first token and spamming permission polls.
+  for (let i = 0; i < 120; i += 1) {
+    try {
+      const bootstrap = await getShellBridge().getBootstrap();
+      if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) {
+        throw new Error("bootstrap incomplete");
+      }
+      const changed =
+        state.client === null ||
+        state.bootstrap?.serviceBaseUrl !== bootstrap.serviceBaseUrl ||
+        state.bootstrap?.clientToken !== bootstrap.clientToken;
+      if (changed) {
+        state.bootstrap = bootstrap;
+        state.client = createServiceClient(bootstrap.serviceBaseUrl, bootstrap.clientToken);
+      }
+      const client = state.client;
+      if (client === null) throw new Error("client missing");
+      await client.health();
+      state.liveAttached = true;
+      return client;
+    } catch {
+      // Service may still be restarting into live mode.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  state.liveAttached = false;
+  throw new Error("Không kết nối lại được local service.");
 }
 
 async function ensureRuntimeSession(
@@ -1767,6 +1807,9 @@ async function sendPrompt(
 
   if (isComposerLocked(state)) return;
 
+  state.turnTiming.reset();
+  state.turnTiming.mark("SEND_START", `${prompt.length}c`);
+
   const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
@@ -1789,6 +1832,7 @@ async function sendPrompt(
     window.alert(dispatchPlan.message);
     return;
   }
+  state.turnTiming.mark("PREPARE_DONE", `dispatch=${dispatchPlan.text.length}c`);
 
   try {
     // Ensure a conversation before clearing the composer so a failed draft create keeps the prompt.
@@ -1825,6 +1869,7 @@ async function sendPrompt(
     state.assistantText = "";
     state.conv.state.runtimePhase = "starting";
     renderState(dom, state, handlers);
+    state.turnTiming.mark("OPTIMISTIC_UI");
 
     const { runtimeSessionId } = await ensureRuntimeSession(
       state,
@@ -1832,11 +1877,11 @@ async function sendPrompt(
       readiness,
       handlers,
     );
+    state.turnTiming.mark("RUNTIME_READY", runtimeSessionId);
 
     resetLiveActivity(state);
     state.currentFileActionIntent = detectFileActionIntent(prompt);
     state.fileVerificationTasks.clear();
-    state.turnTiming.reset();
     await state.conv.recordUserMessage(
       prompt,
       includedMetadata.length > 0 ? includedMetadata : undefined,
@@ -1852,7 +1897,9 @@ async function sendPrompt(
 
     const dispatchText = dispatchPlan.text;
     const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
-    state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
+    if (result.accepted) {
+      state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
+    }
     permissionRefreshNow?.();
     const needsContinuation =
       !result.accepted &&
@@ -1880,6 +1927,9 @@ async function sendPrompt(
           return;
         }
         const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
+        if (second.accepted) {
+          state.turnTiming.mark("PROMPT_ACCEPTED", "retry-ok");
+        }
         permissionRefreshNow?.();
         if (!second.accepted) {
           state.currentFileActionIntent = null;
@@ -2009,7 +2059,8 @@ export function mountCoworkApp(root: HTMLElement): void {
     finalizingTurn: false,
     finalizedRuntimeSessions: new Set(),
     turnTiming: createTurnTimingTracker({
-      enabled: () => state.settings?.general.verboseLogging === true,
+      enabled: () =>
+        TURN_PERF_DEMO_ENABLED || state.settings?.general.verboseLogging === true,
       log: (line) => console.info(line),
     }),
     currentFileActionIntent: null,
@@ -2028,6 +2079,7 @@ export function mountCoworkApp(root: HTMLElement): void {
     permissionMode: readPermissionMode(),
     processingConversationId: null,
     pendingUserRow: null,
+    liveAttached: false,
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);

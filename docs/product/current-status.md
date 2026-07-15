@@ -12,7 +12,7 @@ Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD v
 
 | Capability | Status | Note |
 |---|---|---|
-| Cowork chat | WORKS — Wave 0A stabilize | Optimistic bubble + progressive streaming; mid-send no longer blocked by `runtime_busy`. Stream ticks update bubble only; composer keystrokes no longer full-shell re-render. Permission poll 100ms. Runtime down → honest 503. Vietnamese language match in system prompt. |
+| Cowork chat | WORKS — Wave 0A stabilize | Optimistic bubble + progressive streaming. Hot path: skip `connectLive` only after live attach succeeded (health alone is settings-only-safe). First send no longer hits Internal boundary via not-attached create. Model wait remains dominant. DevTools in Settings → Chung. Dispatch budget 48k chars. |
 | Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
 | Provider profiles | WORKS — BASIC | `Lưu & kiểm tra` persists verification fingerprint; status bar shows `Đã kiểm tra` after success / relaunch. |
 | Local database | WORKS — Wave 0A | Packaged: `%LOCALAPPDATA%\Cowork GHC\data\cowork-ghc.db`. Dev: `<repo>\.runtime\data\cowork-ghc.db`. Override: `COWORK_GHC_RUNTIME_ROOT`. |
