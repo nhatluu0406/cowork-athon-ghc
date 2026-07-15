@@ -74,6 +74,40 @@ export interface RemotePairingCode {
   readonly pairingUrl: string | null;
 }
 
+/** A stored dispatch task (built-in template or user task) as listed by `/v1/tasks`. */
+export interface DispatchTaskView {
+  readonly id: string;
+  readonly name: string;
+  readonly source: "built_in" | "user_local";
+  readonly goal: string;
+  readonly loop: { readonly mode: "run_once" | "retry_until_verified" | "scheduled" };
+  readonly branches?: readonly { readonly agentId: string; readonly focus?: string }[];
+  readonly agentId?: string;
+}
+
+/** Secret-free live view of one fan-out branch (mirrors the service view). */
+export interface DispatchBranchView {
+  readonly branchId: string;
+  readonly agentId: string;
+  readonly agentName: string;
+  readonly status: "pending" | "running" | "completed" | "errored" | "cancelled";
+  readonly summary?: string;
+}
+
+/** Secret-free live view of one dispatch run (loop over fan-out groups). */
+export interface DispatchRunView {
+  readonly runId: string;
+  readonly taskId: string;
+  readonly taskName: string;
+  readonly loopMode: "run_once" | "retry_until_verified" | "scheduled";
+  readonly startedAt: string;
+  readonly status: "running" | "completed" | "partial" | "errored" | "cancelled" | "exhausted";
+  readonly attempts: number;
+  readonly verified: boolean;
+  readonly reason?: string;
+  readonly branches: readonly DispatchBranchView[];
+}
+
 /** Non-secret rejection reasons mirrored from the service (CGHC-008). */
 export type WorkspaceRejectReason =
   | "not_absolute"
@@ -461,6 +495,16 @@ export interface ServiceClient {
   remoteIssuePairingCode(): Promise<RemotePairingCode>;
   /** Revoke every paired device (the `/remote off` teardown). */
   remoteRevokeAll(): Promise<void>;
+  /** List dispatch task templates + user tasks (the dispatch catalog). */
+  listDispatchTasks(): Promise<readonly DispatchTaskView[]>;
+  /** Start a STORED task as a dispatch run (fan-out per its branches). */
+  runDispatchTask(taskId: string): Promise<DispatchRunView>;
+  /** List dispatch runs, newest first. */
+  listDispatchRuns(): Promise<readonly DispatchRunView[]>;
+  /** One dispatch run by id. */
+  getDispatchRun(runId: string): Promise<DispatchRunView>;
+  /** Cancel a dispatch run (loop + in-flight branches). */
+  cancelDispatchRun(runId: string): Promise<void>;
   /** List persisted conversations (optional local search query). */
   listConversations(query?: string): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
@@ -796,6 +840,26 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       call<RemotePairingCode>("/v1/remote/pairing-code", { method: "POST", body: "{}" }),
     remoteRevokeAll: async () => {
       await call<{ ok: true }>("/v1/remote/revoke-all", { method: "POST", body: "{}" });
+    },
+
+    listDispatchTasks: async () =>
+      (await call<{ tasks: readonly DispatchTaskView[] }>("/v1/tasks")).tasks,
+    runDispatchTask: async (taskId) =>
+      (
+        await call<{ run: DispatchRunView }>(
+          `/v1/dispatch/tasks/${encodeURIComponent(taskId)}/run`,
+          { method: "POST", body: "{}" },
+        )
+      ).run,
+    listDispatchRuns: async () =>
+      (await call<{ runs: readonly DispatchRunView[] }>("/v1/dispatch/runs")).runs,
+    getDispatchRun: async (runId) =>
+      (await call<{ run: DispatchRunView }>(`/v1/dispatch/runs/${encodeURIComponent(runId)}`)).run,
+    cancelDispatchRun: async (runId) => {
+      await call<{ cancelled: boolean }>(
+        `/v1/dispatch/runs/${encodeURIComponent(runId)}/cancel`,
+        { method: "POST", body: "{}" },
+      );
     },
 
     listConversations: async (query) => {
