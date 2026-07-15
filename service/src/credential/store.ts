@@ -13,8 +13,11 @@
 
 import type { CredentialRef } from "@cowork-ghc/contracts";
 
-/** Which backing store an adapter is. The persisted {@link CredentialRef} stays `"os"`. */
-export type CredentialStoreKind = "os" | "memory";
+/**
+ * Which backing store an adapter is. The persisted {@link CredentialRef} stays `"os"`
+ * (opaque local-store handle) even when the live adapter is the encrypted SQLite vault.
+ */
+export type CredentialStoreKind = "os" | "memory" | "vault";
 
 /**
  * Provider-neutral credential store port. Every method is async so the real OS-backed

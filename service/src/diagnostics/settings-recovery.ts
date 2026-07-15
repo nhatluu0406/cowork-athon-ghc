@@ -64,6 +64,10 @@ function coerceGeneral(raw: unknown): GeneralSettings {
       typeof raw.telemetryEnabled === "boolean"
         ? raw.telemetryEnabled
         : DEFAULT_GENERAL_SETTINGS.telemetryEnabled,
+    devtoolsEnabled:
+      typeof raw.devtoolsEnabled === "boolean"
+        ? raw.devtoolsEnabled
+        : DEFAULT_GENERAL_SETTINGS.devtoolsEnabled,
   };
 }
 

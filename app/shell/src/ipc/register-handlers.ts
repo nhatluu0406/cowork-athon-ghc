@@ -90,6 +90,24 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
   );
 
   ipcMain.handle(
+    IpcChannel.SetDevToolsEnabled,
+    (event: IpcMainInvokeEvent, enabled: unknown): void => {
+      if (typeof enabled !== "boolean") return;
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      if (!owner) return;
+      if (enabled) {
+        if (!owner.webContents.isDevToolsOpened()) {
+          owner.webContents.openDevTools({ mode: "detach" });
+        }
+        return;
+      }
+      if (owner.webContents.isDevToolsOpened()) {
+        owner.webContents.closeDevTools();
+      }
+    },
+  );
+
+  ipcMain.handle(
     IpcChannel.PickWorkspaceFolder,
     async (event: IpcMainInvokeEvent): Promise<PickedWorkspaceFolder> => {
       // Packaged verification seam only: when set, return the fixture path without opening the

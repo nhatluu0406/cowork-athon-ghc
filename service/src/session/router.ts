@@ -31,7 +31,11 @@ import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/cont
 import { BadRequestError } from "../server/http-util.js";
 import type { CreateSessionInput } from "./seams.js";
 import type { SessionService } from "./session-service.js";
-import { OpencodeHttpError } from "../runtime/opencode-http-error.js";
+import {
+  OpencodeHttpError,
+  OpencodeUnreachableError,
+  RuntimeNotReadyError,
+} from "../runtime/opencode-http-error.js";
 
 export interface SessionRouterOptions {
   /** Validate provider/model/credential prerequisites before creating a runtime session. */
@@ -68,6 +72,35 @@ function isRuntimeNotAttached(err: unknown): boolean {
     typeof err === "object" &&
     err !== null &&
     (err as { code?: unknown }).code === "runtime_not_attached"
+  );
+}
+
+/** Map OpenCode transport failures to an honest 503 — never the generic Internal boundary 500. */
+function runtimeUnavailableResult(sessionId?: SessionId): RouteResult {
+  return {
+    status: 503,
+    data:
+      sessionId !== undefined
+        ? { accepted: false, reason: "runtime_unavailable", sessionId }
+        : { accepted: false, reason: "runtime_unavailable" },
+  };
+}
+
+function isRuntimeUnavailable(err: unknown): boolean {
+  if (
+    err instanceof OpencodeHttpError ||
+    err instanceof OpencodeUnreachableError ||
+    err instanceof RuntimeNotReadyError
+  ) {
+    return true;
+  }
+  // Duck-type: survive duplicate module copies / wrapped causes across composition seams.
+  if (typeof err !== "object" || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return (
+    code === "opencode_http_error" ||
+    code === "opencode_unreachable" ||
+    code === "runtime_not_ready"
   );
 }
 
@@ -144,8 +177,21 @@ export function createSessionRouter(
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
           const input = parseCreateBody(ctx.body);
           options?.assertCreatePrerequisites?.(input);
-          const meta = await sessionService.create(input);
-          return { status: 201, data: { session: meta } };
+          try {
+            const meta = await sessionService.create(input);
+            return { status: 201, data: { session: meta } };
+          } catch (err) {
+            if (isRuntimeNotAttached(err)) {
+              return {
+                status: 503,
+                data: { accepted: false, reason: "runtime_not_attached" },
+              };
+            }
+            if (isRuntimeUnavailable(err)) {
+              return runtimeUnavailableResult();
+            }
+            throw err;
+          }
         },
       },
       {
@@ -240,11 +286,8 @@ export function createSessionRouter(
                 data: { accepted: false, reason: "runtime_not_attached", sessionId },
               };
             }
-            if (err instanceof OpencodeHttpError) {
-              return {
-                status: 503,
-                data: { accepted: false, reason: "runtime_unavailable", sessionId },
-              };
+            if (isRuntimeUnavailable(err)) {
+              return runtimeUnavailableResult(sessionId);
             }
             throw err;
           }

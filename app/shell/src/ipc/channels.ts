@@ -19,6 +19,8 @@ export const IpcChannel = {
   ConnectLive: "cowork:connect-live",
   /** Renderer synchronizes the native title-bar overlay with light/dark theme. */
   SetWindowTheme: "cowork:set-window-theme",
+  /** Renderer opens or closes Electron DevTools for the owning window. */
+  SetDevToolsEnabled: "cowork:set-devtools-enabled",
 } as const;
 
 /** Union of the allowed channel name literals. */

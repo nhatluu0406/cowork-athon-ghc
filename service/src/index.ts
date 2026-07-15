@@ -97,10 +97,12 @@ export {
   type Unsubscribe,
 } from "./server/session-stream-hub.js";
 
+export * as db from "./db/index.js";
+
 // Domain modules (L6 wave 2), namespaced to avoid export-name collisions (e.g. the shared
 // SecretScrubber is re-exported by both credential and diagnostics). Each has its own barrel:
 //   workspace  — grant + confinement (W4/F4, CGHC-007)
-//   credential — @napi-rs/keyring store + inject-at-launch (PR9/SEC-1, CGHC-009)
+//   credential — store + inject-at-launch (PR9/SEC-1, CGHC-009); vault replaces keyring (ADR 0007)
 //   diagnostics— value-based scrubber + redacting logger + bundle export (PR8/SD*, CGHC-021)
 //   execution  — OpenCode SSE -> EV mapper + reducer (EV1-EV7, CGHC-012)
 export * as workspace from "./workspace/index.js";

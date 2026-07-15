@@ -60,7 +60,7 @@ function formatVerifiedStatus(profile?: ProviderProfileView): string {
   if (profile === undefined) return "Chưa kiểm tra.";
   if (!profile.verificationCurrent || profile.lastVerifiedOk === undefined) return "Chưa kiểm tra.";
   const when = profile.lastVerifiedAt !== undefined ? ` · ${profile.lastVerifiedAt}` : "";
-  return profile.lastVerifiedOk ? `Đã xác minh${when}` : `Kiểm tra thất bại${when}`;
+  return profile.lastVerifiedOk ? `Đã kiểm tra${when}` : `Kiểm tra thất bại${when}`;
 }
 
 const ONLY_PROFILE_DELETE_MESSAGE = "Bạn cần tạo một profile khác trước khi xóa profile này.";
@@ -85,7 +85,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const listHeading = el("div", "provider-profiles__list-heading");
   listHeading.append(
     el("h3", "provider-profiles__list-title", "Kết nối đã lưu"),
-    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong Windows keyring."),
+    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong kho mật mã cục bộ."),
   );
   const addBtn = el("button", "provider-profiles__add provider-profiles__add--primary", "Thêm kết nối") as HTMLButtonElement;
   addBtn.type = "button";
@@ -319,7 +319,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       }
       const verifiedLabel =
         profile.verificationCurrent && profile.lastVerifiedOk === true
-          ? "Đã xác minh"
+          ? "Đã kiểm tra"
           : profile.verificationCurrent && profile.lastVerifiedOk === false
             ? "Kiểm tra thất bại"
             : "Chưa kiểm tra";
