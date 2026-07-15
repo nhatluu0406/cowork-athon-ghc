@@ -44,6 +44,7 @@ import {
   createPersistedSettingsSource,
 } from "./service/persisted-settings-source.js";
 import { loadProjectEnvFile } from "./load-project-env.js";
+import { clearRememberedUnlock } from "./service/session-unlock.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -76,21 +77,25 @@ function resolveRuntimePaths() {
     userData: app.getPath("userData"),
     devAppRoot: DEV_APP_ROOT,
   });
-  const settingsFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
-  const conversationsDir = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "conversations");
-  const skillsStateFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills-enabled.json");
+  const runtimeRoot = packaged.runtimeRoot ?? DEV_APP_ROOT;
+  const settingsFilePath = join(runtimeRoot, ".runtime", "settings.json");
+  const conversationsDir = join(runtimeRoot, ".runtime", "conversations");
+  const skillsStateFilePath = join(runtimeRoot, ".runtime", "skills-enabled.json");
+  // ADR 0007: service-owned SQLite lives at <userData>/cowork-ghc.db (not under .runtime/).
+  const dbPath = join(app.getPath("userData"), "cowork-ghc.db");
   const userSkillsRoot =
     process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() ||
-    join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills");
+    join(runtimeRoot, ".runtime", "skills");
   const builtInSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
-  lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
+  lifecycleLogPath = join(runtimeRoot, ".runtime", "service-lifecycle.log");
   return {
     packaged,
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
+    dbPath,
     skillRoots: [
       { path: builtInSkillsRoot, source: "built_in" as const },
       { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
@@ -102,6 +107,7 @@ function createShellController(
   settingsFilePath: string,
   conversationsDir: string,
   skillsStateFilePath: string,
+  dbPath: string,
   skillRoots: readonly {
     readonly path: string;
     readonly source: "built_in" | "user_local";
@@ -112,6 +118,7 @@ function createShellController(
   const liveSource = createFirstConfiguredSource([
     createPersistedSettingsSource({
       settingsFilePath,
+      dbPath,
       allowedOrigins: [APP_ORIGIN],
       binPath: packaged.binPath,
       appRoot: DEV_APP_ROOT,
@@ -124,6 +131,7 @@ function createShellController(
       binPath: packaged.binPath,
       allowedOrigins: [APP_ORIGIN],
       settingsFilePath,
+      dbPath,
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
       skillsStateFilePath,
       skillRoots,
@@ -134,6 +142,7 @@ function createShellController(
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
+    dbPath,
     skillRoots,
     allowedOrigins: [APP_ORIGIN] as const,
     allowEnvCredentialImport: envCredentialImportEnabled(),
@@ -217,7 +226,10 @@ function tracedStartService(name: string, start: StartService): StartService {
 const lifecycleApp: LifecycleApp = {
   whenReady: () => app.whenReady(),
   onBeforeQuit: (listener) => {
-    app.on("before-quit", listener);
+    app.on("before-quit", (event) => {
+      clearRememberedUnlock();
+      listener(event);
+    });
   },
   quit: () => app.quit(),
 };
@@ -240,12 +252,14 @@ void runShellLifecycle({
       settingsFilePath,
       conversationsDir,
       skillsStateFilePath,
+      dbPath,
       skillRoots,
     } = resolveRuntimePaths();
     shellController = createShellController(
       settingsFilePath,
       conversationsDir,
       skillsStateFilePath,
+      dbPath,
       skillRoots,
       packaged,
     );

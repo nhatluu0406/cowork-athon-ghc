@@ -18,11 +18,12 @@ import {
   createCredentialRouter,
   createSecretScrubber,
 } from "../credential/index.js";
-import { createKeyringStore } from "../credential/index.js";
+import { createKeyringStore, createMemoryStore } from "../credential/index.js";
 import {
   createNodeSettingsFs,
   createSettingsRouter,
   openSettingsStore,
+  type SettingsFs,
   type SettingsModelPort,
 } from "../diagnostics/index.js";
 import { assessProviderReadiness } from "../diagnostics/provider-readiness.js";
@@ -85,6 +86,29 @@ import {
   createSharePointService,
   isMs365Enabled,
 } from "../ms365/index.js";
+import {
+  closeSqliteDatabase,
+  collectCredentialAccounts,
+  createAppMetaRepository,
+  createAuthRouter,
+  createLocalAuthService,
+  createLocalUserRepository,
+  createProviderProfileRepository,
+  createProviderVerificationRepository,
+  createSecretsRepository,
+  createSettingsRepository,
+  createSqliteSettingsFs,
+  createVaultCredentialStore,
+  createVaultKeyRepository,
+  migrateJsonSettingsToSqlite,
+  migrateKeyringSecretsToVault,
+  openSqliteDatabase,
+  runMigrations,
+  type LocalAuthService,
+  type SqliteDatabase,
+  type VaultCredentialStore,
+} from "../db/index.js";
+import type { CredentialStore } from "../credential/index.js";
 
 /**
  * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
@@ -101,7 +125,7 @@ const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
  * Construct + wire the whole service WITHOUT opening the socket. Async because the settings
- * store loads persisted state and the keyring store binds the native module at boot.
+ * store loads persisted state and (when configured) the SQLite vault / migration seams bind.
  */
 export async function createCoworkService(
   options: CoworkServiceOptions = {},
@@ -115,12 +139,67 @@ export async function createCoworkService(
   const scrubber = createSecretScrubber();
   const redactError = (message: string): string => sanitizeErrorMessage(scrubber.scrub(message));
 
+  // --- Local SQLite vault (ADR 0007) when dbPath / sqliteDatabase is provided. ---
+  let sqliteDatabase: SqliteDatabase | undefined = options.sqliteDatabase;
+  let ownsSqlite = false;
+  let localAuth: LocalAuthService | undefined;
+  let vaultStore: VaultCredentialStore | undefined;
+  let settingsFs: SettingsFs;
+
+  if (sqliteDatabase !== undefined || options.dbPath !== undefined) {
+    if (sqliteDatabase === undefined) {
+      sqliteDatabase = openSqliteDatabase({ filePath: options.dbPath! });
+      ownsSqlite = true;
+    }
+    runMigrations(sqliteDatabase, undefined, now);
+
+    const settingsRepo = createSettingsRepository(sqliteDatabase);
+    const profilesRepo = createProviderProfileRepository(sqliteDatabase);
+    const verificationsRepo = createProviderVerificationRepository(sqliteDatabase);
+    const appMeta = createAppMetaRepository(sqliteDatabase);
+    const secretsRepo = createSecretsRepository(sqliteDatabase);
+    const usersRepo = createLocalUserRepository(sqliteDatabase);
+    const vaultKeysRepo = createVaultKeyRepository(sqliteDatabase);
+
+    if (options.settingsFilePath !== undefined) {
+      migrateJsonSettingsToSqlite({
+        settingsFilePath: options.settingsFilePath,
+        settings: settingsRepo,
+        appMeta,
+        now,
+      });
+    }
+
+    localAuth = createLocalAuthService({ users: usersRepo, vaultKeys: vaultKeysRepo, now });
+    vaultStore = createVaultCredentialStore({ auth: localAuth, secrets: secretsRepo, now });
+
+    if (options.autoUnlock !== undefined) {
+      try {
+        await localAuth.unlock(options.autoUnlock.username, options.autoUnlock.password);
+      } catch {
+        // Leave locked; renderer lock gate will prompt again.
+      }
+    }
+
+    settingsFs =
+      options.settingsFs ??
+      createSqliteSettingsFs({
+        settings: settingsRepo,
+        profiles: profilesRepo,
+        verifications: verificationsRepo,
+        now,
+      });
+  } else {
+    settingsFs =
+      options.settingsFs ?? createNodeSettingsFs(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
+  }
+
   // --- The ONE credential store + credential service (shares the single scrubber). ---
-  const credentialStore = options.credentialStore ?? (await createKeyringStore());
+  const credentialStore: CredentialStore =
+    options.credentialStore ?? vaultStore ?? createMemoryStore();
   const credentialService = createCredentialService({ store: credentialStore, scrubber });
 
   // --- Settings store (persistent SD1 source of truth), loaded through the fs seam. ---
-  const settingsFs = options.settingsFs ?? createNodeSettingsFs(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
   let baseSettingsStore = await openSettingsStore({ fs: settingsFs });
 
   const migration = await migrateLegacySettingsToProfiles(
@@ -132,6 +211,32 @@ export async function createCoworkService(
   }
 
   const providerProfileStore = createProviderProfileStore({ store: baseSettingsStore, now });
+
+  const runPostUnlockMigration = async (): Promise<void> => {
+    if (localAuth === undefined || vaultStore === undefined || sqliteDatabase === undefined) return;
+    const appMeta = createAppMetaRepository(sqliteDatabase);
+    let legacy: CredentialStore | undefined = options.legacyCredentialStore;
+    if (legacy === undefined) {
+      try {
+        legacy = await createKeyringStore();
+      } catch {
+        legacy = undefined;
+      }
+    }
+    if (legacy === undefined) return;
+    const accounts = collectCredentialAccounts(baseSettingsStore.snapshot());
+    await migrateKeyringSecretsToVault({
+      auth: localAuth,
+      vault: vaultStore,
+      legacy,
+      appMeta,
+      accounts,
+    });
+  };
+
+  if (localAuth !== undefined && localAuth.masterKey() !== null) {
+    await runPostUnlockMigration().catch(() => undefined);
+  }
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
@@ -270,6 +375,17 @@ export async function createCoworkService(
     : undefined;
 
   const routers = [
+    ...(localAuth !== undefined
+      ? [
+          createAuthRouter({
+            auth: localAuth,
+            onUnlocked: runPostUnlockMigration,
+            ...(options.rememberUnlock !== undefined
+              ? { rememberUnlock: options.rememberUnlock }
+              : {}),
+          }),
+        ]
+      : []),
     createWorkspaceRouter({
       recent: recentWorkspaces,
       fsProbe: options.workspaceFsProbe ?? nodeFsProbe(),
@@ -337,6 +453,8 @@ export async function createCoworkService(
     conversationStore,
     skillCatalog,
     redactError,
+    ...(localAuth !== undefined ? { localAuth } : {}),
+    ...(sqliteDatabase !== undefined ? { sqliteDatabase } : {}),
     buildToolPermissionProxy: (guard) =>
       new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),
   };
@@ -345,7 +463,24 @@ export async function createCoworkService(
     routers,
     deps,
     // The service auto-mounts the (token-guarded) health router itself; we never re-mount it.
-    start: (): Promise<RunningService> => startService({ ...options, routers }),
+    start: async (): Promise<RunningService> => {
+      const running = await startService({ ...options, routers });
+      if (!ownsSqlite || sqliteDatabase === undefined) return running;
+      const db = sqliteDatabase;
+      const originalStop = running.service.stop.bind(running.service);
+      Object.defineProperty(running.service, "stop", {
+        configurable: true,
+        value: async () => {
+          await originalStop();
+          try {
+            closeSqliteDatabase(db);
+          } catch {
+            // Already closed.
+          }
+        },
+      });
+      return running;
+    },
   };
 }
 

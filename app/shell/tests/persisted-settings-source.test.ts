@@ -6,6 +6,9 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import {
@@ -16,6 +19,7 @@ import {
 import type { LiveLaunchConfig } from "../src/service/live-launch-resolver.js";
 
 const CRED_REF = { store: "os", account: "deepseek-acct" } as const;
+const WS_ROOT = mkdtempSync(join(tmpdir(), "cghc-ws-"));
 
 function reader(overrides: Partial<{
   workspace: { rootPath: string } | undefined;
@@ -23,7 +27,7 @@ function reader(overrides: Partial<{
   providers: PersistedSettingsReader["listProviderSettings"] extends () => infer R ? R : never;
 }> = {}): PersistedSettingsReader {
   return {
-    activeWorkspace: () => ("workspace" in overrides ? overrides.workspace : { rootPath: "C:/ws" }),
+    activeWorkspace: () => ("workspace" in overrides ? overrides.workspace : { rootPath: WS_ROOT }),
     defaultModel: () =>
       "model" in overrides ? overrides.model : { providerID: "deepseek", modelID: "deepseek-chat" },
     listProviderSettings: () =>
@@ -39,6 +43,7 @@ const makeCredentialStore = () => Promise.resolve(fakeStore as never);
 function source(r: PersistedSettingsReader) {
   return createPersistedSettingsSource({
     settingsFilePath: "C:/x/.runtime/settings.json",
+    dbPath: "C:/x/cowork-ghc.db",
     allowedOrigins: ["app://cowork"],
     binPath: "C:/bin/opencode.exe",
     makeSettingsReader: () => Promise.resolve(r),
@@ -49,7 +54,7 @@ function source(r: PersistedSettingsReader) {
 test("assembles a complete custom-provider live config from persisted onboarding settings", async () => {
   const config = (await source(reader())()) as LiveLaunchConfig;
   assert.ok(config, "a complete config must be returned");
-  assert.equal(config.workspaceRoot, "C:/ws");
+  assert.equal(config.workspaceRoot, WS_ROOT);
   assert.equal(config.provider.kind, "custom");
   if (config.provider.kind === "custom") {
     assert.equal(config.provider.baseUrl, "https://api.deepseek.com");
@@ -60,6 +65,7 @@ test("assembles a complete custom-provider live config from persisted onboarding
   // The live service must allow the renderer origin and share the settings file + the ONE store.
   assert.deepEqual(config.service?.allowedOrigins, ["app://cowork"]);
   assert.equal(config.service?.settingsFilePath, "C:/x/.runtime/settings.json");
+  assert.equal(config.service?.dbPath, "C:/x/cowork-ghc.db");
   assert.equal(config.service?.credentialStore, fakeStore);
 });
 

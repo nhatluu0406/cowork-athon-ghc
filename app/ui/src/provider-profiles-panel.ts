@@ -85,7 +85,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const listHeading = el("div", "provider-profiles__list-heading");
   listHeading.append(
     el("h3", "provider-profiles__list-title", "Kết nối đã lưu"),
-    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong Windows keyring."),
+    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong kho mật mã cục bộ."),
   );
   const addBtn = el("button", "provider-profiles__add provider-profiles__add--primary", "Thêm kết nối") as HTMLButtonElement;
   addBtn.type = "button";
