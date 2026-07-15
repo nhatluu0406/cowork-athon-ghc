@@ -8,6 +8,15 @@ import type { ConversationStore } from "./store.js";
 import type { ConversationStatus, ConversationPatch, PersistedActivitySnapshot, RuntimeTurnRecord, CreateConversationInput } from "./types.js";
 import { normalizeTitle } from "./title.js";
 import type { SkillUseMetadata } from "../skills/types.js";
+import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
+import type { CredentialService } from "../credential/credential-service.js";
+import type { ConversationMessage } from "./types.js";
+import { providerEnvSpec } from "../provider/descriptors.js";
+
+/** Narrow view of the OpenAI-compatible chat-completions reply the compaction call reads. */
+interface CompletionResponse {
+  readonly choices?: readonly { readonly message?: { readonly content?: unknown } }[];
+}
 
 export const CONVERSATIONS_PATH = "/v1/conversations";
 export const CONVERSATION_ITEM_PATH = "/v1/conversations/{id}";
@@ -151,7 +160,11 @@ function parseSkillUses(value: unknown): readonly SkillUseMetadata[] | undefined
   });
 }
 
-export function createConversationRouter(store: ConversationStore): BoundaryRouter {
+export function createConversationRouter(
+  store: ConversationStore,
+  profiles?: ProviderProfileStore,
+  credentials?: CredentialService,
+): BoundaryRouter {
   return {
     name: "conversation",
     routes: [
@@ -263,6 +276,84 @@ export function createConversationRouter(store: ConversationStore): BoundaryRout
             ...(skills !== undefined && skills.length > 0 ? { skills } : {}),
           });
           return { status: 200, data: { conversation } };
+        },
+      },
+      {
+        method: "POST",
+        path: "/v1/conversations/{id}/compact",
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const id = requireId(ctx.params);
+          const conversation = await store.get(id);
+          if (conversation === undefined) return { status: 404, data: { error: "not_found" } };
+
+          if (profiles === undefined || credentials === undefined) {
+            const mockSummary = "Lịch sử hội thoại đã được nén cục bộ.";
+            const updated = await store.compact(id, mockSummary);
+            return { status: 200, data: { summary: mockSummary, conversation: updated } };
+          }
+
+          const active = profiles.activeProfile();
+          if (active === undefined) {
+            throw new ConversationRequestError("Không tìm thấy cấu hình provider hoạt động.");
+          }
+
+          let apiKey = "";
+          if (active.credentialRef !== undefined) {
+            const resolved = await credentials.resolveInjection(
+              active.credentialRef,
+              providerEnvSpec(active.providerType, active.envVar)
+            );
+            apiKey = resolved.value;
+          }
+
+          const historyText = conversation.messages
+            .map((m) => `${m.role === "user" ? "Người dùng" : "Assistant"}: ${m.text}`)
+            .join("\n\n");
+
+          const prompt = `Hãy tóm tắt thật ngắn gọn toàn bộ ngữ cảnh cuộc trò chuyện dưới đây thành 1-2 câu để làm ngữ cảnh cho lượt tiếp theo:\n\n${historyText}`;
+
+          // Compaction is destructive: store.compact() replaces the whole transcript with
+          // the summary. Only commit that once a real summary exists — a failed LLM call
+          // must surface as an error with the history intact, never as a fake success.
+          let summary: string;
+          try {
+            const url = `${active.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+            const res = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${apiKey}`,
+              },
+              body: JSON.stringify({
+                model: active.modelId,
+                messages: [{ role: "user", content: prompt }],
+                max_tokens: 150,
+                temperature: 0.3,
+              }),
+            });
+            if (!res.ok) {
+              throw new ConversationRequestError(
+                `Provider trả về HTTP ${res.status} khi nén hội thoại. Lịch sử được giữ nguyên.`,
+              );
+            }
+            const data = (await res.json()) as CompletionResponse;
+            const text = data.choices?.[0]?.message?.content;
+            if (typeof text !== "string" || text.trim().length === 0) {
+              throw new ConversationRequestError(
+                "Provider trả về tóm tắt rỗng. Lịch sử được giữ nguyên.",
+              );
+            }
+            summary = text.trim();
+          } catch (err) {
+            if (err instanceof ConversationRequestError) throw err;
+            // Never attach the raw cause: it can carry the request URL or credential header.
+            throw new ConversationRequestError(
+              "Không gọi được provider để nén hội thoại. Lịch sử được giữ nguyên.",
+            );
+          }
+
+          const updated = await store.compact(id, summary);
+          return { status: 200, data: { summary, conversation: updated } };
         },
       },
     ],
