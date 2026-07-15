@@ -327,7 +327,7 @@ export async function createCoworkService(
         }
       },
     }),
-    createConversationRouter(conversationStore),
+    createConversationRouter(conversationStore, providerProfileStore, credentialService),
     createSkillRouter(skillCatalog),
     createAgentRouter(agentCatalog),
     createTaskRouter(taskStore),

@@ -28,6 +28,7 @@ export interface ConversationStore {
   patch(id: string, patch: ConversationPatch): Promise<ConversationRecord>;
   setActivity(id: string, activity: PersistedActivitySnapshot): Promise<ConversationRecord>;
   appendMessage(id: string, message: AppendMessageInput): Promise<ConversationRecord>;
+  compact(id: string, summary: string): Promise<ConversationRecord>;
   delete(id: string): Promise<boolean>;
   recoverStaleRunning(): Promise<number>;
   getLastActiveId(): Promise<string | null>;
@@ -277,6 +278,39 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
           updatedAt: at,
         };
       });
+    },
+
+    async compact(id, summary) {
+      const record = await readRecord(id);
+      if (record === undefined) throw new Error("Conversation not found");
+
+      const prefix = "[Ngữ cảnh cuộc trò chuyện trước — dùng để trả lời nhất quán; không lặp lại nguyên văn trừ khi được hỏi.]";
+      const suffix = "[Hết ngữ cảnh — trả lời yêu cầu mới bên dưới.]";
+      const msgText = `${prefix}\n- Lịch sử hội thoại cũ đã được dọn dẹp và nén lại thành tóm tắt:\n${summary}\n${suffix}`;
+
+      const at = clock();
+      const summaryMessage: ConversationMessage = {
+        id: randomUUID(),
+        role: "assistant",
+        text: msgText,
+        at,
+      };
+
+      const updated: ConversationRecord = {
+        ...record,
+        messages: [summaryMessage],
+        updatedAt: at,
+      };
+
+      await writeRecord(updated);
+
+      const index = await readIndex();
+      const next = index.conversations.map((c) =>
+        c.id === id ? { ...c, messageCount: 1, updatedAt: at } : c,
+      );
+      await writeIndex(next);
+
+      return updated;
     },
 
     async delete(id) {
