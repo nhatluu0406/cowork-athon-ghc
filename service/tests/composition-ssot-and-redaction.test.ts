@@ -381,3 +381,32 @@ test("FIX-5.5: value-based redaction is wired into the LIVE session-stream error
     await running.service.stop();
   }
 });
+
+test("BOOT resilience: a persisted base_url whose hostname now resolves PRIVATE must not kill the service", async () => {
+  const settingsFs = memorySettingsFs();
+  const seed = await openSettingsStore({ fs: settingsFs });
+  await seed.setProviderBaseUrl(CUSTOM_OPENAI_COMPAT_ID, "https://intranet-resolved.example.test/v1");
+
+  // The network's DNS (split-horizon / captive portal / VPN change) now answers with a private
+  // address for the persisted hostname — the exact live-test lockout scenario (192.168.11.1).
+  const { running, deps } = await startCoworkService(
+    baseOptions({
+      settingsFs,
+      dnsResolver: fakeResolver({
+        "intranet-resolved.example.test": { address: "192.168.11.1", family: 4 },
+      }),
+    }),
+  );
+  try {
+    // Boot SUCCEEDED (no SsrfBlockedError escaping composition) — that is the fix. The refused
+    // endpoint was skipped: the port holds nothing unvalidated.
+    assert.equal(deps.providerPort.baseUrlFor(CUSTOM_OPENAI_COMPAT_ID), undefined);
+    // Settings remain reachable so the user can FIX the URL (no more lockout).
+    const view = await boundedFetch(`${running.baseUrl}/v1/settings`, {
+      headers: authHeaders(running.clientToken),
+    });
+    assert.equal(view.status, 200);
+  } finally {
+    await running.service.stop();
+  }
+});

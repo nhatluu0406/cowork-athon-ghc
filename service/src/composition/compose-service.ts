@@ -194,7 +194,16 @@ export async function createCoworkService(
     port: providerPort,
     modelConfig,
   });
-  await profileRuntimeBridge.syncActiveProfile();
+  try {
+    await profileRuntimeBridge.syncActiveProfile();
+  } catch {
+    // BOOT resilience: the active profile's persisted base_url may no longer pass the SSRF
+    // policy (e.g. the network's DNS now resolves the hostname to a private address after a
+    // VPN/network change). Refusing to START would lock the user out of the Settings screen
+    // needed to fix it. Skip the sync: the port holds no unvalidated endpoint, the provider
+    // surfaces honestly as unverified/not-ready, and the profiles router still propagates the
+    // same error to the user on an explicit runtime re-test/switch.
+  }
 
   const profileConnectionTester = createProviderConnectionTester({
     credentials: credentialService,
@@ -445,7 +454,17 @@ async function seedFromSettings(
   }
   for (const provider of store.listProviderSettings()) {
     if (provider.baseUrl !== undefined) {
-      await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      try {
+        await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      } catch {
+        // A persisted base_url that no longer passes the SSRF policy (e.g. the network's DNS now
+        // resolves the hostname to a private address — split-horizon/VPN change) must NOT kill
+        // the whole service at boot: that locks the user out of the very Settings screen needed
+        // to fix it. Skip seeding this endpoint — the port never receives an unvalidated URL, so
+        // the provider honestly surfaces as "not configured/unverified" until the user re-tests
+        // or edits it in Settings. The persisted value itself is left untouched, and the
+        // credential ref below still seeds so a later re-test in Settings works immediately.
+      }
     }
     if (provider.credentialRef !== undefined) {
       providerPort.configureCredential(provider.providerId, provider.credentialRef);
