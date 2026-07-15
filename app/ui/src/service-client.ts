@@ -245,6 +245,20 @@ export interface EnabledSkillSnapshot {
   readonly content: string;
 }
 
+/** Secret-free MCP server row from GET /v1/mcp/servers (Wave 2 Phase 1). */
+export interface McpServerListItem {
+  readonly id: string;
+  readonly name: string;
+  readonly command?: string;
+  readonly url?: string;
+  readonly enabled: boolean;
+  readonly status: string;
+  readonly connection: string;
+  readonly hasHeaderSecret: boolean;
+  readonly toolCount: number;
+  readonly updatedAt: string;
+}
+
 /** Metadata persisted for workspace text-file attachments (no raw content). */
 export type AttachmentInclusionStatus =
   | "selected"
@@ -490,6 +504,25 @@ export interface ServiceClient {
     },
   ): Promise<SkillView>;
   deleteSkill(id: string): Promise<void>;
+  listMcpServers(): Promise<readonly McpServerListItem[]>;
+  createMcpServer(input: {
+    readonly id?: string;
+    readonly name: string;
+    readonly command?: string;
+    readonly url?: string;
+    readonly headerSecret?: string;
+  }): Promise<McpServerListItem>;
+  updateMcpServer(
+    id: string,
+    input: {
+      readonly name?: string;
+      readonly command?: string;
+      readonly url?: string;
+      readonly headerSecret?: string | null;
+    },
+  ): Promise<McpServerListItem>;
+  deleteMcpServer(id: string): Promise<void>;
+  setMcpServerEnabled(id: string, enabled: boolean): Promise<McpServerListItem>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -877,6 +910,37 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
     deleteSkill: async (id) => {
       await call<{ ok: boolean }>(`/v1/skills/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
+
+    listMcpServers: async () =>
+      (await call<{ servers: readonly McpServerListItem[] }>("/v1/mcp/servers")).servers,
+
+    createMcpServer: async (input) =>
+      (
+        await call<{ server: McpServerListItem }>("/v1/mcp/servers", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+      ).server,
+
+    updateMcpServer: async (id, input) =>
+      (
+        await call<{ server: McpServerListItem }>(`/v1/mcp/servers/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        })
+      ).server,
+
+    deleteMcpServer: async (id) => {
+      await call<{ ok: boolean }>(`/v1/mcp/servers/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+
+    setMcpServerEnabled: async (id, enabled) =>
+      (
+        await call<{ server: McpServerListItem }>(
+          `/v1/mcp/servers/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`,
+          { method: "POST", body: "{}" },
+        )
+      ).server,
 
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {
