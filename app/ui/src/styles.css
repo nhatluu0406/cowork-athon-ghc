@@ -2448,3 +2448,69 @@ body {
   border-color: rgba(222, 213, 201, 0.95);
   border-radius: 16px;
 }
+
+/* Local app lock (ADR 0007) — minimal gate, token-styled */
+.app-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--canvas, #111315) 78%, transparent);
+  backdrop-filter: blur(6px);
+}
+.app-lock__card {
+  width: min(420px, calc(100vw - 32px));
+  padding: 28px 24px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle, rgba(255,255,255,0.12));
+  background: var(--surface-raised, #1c2126);
+  box-shadow: var(--shadow-lg, 0 18px 48px rgba(0,0,0,0.35));
+}
+.app-lock__title {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  color: var(--text-primary, #f4f6f8);
+}
+.app-lock__copy {
+  margin: 0 0 20px;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--text-secondary, #a7b0b8);
+}
+.app-lock__form {
+  display: grid;
+  gap: 12px;
+}
+.app-lock__label {
+  display: grid;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--text-muted, #8b949e);
+}
+.app-lock__input {
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong, rgba(255,255,255,0.18));
+  background: var(--surface-2, #15191d);
+  color: var(--text-primary, #f4f6f8);
+}
+.app-lock__error {
+  margin: 0;
+  color: var(--danger, #f07178);
+  font-size: 0.85rem;
+}
+.app-lock__submit {
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--accent, #e87722);
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-lock__submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
