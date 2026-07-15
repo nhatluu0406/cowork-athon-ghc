@@ -31,7 +31,6 @@ import { getShellBridge } from "./bridge.js";
 import {
   createConversationManager,
   formatConversationMeta,
-  needsContinuation,
   type ConversationManager,
   type RuntimePhase,
 } from "./conversation-controller.js";
@@ -82,6 +81,7 @@ import {
 } from "./attachment-pending.js";
 import type { AttachmentMetadata, SkillUseMetadata } from "./service-client.js";
 import {
+  beginTurnFinalization,
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
   shouldPollSessionView,
@@ -91,6 +91,7 @@ import {
   mapTerminalToRuntimePhase,
   type ResolvedFinalText,
 } from "./session-finalization.js";
+import { createTurnTimingTracker, type TurnTimingTracker } from "./turn-timing.js";
 import { createProductIcon } from "./product-icons.js";
 import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
 import { createAppFrame, type AppFrameDom } from "./ui-shell/create-app-frame.js";
@@ -149,6 +150,8 @@ interface AppState {
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
+  finalizedRuntimeSessions: Set<string>;
+  turnTiming: TurnTimingTracker;
   currentFileActionIntent: FileActionIntent | null;
   fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
@@ -746,6 +749,7 @@ async function finalizeFileMutationReview(
       after,
     });
     state.fileReviews = [...state.fileReviews, review];
+    state.turnTiming.mark("FILE_VERIFIED", relativePath);
     refreshActivityUi(state, dom);
     void persistActivity(state);
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
@@ -1085,7 +1089,10 @@ async function finalizeConversationTurn(
   handlers: Parameters<typeof renderState>[2],
   sessionId: string,
 ): Promise<void> {
-  if (view.terminal === null || state.finalizingTurn) return;
+  if (view.terminal === null) return;
+  if (!beginTurnFinalization(state.finalizedRuntimeSessions, sessionId, state.finalizingTurn)) {
+    return;
+  }
   const terminal = view.terminal;
   state.finalizingTurn = true;
   stopStreamWatchdog(state);
@@ -1135,6 +1142,12 @@ async function finalizeConversationTurn(
   updateAssistantBubble(state, displayText);
   setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
+  state.turnTiming.mark("FINAL_RESPONSE");
+  const timingReport = state.turnTiming.report();
+  if (state.settings?.general.verboseLogging === true) {
+    (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
+      timingReport;
+  }
 
   const phase =
     terminal === "completed"
@@ -1184,8 +1197,16 @@ function bindEvStream(
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
       refreshActivityUi(state, dom);
+      if (event.kind === "token" && event.delta.length > 0) {
+        state.turnTiming.mark("FIRST_TOKEN");
+      }
       if (event.kind === "tool_call") {
-        void captureBeforeOnToolStart(state, event);
+        if (event.status === "running") {
+          state.turnTiming.mark("TOOL_REQUEST", event.toolName);
+          void captureBeforeOnToolStart(state, event);
+        } else if (event.status === "completed" || event.status === "errored" || event.status === "cancelled") {
+          state.turnTiming.mark("TOOL_FINISHED", event.toolName);
+        }
       }
       if (event.kind === "file_mutation") {
         const task = finalizeFileMutationReview(
@@ -1202,6 +1223,9 @@ function bindEvStream(
     onView: (view) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
+      if (view.text.trim().length > 0) {
+        state.turnTiming.mark("FIRST_TOKEN");
+      }
       state.lastView = view;
       state.assistantText = view.text;
       updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
@@ -1314,7 +1338,9 @@ async function switchConversation(
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
   await state.conv.select(id);
-  state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
+  state.continuationUnlocked = true;
+  state.finalizedRuntimeSessions.clear();
+  state.finalizingTurn = false;
   loadActivityFromRecord(state, state.conv.state.activeRecord);
   renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
   restoreComposerDraft(state, dom, id);
@@ -1571,6 +1597,7 @@ async function sendPrompt(
   resetLiveActivity(state);
   state.currentFileActionIntent = detectFileActionIntent(prompt);
   state.fileVerificationTasks.clear();
+  state.turnTiming.reset();
   const includedMetadata = dispatchPlan.includedMetadata;
   appendMessage(
     dom,
@@ -1605,6 +1632,7 @@ async function sendPrompt(
   const dispatchText = dispatchPlan.text;
 
   const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+  state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
   if (!result.accepted) {
     state.pendingAttachments = pendingCleared;
     if (result.reason === "session_completed") {
@@ -1717,6 +1745,11 @@ export function mountCoworkApp(root: HTMLElement): void {
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
+    finalizedRuntimeSessions: new Set(),
+    turnTiming: createTurnTimingTracker({
+      enabled: () => state.settings?.general.verboseLogging === true,
+      log: (line) => console.info(line),
+    }),
     currentFileActionIntent: null,
     fileVerificationTasks: new Set(),
     pendingAttachments: [],
@@ -1915,6 +1948,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
+              state.turnTiming.mark("PERMISSION_SHOWN", request.requestId);
               void capturePermissionBeforeSnapshot(state, request);
               const target =
                 request.action.targetPath !== undefined
@@ -1934,6 +1968,12 @@ export function mountCoworkApp(root: HTMLElement): void {
             },
             onDecision: ({ request, outcome, requestedDecision }) => {
               touchStreamActivity(state);
+              if (
+                outcome.status === "resolved" &&
+                requestedDecision !== "deny"
+              ) {
+                state.turnTiming.mark("PERMISSION_APPROVED", request.requestId);
+              }
               const target =
                 request.action.targetPath !== undefined
                   ? toRelativePath(request.action.targetPath, state.activeWorkspace)
