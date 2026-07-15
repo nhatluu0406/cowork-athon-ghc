@@ -109,6 +109,24 @@ request create file
 4. Branch prompt ghép system prompt của agent vào đầu message (child seam chưa có slot system
    prompt per-session).
 
+## Hotfix: app tự brick khi settings chứa endpoint http loopback (2026-07-16)
+
+| Item | Status |
+|---|---|
+| Sự cố | Từ 2026-07-14 17:25, mọi lần mở app packaged đều fail: `settings_only_failed: Outbound target refused by SSRF policy (scheme_not_https): http:` — service (kể cả tier settings-only) không start, renderer kẹt "Không khả dụng", mọi panel trống, không tương tác được |
+| Root cause | Profile provider custom với `baseUrl http://127.0.0.1:8080/v1` được LƯU không qua SSRF check, nhưng lúc boot `seedFromSettings` / `syncActiveProfile` re-validate bằng release SSRF policy và THROW — giết toàn bộ service start. App tự brick bằng chính settings đã persist |
+| Fix | `compose-service.ts`: hai call site boot-time bắt `SsrfBlockedError` và degrade thành "endpoint chưa cấu hình" (policy vẫn chặn ở runtime; chỉ thu hẹp blast radius). Runtime configure/switch vẫn trả lỗi typed như cũ |
+| Regression test | `service/tests/compose-seed-ssrf-resilience.test.ts` — tái hiện đúng document settings gây brick; compose + start + health phải PASS |
+| Verified | Test RED→GREEN; typecheck exit 0; chạy Electron shell thật với settings brick thực tế → `settings_only_ready`, `/v1/health` trả 401 khi thiếu token (service sống, token guard đúng) |
+
+### Việc còn mở (quyết định product/security)
+
+1. **Save-path chưa SSRF-validate**: profile store persist `baseUrl` tự do — nên validate lúc
+   create/update để từ chối sớm với lỗi typed (không còn brick, nhưng bất đối xứng vẫn còn).
+2. **Chính sách http-on-loopback**: user thực tế dùng local gateway `http://127.0.0.1:8080/v1`
+   (private-GPT). Release policy hiện cấm http kể cả loopback ⇒ local LLM gateway không dùng
+   được trong release build. Cần quyết định product + ADR nếu muốn nới cho loopback tường minh.
+
 ## MS365 connector + SharePoint slice — D2 (2026-07-14)
 
 | Item | Status |

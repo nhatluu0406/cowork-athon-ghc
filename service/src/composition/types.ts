@@ -37,6 +37,11 @@ import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
+  /**
+   * Sink for redacted, non-secret boot diagnostics (e.g. a persisted endpoint skipped by the
+   * SSRF policy). The shell can wire this into the lifecycle log. Default: `console.warn`.
+   */
+  readonly onBootDiagnostic?: (line: string) => void;
   /** Persistence seam for the settings store. Default: node fs at {@link settingsFilePath}. */
   readonly settingsFs?: SettingsFs;
   /** Settings file path when {@link settingsFs} is not supplied. Default: `.runtime/settings.json`. */
