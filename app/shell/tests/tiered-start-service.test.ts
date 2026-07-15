@@ -67,3 +67,18 @@ test("falls back to settings-only on RuntimeSpawnError when enabled", async () =
   const started = await start();
   assert.equal(started, settingsHandle);
 });
+
+test("a live-spawn-failure fallback preserves the settings-only handle's honest tier tag", async () => {
+  // The ServiceController reads `started.tier` to decide `runningTier` — the tiered composer
+  // must hand the settings-only handle through unmodified so a fallback never gets reported as
+  // "live" by the controller (CGHC connectLive idempotence fix).
+  const { RuntimeSpawnError } = await import("@cowork-ghc/service");
+  const taggedSettingsHandle: StartedService = { ...settingsHandle, tier: "settings_only" };
+  const start = createTieredStartService(
+    () => Promise.reject(new RuntimeSpawnError("OpenCode binary not found (ENOENT)", "ENOENT")),
+    () => Promise.resolve(taggedSettingsHandle),
+    { fallbackOnLiveSpawnFailure: true },
+  );
+  const started = await start();
+  assert.equal(started.tier, "settings_only");
+});

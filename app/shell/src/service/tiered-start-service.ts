@@ -73,6 +73,7 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
     return {
       baseUrl: running.baseUrl,
       token: running.clientToken,
+      tier: "settings_only",
       stop: () => running.service.stop(),
     };
   };

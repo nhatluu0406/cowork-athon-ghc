@@ -51,7 +51,12 @@ export interface PickedWorkspaceFolder {
  * coarse acknowledgement the UI can use to show a transient "connecting…" state.
  */
 export interface ConnectLiveResult {
-  /** `true` once the shell has attempted the live restart (NOT a promise that it succeeded). */
+  /**
+   * `true` once the shell has attempted a live restart (NOT a promise that it succeeded).
+   * `false` when the service was already live and no restart was needed (idempotent
+   * short-circuit) — the running service and its in-memory state (e.g. MS365 session scope)
+   * were left untouched.
+   */
   readonly restarted: boolean;
 }
 
@@ -70,14 +75,20 @@ export interface CoworkShellBridge {
   /** Open the OS file picker for workspace text attachments (scoped to active workspace). */
   readonly pickWorkspaceFile: (workspaceRoot: string) => Promise<PickedWorkspaceFile>;
   /**
-   * Restart the loopback service so it re-resolves its launch config from the now-persisted
-   * onboarding settings — i.e. transition from the settings-only onboarding service to the LIVE
-   * runtime (spawn OpenCode). User-gated: the renderer calls this from an explicit "Connect" action
-   * once a workspace + provider + key + default model are configured. After it resolves, the
-   * renderer re-runs the readiness handshake to pick up the new base URL + token (or an honest
-   * not_connected if the live start failed).
+   * Ensure the loopback service is live, i.e. transition from the settings-only onboarding
+   * service to the LIVE runtime (spawn OpenCode) when it is not already live. User-gated: the
+   * renderer calls this from an explicit "Connect" action, and again on every chat turn as a
+   * cheap idempotent check.
+   *
+   * Idempotent by default: when the service is ALREADY live, this is a no-op (`{ restarted:
+   * false }`) — it does NOT stop/start the running service or the supervised OpenCode child.
+   * Pass `{ force: true }` to force a stop+restart, which re-resolves the launch config from the
+   * now-persisted onboarding settings — required after the user changes provider/model/credential
+   * settings so the next turn picks up the new config. After it resolves, the renderer re-runs the
+   * readiness handshake to pick up the new base URL + token (or an honest not_connected if the
+   * live start failed).
    */
-  readonly connectLive: () => Promise<ConnectLiveResult>;
+  readonly connectLive: (opts?: { readonly force?: boolean }) => Promise<ConnectLiveResult>;
   /** Synchronize the native title-bar overlay with the renderer theme. */
   readonly setWindowTheme: (theme: WindowTheme) => Promise<void>;
 }

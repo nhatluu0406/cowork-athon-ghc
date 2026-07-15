@@ -28,6 +28,7 @@ import {
   type ActivityPanelDom,
 } from "./activity-panel.js";
 import { getShellBridge } from "./bridge.js";
+import { connectLiveOptsFor, nextLiveConfigDirtyAfterConnect } from "./live-config-dirty.js";
 import {
   createConversationManager,
   formatConversationMeta,
@@ -172,6 +173,19 @@ interface AppState {
   pendingAttachments: PendingAttachment[];
   continuationUnlocked: boolean;
   localServiceReady: boolean;
+  /**
+   * Set whenever the persisted launch config the RUNNING live service was built from may now be
+   * stale: provider/model/credential changes (provider profiles panel `onSettingsUpdated`), or a
+   * workspace switch (`onActivated`). This matters because `composeLiveCoworkService` bakes both
+   * the provider/model AND the workspace root into the running service at start time — the
+   * OpenCode child's `cwd`, the workspace permission guard, and the provider client are all fixed
+   * for the lifetime of that running handle (`service/src/composition/compose-live.ts`
+   * `grantWorkspace({ rootPath: workspaceId })` — one grant per running service, not per
+   * request/session). So switching workspace or provider config while already live needs a forced
+   * reconnect for the change to actually take effect; `ensureLive` clears this flag once that
+   * reconnect has run.
+   */
+  liveConfigDirty: boolean;
   connectionTestState: ConnectionTestState;
   activeSurface: ProductSurfaceId;
   workMode: WorkMode;
@@ -1383,11 +1397,12 @@ async function ensureLive(
   state: AppState,
   readiness: ReturnType<typeof createReadinessController>,
 ): Promise<ServiceClient> {
-  await getShellBridge().connectLive();
+  await getShellBridge().connectLive(connectLiveOptsFor(state.liveConfigDirty));
   const client = await awaitLiveClient(state, readiness);
   const bootstrap = await getShellBridge().getBootstrap();
   if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) throw new Error("Shell chưa cung cấp kết nối live.");
   state.bootstrap = bootstrap;
+  state.liveConfigDirty = nextLiveConfigDirtyAfterConnect();
   return client;
 }
 
@@ -1882,6 +1897,7 @@ export function mountCoworkApp(root: HTMLElement): void {
     pendingAttachments: [],
     continuationUnlocked: true,
     localServiceReady: false,
+    liveConfigDirty: false,
     connectionTestState: "unknown",
     activeSurface: "cowork",
     workMode: "cowork",
@@ -2027,6 +2043,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             onActivated: (rootPath) => {
               state.activeWorkspace = rootPath;
+              state.liveConfigDirty = true;
               void refreshSettings(state, dom, handlers);
               void workspaceNavigator?.refresh();
               void codeNavigator?.refresh();
@@ -2070,6 +2087,7 @@ export function mountCoworkApp(root: HTMLElement): void {
             onSettingsUpdated: (view) => {
               state.settings = view;
               state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              state.liveConfigDirty = true;
               void workspaceNavigator?.refresh();
               void codeNavigator?.refresh();
               renderState(dom, state, handlers);

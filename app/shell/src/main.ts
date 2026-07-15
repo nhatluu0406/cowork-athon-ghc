@@ -33,6 +33,7 @@ import { hardenWebContents } from "./security/navigation.js";
 import { installCsp } from "./security/csp.js";
 import { APP_ORIGIN, installAppProtocol, registerAppScheme } from "./security/app-protocol.js";
 import { ServiceController, type StartService } from "./service/service-controller.js";
+import { createConnectLive } from "./service/connect-live.js";
 import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
@@ -258,14 +259,14 @@ void runShellLifecycle({
     installCsp(session.defaultSession);
     Menu.setApplicationMenu(null);
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
-    // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
-    // now re-resolves the persisted config). Stop+start are each idempotent + own the child.
+    // `connectLive` is idempotent when the service is ALREADY live (no stop/start, no dropped
+    // in-memory state — e.g. the MS365 manual token / session scope survive a chat turn) and only
+    // forces a stop+restart (re-resolving the persisted config) when the renderer explicitly asks
+    // for it — the settings-only → live transition, and after a provider-config change. Stop+start
+    // are each idempotent + own the child.
     registerIpcHandlers({
       getBootstrap: () => shellController!.getBootstrap(),
-      restartService: async () => {
-        await shellController!.stop();
-        await shellController!.startLive();
-      },
+      connectLive: createConnectLive(shellController),
     });
     createMainWindow();
 

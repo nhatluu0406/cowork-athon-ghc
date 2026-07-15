@@ -666,6 +666,52 @@ node --import tsx --test tests/ms365-session-scope.test.ts (service)     → 9/9
    `createSession`/`setSessionScope`/`sendMessage` khác (những nhánh có throw), không có
    "completed" giả nào được hiển thị.
 
+## Sửa lỗi restart-mỗi-lượt của `connectLive` (2026-07-15)
+
+**Bug đã sửa:** trước đây `IpcChannel.ConnectLive` luôn gọi `restartService()` vô điều kiện —
+tức là DỪNG rồi KHỞI ĐỘNG LẠI toàn bộ loopback service + child OpenCode trên **mỗi lượt chat**
+(cả tab cowork chính lẫn tab MS365), vì `ensureLive`/`ensureRuntimeSession` (tab chính) và
+`createMsChatDeps.createSession` (tab MS365) đều gọi `connectLive()` mỗi lần gửi tin nhắn. Hệ quả:
+mỗi lượt tốn thêm ~2.5-3s (đo từ `service-lifecycle.log`), và vì service bị dừng/khởi động lại nên
+token MS365 thủ công (giữ in-memory do giới hạn kích thước Windows keyring) cùng session-scope
+MS365 bị xoá — tab MS365 hỏng ngay ở lượt kế tiếp.
+
+**Đã sửa:** `ServiceController` (`app/shell/src/service/service-controller.ts`) giờ theo dõi
+tier đang chạy (`settings_only` | `live`) qua getter `runningTier`, dựa trên field `tier` optional
+trên `StartedService` — cả `createSettingsOnlyStartService` và `toStartedService` (live adapter)
+đều gắn tag trung thực để một fallback từ live xuống settings-only KHÔNG BAO GIỜ tự nhận là live.
+IPC `connectLive` giờ nhận tham số optional `{ force?: boolean }`
+(`app/shell/src/service/connect-live.ts`, wired qua `register-handlers.ts` + `main.ts`): nếu
+service ĐANG chạy tier `live` và không `force`, trả `{ restarted: false }` ngay — không dừng/khởi
+động lại, không mất state in-memory. Renderer (`app/ui/src/app-shell.ts`) thêm cờ
+`state.liveConfigDirty`, bật lên khi người dùng đổi provider/model/credential
+(`onSettingsUpdated`) hoặc đổi workspace (`onActivated`) — vì `compose-live.ts` bake cả provider
+lẫn workspace-root vào service đang chạy tại thời điểm start (`grantWorkspace({ rootPath:
+workspaceId })`, một grant cho cả vòng đời service, không phải per-request) — nên đổi 1 trong 2
+thứ đó trong lúc đang live PHẢI force reconnect thì thay đổi mới có hiệu lực. `ensureLive` truyền
+`{ force: true }` đúng khi cờ bật, và xoá cờ sau khi reconnect thành công.
+
+### Bằng chứng đã xác minh (verified)
+
+- `app/shell/tests/service-controller.test.ts` — `runningTier` phản ánh đúng tier kể cả khi
+  fallback bị gắn tag trung thực; reset về `null` sau `stop()`/start thất bại.
+- `app/shell/tests/connect-live.test.ts` — already-live + no force → `{restarted:false}`, KHÔNG
+  gọi `stop`/`startLive`; force:true → luôn restart; settings-only đang chạy → vẫn restart lên
+  live (giữ nguyên transition onboarding cũ).
+- `app/shell/tests/tiered-start-service.test.ts` — tag tier sống sót qua fallback live→settings-only.
+- `app/ui/tests/live-config-dirty.test.ts` + `app/ui/tests/ms-chat-controller.test.ts` (regression,
+  17/17 pass) — cờ dirty quyết định đúng tham số `force` và được xoá sau khi connect.
+- `npm run typecheck` — pass (root `tsc -b`).
+
+### Giới hạn trung thực (honesty limitations)
+
+- Chưa chạy packaged live verification đo lại thời gian thực tế của từng lượt (chỉ có bằng
+  chứng đơn vị + lifecycle-log cũ chứng minh vấn đề); nên đo lại `service-lifecycle.log` trong
+  lần verify đóng gói kế tiếp để xác nhận số liệu ~2.5-3s/lượt đã biến mất.
+- `session-panel.ts` (một panel demo cũ tách biệt khỏi `app-shell.ts`) vẫn gọi
+  `connectLive()` không tham số — vẫn hợp lệ (tham số optional) và không được đưa vào phạm vi cờ
+  dirty vì nó không dùng `AppState`.
+
 ## Microsoft 365 & Claude Code surfaces (2026-07-13)
 
 | Item | Status |
