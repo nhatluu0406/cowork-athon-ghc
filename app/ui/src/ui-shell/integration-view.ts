@@ -1,5 +1,6 @@
 import { getIntegrationSurfaceAdapter } from "../integration-surface-adapters.js";
 import type { ProductSurfaceDefinition } from "../surface-registry.js";
+import { renderRemotePairing, type RemotePairingClient } from "../remote-pairing-view.js";
 import { el, icon } from "./dom-utils.js";
 
 export function createIntegrationView(): HTMLElement {
@@ -9,7 +10,33 @@ export function createIntegrationView(): HTMLElement {
   return root;
 }
 
-export function renderIntegrationSurface(container: HTMLElement, surface: ProductSurfaceDefinition): void {
+/**
+ * The Dispatch surface waits on the D1 backend, but phone access does not: the remote gateway
+ * is built and running, so this surface doubles as the quick way to pair a phone without
+ * typing `/remote`. The D1 status stays honest — pairing a phone does not mean D1 is
+ * integrated, and nothing here renders D1 data.
+ */
+function appendRemoteQuickAccess(mount: HTMLElement, client: RemotePairingClient): void {
+  const section = el("section", "integration-remote");
+  section.append(
+    el("h2", "integration-remote__title", "Truy cập nhanh bằng điện thoại"),
+    el(
+      "p",
+      "integration-remote__copy",
+      "Ghép nối điện thoại với gateway remote của máy này để theo dõi phiên và duyệt quyền. Độc lập với backend D1.",
+    ),
+  );
+  const body = el("div", "integration-remote__body", "Đang tải trạng thái remote…");
+  section.append(body);
+  mount.append(section);
+  void renderRemotePairing(client, body);
+}
+
+export function renderIntegrationSurface(
+  container: HTMLElement,
+  surface: ProductSurfaceDefinition,
+  remoteClient?: RemotePairingClient | null,
+): void {
   container.replaceChildren();
   const adapter = getIntegrationSurfaceAdapter(surface.id);
 
@@ -52,5 +79,8 @@ export function renderIntegrationSurface(container: HTMLElement, surface: Produc
   }
 
   mount.append(card);
+  if (surface.id === "dispatch" && remoteClient != null) {
+    appendRemoteQuickAccess(mount, remoteClient);
+  }
   container.append(mount);
 }

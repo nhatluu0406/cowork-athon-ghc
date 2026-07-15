@@ -2065,6 +2065,39 @@ textarea,
   box-shadow: var(--shadow-sm);
 }
 
+/* Remote quick-access on the Dispatch surface: a real, working section that sits below the
+   honest "awaiting D1" card, so it must read as separate from the D1 placeholder. */
+.integration-remote {
+  width: min(620px, 100%);
+  margin-top: 18px;
+  padding: 24px 30px 28px;
+  border: 1px solid var(--line-warm);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.integration-remote__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.integration-remote__copy {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.integration-remote__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .integration-empty__icon {
   width: 48px;
   height: 48px;

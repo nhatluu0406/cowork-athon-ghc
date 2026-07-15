@@ -900,7 +900,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface);
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
   }
 
   if (isCoworkSurface) {
