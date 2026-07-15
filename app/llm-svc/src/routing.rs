@@ -32,16 +32,19 @@ impl NlpMode {
     }
 
     /// Check if this mode requires local models
+    #[allow(dead_code)]
     pub fn requires_local_models(self) -> bool {
         matches!(self, NlpMode::CloudWithLocalPreprocess | NlpMode::LocalOnly)
     }
 
     /// Check if this mode allows cloud fallback
+    #[allow(dead_code)]
     pub fn allows_cloud_fallback(self) -> bool {
         matches!(self, NlpMode::CloudWithLocalPreprocess)
     }
 
     /// Check if cloud is required in this mode
+    #[allow(dead_code)]
     pub fn requires_cloud(self) -> bool {
         matches!(self, NlpMode::CloudOnly)
     }
