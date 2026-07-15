@@ -137,7 +137,9 @@ export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
 
   async function evaluate(rawUrl: string): Promise<SsrfDecision> {
     const url = parseUrl(rawUrl);
-    if (url === null) return { allowed: false, reason: "invalid_url", detail: rawUrl };
+    // NEVER echo the raw input: a malformed paste may contain a credential. The reason
+    // alone is diagnosable; the user knows what they typed.
+    if (url === null) return { allowed: false, reason: "invalid_url", detail: "unparseable URL" };
 
     const normalized = url.href.replace(/\/+$/u, "");
     if (

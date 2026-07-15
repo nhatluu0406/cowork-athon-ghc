@@ -304,3 +304,32 @@ test("allowPrivateNetwork=true: loopback is UNAFFECTED — still refused unless 
     (err: unknown) => err instanceof SsrfBlockedError && err.reason === "loopback",
   );
 });
+
+test("allowPrivateNetwork=true: 0.0.0.0 / :: / unparseable answers stay REFUSED (never-allowed loopback bucket)", async () => {
+  const ssrf = createSsrfPolicy({
+    resolver: async (host) => {
+      if (host === "zero.example.test") return [{ address: "0.0.0.0", family: 4 }];
+      if (host === "unspec6.example.test") return [{ address: "::", family: 6 }];
+      return [{ address: "not-an-ip", family: 4 }];
+    },
+    allowPrivateNetwork: true,
+  });
+  const zero = await ssrf.evaluate("https://zero.example.test/v1");
+  assert.equal(zero.allowed, false);
+  assert.equal(!zero.allowed && zero.reason, "loopback");
+  const unspec = await ssrf.evaluate("https://unspec6.example.test/v1");
+  assert.equal(unspec.allowed, false);
+  assert.equal(!unspec.allowed && unspec.reason, "loopback");
+  const junk = await ssrf.evaluate("https://junk.example.test/v1");
+  assert.equal(junk.allowed, false);
+  assert.equal(!junk.allowed && junk.reason, "loopback");
+});
+
+test("invalid_url refusal never echoes the raw input (a malformed paste may contain a credential)", async () => {
+  const ssrf = createSsrfPolicy({ resolver: async () => [] });
+  const secretish = "http://:sk-THISCOULDBEATOKEN@[bad";
+  const decision = await ssrf.evaluate(secretish);
+  assert.equal(decision.allowed, false);
+  assert.equal(!decision.allowed && decision.reason, "invalid_url");
+  assert.ok(!decision.allowed && !decision.detail.includes("THISCOULDBEATOKEN"), "raw input must not leak into detail");
+});
