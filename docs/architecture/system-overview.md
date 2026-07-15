@@ -4,95 +4,35 @@ status: "active"
 updated_at: "2026-07-15"
 ---
 
-# Tổng quan kiến trúc
+# Tổng quan kiến trúc V2
 
 ```text
 Electron renderer
-→ typed preload / shell bridge
+→ typed preload
 → loopback local application service
+→ SQLite repositories + encrypted secret vault
 → supervised OpenCode runtime
-→ active provider profile / LLM endpoint
+→ provider / MCP / workspace
 ```
 
-## Desktop shell
+## Data boundary
 
-- Electron main process sở hữu BrowserWindow, native titlebar overlay, service/runtime lifecycle và allow-listed IPC.
-- Renderer không có Node.js access trực tiếp.
-- Commercial UI V3 dùng product rail, surface-specific layout, light/dark semantic tokens và native Windows controls.
+SQLite at `<userData>/cowork-ghc.db` becomes the source of truth for local user, settings, provider profiles, encrypted secret records, conversations/messages, Skill state and MCP config.
 
-## Local service
+Skill files and workspace files remain on filesystem. File Work Review binary/text snapshots remain filesystem artifacts with DB references.
 
-Service giữ business logic và boundary:
+## Secret boundary
 
-- workspace validation và file access;
-- conversation persistence;
-- provider profiles và connection testing;
-- credential references;
-- Skills catalog/CRUD;
-- permission gate;
-- runtime event mapping;
-- File Work Review snapshots;
-- settings/diagnostics.
+Local password derives a key-encryption-key using scrypt. A random vault master key is wrapped with AES-256-GCM. Provider/MS365/MCP secrets are encrypted with the vault master key. The master key exists only in memory after unlock.
 
-Service bind loopback và dùng authenticated local boundary.
+## Runtime boundary
 
-## Persistence / database
+OpenCode remains a supervised exact pin. Runtime upgrade requires a server-contract matrix; it is not coupled to the database migration.
 
-POC hiện không dùng SQL database.
+## Extension boundary
 
-- Conversation/index/settings/profile/Skill-enabled state: local JSON files, ghi atomically bằng temporary file + rename khi phù hợp.
-- API secrets: Windows Credential Manager thông qua `@napi-rs/keyring`.
-- Runtime/process identity: `.runtime` hoặc application profile data.
-- Generated reports/screenshots không phải source of truth.
+`Kỹ năng & MCP` is a separate product surface. Skills use native runtime load-on-demand; MCP server config and active state are service-owned. Cowork/Workspace only display active summaries.
 
-## Provider boundary
+## Conversation boundary
 
-`ProviderProfileStore` quản lý nhiều profile secret-free. Credential được namespace theo profile ID trong keyring. Runtime resolver chuyển active profile thành OpenCode configuration.
-
-Current provider UX:
-
-- DeepSeek preset;
-- custom OpenAI-compatible endpoint;
-- explicit model ID;
-- connection test/readiness.
-
-Planned extension: call OpenAI-compatible `GET /models` when endpoint supports it, with manual model ID fallback. Discovery failure must not prevent manual configuration.
-
-## Permission boundary
-
-File mutation và command execution phải qua permission policy/gate. Composer exposes permission mode, but execution boundary remains authoritative.
-
-Product invariant:
-
-```text
-assistant prose ≠ verified mutation
-```
-
-Create/modify success requires successful tool/mutation evidence and valid workspace confinement.
-
-## Workspace boundary
-
-- Native folder picker selects active workspace.
-- Service validates and confines file access through realpath/workspace guard.
-- Navigator lists bounded entries without unrestricted renderer filesystem access.
-- Preview/edit behavior is extension- and size-bounded.
-- Dirty editor content must not be overwritten by Agent refresh.
-
-## Conversation / runtime turn
-
-Cowork conversation is persistent user identity. OpenCode runtime sessions may be ephemeral per turn. Context handoff is bounded and never shown as visible transcript content.
-
-## UI surface ownership
-
-| Surface | Layout ownership |
-|---|---|
-| Cowork | conversation sidebar + conversation canvas + optional Inspector |
-| Workspace | file tree + editor/preview + optional Cowork companion |
-| Settings | settings navigation + content |
-| D1–D4 / Code | full application surface |
-
-Hidden Inspector or sidebar columns must never reserve space outside their owning surface.
-
-## External integration boundaries
-
-D1–D4 entries are stable mount points only until team code is merged. The production shell must not fake records, metrics, connectivity, or completed capability.
+Persist user-visible messages and durable turn summaries. Raw streaming deltas stay transient. Conversation identity remains independent from ephemeral OpenCode session IDs.
