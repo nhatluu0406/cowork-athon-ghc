@@ -222,6 +222,35 @@ test("non-allowlisted paths are 404 and never forwarded", async () => {
   }
 });
 
+test("an encoded traversal in the id segment is 404 and never forwarded", async () => {
+  const main = await startFakeMain();
+  const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);
+  try {
+    const token = await pairAndGetToken();
+    // A raw-slash check passes these: the main router only turns %2F into "/" after it has
+    // split the path, so the id would arrive there as a real relative path.
+    for (const path of [
+      "/api/conversations/..%2Fvictim",
+      "/api/conversations/..%2F..%2Fsettings",
+      "/api/conversations/%2e%2e%2fvictim",
+      "/api/sessions/..%2Fvictim/message",
+    ]) {
+      const res = await fetch(`${gateway.url}${path}`, {
+        method: path.endsWith("/message") ? "POST" : "GET",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        ...(path.endsWith("/message") ? { body: JSON.stringify({ text: "hi" }) } : {}),
+      });
+      assert.equal(res.status, 404, `expected 404 for ${path}`);
+    }
+    // The strong assertion: the gateway holds the MAIN token, so a forward would have run
+    // fully authenticated. Nothing may reach the main service at all.
+    assert.deepEqual(main.seen, []);
+  } finally {
+    await gateway.stop();
+    main.server.close();
+  }
+});
+
 test("SSE stream pipes through end-to-end", async () => {
   const main = await startFakeMain();
   const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);

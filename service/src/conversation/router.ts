@@ -30,9 +30,19 @@ export class ConversationRequestError extends BadRequestError {
   }
 }
 
+/**
+ * Conversation ids are `randomUUID()` values, and the store turns an id straight into
+ * `<root>/<id>.json`. The router registry decodes a `{id}` segment AFTER splitting on "/",
+ * so `..%2Fvictim` arrives here as the real path `../victim` — anything but a strict UUID
+ * must be rejected at this boundary or the store reads outside its root.
+ */
+const CONVERSATION_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
 function requireId(params: Readonly<Record<string, string>>): string {
   const id = params["id"];
   if (id === undefined || id.length === 0) throw new ConversationRequestError("id is required.");
+  if (!CONVERSATION_ID_PATTERN.test(id)) throw new ConversationRequestError("id is not a valid conversation id.");
   return id;
 }
 
