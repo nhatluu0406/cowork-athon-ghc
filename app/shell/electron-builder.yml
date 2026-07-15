@@ -30,6 +30,9 @@ asar: true
 # `extraResources` below.)
 asarUnpack:
   - "**/node_modules/better-sqlite3/**"
+  # Keyring remains until Wave 0A migration consumers are fully retired (ADR 0007 §6).
+  - "**/node_modules/@napi-rs/keyring/**"
+  - "**/node_modules/@napi-rs/keyring-win32-x64-msvc/**"
 
 # The Electron main is a SINGLE esbuild bundle (`app/shell/dist/main.cjs`) that INLINES every
 # `@cowork-ghc/*` workspace module + all pure-JS deps. The `tsc -b` step also emits the loose,
@@ -45,6 +48,8 @@ files:
   - "app/shell/dist/**"
   - "app/ui/dist/**"
   - "node_modules/better-sqlite3/**"
+  - "node_modules/@napi-rs/keyring/**"
+  - "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
   - "package.json"
   - "app/shell/package.json"
   - "!app/shell/dist/**/*.js"

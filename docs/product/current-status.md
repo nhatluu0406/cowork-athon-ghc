@@ -12,12 +12,12 @@ Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD v
 
 | Capability | Status | Note |
 |---|---|---|
-| Cowork chat | WORKS — Wave 0A stabilize | Optimistic user bubble + progressive streaming; `Đang xử lý` bound to active turn. |
+| Cowork chat | WORKS — Wave 0A stabilize | Optimistic bubble + progressive streaming; mid-send no longer blocked by `runtime_busy`. Stream ticks update bubble only; composer keystrokes no longer full-shell re-render. Permission poll 100ms. Runtime down → honest 503. Vietnamese language match in system prompt. |
 | Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
 | Provider profiles | WORKS — BASIC | `Lưu & kiểm tra` persists verification fingerprint; status bar shows `Đã kiểm tra` after success / relaunch. |
 | Local database | WORKS — Wave 0A | Packaged: `%LOCALAPPDATA%\Cowork GHC\data\cowork-ghc.db`. Dev: `<repo>\.runtime\data\cowork-ghc.db`. Override: `COWORK_GHC_RUNTIME_ROOT`. |
 | Local app authentication | WORKS — Wave 0A | First-run username/password + unlock; master key in memory only. |
-| Conversations | WORKS — JSON | Wave 0B migrates to SQLite. |
+| Conversations | WORKS — JSON | Packaged settings-only + live share `%LOCALAPPDATA%\Cowork GHC\conversations` (was split to Roaming `.runtime` on live → empty history). Wave 0B migrates to SQLite. |
 | Skills CRUD | WORKS — BASIC | Currently Settings + full prompt injection; planned separate surface/on-demand. |
 | MCP | FOUNDATION ONLY | In-memory registry, no mounted router/live adapter/UI. |
 | OpenCode | PINNED 1.17.11 | Compatibility test planned for 1.18.1/1.17.20. Do not change in Wave 0A. |

@@ -96,7 +96,9 @@
   gap: 2px;
   margin: 0;
   padding: 0 8px 12px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
 }
 
 .history-item {

@@ -10,16 +10,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startCoworkService } from "../src/composition/index.js";
 import { createMemoryStore } from "../src/credential/index.js";
-import type { SettingsFs } from "../src/diagnostics/index.js";
+import { credentialAccountForProfile, credentialRef } from "../src/credential/store.js";
+import { defaultSettings, type SettingsFs } from "../src/diagnostics/index.js";
 import type { SendPrompt, SessionStore, StoredSession } from "../src/session/index.js";
 import { RouterRegistry } from "../src/server/router-registry.js";
 import type { BoundaryRouter, RouteResult } from "../src/boundary/contract.js";
 
 const WS = "C:/ws/tier1";
 const NOW = (): string => "2026-07-12T00:00:00.000Z";
+const PROFILE_ID = "tier1-profile";
 
-function memorySettingsFs(): SettingsFs {
-  let data: string | undefined;
+function memorySettingsFs(seed?: string): SettingsFs {
+  let data: string | undefined = seed;
   return { read: () => Promise.resolve(data), write: (d) => { data = d; return Promise.resolve(); } };
 }
 
@@ -40,13 +42,46 @@ function memSessionStore(): SessionStore {
   };
 }
 
+/** Seed an active provider profile so composed create is not blocked by readiness. */
+async function readyComposeDeps(): Promise<{
+  readonly credentialStore: ReturnType<typeof createMemoryStore>;
+  readonly settingsFs: SettingsFs;
+  readonly sessionStore: SessionStore;
+}> {
+  const account = credentialAccountForProfile(PROFILE_ID);
+  const credentialStore = createMemoryStore();
+  await credentialStore.set(account, "sk-test-tier1");
+  const settings = {
+    ...defaultSettings(),
+    activeProfileId: PROFILE_ID,
+    providerProfilesMigrated: true,
+    providerProfiles: [
+      {
+        id: PROFILE_ID,
+        displayName: "Tier1",
+        providerType: "custom-openai-compat" as const,
+        baseUrl: "https://8.8.8.8/v1",
+        modelId: "demo-model",
+        envVar: "TIER1_API_KEY",
+        createdAt: NOW(),
+        updatedAt: NOW(),
+        credentialRef: credentialRef(account),
+      },
+    ],
+  };
+  return {
+    credentialStore,
+    settingsFs: memorySettingsFs(JSON.stringify(settings)),
+    sessionStore: memSessionStore(),
+  };
+}
+
 const auth = (t: string): Record<string, string> => ({ authorization: `Bearer ${t}` });
 const jsonHeaders = (t: string): Record<string, string> => ({ ...auth(t), "content-type": "application/json" });
 
 test("Tier 1 session boundary: create/list work; message honestly errors runtime_not_attached", async () => {
-  const { running } = await startCoworkService({
-    credentialStore: createMemoryStore(), settingsFs: memorySettingsFs(), sessionStore: memSessionStore(), now: NOW,
-  });
+  const deps = await readyComposeDeps();
+  const { running } = await startCoworkService({ ...deps, now: NOW });
   const base = running.baseUrl;
   const token = running.clientToken;
   try {
@@ -72,9 +107,8 @@ test("Tier 1 session boundary: create/list work; message honestly errors runtime
 });
 
 test("Tier 1 session boundary: malformed bodies → 400, unknown session → 404", async () => {
-  const { running } = await startCoworkService({
-    credentialStore: createMemoryStore(), settingsFs: memorySettingsFs(), sessionStore: memSessionStore(), now: NOW,
-  });
+  const deps = await readyComposeDeps();
+  const { running } = await startCoworkService({ ...deps, now: NOW });
   const base = running.baseUrl;
   const token = running.clientToken;
   try {
@@ -95,19 +129,197 @@ test("Tier 1 session boundary: malformed bodies → 400, unknown session → 404
   }
 });
 
+test("unreachable OpenCode maps to honest 503, not Internal boundary error", async () => {
+  const { createService } = await import("../src/server/http-service.js");
+  const { OpencodeUnreachableError } = await import("../src/runtime/opencode-http-error.js");
+  const { createSessionRouter } = await import("../src/session/router.js");
+  const { initialSessionView } = await import("../src/execution/index.js");
+
+  const sessionId = "s-unreachable";
+  const views = new Map([[sessionId, initialSessionView(sessionId)]]);
+  const sessionService = {
+    create: async () => ({
+      id: sessionId,
+      title: "T",
+      workspaceId: WS,
+      createdAt: NOW(),
+      updatedAt: NOW(),
+    }),
+    list: async () => [],
+    continueSession: async () => {
+      throw new Error("unused");
+    },
+    rename: async () => {
+      throw new Error("unused");
+    },
+    view: (id: string) => views.get(id),
+    status: () => "ready" as const,
+    apply: () => initialSessionView(sessionId),
+    bindStream: () => undefined,
+    cancel: async () => undefined,
+  };
+
+  const service = createService();
+  service.mount(
+    createSessionRouter(sessionService as never, {
+      send: async () => {
+        throw new OpencodeUnreachableError("session.message");
+      },
+    }),
+  );
+  const address = await service.start();
+  const baseUrl = `http://${address.host}:${address.port}`;
+  try {
+    const sent = await fetch(`${baseUrl}/v1/session/${sessionId}/message`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${service.clientToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ text: "hi" }),
+    });
+    assert.equal(sent.status, 503);
+    const body = (await sent.json()) as {
+      ok?: boolean;
+      data?: { reason?: string };
+      error?: { message?: string };
+    };
+    assert.equal(body.ok, true, "503 transport uses success envelope with accepted:false");
+    assert.equal(body.data?.reason, "runtime_unavailable");
+    assert.equal(body.error, undefined);
+    assert.notEqual(body.error?.message, "Internal boundary error.");
+  } finally {
+    await service.stop();
+  }
+});
+
+test("duck-typed runtime_not_ready and OpencodeHttpError also map to 503, not Internal boundary", async () => {
+  const { createService } = await import("../src/server/http-service.js");
+  const { OpencodeHttpError } = await import("../src/runtime/opencode-http-error.js");
+  const { createSessionRouter } = await import("../src/session/router.js");
+  const { initialSessionView } = await import("../src/execution/index.js");
+
+  async function assertMessageMaps(sendError: unknown, label: string): Promise<void> {
+    const sessionId = `s-${label}`;
+    const views = new Map([[sessionId, initialSessionView(sessionId)]]);
+    const sessionService = {
+      create: async () => {
+        throw new Error("unused");
+      },
+      list: async () => [],
+      continueSession: async () => {
+        throw new Error("unused");
+      },
+      rename: async () => {
+        throw new Error("unused");
+      },
+      view: (id: string) => views.get(id),
+      status: () => "ready" as const,
+      apply: () => initialSessionView(sessionId),
+      bindStream: () => undefined,
+      cancel: async () => undefined,
+    };
+    const service = createService();
+    service.mount(
+      createSessionRouter(sessionService as never, {
+        send: async () => {
+          throw sendError;
+        },
+      }),
+    );
+    const address = await service.start();
+    try {
+      const sent = await fetch(`http://${address.host}:${address.port}/v1/session/${sessionId}/message`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${service.clientToken}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ text: "hi" }),
+      });
+      assert.equal(sent.status, 503, label);
+      const body = (await sent.json()) as { data?: { reason?: string }; error?: { message?: string } };
+      assert.equal(body.data?.reason, "runtime_unavailable", label);
+      assert.notEqual(body.error?.message, "Internal boundary error.", label);
+    } finally {
+      await service.stop();
+    }
+  }
+
+  await assertMessageMaps(new OpencodeHttpError("session.message", 502), "http-error");
+  await assertMessageMaps(
+    Object.assign(new Error("runtime not ready elsewhere"), { code: "runtime_not_ready" }),
+    "duck-not-ready",
+  );
+});
+
+test("create session maps duck-typed unreachable to 503 without Internal boundary", async () => {
+  const { createService } = await import("../src/server/http-service.js");
+  const { createSessionRouter } = await import("../src/session/router.js");
+  const { initialSessionView } = await import("../src/execution/index.js");
+
+  const service = createService();
+  service.mount(
+    createSessionRouter(
+      {
+        create: async () => {
+          throw Object.assign(new Error("could not reach"), { code: "opencode_unreachable" });
+        },
+        list: async () => [],
+        continueSession: async () => {
+          throw new Error("unused");
+        },
+        rename: async () => {
+          throw new Error("unused");
+        },
+        view: () => initialSessionView("x"),
+        status: () => "ready" as const,
+        apply: () => initialSessionView("x"),
+        bindStream: () => undefined,
+        cancel: async () => undefined,
+      } as never,
+      {
+        send: async () => undefined,
+      },
+    ),
+  );
+  const address = await service.start();
+  try {
+    const created = await fetch(`http://${address.host}:${address.port}/v1/session`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${service.clientToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ workspaceId: WS }),
+    });
+    assert.equal(created.status, 503);
+    const body = (await created.json()) as {
+      data?: { reason?: string };
+      error?: { message?: string };
+    };
+    assert.equal(body.data?.reason, "runtime_unavailable");
+    assert.notEqual(body.error?.message, "Internal boundary error.");
+  } finally {
+    await service.stop();
+  }
+});
+
 test("FIX-1 message to a live session → 202 (reaches send seam); to a terminal session → honest 409", async () => {
   const sent: Array<{ id: string; text: string }> = [];
   const recordingSendPrompt: SendPrompt = {
     send: async (id, text) => { sent.push({ id, text }); },
   };
+  const seed = await readyComposeDeps();
   const { running, deps } = await startCoworkService({
-    credentialStore: createMemoryStore(), settingsFs: memorySettingsFs(), sessionStore: memSessionStore(),
+    ...seed,
     now: NOW, sendPrompt: recordingSendPrompt,
   });
   const base = running.baseUrl;
   const token = running.clientToken;
   try {
     const created = await fetch(`${base}/v1/session`, { method: "POST", headers: jsonHeaders(token), body: JSON.stringify({ workspaceId: WS }) });
+    assert.equal(created.status, 201);
     const id = ((await created.json()) as { data: { session: { id: string } } }).data.session.id;
 
     // A live, non-terminal session accepts the prompt (202) and it REACHES the send seam.

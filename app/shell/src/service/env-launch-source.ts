@@ -29,6 +29,8 @@ export interface EnvLaunchSourceOptions {
   readonly appRoot?: string;
   readonly binPath?: string;
   readonly runtimeRoot?: string;
+  /** Absolute conversation store — must match settings-only tier. */
+  readonly conversationsDir?: string;
   readonly allowedOrigins?: readonly string[];
   readonly settingsFilePath?: string;
   /** Absolute path to the local SQLite database (ADR 0007). */
@@ -120,6 +122,9 @@ export function createEnvLaunchSource(options: EnvLaunchSourceOptions = {}): Liv
         ...(injectedStore !== undefined ? { credentialStore: injectedStore } : {}),
         ...(autoUnlock !== null ? { autoUnlock } : {}),
         rememberUnlock,
+        ...(options.conversationsDir !== undefined
+          ? { conversationsDir: options.conversationsDir }
+          : {}),
         ...(options.allowedOrigins !== undefined ? { allowedOrigins: options.allowedOrigins } : {}),
         ...(settingsFilePath !== undefined ? { settingsFilePath } : {}),
         ...(options.skillsStateFilePath !== undefined
