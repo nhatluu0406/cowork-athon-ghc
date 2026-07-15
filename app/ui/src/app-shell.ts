@@ -36,6 +36,7 @@ import {
 } from "./conversation-controller.js";
 import { createReadinessController, type ReadinessState } from "./readiness-controller.js";
 import {
+  assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
   localServiceStatus,
@@ -115,6 +116,8 @@ import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+/** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
+let permissionRefreshNow: (() => void) | null = null;
 
 const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
   connectionState: "disconnected",
@@ -282,8 +285,21 @@ function shortPath(path: string): string {
 }
 
 function safeError(error: unknown): string {
-  if (error instanceof ServiceClientError) return sanitizeErrorMessage(error.message);
-  if (error instanceof Error) return sanitizeErrorMessage(error.message);
+  if (error instanceof ServiceClientError) {
+    if (error.code === "internal" || /internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    if (error.code === "runtime_unavailable" || error.code === "runtime_not_attached") {
+      return "Runtime chưa sẵn sàng. Đợi local service / OpenCode khởi động rồi gửi lại.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
+  if (error instanceof Error) {
+    if (/internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
   return "Có lỗi xảy ra.";
 }
 
@@ -987,11 +1003,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "running" ||
     phase === "cancelling" ||
     state.activeWorkspace === null;
-  dom.thinking.hidden = !shouldShowProcessing({
-    activeConversationId: state.conv.state.activeConversationId,
-    processingConversationId: state.processingConversationId,
-    runtimePhase: phase,
-  });
+  syncProcessingIndicator(dom, state);
   dom.sendButton.disabled =
     locked ||
     phase === "starting" ||
@@ -1054,6 +1066,76 @@ async function awaitLiveClient(
 function updateAssistantBubble(state: AppState, text: string): void {
   const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
   if (assistant !== null) assistant.textContent = text;
+  if (text.trim().length > 0 && state.activeAssistant !== null) {
+    state.activeAssistant.classList.remove("msg--awaiting");
+    const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");
+    if (thinking !== null) {
+      thinking.hidden = true;
+      const host = state.activeAssistant.closest(".transcript__inner");
+      if (host !== null) host.append(thinking);
+    }
+  }
+}
+
+/** Keep the processing indicator under the live assistant label when the bubble is still empty. */
+function syncProcessingIndicator(dom: AppDom, state: AppState): void {
+  const show = shouldShowProcessing({
+    activeConversationId: state.conv.state.activeConversationId,
+    processingConversationId: state.processingConversationId,
+    runtimePhase: state.conv.state.runtimePhase,
+  });
+  const awaiting =
+    show &&
+    state.activeAssistant !== null &&
+    (state.assistantText.trim().length === 0);
+
+  for (const row of dom.transcriptInner.querySelectorAll(".msg--awaiting")) {
+    if (row !== state.activeAssistant) row.classList.remove("msg--awaiting");
+  }
+
+  if (!show) {
+    dom.thinking.hidden = true;
+    state.activeAssistant?.classList.remove("msg--awaiting");
+    if (dom.thinking.parentElement !== dom.transcriptInner) {
+      dom.transcriptInner.append(dom.thinking);
+    }
+    return;
+  }
+
+  dom.thinking.hidden = false;
+  if (awaiting && state.activeAssistant !== null) {
+    state.activeAssistant.classList.add("msg--awaiting");
+    const body = state.activeAssistant.querySelector(".msg__body");
+    if (body !== null && dom.thinking.parentElement !== body) {
+      body.append(dom.thinking);
+    }
+    return;
+  }
+
+  state.activeAssistant?.classList.remove("msg--awaiting");
+  if (dom.thinking.parentElement !== dom.transcriptInner) {
+    dom.transcriptInner.append(dom.thinking);
+  }
+}
+
+/**
+ * Composer keystrokes must not rebuild the session list / status chrome.
+ * That full renderState path was the main input lag on the packaged app.
+ */
+function syncComposerChrome(dom: AppDom, state: AppState): void {
+  saveComposerDraft(state, dom);
+  const locked = isComposerLocked(state);
+  const phase = state.conv.state.runtimePhase;
+  const readinessInput = buildReadinessInput(state.localServiceReady, state);
+  const sendPreflight = assessSendPreflight(readinessInput);
+  const composerText = textFromComposer(dom.composerInput);
+  renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+  dom.sendButton.disabled =
+    locked ||
+    phase === "starting" ||
+    phase === "running" ||
+    phase === "cancelling" ||
+    composerText.length === 0;
 }
 
 function stopStreamWatchdog(state: AppState): void {
@@ -1228,6 +1310,22 @@ function bindEvStream(
   if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) return;
   stopStream(state);
   state.streamSessionId = sessionId;
+  let activityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleActivityRefresh = (immediate = false): void => {
+    if (immediate) {
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
+      refreshActivityUi(state, dom);
+      return;
+    }
+    if (activityRefreshTimer !== null) return;
+    activityRefreshTimer = setTimeout(() => {
+      activityRefreshTimer = null;
+      refreshActivityUi(state, dom);
+    }, 32);
+  };
   state.stream = startEvStream({
     baseUrl: bootstrap.serviceBaseUrl,
     clientToken: bootstrap.clientToken,
@@ -1236,13 +1334,15 @@ function bindEvStream(
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
-      refreshActivityUi(state, dom);
+      // Tokens are frequent — debounce Inspector rebuild. Tool/file/plan events paint ASAP.
+      scheduleActivityRefresh(event.kind !== "token");
       if (event.kind === "token" && event.delta.length > 0) {
         state.turnTiming.mark("FIRST_TOKEN");
       }
       if (event.kind === "tool_call") {
         if (event.status === "running") {
           state.turnTiming.mark("TOOL_REQUEST", event.toolName);
+          permissionRefreshNow?.();
           void captureBeforeOnToolStart(state, event);
         } else if (event.status === "completed" || event.status === "errored" || event.status === "cancelled") {
           state.turnTiming.mark("TOOL_FINISHED", event.toolName);
@@ -1270,15 +1370,21 @@ function bindEvStream(
       state.assistantText = view.text;
       updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
       setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
-      refreshActivityUi(state, dom);
       if (view.terminal !== null) {
+        scheduleActivityRefresh(true);
         void finalizeConversationTurn(state, dom, view, handlers, sessionId);
         return;
       }
-      renderState(dom, state, handlers);
+      // Streaming tokens: update the bubble only. Full shell re-render thrashing is the main
+      // jank source; composer/cancel were already set when the turn started.
+      scheduleActivityRefresh(false);
     },
     onError: (message) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
       stopStreamWatchdog(state);
       void state.conv.setRuntimePhase("failed");
       appendMessage(dom, "assistant", message);
@@ -1309,7 +1415,8 @@ async function ensureRuntimeSession(
   if (state.client === null) throw new Error("Service chưa sẵn sàng.");
   await refreshSettings(state, dom, handlers);
 
-  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  // Turn already claimed (`runtimePhase = "starting"`); only re-check config readiness.
+  const preflight = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
     throw new Error(preflight.message);
@@ -1329,24 +1436,34 @@ async function ensureRuntimeSession(
   const plan = await planRuntimeTurn(state.client, record);
 
   if (plan.action === "reuse") {
-    state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
-    bindEvStream(state, dom, handlers, plan.runtimeSessionId);
-    state.conv.state.runtimePhase =
-      state.processingConversationId !== null ? "starting" : "ready";
-    return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+    // Never reuse a session that this UI already saw go terminal — OpenCode single-turn finality.
+    if (state.lastView.sessionId === plan.runtimeSessionId && state.lastView.terminal !== null) {
+      await state.conv.startContinuation();
+    } else {
+      state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
+      if (state.lastView.terminal !== null) {
+        await state.conv.startContinuation();
+      } else {
+        bindEvStream(state, dom, handlers, plan.runtimeSessionId);
+        state.conv.state.runtimePhase =
+          state.processingConversationId !== null ? "starting" : "ready";
+        return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+      }
+    }
   }
 
   state.conv.state.runtimePhase = "starting";
   renderState(dom, state, handlers);
   const client = await ensureLive(state, readiness);
 
-  if (record.runtimeSessionId !== null) {
+  const activeRecord = state.conv.state.activeRecord;
+  if (activeRecord?.runtimeSessionId !== null && activeRecord !== null) {
     await state.conv.startContinuation();
   }
 
   const meta = await client.createSession({
     workspaceId: state.activeWorkspace,
-    title: record.title,
+    title: (state.conv.state.activeRecord ?? record).title,
     model,
   });
   await state.conv.linkRuntimeSession(meta.id);
@@ -1356,7 +1473,9 @@ async function ensureRuntimeSession(
     state.processingConversationId !== null ? "starting" : "ready";
   bindEvStream(state, dom, handlers, meta.id);
   renderState(dom, state, handlers);
-  return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
+  const contextMessages =
+    plan.action === "new_turn" ? plan.priorMessages : (state.conv.state.activeRecord?.messages ?? record.messages);
+  return { runtimeSessionId: meta.id, contextMessages };
 }
 
 async function switchConversation(
@@ -1411,7 +1530,7 @@ async function ensureDraftConversation(
   );
   if (reusableDraft !== undefined) {
     await state.conv.select(reusableDraft.id);
-    return;
+    if (state.conv.state.activeConversationId === reusableDraft.id) return;
   }
 
   const model = state.settings?.defaultModel;
@@ -1671,21 +1790,22 @@ async function sendPrompt(
     return;
   }
 
-  // Optimistic UX: clear composer immediately, then ensure a conversation so processing can bind.
-  if (promptOverride === undefined) {
-    setComposerText(dom.composerInput, "");
-  }
-  if (!skipAttachments) {
-    state.pendingAttachments = [];
-  }
-
   try {
+    // Ensure a conversation before clearing the composer so a failed draft create keeps the prompt.
     if (state.conv.state.activeConversationId === null) {
       await ensureDraftConversation(state, dom, handlers);
     }
     if (state.client === null || state.conv.state.activeConversationId === null) {
       throw new Error("Không tạo được cuộc trò chuyện.");
     }
+
+    if (promptOverride === undefined) {
+      setComposerText(dom.composerInput, "");
+    }
+    if (!skipAttachments) {
+      state.pendingAttachments = [];
+    }
+
     state.processingConversationId = state.conv.state.activeConversationId;
     if (promptOverride === undefined) {
       state.composerDrafts.delete(state.conv.state.activeConversationId);
@@ -1733,8 +1853,14 @@ async function sendPrompt(
     const dispatchText = dispatchPlan.text;
     const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     state.turnTiming.mark("PROMPT_SENT", runtimeSessionId);
+    permissionRefreshNow?.();
+    const needsContinuation =
+      !result.accepted &&
+      (result.reason === "session_completed" ||
+        ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
+          state.lastView.terminal !== null));
     if (!result.accepted) {
-      if (result.reason === "session_completed") {
+      if (needsContinuation) {
         await state.conv.startContinuation();
         const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
         const retryPlan = planDispatchPrompt(
@@ -1754,12 +1880,18 @@ async function sendPrompt(
           return;
         }
         const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
+        permissionRefreshNow?.();
         if (!second.accepted) {
           state.currentFileActionIntent = null;
           state.fileVerificationTasks.clear();
           state.processingConversationId = null;
           await state.conv.setRuntimePhase("failed");
-          updateAssistantBubble(state, "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
+          updateAssistantBubble(
+            state,
+            second.reason === "runtime_not_attached" || second.reason === "runtime_unavailable"
+              ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+              : `Không gửi được yêu cầu (${second.reason}).`,
+          );
         }
       } else {
         state.currentFileActionIntent = null;
@@ -1768,7 +1900,9 @@ async function sendPrompt(
         await state.conv.setRuntimePhase("failed");
         updateAssistantBubble(
           state,
-          result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.",
+          result.reason === "runtime_not_attached" || result.reason === "runtime_unavailable"
+            ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+            : `Không gửi được yêu cầu (${result.reason}).`,
         );
         if (state.pendingUserRow === null) {
           const lastUser = [...dom.transcriptInner.querySelectorAll(".msg--user")].at(-1) as
@@ -1789,7 +1923,11 @@ async function sendPrompt(
     state.processingConversationId = null;
     await state.conv.setRuntimePhase("failed").catch(() => undefined);
     const message = error instanceof Error ? error.message : "Không gửi được yêu cầu.";
-    updateAssistantBubble(state, message);
+    if (state.activeAssistant !== null) {
+      updateAssistantBubble(state, message);
+    } else {
+      appendMessage(dom, "assistant", message);
+    }
     const pendingRow = state.pendingUserRow;
     if (pendingRow !== null) {
       attachSendRetry(pendingRow, () => {
@@ -1924,6 +2062,17 @@ export function mountCoworkApp(root: HTMLElement): void {
         renderState(dom, state, handlers);
       })();
     },
+  };
+
+  const baseCloseSettings = dom.closeSettings;
+  const baseOpenSettings = dom.openSettings;
+  dom.closeSettings = () => {
+    baseCloseSettings();
+    renderState(dom, state, handlers);
+  };
+  dom.openSettings = () => {
+    baseOpenSettings();
+    renderState(dom, state, handlers);
   };
 
   for (const [id, button] of dom.surfaceButtons) {
@@ -2063,6 +2212,8 @@ export function mountCoworkApp(root: HTMLElement): void {
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            // Discover permission ASAP — workspace_auto still needs the poll to see pending.
+            pollIntervalMs: 100,
             getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
@@ -2119,6 +2270,9 @@ export function mountCoworkApp(root: HTMLElement): void {
               void persistActivity(state);
             },
           });
+          permissionRefreshNow = () => {
+            void permissions.refresh();
+          };
           permissions.start();
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
@@ -2234,7 +2388,7 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => renderState(dom, state, handlers));
+  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
     if (event.key === "Enter" && !event.shiftKey) {

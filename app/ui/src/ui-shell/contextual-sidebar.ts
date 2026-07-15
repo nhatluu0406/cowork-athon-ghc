@@ -51,8 +51,8 @@ export function createContextualSidebar(): ContextualSidebarDom {
   searchWrap.append(icon("search"));
   const sessionSearch = el("input", "") as HTMLInputElement;
   sessionSearch.type = "search";
-  sessionSearch.placeholder = "Tìm cuộc trò chuyện...";
-  sessionSearch.setAttribute("aria-label", "Tìm cuộc trò chuyện");
+  sessionSearch.placeholder = "Tìm kiếm";
+  sessionSearch.setAttribute("aria-label", "Tìm kiếm");
   searchWrap.append(sessionSearch);
   toolbar.append(newConversationButton, searchWrap);
   const sessionList = el("div", "conv-list sidebar__history");

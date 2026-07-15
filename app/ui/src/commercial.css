@@ -332,6 +332,9 @@ button {
 .sidebar__history,
 .workspace-nav__body {
   padding: 8px 2px 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
 }
 
 .conv-item,
@@ -416,6 +419,9 @@ button {
 
 .transcript {
   background: transparent;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
 }
 
 .transcript__inner {
@@ -464,7 +470,101 @@ button {
   margin: 0 0 6px;
   color: var(--cghc-text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.msg--assistant .msg__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, var(--cghc-text-secondary) 88%, var(--cghc-accent) 12%);
+}
+
+.msg--assistant .msg__name::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--cghc-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--cghc-accent) 18%, transparent);
+}
+
+.msg--awaiting .msg__text {
+  display: none;
+}
+
+.msg--awaiting .thinking {
+  margin: 2px 0 0;
+}
+
+.thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 10px;
+  padding: 8px 12px;
+  width: fit-content;
+  max-width: min(420px, 92%);
+  border: 1px solid color-mix(in srgb, var(--cghc-accent) 16%, var(--cghc-border-subtle));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--cghc-accent-soft) 34%, var(--cghc-surface-elevated));
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.thinking[hidden] {
+  display: none !important;
+}
+
+.thinking__dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 22px;
+}
+
+.thinking__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--cghc-accent);
+  opacity: 0.35;
+  animation: cghc-thinking-dot 1.05s ease-in-out infinite;
+}
+
+.thinking__dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.thinking__dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.thinking__label {
+  color: var(--cghc-text-muted);
+}
+
+@keyframes cghc-thinking-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.28;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking__dot {
+    animation: none;
+    opacity: 0.72;
+  }
 }
 
 .msg__text {
@@ -1302,12 +1402,12 @@ button {
 .permission-allow:hover:not(:disabled) {
   background: var(--cghc-accent);
   color: var(--cghc-accent-contrast);
-  transform: translateY(-1px);
 }
 
 .permission-allow .product-icon {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 }
 
 .permission-spinner {
@@ -1674,16 +1774,33 @@ button {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 42px;
+  align-items: stretch;
   min-width: 250px;
+  min-height: 42px;
 }
 
 .permission-allow--primary {
   border-radius: 12px 0 0 12px !important;
+  min-height: 42px;
+  height: 100%;
+  line-height: 1.2;
+  background: var(--cghc-accent) !important;
+  color: var(--cghc-accent-contrast) !important;
+  box-shadow: none;
+}
+
+.permission-allow--primary:hover:not(:disabled) {
+  background: var(--cghc-accent-hover) !important;
+  color: var(--cghc-accent-contrast) !important;
+  transform: none;
 }
 
 .permission-allow-menu-button {
   display: grid;
   place-items: center;
+  align-self: stretch;
+  min-height: 42px;
+  height: 100%;
   border: 0;
   border-left: 1px solid color-mix(in srgb, var(--cghc-accent-contrast) 24%, transparent);
   border-radius: 0 12px 12px 0;
@@ -1698,6 +1815,7 @@ button {
 .permission-allow-menu-button .product-icon {
   width: 16px;
   height: 16px;
+  display: block;
 }
 
 .permission-allow-menu {

@@ -287,32 +287,16 @@ export function runtimeReadinessKind(phase: RuntimePhase): ReadinessKind {
   }
 }
 
-export function assessSendPreflight(input: ProviderReadinessInput): SendPreflight {
+/**
+ * Provider / workspace configuration readiness only.
+ * Used mid-send after the turn already claimed `runtimePhase = "starting"`.
+ */
+export function assessConfigPreflight(input: ProviderReadinessInput): SendPreflight {
   if (!input.localServiceReady) {
     return {
       canSend: false,
       blockKind: "local_service_unavailable",
       message: "Local service chưa sẵn sàng. Đợi kết nối hoặc thử lại.",
-      showSettingsCta: false,
-    };
-  }
-  if (input.composerLocked) {
-    return {
-      canSend: false,
-      blockKind: "composer_locked",
-      message: "Tiếp tục cuộc trò chuyện lịch sử trước khi gửi tin mới.",
-      showSettingsCta: false,
-    };
-  }
-  if (
-    input.runtimePhase === "running" ||
-    input.runtimePhase === "starting" ||
-    input.runtimePhase === "cancelling"
-  ) {
-    return {
-      canSend: false,
-      blockKind: "runtime_busy",
-      message: "Đang xử lý yêu cầu trước.",
       showSettingsCta: false,
     };
   }
@@ -413,6 +397,30 @@ export function assessSendPreflight(input: ProviderReadinessInput): SendPrefligh
     message: "",
     showSettingsCta: false,
   };
+}
+
+export function assessSendPreflight(input: ProviderReadinessInput): SendPreflight {
+  if (input.composerLocked) {
+    return {
+      canSend: false,
+      blockKind: "composer_locked",
+      message: "Tiếp tục cuộc trò chuyện lịch sử trước khi gửi tin mới.",
+      showSettingsCta: false,
+    };
+  }
+  if (
+    input.runtimePhase === "running" ||
+    input.runtimePhase === "starting" ||
+    input.runtimePhase === "cancelling"
+  ) {
+    return {
+      canSend: false,
+      blockKind: "runtime_busy",
+      message: "Đang xử lý yêu cầu trước.",
+      showSettingsCta: false,
+    };
+  }
+  return assessConfigPreflight(input);
 }
 
 export function shouldShowContinuationBanner(
