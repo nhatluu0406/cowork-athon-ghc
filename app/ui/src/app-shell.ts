@@ -109,6 +109,7 @@ import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
@@ -1859,39 +1860,42 @@ export function mountCoworkApp(root: HTMLElement): void {
       dom.serviceDetail.textContent = copy.detail;
       state.localServiceReady = readinessState.phase === "ready";
       if (readinessState.phase === "ready" && state.client !== null) {
-        void refreshSettings(state, dom, handlers);
-        void state.conv.refreshList().then(async () => {
-          if (!conversationRestored && state.conv.state.activeConversationId === null) {
-            // PO fix #6: start with a clean new-chat slate.
-            // History is loaded into the sidebar list but no conversation is auto-opened.
-            // User must click a history item to load it. continuationBanner must not appear on startup.
-            // We do NOT call state.conv.select() here; leave activeConversationId null so
-            // the composer starts fresh. A persisted conversation is created only when the
-            // first message is sent (conversation-controller handles that path).
-            conversationRestored = true;
-          }
-          renderState(dom, state, handlers);
-        });
-        if (!featuresMounted) {
-          featuresMounted = true;
-          workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
-            bridge: getShellBridge(),
-            client: dynamicClient,
-            onActivated: (rootPath) => {
-              state.activeWorkspace = rootPath;
-              void refreshSettings(state, dom, handlers);
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
-            onDeactivated: () => {
-              state.activeWorkspace = null;
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
+        const client = state.client;
+        void (async () => {
+          await ensureAppUnlocked(dom.root, client);
+          await refreshSettings(state, dom, handlers);
+          await state.conv.refreshList().then(async () => {
+            if (!conversationRestored && state.conv.state.activeConversationId === null) {
+              // PO fix #6: start with a clean new-chat slate.
+              // History is loaded into the sidebar list but no conversation is auto-opened.
+              // User must click a history item to load it. continuationBanner must not appear on startup.
+              // We do NOT call state.conv.select() here; leave activeConversationId null so
+              // the composer starts fresh. A persisted conversation is created only when the
+              // first message is sent (conversation-controller handles that path).
+              conversationRestored = true;
+            }
+            renderState(dom, state, handlers);
           });
-          workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
+          if (!featuresMounted) {
+            featuresMounted = true;
+            workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
+              bridge: getShellBridge(),
+              client: dynamicClient,
+              onActivated: (rootPath) => {
+                state.activeWorkspace = rootPath;
+                void refreshSettings(state, dom, handlers);
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+              onDeactivated: () => {
+                state.activeWorkspace = null;
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+            });
+            workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onChooseWorkspace: () => void workspacePicker?.choose(),
@@ -2028,7 +2032,8 @@ export function mountCoworkApp(root: HTMLElement): void {
             openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanionHandle, relativePath);
             void showFilePreview(dom.activityPanel, state.client, change);
           });
-        }
+          }
+        })();
       }
     },
   });
