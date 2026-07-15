@@ -50,6 +50,9 @@ SSE-based server-sent events that stream real-time execution frames back to the 
 - `permission.asked` (requires human validation or pre-approved rule matching)
 - `session.terminal` (success/failure status with evidence hashes)
 
+### C. D1 Dispatch UI (Pairing Screen)
+- **Pairing QR Code**: When opening the D1 Dispatch screen, it will display a QR code to facilitate pairing/connection setup with the D1 Cloud Backend.
+
 ---
 
 ## 3. Recommended Roadmap for D1 Integration
