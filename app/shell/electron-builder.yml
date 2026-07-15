@@ -25,13 +25,11 @@ directories:
   buildResources: app/shell/assets
 
 asar: true
-# The native keyring addon MUST be unpacked from the asar archive: a `.node` addon cannot be
-# loaded from inside asar. `@napi-rs/keyring` loads its platform binding from the sibling
-# `@napi-rs/keyring-win32-x64-msvc` package, so BOTH are unpacked. (The OpenCode binary is NOT
-# in the asar at all — it ships via `extraResources` below.)
+# Native better-sqlite3 MUST be unpacked from the asar archive: a `.node` addon cannot be
+# loaded from inside asar. (The OpenCode binary is NOT in the asar at all — it ships via
+# `extraResources` below.)
 asarUnpack:
-  - "**/node_modules/@napi-rs/keyring/**"
-  - "**/node_modules/@napi-rs/keyring-win32-x64-msvc/**"
+  - "**/node_modules/better-sqlite3/**"
 
 # The Electron main is a SINGLE esbuild bundle (`app/shell/dist/main.cjs`) that INLINES every
 # `@cowork-ghc/*` workspace module + all pure-JS deps. The `tsc -b` step also emits the loose,
@@ -41,13 +39,12 @@ asarUnpack:
 # also removes the exact ESM `main.js` whose top-level `require` threw `ReferenceError: require is
 # not defined in ES module scope` — keeping it out of the artifact prevents a silent regression if
 # the entry is ever mis-pointed. Only the bundled main + preload (`.cjs`), the renderer (`app/ui/
-# dist`, whose own `.js` are Vite output and MUST stay), the root-hoisted native keyring, and the
-# manifests go into the asar. Sourcemaps/TS/build metadata are excluded.
+# dist`, whose own `.js` are Vite output and MUST stay), the root-hoisted native SQLite module, and
+# the manifests go into the asar. Sourcemaps/TS/build metadata are excluded.
 files:
   - "app/shell/dist/**"
   - "app/ui/dist/**"
-  - "node_modules/@napi-rs/keyring/**"
-  - "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
+  - "node_modules/better-sqlite3/**"
   - "package.json"
   - "app/shell/package.json"
   - "!app/shell/dist/**/*.js"
