@@ -20,7 +20,7 @@ Cowork GHC có Commercial UI, Cowork/Workspace, provider profiles, Skills CRUD v
 | Conversations | WORKS — SQLite (Wave 0B) | Summaries/messages/provider snapshots/durable turns/attachment metadata + file-review refs in DB. Idempotent import from `conversations/` JSON → `.migrated-backup`; SQLite is sole source after import. No raw token deltas / SSE. |
 | Skills CRUD | WORKS — BASIC | Currently Settings + full prompt injection; planned separate surface/on-demand. |
 | MCP | FOUNDATION ONLY | In-memory registry, no mounted router/live adapter/UI. |
-| OpenCode | PINNED 1.17.11 | Compatibility test planned for 1.18.1/1.17.20. |
+| OpenCode | PINNED 1.18.1 | Wave 2: server-contract matrix PASS vs 1.17.11/1.17.20; health ready ~61ms vs baseline 163ms. Live LLM stages remain provider-key gated. |
 | MS365 | SOURCE PRESENT | Tokens migrate into the same encrypted vault after unlock. |
 | Inspector | PARTIAL | Phase 1 planned. |
 | Logging/telemetry | PARTIAL | Toggles exist; full contract pending. |

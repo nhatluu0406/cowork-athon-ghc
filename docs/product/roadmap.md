@@ -36,7 +36,7 @@ updated_at: "2026-07-15"
 
 ## WAVE 2 — OpenCode compatibility + Kỹ năng & MCP Hub
 
-- [ ] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
+- [x] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
 - [ ] Add `Kỹ năng & MCP` rail surface below Cowork.
 - [ ] Remove Skills from Settings.
 - [ ] Remove Skill/MCP selection from composer.

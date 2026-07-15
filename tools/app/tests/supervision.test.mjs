@@ -34,12 +34,12 @@ test('buildPidRecord validates role/pid/port/exePath and carries the full schema
   const rec = buildPidRecord({
     role: 'local-service', pid: 4242, host: '127.0.0.1', port: 51789,
     startedAt: '2026-07-11T04:00:00.1234567Z', exePath: 'C:\\Program Files\\nodejs\\node.exe',
-    runtimeVersion: 'v1.17.11',
+    runtimeVersion: 'v1.18.1',
   });
   assert.equal(rec.role, 'local-service');
   assert.equal(rec.startedAt, '2026-07-11T04:00:00.123Z');
   assert.equal(rec.port, 51789);
-  assert.equal(rec.runtimeVersion, 'v1.17.11');
+  assert.equal(rec.runtimeVersion, 'v1.18.1');
   assert.throws(() => buildPidRecord({ role: 'nope', pid: 1, startedAt: '2026-01-01T00:00:00Z', exePath: 'x' }));
   assert.throws(() => buildPidRecord({ role: 'local-service', pid: 0, startedAt: '2026-01-01T00:00:00Z', exePath: 'x' }));
   assert.throws(() => buildPidRecord({ role: 'local-service', pid: 5, port: 99999, startedAt: '2026-01-01T00:00:00Z', exePath: 'x' }));
@@ -135,7 +135,7 @@ test('real spawned child: capture identity, verify match, then stale after exit'
     assert.ok(info, 'expected a live Win32_Process record for the spawned child');
     assert.ok(/node\.exe$/i.test(info.exePath), `exePath should be node.exe, got ${info.exePath}`);
     assert.doesNotThrow(() => normalizeStartedAt(info.startedAt));
-    const { record } = capturePidRecord(root, { role: 'agent-runtime', pid: child.pid, port: 51900, host: '127.0.0.1', runtimeVersion: 'v1.17.11' });
+    const { record } = capturePidRecord(root, { role: 'agent-runtime', pid: child.pid, port: 51900, host: '127.0.0.1', runtimeVersion: 'v1.18.1' });
     assert.equal(record.pid, child.pid);
     assert.equal(verifyRecord(record), 'match');
     child.kill();
