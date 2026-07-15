@@ -10,7 +10,7 @@ export interface Migration {
   readonly sql: string;
 }
 
-/** Wave 0A initial schema. Conversation tables exist but are unused until Wave 0B. */
+/** Wave 0A initial schema; Wave 0B adds conversation indexes on the existing tables. */
 export const MIGRATIONS: readonly Migration[] = [
   {
     id: 1,
@@ -126,6 +126,16 @@ CREATE TABLE IF NOT EXISTS mcp_secret_refs (
   secret_account TEXT NOT NULL,
   document_json TEXT NOT NULL
 );
+`,
+  },
+  {
+    id: 2,
+    name: "conversation_persistence_indexes",
+    sql: `
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_runtime_turns_conversation_id ON runtime_turns(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_attachments_conversation_id ON conversation_attachments(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_file_review_refs_conversation_id ON file_review_refs(conversation_id);
 `,
   },
 ];

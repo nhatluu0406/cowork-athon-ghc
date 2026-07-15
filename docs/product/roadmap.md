@@ -17,12 +17,12 @@ updated_at: "2026-07-15"
 
 ## WAVE 0B — Conversation/session persistence migration
 
-- [ ] Move conversation summaries/messages/provider snapshots to SQLite.
-- [ ] Preserve rename/delete/search/reopen behavior.
-- [ ] Store durable turn summaries, not raw token deltas.
-- [ ] Import existing `.runtime/conversations`.
-- [ ] Keep File Work Review snapshots on filesystem with DB references.
-- [ ] Remove legacy JSON writes after migration PASS.
+- [x] Move conversation summaries/messages/provider snapshots to SQLite.
+- [x] Preserve rename/delete/search/reopen behavior.
+- [x] Store durable turn summaries, not raw token deltas.
+- [x] Import existing `.runtime/conversations`.
+- [x] Keep File Work Review snapshots on filesystem with DB references.
+- [x] Remove legacy JSON writes after migration PASS.
 
 ## WAVE 1 — Chat, Provider UX, Tooltip, Sidebar, Brand and latency truth
 
