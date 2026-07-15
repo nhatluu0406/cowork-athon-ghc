@@ -63,6 +63,21 @@ export function shouldPollSessionView(view: SessionView): boolean {
   return view.terminal === "completed" && view.text.trim().length === 0;
 }
 
+/**
+ * Guard: a runtime session may finalize at most once.
+ * Prevents streamed onView(terminal) + watchdog poll from both persisting assistant text.
+ */
+export function beginTurnFinalization(
+  finalizedSessions: Set<string>,
+  sessionId: string,
+  currentlyFinalizing: boolean,
+): boolean {
+  if (currentlyFinalizing) return false;
+  if (finalizedSessions.has(sessionId)) return false;
+  finalizedSessions.add(sessionId);
+  return true;
+}
+
 export const TERMINAL_GRACE_MS = 200;
 export const STREAM_WATCHDOG_MS = 90_000;
 export const STREAM_POLL_INTERVAL_MS = 2_000;
