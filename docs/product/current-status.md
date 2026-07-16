@@ -101,13 +101,32 @@ request create file
 ### Giới hạn trung thực (dispatch slice)
 
 1. **Chưa có packaged/live verification**: bằng chứng ở mức unit/integration với fake seams;
-   chưa chạy fan-out với OpenCode child + LLM thật.
-2. **`retry_until_verified` chưa nối verify hook ở composition** (file-review/disk evidence là
-   slice sau) — task loại này kết thúc **lỗi trung thực** ("requires a verification hook") thay
-   vì retry mù; `run_once` và `scheduled` hoạt động đầy đủ.
-3. **Task 4.3 (workflow builder từ prompt) và 5.3 phần PWA chưa làm.**
-4. Branch prompt ghép system prompt của agent vào đầu message (child seam chưa có slot system
+   chưa chạy fan-out với OpenCode child + LLM thật. (Đây là Checkpoint 5 còn mở — xem handoff.)
+2. Branch prompt ghép system prompt của agent vào đầu message (child seam chưa có slot system
    prompt per-session).
+
+## Dispatch backlog hoàn tất (verify hook + 4.3 + 5.3 PWA) — 2026-07-16 (commit `878c1f9`)
+
+Fan-out qua project-harness (Fable 5 orchestrate, workers `.claude/agents/*`). Đã đóng 3 mục
+còn thiếu của dispatch:
+
+| Item | Status |
+|---|---|
+| Verify hook `retry_until_verified` | `service/src/tasks/verify-file-evidence.ts` + nối ở `compose-service.ts` (`createFileEvidenceVerificationHook`). Task chỉ `verified` khi có bằng chứng file/disk thật; không thì `exhausted`, **không bao giờ** `completed` giả. Tier 1 vẫn trung thực khi không kiểm được evidence. |
+| Task 4.3 workflow builder từ prompt | `service/src/tasks/workflow-builder.ts` + `workflow-router.ts`. NL prompt → LLM draft TaskDefinition (+ chọn agent, fan-out) → validate bắt buộc qua contract → trả draft review → **confirm riêng mới lưu**. Không đường nào chạy draft chưa confirm; draft schema-injection / nới permission bị từ chối ở boundary (422). Live generator là Tier 2 seam; test dùng fake, không gọi LLM thật. |
+| Task 5.3 (PWA/phone) | `service/src/remote-gateway/pwa.ts` tab Dispatch + `gateway.ts` allowlist **chỉ** 5 route (list tasks, list/get runs, 1-touch run, cancel). Task create/update/delete/instantiate từ phone bị chặn 404. Poll 3s chỉ khi có run đang chạy; state trung thực. |
+| Verified | typecheck exit 0; **68/68** test dispatch (verify-hook, verify-file-evidence, workflow-builder, remote-dispatch, loop-runner, run-registry, fanout) + **23/23** regression composition/remote PASS. Chưa chạy full suite; chưa packaged/live. |
+
+### Handoff — việc build tiếp theo
+
+- **Checkpoint 5 (task #4, gate: security-reviewer)**: packaged golden path dispatch với
+  OpenCode child + LLM thật — chọn task → fan-out 2 agent → MỘT permission gate → cả hai kết
+  quả verified → tổng hợp trên desktop + phone. **Chưa bắt đầu.**
+- **Chặn Checkpoint 5**: cần provider hợp lệ. Gateway `http://127.0.0.1:8080` của user vẫn bị
+  SSRF policy chặn (http-on-loopback) → cần endpoint https **hoặc** quyết định nới policy +
+  ADR trước. Đường deterministic: dùng `COWORK_GHC_E2E_MOCK_LLM_BASE_URL` (mock LLM loopback)
+  cho verification không cần LLM thật.
+- **Chưa làm trong scope dispatch**: full-suite test sweep; đo cost/token của fan-out thật.
 
 ## Hotfix: app tự brick khi settings chứa endpoint http loopback (2026-07-16)
 
