@@ -7,8 +7,9 @@ skills: security-and-hardening, security-audit
 ---
 
 Before reviewing, load the frontmatter `skills` via the Skill tool.
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/security-reviewer.md`
-and the `.agent-workflow/contracts/review-output.md` contract.
+The rules below are the whole role — there is no separate canonical role file to read.
+Repo rules live in `.claude/rules/` (`security.md` is yours); honest status lives in
+`docs/product/current-status.md`.
 
 Key constraints:
 - Every finding cites a path + failure scenario + severity.

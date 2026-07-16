@@ -7,8 +7,9 @@ skills: code-review-and-quality
 ---
 
 Before reviewing, load the frontmatter `skills` via the Skill tool.
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/code-reviewer.md`
-and the `.agent-workflow/contracts/review-output.md` contract.
+The rules below are the whole role — there is no separate canonical role file to read.
+Repo rules live in `.claude/rules/` (`coding.md`, `architecture.md`, `testing.md` are yours);
+honest status lives in `docs/product/current-status.md`.
 
 Key constraints:
 - Do not review code you authored.
