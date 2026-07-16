@@ -53,9 +53,18 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 
 - [ ] Provider actions are understandable without button clutter.
 - [ ] Skills create/edit/delete/enable happy path works.
-- [ ] Inspector Plan/Activity/File Review display useful data or intentional empty state.
+- [x] Inspector Plan/Activity/File Review display useful data or intentional empty state. (PO-observed 2026-07-17; Cowork-only; no raw runtime payloads.)
 - [ ] No tooltip clipping at titlebar or sidebar boundaries.
 - [ ] No unnecessary page-level scrollbar at 1366×768.
+
+## Diagnostics (Wave 6; PO-observed 2026-07-17)
+
+- [x] Logging: enable "Ghi log chi tiết", perform activity, log size grows; Export writes a file via
+      the native save dialog; Clear resets the size.
+- [x] Telemetry: enable "Telemetry cục bộ", perform activity, counters increment; Export; Clear resets
+      them; disabling telemetry stops new counts.
+- [x] Export safety: the exported JSON holds only aggregate counters + logging status — no API keys,
+      prompts, document content, paths, or raw runtime events.
 
 ## Not demo blockers
 

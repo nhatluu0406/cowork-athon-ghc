@@ -73,21 +73,24 @@ updated_at: "2026-07-17"
       media/EMF not rendered; malformed/encrypted/>8 MiB → unsupported. No Office editor, no
       cloud/LibreOffice conversion, no full fidelity.
 
-## WAVE 5 — Inspector Phase 1
+## WAVE 5 — Inspector Phase 1 (PO-observed 2026-07-17)
 
-- [ ] Kế hoạch.
-- [ ] Hoạt động.
-- [ ] Tệp / File Work Review.
-- [ ] No raw runtime payloads.
-- [ ] Clear loading/error/empty states.
+- [x] Kế hoạch. (Cowork-only pane; folded from normalized `plan` EV events.)
+- [x] Hoạt động. (Normalized EV timeline; token/SSE/raw frames never reach the renderer.)
+- [x] Tệp / File Work Review. (Reuses the one verified-mutation File Work Review engine.)
+- [x] No raw runtime payloads. (Server-side EV mapper/reducer; renderer sees folded shapes only.)
+- [x] Clear loading/error/empty states + persistence across reopen.
 
-## WAVE 6 — Logging and local telemetry
+## WAVE 6 — Logging and local telemetry (PO-observed 2026-07-17)
 
-- [ ] Detailed local structured logs with rotation/redaction.
-- [ ] Local-only aggregate telemetry.
-- [ ] Export/clear actions.
-- [ ] No network telemetry.
-- [ ] Diagnostics documentation and acceptance.
+- [x] Detailed local structured logs with rotation/redaction. (Rotating JSON-lines file sink under
+      `data/logs`; every record scrubbed before disk; "Ghi log chi tiết" drives service debug logs.)
+- [x] Local-only aggregate telemetry. (SQLite counters, migration id 3; fixed allowlist; toggle
+      gates collection; counts structural facts only — no content/paths/prompts/credentials.)
+- [x] Export/clear actions. (`/v1/diagnostics` + shell save-dialog IPC; redacted export bundle;
+      per-target clear with confirmation in Settings → Chẩn đoán.)
+- [x] No network telemetry. (No egress anywhere in the diagnostics modules.)
+- [x] Diagnostics documentation and acceptance.
 
 ## WAITING
 
