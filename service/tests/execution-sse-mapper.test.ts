@@ -96,8 +96,15 @@ test("step-start / step-finish parts → EV2 step events", () => {
   assert.equal((finish[0] as Extract<EvEvent, { kind: "step" }>).status, "completed");
 });
 
+/** Seed the message role so the assistant-only token gate lets deltas through (as in a real run). */
+function assistantMessage(mapper: ReturnType<typeof newMapper>, id: string): void {
+  mapper.map({ type: "message.updated", properties: { info: { id, role: "assistant" } } });
+}
+
 test("message.part.delta → S2 token event; a text part emits nothing (deltas own tokens)", () => {
-  const tok = newMapper().map({
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const tok = mapper.map({
     type: "message.part.delta",
     properties: { sessionID: SID, messageID: "m", partID: "p", field: "text", delta: "Hello" },
   });
@@ -108,6 +115,24 @@ test("message.part.delta → S2 token event; a text part emits nothing (deltas o
     partFrame({ id: "p", sessionID: SID, messageID: "m", type: "text", text: "Hello" }),
   );
   assert.equal(textPart.length, 0);
+});
+
+test("message.part.delta with field=reasoning emits NO token (thinking must not leak)", () => {
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const reasoning = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "r", field: "reasoning", delta: "Let me think..." },
+  });
+  assert.equal(reasoning.length, 0, "reasoning deltas must not become visible tokens");
+
+  // A field-less delta stays backward-compatible (treated as answer text).
+  const legacy = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "p", delta: "Answer" },
+  });
+  assert.equal(legacy.length, 1);
+  assert.equal((legacy[0] as Extract<EvEvent, { kind: "token" }>).delta, "Answer");
 });
 
 test("session.idle → terminal completed (the only completed source)", () => {
