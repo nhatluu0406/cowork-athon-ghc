@@ -25,7 +25,14 @@ import type { Session } from "electron";
 export const RENDERER_CSP = [
   "default-src 'self'",
   "script-src 'self'",
-  "style-src 'self'",
+  // `'unsafe-inline'` is required ONLY for styles: Chromium's built-in PDF viewer (PDFium),
+  // which renders a workspace `.pdf` inside the `blob:` iframe, applies inline styles to lay out
+  // its own toolbar/page/thumbnail chrome. Under a strict `style-src 'self'` those inline styles
+  // are refused, the viewer's layout collapses, and the PDF shows as a blank/cramped grey box.
+  // The security-critical directive — `script-src 'self'` — stays strict (no inline scripts, the
+  // real XSS lever), and `object-src 'none'` is unchanged. CSS-based exfiltration is further
+  // constrained because `connect-src`/`img-src`/`font-src` still forbid arbitrary remote origins.
+  "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
