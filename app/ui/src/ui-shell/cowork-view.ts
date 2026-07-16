@@ -103,9 +103,9 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
   // full Kỹ năng & MCP surface (handler wired in app-shell.ts).
   const skillsButton = el("button", "skills-btn composer-skills-btn") as HTMLButtonElement;
   skillsButton.type = "button";
-  skillsButton.textContent = "0 Kỹ năng · 0 MCP";
-  skillsButton.dataset["tooltip"] = "Mở Kỹ năng & MCP";
-  skillsButton.setAttribute("aria-label", "Mở Kỹ năng & MCP");
+  skillsButton.textContent = "0 Skill · 0 MCP";
+  skillsButton.dataset["tooltip"] = "Mở Skill & MCP";
+  skillsButton.setAttribute("aria-label", "Mở Skill & MCP");
 
   const providerControl = createConversationProviderControl();
 
