@@ -38,6 +38,16 @@ export {
 } from "./log-file-sink.js";
 
 export {
+  createTelemetryStore,
+  recordEventTelemetry,
+  TELEMETRY_COUNTERS,
+  type TelemetryStore,
+  type TelemetryStoreOptions,
+  type TelemetrySnapshot,
+  type TelemetryCounter,
+} from "./telemetry-store.js";
+
+export {
   scrubExecutionMetadata,
   exportExecutionMetadataJson,
   type ExecutionMetadata,
