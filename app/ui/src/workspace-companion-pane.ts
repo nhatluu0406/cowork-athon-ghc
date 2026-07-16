@@ -4,6 +4,7 @@
 
 import type { ServiceClient } from "./service-client.js";
 import { el, icon } from "./ui-shell/dom-utils.js";
+import { isAutoOpenSafe } from "./workspace-file-role.js";
 
 export type WorkspaceFileContentView = Awaited<ReturnType<ServiceClient["readWorkspaceFileContent"]>>;
 
@@ -20,7 +21,19 @@ export interface WorkspaceCompanionPaneHandle {
   readonly open: (relativePath: string) => Promise<void>;
   readonly refresh: () => Promise<void>;
   readonly getOpenPath: () => string | null;
+  /**
+   * A verified agent mutation touched the currently-open file. Reloads from disk when the
+   * buffer is clean; when the buffer is dirty it shows a conflict banner instead of
+   * overwriting the user's unsaved edits (the user picks keep-mine or reload-from-disk).
+   */
   readonly showAgentUpdated: () => void;
+  /**
+   * Auto-open a file affected by a verified agent mutation, but only when it is SAFE:
+   * a supported non-secret previewable kind, not oversized (the service returns
+   * `unsupported`), and not while the current buffer has unsaved edits. Returns whether the
+   * file was opened. Never yanks the user off a dirty buffer.
+   */
+  readonly openIfSafe: (relativePath: string) => Promise<boolean>;
 }
 
 function base64ToBlobUrl(base64: string, mime: string): string {
@@ -56,6 +69,31 @@ export function mountWorkspaceCompanionPane(
   saveButton.append(icon("save", "Lưu tệp"));
   toolbar.append(pathWrap, statusBadge, saveButton);
 
+  // Conflict banner: shown when an agent edits the open file while the buffer is dirty.
+  const conflictBanner = el("div", "workspace-companion-pane__conflict");
+  conflictBanner.hidden = true;
+  conflictBanner.setAttribute("role", "alert");
+  const conflictText = el(
+    "span",
+    "workspace-companion-pane__conflict-text",
+    "Agent đã sửa tệp này trên đĩa, nhưng bạn đang có thay đổi chưa lưu.",
+  );
+  const conflictActions = el("div", "workspace-companion-pane__conflict-actions");
+  const keepButton = el(
+    "button",
+    "workspace-companion-pane__conflict-btn",
+    "Giữ bản đang sửa",
+  ) as HTMLButtonElement;
+  keepButton.type = "button";
+  const reloadButton = el(
+    "button",
+    "workspace-companion-pane__conflict-btn workspace-companion-pane__conflict-btn--danger",
+    "Tải lại từ đĩa",
+  ) as HTMLButtonElement;
+  reloadButton.type = "button";
+  conflictActions.append(keepButton, reloadButton);
+  conflictBanner.append(conflictText, conflictActions);
+
   const body = el("div", "workspace-companion-pane__body");
   const empty = el("div", "workspace-companion-pane__empty");
   const emptyIcon = el("div", "workspace-companion-pane__empty-icon");
@@ -75,8 +113,12 @@ export function mountWorkspaceCompanionPane(
     formats,
   );
   body.append(empty);
-  root.append(toolbar, body);
+  root.append(toolbar, conflictBanner, body);
   container.replaceChildren(root);
+
+  const hideConflict = (): void => {
+    conflictBanner.hidden = true;
+  };
 
   const revokeBlob = (): void => {
     if (blobUrl !== null) {
@@ -161,6 +203,7 @@ export function mountWorkspaceCompanionPane(
   const renderFile = (file: WorkspaceFileContentView): void => {
     current = file;
     dirty = false;
+    hideConflict();
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
     revokeBlob();
@@ -254,6 +297,7 @@ export function mountWorkspaceCompanionPane(
           });
         }
         dirty = false;
+        hideConflict();
         setStatus("Đã lưu", 2500);
         await load(openPath!);
       } catch (error) {
@@ -261,6 +305,19 @@ export function mountWorkspaceCompanionPane(
         saveButton.disabled = false;
       }
     })();
+  });
+
+  // Keep my unsaved edits: dismiss the banner, do NOT touch the disk or the buffer.
+  keepButton.addEventListener("click", () => {
+    hideConflict();
+    setStatus("Đang giữ bản đang sửa của bạn.", 3500);
+  });
+  // Reload from disk: discard local edits and re-read the agent's version.
+  reloadButton.addEventListener("click", () => {
+    if (openPath === null) return;
+    dirty = false;
+    hideConflict();
+    void load(openPath);
   });
 
   return {
@@ -275,12 +332,30 @@ export function mountWorkspaceCompanionPane(
     },
     getOpenPath: () => openPath,
     showAgentUpdated: () => {
+      // Dirty buffer: never silently overwrite — surface a conflict banner with a choice.
       if (dirty) {
-        setStatus("Agent đã cập nhật tệp. Thay đổi chưa lưu của bạn được giữ nguyên.", 0);
+        conflictBanner.hidden = false;
+        setStatus("Xung đột: Agent đã sửa tệp đang mở.", 0);
         return;
       }
       setStatus("Agent đã cập nhật tệp", 3500);
       void load(openPath ?? "");
+    },
+    openIfSafe: async (relativePath) => {
+      // Never yank the user off unsaved work, and never force-open secret/unsupported files.
+      if (dirty) return false;
+      if (!isAutoOpenSafe(relativePath)) return false;
+      try {
+        const file = await client.readWorkspaceFileContent(relativePath);
+        // Oversize files come back as `unsupported`/`missing` — do not present them.
+        if (file.kind === "unsupported" || file.kind === "missing") return false;
+        openPath = relativePath;
+        renderFile(file);
+        setStatus("Agent đã tạo/cập nhật tệp — đã mở tại đây.", 3500);
+        return true;
+      } catch {
+        return false;
+      }
     },
   };
 }

@@ -123,6 +123,10 @@ import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+// Module-level so the verified-mutation handler (finalizeFileMutationReview) can auto-refresh the
+// file trees after an agent create/modify/delete, not just the mount closure.
+let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
+let codeNavigator: WorkspaceNavigatorHandle | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
 let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
@@ -819,9 +823,22 @@ async function finalizeFileMutationReview(
     state.turnTiming.mark("FILE_VERIFIED", relativePath);
     refreshActivityUi(state, dom);
     void persistActivity(state);
+    // Wave 4 — reflect the verified mutation in the workspace surface.
+    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
+    void workspaceNavigator?.refresh();
+    void codeNavigator?.refresh();
+    // 2) Update the open file, or auto-open the affected file when safe.
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
-    if (openPath !== null && openPath === relativePath && event.operation !== "delete") {
-      workspaceCompanion?.showAgentUpdated();
+    if (openPath !== null && openPath === relativePath) {
+      // The open file itself changed: reload it, or raise a conflict banner if the buffer is
+      // dirty (showAgentUpdated never overwrites unsaved edits). Skip on delete.
+      if (event.operation !== "delete") workspaceCompanion?.showAgentUpdated();
+    } else if (event.operation !== "delete") {
+      // A different/unopened file changed: auto-open it only when safe (never over a dirty
+      // buffer, never a secret/unsupported/oversize file), and select it in the navigator.
+      void workspaceCompanion?.openIfSafe(relativePath).then((opened) => {
+        if (opened) workspaceNavigator?.selectPath(relativePath);
+      });
     }
   } catch {
     // best effort
@@ -2263,8 +2280,6 @@ export function mountCoworkApp(root: HTMLElement): void {
   let featuresMounted = false;
   let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
-  let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
-  let codeNavigator: WorkspaceNavigatorHandle | null = null;
   let workspacePicker: WorkspacePickerHandle | null = null;
   let skillsEnabledCount = 0;
   let mcpEnabledCount = 0;

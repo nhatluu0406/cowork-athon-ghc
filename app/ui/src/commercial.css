@@ -1208,6 +1208,45 @@ button {
   box-shadow: var(--cghc-shadow-sm);
 }
 
+.workspace-companion-pane__conflict {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--cghc-border));
+  border-radius: 12px;
+  margin: 8px 12px 0;
+  background: color-mix(in srgb, var(--danger) 10%, var(--cghc-surface-elevated));
+  color: var(--cghc-text-primary);
+  font-size: 12px;
+}
+
+.workspace-companion-pane__conflict-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.workspace-companion-pane__conflict-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 999px;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workspace-companion-pane__conflict-btn:hover {
+  background: var(--cghc-surface-elevated);
+}
+
+.workspace-companion-pane__conflict-btn--danger {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--cghc-border));
+  color: var(--danger);
+}
+
 .workspace-companion-pane__editor {
   padding: 20px;
   color: var(--cghc-text-primary);
