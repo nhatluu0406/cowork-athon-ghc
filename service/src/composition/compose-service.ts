@@ -67,6 +67,9 @@ import {
 } from "../conversation/index.js";
 import type { ConversationStore } from "../conversation/store.js";
 import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
+import { createAgentCatalog, createAgentRouter } from "../agents/index.js";
+import { createTaskStore, createTaskRouter } from "../tasks/index.js";
+import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
@@ -130,6 +133,8 @@ const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
 const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
+const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
+const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -385,6 +390,19 @@ export async function createCoworkService(
     stateFilePath: options.skillsStateFilePath ?? DEFAULT_SKILLS_STATE_PATH,
   });
 
+  // --- Agent catalog + Task store (agent-harness-plan.md Task 5.1 / 4.1). Built-ins are always
+  // present; user definitions persist as one JSON doc each. Agent presets can only NARROW the live
+  // session policy (validated in the catalog); tasks validate agent/branch references against the
+  // CURRENT agent catalog. Both use the single-file settings-fs seam (injectable for tests).
+  const agentCatalog = await createAgentCatalog({
+    fs: options.agentStoreFs ?? createNodeSettingsFs(options.agentStoreFilePath ?? DEFAULT_AGENTS_PATH),
+    basePolicy: LIVE_SESSION_PERMISSION_POLICY,
+  });
+  const taskStore = await createTaskStore({
+    fs: options.taskStoreFs ?? createNodeSettingsFs(options.taskStoreFilePath ?? DEFAULT_TASKS_PATH),
+    knownAgentIds: () => agentCatalog.knownIds(),
+  });
+
   // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
   // reads the SAME `process.env` the rest of this module treats as the environment source
   // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
@@ -467,8 +485,10 @@ export async function createCoworkService(
         }
       },
     }),
-    createConversationRouter(conversationStore),
+    createConversationRouter(conversationStore, providerProfileStore, credentialService),
     createSkillRouter(skillCatalog),
+    createAgentRouter(agentCatalog),
+    createTaskRouter(taskStore),
     createFileReviewRouter({
       activeWorkspaceRoot: () => {
         const ws = settingsStore.activeWorkspace();
@@ -479,6 +499,7 @@ export async function createCoworkService(
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
     ...(ms365Router !== undefined ? [ms365Router] : []),
+    ...(options.extraRouters ?? []),
   ];
 
   const deps: CoworkServiceDeps = {
@@ -498,6 +519,8 @@ export async function createCoworkService(
     ...(mcpStore !== undefined ? { mcpStore } : {}),
     conversationStore,
     skillCatalog,
+    agentCatalog,
+    taskStore,
     redactError,
     ...(localAuth !== undefined ? { localAuth } : {}),
     ...(sqliteDatabase !== undefined ? { sqliteDatabase } : {}),

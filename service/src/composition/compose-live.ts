@@ -45,6 +45,23 @@ import type { SkillRoot } from "../skills/index.js";
 import { createWorkspaceGuard, grantWorkspace } from "../workspace/index.js";
 import { createPermissionBridge } from "../runtime/permission-bridge.js";
 import { normalizeOpencodeFramePaths } from "../runtime/opencode-frame-paths.js";
+import {
+  createPairingRegistry,
+  createRemoteRouter,
+  isRemoteEnabled,
+  lanGatewayUrls,
+  resolveRemoteBindHost,
+  startRemoteGateway,
+  type PairingRegistry,
+  type RemoteGateway,
+  type RemoteGatewayInfo,
+} from "../remote-gateway/index.js";
+import {
+  createDiscordAdapter,
+  createDiscordRestTransport,
+  readDiscordConfig,
+  type DiscordAdapter,
+} from "../remote-gateway/discord/index.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -85,6 +102,13 @@ export interface LiveCoworkServiceOptions {
    * (FIX-6). Called after the child is up and before the socket opens.
    */
   readonly seedScrubber?: (scrubber: SecretScrubber, deps: CoworkServiceDeps) => void | Promise<void>;
+  /**
+   * Env seam for the flag-gated remote gateway (default `process.env`). Unset/off keeps the
+   * composition byte-for-byte unchanged (agent-harness-plan.md remote MVP).
+   */
+  readonly env?: Record<string, string | undefined>;
+  /** Secret-free info sink for remote-gateway startup lines (default: stdout). */
+  readonly remoteLog?: (line: string) => void;
 }
 
 export interface LiveCoworkService {
@@ -92,6 +116,8 @@ export interface LiveCoworkService {
   readonly deps: CoworkServiceDeps;
   readonly supervisor: LiveRuntimeSupervisor;
   readonly identity: RuntimeProcessIdentity;
+  /** The flag-gated remote gateway, present only when `CGHC_REMOTE_ENABLED` is on. */
+  readonly remote?: RemoteGateway;
   /** Stop the loopback socket THEN the supervised child (ONE owner). Idempotent-friendly. */
   stop(): Promise<void>;
 }
@@ -146,10 +172,34 @@ export async function startLiveCoworkService(
   // out-of-band on `/event` (consumed by the pump below), never in this POST's response.
   const sendPrompt = createOpencodeSendPrompt({ http });
 
+  // Remote feature (flag-gated): ONE pairing registry shared by the desktop `/v1/remote` router
+  // and the phone-facing gateway, plus a mutable holder the desktop reads for gateway coordinates
+  // (filled after the gateway binds below). When the flag is off, no router is added and the
+  // holder stays empty — the baseline composition is unchanged.
+  const env = options.env ?? process.env;
+  const remoteEnabled = isRemoteEnabled(env);
+  const remotePairing: PairingRegistry | undefined = remoteEnabled
+    ? createPairingRegistry()
+    : undefined;
+  let remoteGatewayInfo: RemoteGatewayInfo | null = null;
+  const extraRouters =
+    remotePairing !== undefined
+      ? [
+          createRemoteRouter({
+            pairing: remotePairing,
+            state: {
+              enabled: () => remoteGatewayInfo !== null,
+              gateway: () => remoteGatewayInfo,
+            },
+          }),
+        ]
+      : [];
+
   // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).
   const composed = await createCoworkService({
     ...(options.service ?? {}),
     ...(options.now !== undefined ? { now: options.now } : {}),
+    ...(extraRouters.length > 0 ? { extraRouters } : {}),
     runtimeHealth: supervisor,
     sessionStore,
     runtimeReply,
@@ -167,13 +217,20 @@ export async function startLiveCoworkService(
     return normalized;
   }
 
+  // Most-recently-active session, tracked as the hub opens runs — the Discord channel's default
+  // prompt target (the app owns richer session selection; this is a best-effort MVP default).
+  let lastActiveSessionId: string | null = null;
+
   // The live `/event` → hub pump. It feeds each raw child frame into the session's hub run
   // (the hub owns the single mapper/fold/coalesce/fan-out), so the SSE route has frames to stream.
   const pump: EventPump = createEventPump({
     baseUrl: () => supervisor.baseUrl,
     target: {
       knows: (sessionId) => composed.deps.sessionService.view(sessionId) !== undefined,
-      open: (sessionId) => composed.deps.streamHub.open(sessionId),
+      open: (sessionId) => {
+        lastActiveSessionId = sessionId;
+        return composed.deps.streamHub.open(sessionId);
+      },
     },
     redactError: composed.deps.redactError,
     onFrame: preprocessFrame,
@@ -191,23 +248,128 @@ export async function startLiveCoworkService(
     }
     const running = await composed.start();
     pump.start();
+
+    // Flag-gated remote gateway (agent-harness-plan.md remote MVP): started AFTER the main
+    // loopback socket so it proxies a live endpoint. A gateway failure must never take the
+    // product down — remote is an optional observer, so it degrades to "not available".
+    const remoteLog =
+      options.remoteLog ?? ((line: string) => process.stdout.write(`${line}\n`));
+    let remote: RemoteGateway | undefined;
+    if (remotePairing !== undefined) {
+      try {
+        const remotePort = Number.parseInt(env["CGHC_REMOTE_PORT"] ?? "", 10);
+        remote = await startRemoteGateway({
+          mainBaseUrl: running.baseUrl,
+          mainClientToken: running.clientToken,
+          pairing: remotePairing,
+          host: resolveRemoteBindHost(env),
+          ...(Number.isFinite(remotePort) && remotePort > 0 ? { port: remotePort } : {}),
+          log: remoteLog,
+        });
+        const lanUrls = remote.host === "0.0.0.0" ? lanGatewayUrls(remote.port) : [];
+        remoteGatewayInfo = { url: remote.url, lanUrls };
+        // The desktop `/remote` panel issues codes + QR via `/v1/remote`; only surface the
+        // reachable URL here (never a pairing code or token in a log line).
+        remoteLog(`[cowork-remote] gateway san sang: ${remote.url}`);
+        for (const url of lanUrls) {
+          remoteLog(`[cowork-remote] tu dien thoai (cung Wi-Fi): ${url}`);
+        }
+        remoteLog(`[cowork-remote] mo /remote trong app de lay ma pairing + QR`);
+      } catch (err) {
+        remote = undefined;
+        remoteGatewayInfo = null;
+        remoteLog(
+          `[cowork-remote] khong khoi dong duoc gateway: ${err instanceof Error ? err.message : "unknown"}`,
+        );
+      }
+    }
+
+    // Flag-gated Discord channel (agent-harness-plan.md Task 2.3). One poll loop both notifies
+    // newly-pending permissions (redacted) and processes inbound commands. Q5: only `deny` and
+    // `prompt` reach the gate/session; `approve` of a write is refused inside the adapter.
+    const discordConfig = readDiscordConfig(env);
+    let discordAdapter: DiscordAdapter | undefined;
+    let discordTimer: ReturnType<typeof setInterval> | undefined;
+    if (discordConfig !== null) {
+      const gate = composed.deps.permissionGate;
+      const notified = new Set<string>();
+      discordAdapter = createDiscordAdapter({
+        transport: createDiscordRestTransport({
+          botToken: discordConfig.botToken,
+          channelId: discordConfig.channelId,
+          log: remoteLog,
+        }),
+        allowedUserIds: discordConfig.allowedUserIds,
+        hooks: {
+          listPending: () =>
+            gate.pending().map((r) => ({
+              requestId: r.requestId,
+              description: r.action.description,
+              ...(r.action.targetPath !== undefined ? { targetPath: r.action.targetPath } : {}),
+            })),
+          denyPermission: async (requestId) => {
+            const outcome = await gate.resolve({ requestId, decision: "deny" });
+            return { status: outcome.status === "resolved" ? "resolved" : outcome.status };
+          },
+          // MVP: the most recently active session is the prompt target.
+          activeSessionId: () => lastActiveSessionId,
+          sendPrompt: async (sessionId, text) => {
+            try {
+              await sendPrompt.send(sessionId, text);
+              return { accepted: true };
+            } catch (e) {
+              const reason =
+                typeof e === "object" && e !== null && typeof (e as { code?: unknown }).code === "string"
+                  ? ((e as { code: string }).code)
+                  : "error";
+              return { accepted: false, reason };
+            }
+          },
+        },
+      });
+      const adapter = discordAdapter;
+      discordTimer = setInterval(() => {
+        // Notify any newly-pending permission (once each), then process inbound commands.
+        for (const r of gate.pending()) {
+          if (notified.has(r.requestId)) continue;
+          notified.add(r.requestId);
+          void adapter.notifyPermissionAsked({
+            requestId: r.requestId,
+            description: r.action.description,
+            ...(r.action.targetPath !== undefined ? { targetPath: r.action.targetPath } : {}),
+          });
+        }
+        void adapter.pump();
+      }, 4000);
+      discordTimer.unref?.();
+      remoteLog(`[cowork-remote] Discord channel bat (allowlist ${discordConfig.allowedUserIds.length} user)`);
+    }
+
     return {
       running,
       deps: composed.deps,
       supervisor,
       identity,
-      // Ordered teardown (ONE owner): stop the socket (no new requests) → stop the pump (close
-      // the `/event` consumer) → stop the child. The pump reads FROM the child, so it must be
-      // torn down before the child is killed. Each step is protected so a later step always runs.
+      ...(remote !== undefined ? { remote } : {}),
+      // Ordered teardown (ONE owner): stop the remote gateway (it depends on the socket) →
+      // stop the socket (no new requests) → stop the pump (close the `/event` consumer) →
+      // stop the child. The pump reads FROM the child, so it must be torn down before the
+      // child is killed. Each step is protected so a later step always runs.
       stop: async (): Promise<void> => {
         try {
-          await running.service.stop();
+          if (discordTimer !== undefined) clearInterval(discordTimer);
+          remoteGatewayInfo = null;
+          await remote?.stop().catch(() => undefined);
         } finally {
           try {
-            await pump.stop();
+            await running.service.stop();
           } finally {
-            permissionBridge.reset();
-            await supervisor.stop();
+            try {
+              await pump.stop();
+            } finally {
+              permissionBridge.reset();
+              await supervisor.stop();
+            }
           }
         }
       },

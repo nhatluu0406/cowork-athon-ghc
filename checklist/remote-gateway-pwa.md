@@ -1,0 +1,18 @@
+# Validation Checklist: Remote Gateway & PWA Client
+
+This checklist verifies the alignment of the **Remote Control (PWA + Discord)** features with the specifications in `review/idea.md`.
+
+---
+
+## Validation Items
+
+| ID | Description | How to Validate | Status | Evidence Link / Path | Notes |
+|---|---|---|---|---|---|
+| **REMOTE-PAIR-01** | One-time pairing codes expire after 2 minutes; lock out after 5 failures. | Check pairing registry timing logic and tests. | **Pass** | [pairing.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/pairing.ts#L110-L157)<br>[remote-pairing.test.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/tests/remote-pairing.test.ts) | Implements alphabet filtering and timing-safe code comparisons. |
+| **REMOTE-TOK-02** | Device tokens are stored as SHA-256 digests; comparison is timing-safe. | Review verifyToken implementation and test timing safety. | **Pass** | [pairing.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/pairing.ts#L176-L188) | Constant-time comparisons run over all stored digests to avoid timing leaks. |
+| **REMOTE-GW-03** | Gateway forwards only allowlisted endpoints to the loopback service. | Verify path resolution limits against the target routes. | **Pass** | [gateway.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/gateway.ts#L107-L135)<br>[remote-gateway.test.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/tests/remote-gateway.test.ts) | Restricts requests to allowed endpoints only. Unknown routes fail with 404. |
+| **REMOTE-DIS-04** | Discord bot poll client runs outbound-only and uses user allowlist. | Inspect Discord transport polling loops and config gates. | **Pass** | [adapter.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/discord/adapter.ts#L90-L98)<br>[rest-transport.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/discord/rest-transport.ts) | Does not open inbound ports. Discards inputs from non-allowlisted IDs. |
+| **REMOTE-DIS-05** | Discord bot refuses tool file-write approvals (Q5 security rule). | Send "approve" command via Discord mock and assert rejection. | **Pass** | [adapter.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/discord/adapter.ts#L100-L105)<br>[discord-adapter.test.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/tests/discord-adapter.test.ts) | Correctly blocks write approvals, requiring approval via PWA/desktop. |
+| **REMOTE-PWA-06** | Served PWA page contains no external CDNs or dynamic backend dependencies. | Review PWA inlined HTML template. | **Pass** | [pwa.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/pwa.ts) | Written in self-contained pure vanilla HTML/JS/CSS. |
+| **REMOTE-TLS-07** | Local network (LAN) connections are secured with TLS + cert pinning. | Inspect gateway listener setup and look for HTTPS/TLS configuration. | **Fail** | [gateway.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/gateway.ts#L55-L60) | LAN mode (`CGHC_REMOTE_LAN=1`) runs over plain HTTP without TLS. This is a known gap. |
+| **REMOTE-KEY-08** | Paired device tokens survive app restart via Windows Keyring storage. | Inspect registry storage mechanism. | **Fail** | [pairing.ts](file:///c:/Users/nhata/PycharmProjects/cowork-athon-ghc/service/src/remote-gateway/pairing.ts#L5-L9) | Registry is in-memory only. Restarting the desktop service revokes all devices. |

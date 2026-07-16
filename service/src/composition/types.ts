@@ -29,6 +29,8 @@ import type { ConversationStore } from "../conversation/index.js";
 import type { SessionStreamHub } from "../server/session-stream-hub.js";
 import type { ExtensionRegistry } from "../extensions/index.js";
 import type { SkillCatalog, SkillRoot } from "../skills/index.js";
+import type { AgentCatalog } from "../agents/index.js";
+import type { TaskStore } from "../tasks/index.js";
 import type { McpStore } from "../db/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
@@ -60,6 +62,14 @@ export interface CoworkServiceOptions extends ServiceOptions {
   readonly skillRoots?: readonly SkillRoot[];
   /** Persisted global-local enabled registry. Default: `.runtime/skills-enabled.json`. */
   readonly skillsStateFilePath?: string;
+  /** Persistence seam for user AgentDefinitions. Default: node fs at {@link agentStoreFilePath}. */
+  readonly agentStoreFs?: SettingsFs;
+  /** User-agents file path when {@link agentStoreFs} is not supplied. Default: `.runtime/agents.json`. */
+  readonly agentStoreFilePath?: string;
+  /** Persistence seam for user TaskDefinitions. Default: node fs at {@link taskStoreFilePath}. */
+  readonly taskStoreFs?: SettingsFs;
+  /** User-tasks file path when {@link taskStoreFs} is not supplied. Default: `.runtime/tasks.json`. */
+  readonly taskStoreFilePath?: string;
   /**
    * The ONE credential store. Default: encrypted SQLite vault when a database is open;
    * otherwise tests inject the memory store. Legacy keyring is used only as a migration source.
@@ -111,6 +121,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * RuntimeNotAttachedError so the message route honestly reports `runtime_not_attached`.
    */
   readonly sendPrompt?: SendPrompt;
+
+  /**
+   * Extra token-guarded routers mounted after the built-ins (e.g. the flag-gated `/v1/remote`
+   * control surface wired by `compose-live`). Empty by default — the baseline is unchanged.
+   */
+  readonly extraRouters?: readonly BoundaryRouter[];
 }
 
 /** The wired singletons exposed for the shell, tests, and the Tier 2 live supervisor to attach. */
@@ -135,6 +151,10 @@ export interface CoworkServiceDeps {
   readonly conversationStore: ConversationStore;
   /** Service-owned local Skill discovery, validation, enabled state, and snapshots. */
   readonly skillCatalog: SkillCatalog;
+  /** Built-in + user AgentDefinition catalog (agent-harness-plan.md Task 5.1). */
+  readonly agentCatalog: AgentCatalog;
+  /** Persisted TaskDefinition store (agent-harness-plan.md Task 4.1). */
+  readonly taskStore: TaskStore;
   /**
    * The runtime-extension layer (CGHC-026): skill registry (RE1), MCP lifecycle (RE2), workflow
    * templates (RE4) over ONE extension-state source of truth with RE5 failure isolation. Wired
