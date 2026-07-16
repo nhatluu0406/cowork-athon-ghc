@@ -11,7 +11,9 @@ export function createTopbar(): TopbarDom {
 
   const leading = el("div", "topbar__leading");
   const brand = el("div", "topbar__brand");
-  const mark = el("span", "topbar__brand-mark");
+  const mark = el("img", "topbar__brand-mark") as HTMLImageElement;
+  mark.src = "/cowork-ghc-logo.svg";
+  mark.alt = "";
   mark.setAttribute("aria-hidden", "true");
   brand.append(mark, el("span", "topbar__brand-name", "Cowork GHC"));
   leading.append(brand);

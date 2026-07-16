@@ -27,6 +27,10 @@ export interface ProviderProfile {
   readonly updatedAt: string;
   readonly credentialRef?: CredentialRef;
   readonly preset?: ProviderProfilePresetMeta;
+  readonly credentialRevision?: number;
+  readonly lastVerifiedAt?: string;
+  readonly lastVerifiedOk?: boolean;
+  readonly verifiedTargetFingerprint?: string;
 }
 
 /** Non-secret profile row returned to the renderer. */
@@ -42,6 +46,10 @@ export interface ProviderProfileView {
   readonly credentialAccount?: string;
   readonly presetId?: string;
   readonly isActive: boolean;
+  /** True when last verification matches the current endpoint/model/credential revision. */
+  readonly verificationCurrent: boolean;
+  readonly lastVerifiedAt?: string;
+  readonly lastVerifiedOk?: boolean;
 }
 
 /** Provider/model identity snapshotted on a conversation's first turn. */

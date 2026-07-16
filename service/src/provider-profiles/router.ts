@@ -155,12 +155,14 @@ export function createProviderProfileRouter(input: {
           const profile = input.profiles.get(id);
           if (profile === undefined) throw new ProviderProfileRequestError("Profile not found.");
           const result = await input.tester.testProfile(profile);
+          await input.profiles.recordConnectionVerification(id, result.ok);
           return {
             status: 200,
             data: {
               profileId: id,
               result,
               state: input.tester.lastResultFor(id) ?? null,
+              profile: input.profiles.listViews().find((p) => p.id === id) ?? null,
             },
           };
         },

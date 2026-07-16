@@ -28,6 +28,8 @@ export {
 
 export { runIsolated, runIsolatedSync, type ExtRedactor, type IsolateContext } from "./isolation.js";
 
+// @deprecated Exploratory RE1 skill-execution seam. The ONE product Skill system is
+// `service/src/skills/catalog.ts` (`SkillCatalog`) — see `skill-registry.ts` module docblock.
 export {
   createSkillRegistry,
   type SkillRegistry,
@@ -101,6 +103,11 @@ export interface ExtensionRegistryOptions {
  * Wire the skill / MCP / template registries onto ONE {@link ExtensionState}. Every seam
  * defaults to its honest not-attached implementation, so this is safe to construct at Tier 1
  * without any live runtime, process, or network.
+ *
+ * NOTE: `.skills` here is the DEPRECATED exploratory RE1 registry (kept mounted only so this
+ * type stays stable for existing callers/tests) — it is NOT the product Skills system. Product
+ * Skill composition (discovery, enable/disable, OpenCode native-Skills launch wiring) goes
+ * exclusively through `service/src/skills/catalog.ts` (`CoworkServiceDeps.skillCatalog`).
  */
 export function createExtensionRegistry(
   options: ExtensionRegistryOptions = {},

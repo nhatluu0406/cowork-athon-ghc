@@ -1,10 +1,13 @@
 /**
- * Assistant output sanitization tests.
+ * Assistant output sanitization / presentation tests.
  */
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeAssistantForDisplay } from "../src/assistant-output.js";
+import {
+  sanitizeAssistantForDisplay,
+  stripInternalAssistantNarration,
+} from "../src/assistant-output.js";
 import {
   CONTEXT_ENVELOPE_END,
   CONTEXT_ENVELOPE_START,
@@ -38,4 +41,35 @@ test("injection phrase in historical context does not appear in cleaned output",
   const out = sanitizeAssistantForDisplay(leaked);
   assert.ok(!out.includes(LEGACY_HEADER));
   assert.match(out, /OK/);
+});
+
+test("sanitizeAssistantForDisplay removes tool narration lines", () => {
+  const raw =
+    "Sử dụng tool write để tạo demo.txt\n" +
+    "Đã tạo demo.txt trong workspace.\n" +
+    "Using tool read\n" +
+    "Nội dung sẵn sàng.";
+  const out = sanitizeAssistantForDisplay(raw);
+  assert.doesNotMatch(out, /Sử dụng tool/u);
+  assert.doesNotMatch(out, /Using tool/u);
+  assert.match(out, /Đã tạo demo\.txt/u);
+  assert.match(out, /Nội dung sẵn sàng/u);
+});
+
+test("sanitizeAssistantForDisplay removes Skill tokens and runtime ids", () => {
+  const raw =
+    "Ghi chú ngắn.\n" +
+    "SKILL-CYAN-582\n" +
+    "runtimeSessionId: sess-abc-123\n" +
+    "Hoàn tất.";
+  const out = sanitizeAssistantForDisplay(raw);
+  assert.doesNotMatch(out, /SKILL-CYAN/u);
+  assert.doesNotMatch(out, /runtimeSessionId/u);
+  assert.match(out, /Ghi chú ngắn/u);
+  assert.match(out, /Hoàn tất/u);
+});
+
+test("stripInternalAssistantNarration keeps multi-line user prose", () => {
+  const prose = "Đã cập nhật kế hoạch:\n- Bước 1\n- Bước 2";
+  assert.equal(stripInternalAssistantNarration(prose), prose);
 });

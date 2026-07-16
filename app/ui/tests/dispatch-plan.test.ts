@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AttachmentMetadata, ConversationMessage } from "../src/service-client.js";
-import { COWORK_RUNTIME_ACTION_POLICY, planDispatchPrompt } from "../src/dispatch-plan.js";
+import { COWORK_SYSTEM_PROMPT, planDispatchPrompt } from "../src/dispatch-plan.js";
 import type { AttachmentSnapshot } from "../src/attachment-context.js";
 import { DISPATCH_MAX_CHARS } from "../src/attachment-limits.js";
 
@@ -30,13 +30,18 @@ const priorUser: ConversationMessage = {
   at: "2026-01-01T00:00:00.000Z",
 };
 
-test("planDispatchPrompt always prepends the Cowork action contract", () => {
+test("planDispatchPrompt always prepends the Cowork GHC system prompt", () => {
   const plan = planDispatchPrompt([], [], "Hãy tạo file demo.txt");
   assert.equal(plan.ok, true);
   if (plan.ok) {
-    assert.ok(plan.text.startsWith(COWORK_RUNTIME_ACTION_POLICY));
-    assert.match(plan.text, /must use an available filesystem tool/i);
-    assert.match(plan.text, /Never claim a file action succeeded/i);
+    assert.ok(plan.text.startsWith(COWORK_SYSTEM_PROMPT));
+    assert.match(plan.text, /You are Cowork GHC/u);
+    assert.match(plan.text, /filesystem tools/i);
+    assert.match(plan.text, /claim success only after tools succeed/i);
+    assert.match(plan.text, /Reply in the user's language/i);
+    assert.match(plan.text, /Vietnamese in/i);
+    assert.match(plan.text, /CGHC_CURRENT_USER_REQUEST/u);
+    assert.doesNotMatch(plan.text, /contentHash|SKILL-CYAN|COWORK GHC ACTION CONTRACT|COWORK_RUNTIME_ACTION_POLICY/u);
   }
 });
 
@@ -51,7 +56,7 @@ test("planDispatchPrompt includes single small attachment", () => {
 });
 
 test("planDispatchPrompt fails when attachments exceed final budget", () => {
-  const big = "x".repeat(4000);
+  const big = "x".repeat(Math.floor(DISPATCH_MAX_CHARS / 2));
   const plan = planDispatchPrompt(
     [],
     [snapshot("a.txt", big), snapshot("b.txt", big), snapshot("c.txt", big)],
@@ -66,31 +71,34 @@ test("planDispatchPrompt fails when attachments exceed final budget", () => {
 });
 
 test("planDispatchPrompt fails when prior context consumes attachment budget", () => {
+  // Tight budget on purpose: prior packing + a large attachment must fail-fast.
+  const tightBudget = 8_000;
   const longPrior: ConversationMessage[] = [];
-  for (let i = 0; i < 60; i += 1) {
+  for (let i = 0; i < 40; i += 1) {
     longPrior.push({
       id: `u-${i}`,
       role: "user",
-      text: `turn ${i} `.repeat(120),
+      text: `turn ${i} `.repeat(80),
       at: "2026-01-01T00:00:00.000Z",
     });
     longPrior.push({
       id: `a-${i}`,
       role: "assistant",
-      text: `reply ${i} `.repeat(120),
+      text: `reply ${i} `.repeat(80),
       at: "2026-01-01T00:00:00.000Z",
     });
   }
   const plan = planDispatchPrompt(
     longPrior,
-    [snapshot("small.txt", "y".repeat(7000))],
+    [snapshot("small.txt", "y".repeat(4_500))],
     "question",
+    tightBudget,
   );
   assert.equal(plan.ok, false);
 });
 
 test("plan failure lists omitted attachments and includes no dispatch metadata", () => {
-  const big = "z".repeat(4000);
+  const big = "z".repeat(Math.floor(DISPATCH_MAX_CHARS / 2));
   const plan = planDispatchPrompt(
     [],
     [snapshot("big.txt", big), snapshot("big2.txt", big), snapshot("big3.txt", big)],

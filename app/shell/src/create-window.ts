@@ -8,7 +8,7 @@
  * reaches business logic only through the loopback service (ADR 0003).
  */
 
-import { BrowserWindow, nativeTheme } from "electron";
+import { app, BrowserWindow, nativeTheme } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,6 +24,9 @@ const here = dirname(fileURLToPath(import.meta.url));
  * so a `.js` preload would be parsed as ESM and fail to load.
  */
 export const PRELOAD_PATH = join(here, "preload.cjs");
+const WINDOW_ICON_PATH = app.isPackaged
+  ? join(process.resourcesPath, "branding", "cowork-ghc.ico")
+  : join(here, "..", "..", "assets", "cowork-ghc.ico");
 
 /**
  * Create the hardened main window and load the packaged renderer over `app://`.
@@ -46,6 +49,7 @@ export function createMainWindow(loadUrl: string = APP_INDEX_URL): BrowserWindow
         : false,
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#111315" : "#F5F6F8",
     webPreferences: buildMainWindowWebPreferences(PRELOAD_PATH),
+    icon: WINDOW_ICON_PATH,
   });
 
   hardenWebContents(window.webContents);
