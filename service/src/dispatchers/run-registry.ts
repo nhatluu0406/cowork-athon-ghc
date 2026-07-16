@@ -137,9 +137,13 @@ export function createDispatchRunRegistry(options: DispatchRunRegistryOptions): 
         else signal.addEventListener("abort", onAbort, { once: true });
         try {
           const outcome = await group.done;
+          // Aggregate the run's declared outputs across branches — the verification hook checks
+          // these against real disk state; an empty list is honest ("no evidence claimed").
+          const evidencePaths = outcome.branches.flatMap((b) => b.mutatedPaths ?? []);
           return {
             status: outcome.status === "completed" ? "completed" : "errored",
             summary: describeGroup(outcome),
+            ...(evidencePaths.length > 0 ? { evidencePaths } : {}),
           };
         } finally {
           signal.removeEventListener("abort", onAbort);

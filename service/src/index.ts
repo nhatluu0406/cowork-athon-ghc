@@ -234,6 +234,24 @@ export {
 } from "./tasks/index.js";
 
 export {
+  createFileEvidenceVerificationHook,
+  type FileEvidenceVerificationOptions,
+} from "./tasks/index.js";
+
+export {
+  createWorkflowBuilder,
+  createWorkflowRouter,
+  WorkflowBuilderError,
+  WorkflowRequestError,
+  TASK_DRAFT_PATH,
+  TASK_DRAFT_CONFIRM_PATH,
+  type WorkflowBuilder,
+  type WorkflowDraftCandidate,
+  type WorkflowDraftGenerator,
+  type WorkflowDraftOutcome,
+} from "./tasks/index.js";
+
+export {
   createDispatchRunRegistry,
   createDispatchRouter,
   createLiveBranchRunner,

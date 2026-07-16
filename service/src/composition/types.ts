@@ -32,6 +32,7 @@ import type { SkillCatalog, SkillRoot } from "../skills/index.js";
 import type { AgentCatalog } from "../agents/index.js";
 import type { TaskStore } from "../tasks/index.js";
 import type { BranchRunner, DispatchRunRegistry } from "../dispatchers/index.js";
+import type { WorkflowDraftGenerator } from "../tasks/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
 
@@ -102,6 +103,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * session-backed runner.
    */
   readonly branchRunner?: BranchRunner;
+  /**
+   * Workflow-from-prompt generator (Task 4.3). Default: an honest not-attached seam — a draft
+   * request rejects rather than fabricating a TaskDefinition. The live composition (Tier 2) may
+   * inject a real generator; tests inject a fake (no live LLM call in this repo's test suite).
+   */
+  readonly workflowDraftGenerator?: WorkflowDraftGenerator;
 
   /**
    * Extra token-guarded routers mounted after the built-ins (e.g. the flag-gated `/v1/remote`

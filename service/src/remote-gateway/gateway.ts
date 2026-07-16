@@ -129,6 +129,16 @@ function resolveProxyTarget(pathname: string): string | undefined {
   if (pathname === "/api/snapshot") return "/v1/session/stream/snapshot";
   if (pathname === "/api/stream") return "/v1/session/stream";
   if (pathname === "/api/permissions") return "/v1/permission/pending";
+  // Dispatch (Task 5.3 phone slice): the task CATALOG (read-only) and dispatch RUNS. No
+  // create/update/delete task route is ever allowlisted here — v1 has no task CRUD from the
+  // phone; a custom-by-prompt confirm flow is a separate, not-yet-built unit.
+  if (pathname === "/api/dispatch/tasks") return "/v1/tasks";
+  if (pathname === "/api/dispatch/runs") return "/v1/dispatch/runs";
+  if (pathname.startsWith("/api/dispatch/runs/")) {
+    const rest = pathname.slice("/api/dispatch/runs/".length);
+    if (isInertIdSegment(rest)) return `/v1/dispatch/runs/${rest}`;
+    return undefined;
+  }
   return undefined;
 }
 
@@ -144,6 +154,16 @@ function resolvePostProxyTarget(pathname: string): string | undefined {
     const middle = pathname.slice("/api/sessions/".length, -"/message".length);
     // Exactly one inert path segment (the session id) between the fixed prefix and suffix.
     if (isInertIdSegment(middle)) return `/v1/session/${middle}/message`;
+  }
+  // Dispatch (Task 5.3 phone slice): 1-touch run of a SAVED task, and cancel of a run. No
+  // task write route (create/update/delete/instantiate) is ever allowlisted here.
+  if (pathname.startsWith("/api/dispatch/tasks/") && pathname.endsWith("/run")) {
+    const middle = pathname.slice("/api/dispatch/tasks/".length, -"/run".length);
+    if (isInertIdSegment(middle)) return `/v1/dispatch/tasks/${middle}/run`;
+  }
+  if (pathname.startsWith("/api/dispatch/runs/") && pathname.endsWith("/cancel")) {
+    const middle = pathname.slice("/api/dispatch/runs/".length, -"/cancel".length);
+    if (isInertIdSegment(middle)) return `/v1/dispatch/runs/${middle}/cancel`;
   }
   return undefined;
 }
