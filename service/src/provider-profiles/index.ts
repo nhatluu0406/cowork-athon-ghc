@@ -26,6 +26,11 @@ export {
   type ProviderProfileStore,
 } from "./provider-profile-store.js";
 export { createProviderConnectionTester, type ProviderConnectionTester } from "./provider-connection-tester.js";
+export {
+  createProfileModelDiscovery,
+  type ProfileModelDiscovery,
+  type ProfileModelDiscoveryOptions,
+} from "./provider-model-discovery.js";
 export { createProfileRuntimeBridge, type ProfileRuntimeBridge } from "./profile-runtime-bridge.js";
 export {
   resolveRuntimeProviderConfig,
@@ -40,6 +45,7 @@ export {
   PROVIDER_PROFILE_ACTIVE_PATH,
   PROVIDER_PROFILE_TEST_PATH,
   PROVIDER_PROFILE_CREDENTIAL_PATH,
+  PROVIDER_PROFILE_DISCOVER_PATH,
 } from "./router.js";
 export {
   computeVerifiedTargetFingerprint,

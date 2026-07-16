@@ -37,6 +37,7 @@ import {
 } from "../provider/index.js";
 import {
   createProviderConnectionTester,
+  createProfileModelDiscovery,
   createProviderProfileRouter,
   createProviderProfileStore,
   createProfileRuntimeBridge,
@@ -292,6 +293,12 @@ export async function createCoworkService(
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
   });
 
+  const profileModelDiscovery = createProfileModelDiscovery({
+    credentials: credentialService,
+    dnsResolver,
+    ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+  });
+
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,
   // and (2) mirrors default-model / credential-ref writes into the in-memory runtime resolver so
   // the persistent store and `activeModelFor()` / Tier 2 launch never drift (FIX-1). Port-sync
@@ -463,6 +470,7 @@ export async function createCoworkService(
     createProviderProfileRouter({
       profiles: providerProfileStore,
       tester: profileConnectionTester,
+      discovery: profileModelDiscovery,
       runtimeBridge: profileRuntimeBridge,
       bindCredentialRef: async (_profileId, ref) => {
         // Credential value is stored via /v1/credentials before binding.
