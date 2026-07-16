@@ -1,40 +1,92 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
-# Lộ trình sản phẩm
+# Roadmap V2 — basic-first, one wave at a time
 
-## NOW — một golden path đáng tin cậy
+## WAVE 0A — Local database, app lock and encrypted credentials
 
-- [x] Thêm Cowork file-action contract vào dispatch prompt.
-- [x] Map `permission.asked.properties.tool` đúng (`write` → create, `edit` → modify).
-- [x] Thêm false-success guard dựa trên File Work Review/disk evidence.
-- [x] Tắt các đường ghi file nguy hiểm: truncated text và XLSX destructive save.
-- [ ] Packaged manual: create file → Permission → Allow → file tồn tại.
-- [ ] Packaged manual: modify file → Deny → file không đổi.
-- [ ] Xác nhận File Work Review create/modify sau golden path.
+- [x] Add SQLite adapter and migrations.
+- [x] Implement first-run local account + unlock.
+- [x] Implement wrapped vault master key and encrypted secret table.
+- [x] Migrate provider and MS365 keys from Windows Credential Manager.
+- [x] Move settings/provider profiles/verification state to SQLite.
+- [x] Remove keyring dependency only after packaged migration PASS.
 
-## NEXT — demo xuất sắc sau khi P0 PASS
+## WAVE 0B — Conversation/session persistence migration
 
-- [ ] Một commercial UI pass thống nhất: design tokens, icons, tooltip, permission card, transcript, Settings, Workspace, Skills.
-- [ ] Light/dark mode thật, gồm titlebar overlay và toàn bộ surface.
-- [ ] Capture tối đa 10 màn hình packaged sau khi các feature thật đã ổn định.
-- [ ] Hoàn thiện preview Office an toàn; chỉ mở edit khi bảo toàn dữ liệu được chứng minh.
+- [x] Move conversation summaries/messages/provider snapshots to SQLite.
+- [x] Preserve rename/delete/search/reopen behavior.
+- [x] Store durable turn summaries, not raw token deltas.
+- [x] Import existing `.runtime/conversations`.
+- [x] Keep File Work Review snapshots on filesystem with DB references.
+- [x] Remove legacy JSON writes after migration PASS.
 
-## WAITING — team khác
+## WAVE 1 — Chat, Provider UX, Tooltip, Sidebar, Brand and latency truth
 
-- [ ] D1 Dispatch backend integration.
-- [ ] D2 Microsoft 365 integration.
+- [ ] Refine user/assistant message surfaces.
+- [ ] Keep tool/Skill/runtime internals out of visible transcript.
+- [ ] Simplify provider actions and verified state.
+- [ ] Fix tooltip clipping and sidebar spacing.
+- [ ] Render real Cowork logo in topbar/taskbar identity.
+- [ ] Benchmark one chat/create/modify turn by timing stage.
+- [ ] Do not upgrade OpenCode until timing baseline exists.
+
+## WAVE 2 — OpenCode compatibility + Kỹ năng & MCP Hub
+
+- [x] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
+- [x] Add `Kỹ năng & MCP` rail surface below Cowork.
+- [x] Remove Skills from Settings.
+- [x] Remove Skill/MCP selectors from Cowork/Workspace composer.
+- [x] Show active summary only in Cowork/Workspace.
+- [x] Use OpenCode native Skill load-on-demand.
+- [x] Add persistent MCP config and live adapter.
+- [x] Phase 1 MCP: local/remote + static encrypted API headers, no OAuth.
+
+## WAVE 3 — Provider model discovery
+
+- [ ] Safe OpenAI-compatible `GET /models`.
+- [ ] Searchable combobox.
+- [ ] Manual model ID fallback.
+- [ ] Cache/invalidate by target fingerprint.
+- [ ] Never block save when discovery unsupported.
+
+## WAVE 4 — Workspace PDF and live refresh
+
+- [ ] Packaged PDF preview.
+- [ ] Auto-refresh tree after verified mutation.
+- [ ] Auto-open created/modified file when safe.
+- [ ] Dirty-edit conflict UX.
+- [ ] Explicit current-file context in companion chat.
+
+## WAVE 5 — Inspector Phase 1
+
+- [ ] Kế hoạch.
+- [ ] Hoạt động.
+- [ ] Tệp / File Work Review.
+- [ ] No raw runtime payloads.
+- [ ] Clear loading/error/empty states.
+
+## WAVE 6 — Logging and local telemetry
+
+- [ ] Detailed local structured logs with rotation/redaction.
+- [ ] Local-only aggregate telemetry.
+- [ ] Export/clear actions.
+- [ ] No network telemetry.
+- [ ] Diagnostics documentation and acceptance.
+
+## WAITING
+
+- [ ] D1 Dispatch integration.
+- [ ] D2 Microsoft 365 product acceptance.
 - [ ] D3 Knowledge/RAG integration.
-- [ ] D4 Advanced Gateway integration.
+- [ ] D4 Gateway integration.
 
 ## DEFERRED
 
-- File Work Review delete trên OpenCode v1.17.11.
-- XLSX direct editing cho đến khi patch-in-place giữ công thức/format/sheet.
-- Full DOCX/PPTX editor.
-- Routing, failover, key pool, cost routing.
-- Web/Next.js.
-- Full L9/RC.
+- [ ] MCP OAuth token ownership.
+- [ ] Cloud/multi-user authentication.
+- [ ] Full Office editing.
+- [ ] Web/Next.js.

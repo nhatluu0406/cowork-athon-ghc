@@ -22,6 +22,7 @@
     "@cowork-ghc/contracts": "*",
     "@cowork-ghc/runtime": "*",
     "@napi-rs/keyring": "1.3.0",
+    "better-sqlite3": "12.11.1",
     "mammoth": "^1.12.0",
     "qrcode": "1.5.4",
     "xlsx": "^0.18.5"

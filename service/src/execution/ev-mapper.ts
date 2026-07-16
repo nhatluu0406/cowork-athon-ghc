@@ -33,7 +33,7 @@ import {
 } from "./opencode-events.js";
 import { mapPart, type BaseAllocator } from "./part-mapper.js";
 import { mapTodos } from "./todo-mapper.js";
-import { mapTextPartSnapshot, type TextPartCursorMap } from "./text-part-mapper.js";
+import { mapTextPartSnapshot, noteTextPartDelta, type TextPartCursorMap } from "./text-part-mapper.js";
 import { sanitizeErrorMessage } from "./error-sanitize.js";
 import {
   createMessageRoleTracker,
@@ -156,10 +156,13 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         if (!delta) return [];
         const messageId = readString(props, "messageID");
         if (!isAssistantMessageRole(messageRoles.roleOf(messageId))) return [];
-        const partId =
-          readString(props, "partID") ?? messageId ?? "text";
-        const prev = textPartCursors.get(partId) ?? "";
-        textPartCursors.set(partId, prev + delta);
+        const partId = readString(props, "partID");
+        const noted = noteTextPartDelta(textPartCursors, {
+          delta,
+          ...(partId !== undefined ? { partId } : {}),
+          ...(messageId !== undefined ? { messageId } : {}),
+        });
+        if (!noted) return [];
         return [{ ...alloc(), kind: "token", delta }];
       }
       case "session.idle": {

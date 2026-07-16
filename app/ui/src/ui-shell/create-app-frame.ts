@@ -18,6 +18,7 @@ import { createIntegrationView } from "./integration-view.js";
 import { createKnowledgeView, type KnowledgeViewDom } from "./knowledge-view.js";
 import { createMicrosoftView, type MicrosoftViewDom } from "./microsoft/microsoft-view.js";
 import { createProductRail } from "./product-rail.js";
+import { createSkillsMcpView, type SkillsMcpViewDom } from "./skills-mcp-view.js";
 import { createStatusBar, type StatusBarDom } from "./status-bar.js";
 import { createTopbar } from "./topbar.js";
 import { installShellTooltips } from "./tooltip.js";
@@ -66,7 +67,6 @@ export interface AppFrameDom {
   readonly skillsButton: HTMLButtonElement;
   readonly settingsSurface: HTMLElement;
   readonly settingsProviderBody: HTMLElement;
-  readonly settingsSkillsBody: HTMLElement;
   readonly settingsGeneralBody: HTMLElement;
   readonly settingsButton: HTMLButtonElement;
   readonly closeSettingsButton: HTMLButtonElement;
@@ -82,7 +82,7 @@ export interface AppFrameDom {
   readonly workModeWorkspaceTab: HTMLButtonElement;
   readonly coworkSidebarPanel: HTMLElement;
   readonly workspaceSidebarPanel: HTMLElement;
-  readonly skillsPanel: HTMLElement;
+  readonly skillsMcpView: SkillsMcpViewDom;
   readonly productRail: HTMLElement;
   readonly surfaceButtons: Map<ProductSurfaceId, HTMLButtonElement>;
   readonly integrationSurface: HTMLElement;
@@ -113,6 +113,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const integrationSurface = createIntegrationView();
   const microsoftView = createMicrosoftView();
   const codeView = createClaudeCodeView({ onSendPrompt: (text) => dom.onCodePanelSend(text) });
+  const skillsMcpView = createSkillsMcpView();
   const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
   const statusBar = createStatusBar();
@@ -129,6 +130,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     integrationSurface,
     microsoftView.root,
     codeView.root,
+    skillsMcpView.root,
     settingsSurface.root,
     inspector.root,
   );
@@ -136,10 +138,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const drawerScrim = el("div", "drawer-scrim");
   drawerScrim.hidden = true;
 
-  const skillsPanel = el("section", "skills-panel skills-drawer");
-  skillsPanel.hidden = true;
-
-  root.append(topbar.root, shellFrame, statusBar.root, drawerScrim, skillsPanel);
+  root.append(topbar.root, shellFrame, statusBar.root, drawerScrim);
   installShellTooltips(root);
 
   let settingsOpener: HTMLElement | null = null;
@@ -186,7 +185,6 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     skillsButton: cowork.skillsButton,
     settingsSurface: settingsSurface.root,
     settingsProviderBody: settingsSurface.providerBody,
-    settingsSkillsBody: settingsSurface.skillsBody,
     settingsGeneralBody: settingsSurface.generalBody,
     settingsButton: topbar.settingsButton,
     closeSettingsButton: settingsSurface.closeButton,
@@ -202,7 +200,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     workModeWorkspaceTab: sidebar.workModeWorkspaceTab,
     coworkSidebarPanel: sidebar.coworkPanel,
     workspaceSidebarPanel: sidebar.workspacePanel,
-    skillsPanel,
+    skillsMcpView,
     productRail: rail.root,
     surfaceButtons: rail.surfaceButtons,
     integrationSurface,
@@ -239,15 +237,16 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   dom.openSettings = openSettings;
   dom.closeSettings = closeSettings;
 
-  topbar.settingsButton.addEventListener("click", openSettings);
-  statusBar.provider.addEventListener("click", openSettings);
-  cowork.providerControl.root.addEventListener("click", openSettings);
-  cowork.composerPreflightCta.addEventListener("click", openSettings);
-  cowork.emptyStateCta.addEventListener("click", openSettings);
-  settingsSurface.closeButton.addEventListener("click", closeSettings);
-  settingsSurface.backButton.addEventListener("click", closeSettings);
+  // Route through `dom.*` so app-shell can wrap open/close and re-render layout chrome.
+  topbar.settingsButton.addEventListener("click", () => dom.openSettings());
+  statusBar.provider.addEventListener("click", () => dom.openSettings());
+  cowork.providerControl.root.addEventListener("click", () => dom.openSettings());
+  cowork.composerPreflightCta.addEventListener("click", () => dom.openSettings());
+  cowork.emptyStateCta.addEventListener("click", () => dom.openSettings());
+  settingsSurface.closeButton.addEventListener("click", () => dom.closeSettings());
+  settingsSurface.backButton.addEventListener("click", () => dom.closeSettings());
   settingsSurface.root.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSettings();
+    if (event.key === "Escape") dom.closeSettings();
   });
 
   const isSidebarDrawerViewport = (): boolean => window.matchMedia("(max-width: 900px)").matches;
@@ -360,12 +359,11 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
 function createSettingsSurface(): {
   readonly root: HTMLElement;
   readonly providerBody: HTMLElement;
-  readonly skillsBody: HTMLElement;
   readonly generalBody: HTMLElement;
   readonly providerTab: HTMLButtonElement;
   readonly closeButton: HTMLButtonElement;
   readonly backButton: HTMLButtonElement;
-  readonly showTab: (tab: "provider" | "skills" | "general") => void;
+  readonly showTab: (tab: "provider" | "general") => void;
 } {
   const root = el("section", "view view--settings settings-surface");
   root.hidden = true;
@@ -393,32 +391,25 @@ function createSettingsSurface(): {
   providerTab.type = "button";
   providerTab.dataset["settingsTab"] = "provider";
   providerTab.setAttribute("aria-current", "page");
-  const skillsTab = el("button", "settings-surface__tab", "Kỹ năng") as HTMLButtonElement;
-  skillsTab.type = "button";
-  skillsTab.dataset["settingsTab"] = "skills";
   const generalTab = el("button", "settings-surface__tab", "Chung") as HTMLButtonElement;
   generalTab.type = "button";
   generalTab.dataset["settingsTab"] = "general";
-  nav.append(providerTab, skillsTab, generalTab);
+  nav.append(providerTab, generalTab);
 
   const content = el("div", "settings-surface__content");
   const providerBody = el("section", "settings-surface__panel settings-surface__panel--provider");
   providerBody.setAttribute("aria-label", "Cài đặt nhà cung cấp");
-  const skillsBody = el("section", "settings-surface__panel settings-surface__panel--skills");
-  skillsBody.hidden = true;
-  skillsBody.setAttribute("aria-label", "Quản lý Kỹ năng");
   const generalBody = el("section", "settings-surface__panel settings-surface__panel--general");
   generalBody.hidden = true;
   generalBody.setAttribute("aria-label", "Cài đặt chung");
-  content.append(providerBody, skillsBody, generalBody);
+  content.append(providerBody, generalBody);
   layout.append(nav, content);
   root.append(header, layout);
 
-  const showTab = (tab: "provider" | "skills" | "general"): void => {
+  const showTab = (tab: "provider" | "general"): void => {
     providerBody.hidden = tab !== "provider";
-    skillsBody.hidden = tab !== "skills";
     generalBody.hidden = tab !== "general";
-    for (const btn of [providerTab, skillsTab, generalTab]) {
+    for (const btn of [providerTab, generalTab]) {
       const active = btn.dataset["settingsTab"] === tab;
       btn.classList.toggle("settings-surface__tab--active", active);
       btn.setAttribute("aria-current", active ? "page" : "false");
@@ -426,10 +417,9 @@ function createSettingsSurface(): {
   };
 
   providerTab.addEventListener("click", () => showTab("provider"));
-  skillsTab.addEventListener("click", () => showTab("skills"));
   generalTab.addEventListener("click", () => showTab("general"));
 
-  const tabs = [providerTab, skillsTab, generalTab];
+  const tabs = [providerTab, generalTab];
   for (const tab of tabs) {
     tab.addEventListener("keydown", (event) => {
       if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") return;
@@ -446,5 +436,5 @@ function createSettingsSurface(): {
     });
   }
 
-  return { root, providerBody, skillsBody, generalBody, providerTab, closeButton, backButton, showTab };
+  return { root, providerBody, generalBody, providerTab, closeButton, backButton, showTab };
 }

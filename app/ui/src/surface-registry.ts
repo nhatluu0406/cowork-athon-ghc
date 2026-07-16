@@ -2,6 +2,7 @@ import type { ProductIconName } from "./product-icons.js";
 
 export type ProductSurfaceId =
   | "cowork"
+  | "skills-mcp"
   | "dispatch"
   | "gateway"
   | "knowledge"
@@ -44,6 +45,17 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     availability: "available",
     description: "Conversation workspace với runtime OpenCode hiện tại.",
     component: "CoworkShellSurface",
+  },
+  {
+    id: "skills-mcp",
+    label: "Kỹ năng & MCP",
+    icon: "skills",
+    featureFlag: "core.skills_mcp",
+    requiredCapability: "skills_mcp_hub",
+    availability: "available",
+    description:
+      "Quản lý Skill local và kết nối MCP (Phase 1: stdio hoặc remote URL, secret trong vault mã hoá).",
+    component: "SkillsMcpHubSurface",
   },
   {
     id: "dispatch",

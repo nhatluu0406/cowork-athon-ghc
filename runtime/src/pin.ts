@@ -10,14 +10,14 @@
  */
 
 /** The pinned OpenCode version. Do NOT use a range; a single explicit value only. */
-export const OPENCODE_PIN = "v1.17.11" as const;
+export const OPENCODE_PIN = "v1.18.1" as const;
 
 export type OpencodePin = typeof OPENCODE_PIN;
 
 /**
  * Normalize a version string for comparison: trim, lowercase the leading `v`, and
- * drop a single leading `v`/`V`. OpenCode `/global/health` may report `1.17.11`
- * while the pin literal is `v1.17.11` (design §8) — both must compare equal.
+ * drop a single leading `v`/`V`. OpenCode `/global/health` may report `1.18.1`
+ * while the pin literal is `v1.18.1` (design §8) — both must compare equal.
  */
 export function normalizeVersion(version: string): string {
   const trimmed = version.trim();

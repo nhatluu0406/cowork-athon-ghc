@@ -28,6 +28,10 @@ export interface SupervisorStartSpec {
   readonly injectionRequests: readonly CredentialInjectionRequest[];
   /** Non-secret `opencode.json` provider config; required for a custom OpenAI-compatible endpoint. */
   readonly providerConfig?: OpencodeProviderConfig;
+  /** Absolute Skill-root directories to pass to OpenCode's native Skills launch (1.18 array form). */
+  readonly skillsPaths?: readonly string[];
+  /** Enabled Skill ids; when present, replaces the blanket `skill: allow` policy with an allowlist. */
+  readonly skillAllow?: readonly string[];
 }
 
 export interface OpencodeSupervisorOptions {

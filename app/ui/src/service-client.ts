@@ -153,6 +153,7 @@ export interface GeneralSettingsView {
   readonly theme: ThemePreference;
   readonly verboseLogging: boolean;
   readonly telemetryEnabled: boolean;
+  readonly devtoolsEnabled: boolean;
 }
 
 /**
@@ -181,6 +182,9 @@ export interface ProviderProfileView {
   readonly credentialAccount?: string;
   readonly presetId?: string;
   readonly isActive: boolean;
+  readonly verificationCurrent: boolean;
+  readonly lastVerifiedAt?: string;
+  readonly lastVerifiedOk?: boolean;
 }
 
 export interface ProviderProfileRecord {
@@ -264,6 +268,20 @@ export interface SkillView {
 export interface EnabledSkillSnapshot {
   readonly metadata: SkillUseMetadata;
   readonly content: string;
+}
+
+/** Secret-free MCP server row from GET /v1/mcp/servers (Wave 2 Phase 1). */
+export interface McpServerListItem {
+  readonly id: string;
+  readonly name: string;
+  readonly command?: string;
+  readonly url?: string;
+  readonly enabled: boolean;
+  readonly status: string;
+  readonly connection: string;
+  readonly hasHeaderSecret: boolean;
+  readonly toolCount: number;
+  readonly updatedAt: string;
 }
 
 /** Metadata persisted for workspace text-file attachments (no raw content). */
@@ -366,11 +384,15 @@ export interface ClearSessionModelResult {
 
 /**
  * Client-side failure code: either a real {@link BoundaryErrorCode} from the service's
- * error envelope, or `"protocol_mismatch"` when the envelope's protocol tag does not match
- * {@link BOUNDARY_PROTOCOL_VERSION} (a drifted/wrong wire contract we refuse rather than
- * silently accept).
+ * error envelope, `"protocol_mismatch"` when the envelope's protocol tag does not match
+ * {@link BOUNDARY_PROTOCOL_VERSION}, or a client-synthesized code when a success envelope
+ * reports an unusable runtime (e.g. create session accepted:false).
  */
-export type ServiceClientErrorCode = BoundaryErrorCode | "protocol_mismatch";
+export type ServiceClientErrorCode =
+  | BoundaryErrorCode
+  | "protocol_mismatch"
+  | "runtime_unavailable"
+  | "runtime_not_attached";
 
 /** Error surfaced by the client; carries a stable, non-secret code. */
 export class ServiceClientError extends Error {
@@ -514,6 +536,25 @@ export interface ServiceClient {
     },
   ): Promise<SkillView>;
   deleteSkill(id: string): Promise<void>;
+  listMcpServers(): Promise<readonly McpServerListItem[]>;
+  createMcpServer(input: {
+    readonly id?: string;
+    readonly name: string;
+    readonly command?: string;
+    readonly url?: string;
+    readonly headerSecret?: string;
+  }): Promise<McpServerListItem>;
+  updateMcpServer(
+    id: string,
+    input: {
+      readonly name?: string;
+      readonly command?: string;
+      readonly url?: string;
+      readonly headerSecret?: string | null;
+    },
+  ): Promise<McpServerListItem>;
+  deleteMcpServer(id: string): Promise<void>;
+  setMcpServerEnabled(id: string, enabled: boolean): Promise<McpServerListItem>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -546,6 +587,22 @@ export interface ServiceClient {
    * `already_resolved` outcomes are returned honestly — never a fabricated success.
    */
   decidePermission(input: DecidePermissionInput): Promise<PermissionDecisionResponse>;
+  /** Local app lock status (ADR 0007). Never returns secrets. */
+  authStatus(): Promise<
+    | { readonly state: "needs_setup" }
+    | { readonly state: "locked"; readonly username: string }
+    | { readonly state: "unlocked"; readonly username: string; readonly userId: string }
+  >;
+  authSetup(username: string, password: string): Promise<{
+    readonly state: "unlocked";
+    readonly username: string;
+    readonly userId: string;
+  }>;
+  authUnlock(username: string, password: string): Promise<{
+    readonly state: "unlocked";
+    readonly username: string;
+    readonly userId: string;
+  }>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -760,11 +817,22 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         body: JSON.stringify({ sessionId }),
       }),
 
-    createSession: async (input) =>
-      (await call<{ session: SessionMeta }>("/v1/session", {
+    createSession: async (input) => {
+      const data = await call<{
+        session?: SessionMeta;
+        accepted?: boolean;
+        reason?: string;
+      }>("/v1/session", {
         method: "POST",
         body: JSON.stringify(input),
-      })).session,
+      });
+      if (data.session !== undefined) return data.session;
+      const reason = data.reason === "runtime_not_attached" ? "runtime_not_attached" : "runtime_unavailable";
+      throw new ServiceClientError(
+        reason,
+        "Runtime chưa sẵn sàng. Thử lại sau khi local service khởi động xong.",
+      );
+    },
 
     sendSessionMessage: async (sessionId, text) => {
       const data = await call<{
@@ -887,6 +955,37 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       await call<{ ok: boolean }>(`/v1/skills/${encodeURIComponent(id)}`, { method: "DELETE" });
     },
 
+    listMcpServers: async () =>
+      (await call<{ servers: readonly McpServerListItem[] }>("/v1/mcp/servers")).servers,
+
+    createMcpServer: async (input) =>
+      (
+        await call<{ server: McpServerListItem }>("/v1/mcp/servers", {
+          method: "POST",
+          body: JSON.stringify(input),
+        })
+      ).server,
+
+    updateMcpServer: async (id, input) =>
+      (
+        await call<{ server: McpServerListItem }>(`/v1/mcp/servers/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(input),
+        })
+      ).server,
+
+    deleteMcpServer: async (id) => {
+      await call<{ ok: boolean }>(`/v1/mcp/servers/${encodeURIComponent(id)}`, { method: "DELETE" });
+    },
+
+    setMcpServerEnabled: async (id, enabled) =>
+      (
+        await call<{ server: McpServerListItem }>(
+          `/v1/mcp/servers/${encodeURIComponent(id)}/${enabled ? "enable" : "disable"}`,
+          { method: "POST", body: "{}" },
+        )
+      ).server,
+
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {
         method: "POST",
@@ -954,5 +1053,22 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
 
     listPendingPermissions: permission.listPendingPermissions,
     decidePermission: permission.decidePermission,
+
+    authStatus: () =>
+      call<
+        | { readonly state: "needs_setup" }
+        | { readonly state: "locked"; readonly username: string }
+        | { readonly state: "unlocked"; readonly username: string; readonly userId: string }
+      >("/v1/auth/status"),
+    authSetup: (username, password) =>
+      call<{ readonly state: "unlocked"; readonly username: string; readonly userId: string }>(
+        "/v1/auth/setup",
+        { method: "POST", body: JSON.stringify({ username, password }) },
+      ),
+    authUnlock: (username, password) =>
+      call<{ readonly state: "unlocked"; readonly username: string; readonly userId: string }>(
+        "/v1/auth/unlock",
+        { method: "POST", body: JSON.stringify({ username, password }) },
+      ),
   };
 }
