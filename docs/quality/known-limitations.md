@@ -55,7 +55,15 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
     - **`.ppt` legacy** (OLE nhị phân) **không hỗ trợ** — hiện trạng thái unsupported.
     - **Malformed / mã hoá mật khẩu / vượt 8 MiB** ở mọi loại Office → trạng thái unsupported rõ
       ràng, không crash renderer. Không có **editor Office** đầy đủ.
-- **Inspector Phase 1** (plan/activity/file review) còn PARTIAL; diagnostics/logging PARTIAL (Wave 5–6).
+- **Inspector Phase 1** (Wave 5, PO-observed 2026-07-17): Cowork-only pane Kế hoạch/Hoạt động/Tệp từ
+  EV events đã chuẩn hoá (không lộ SSE/token/tool payload thô), tái dùng File Work Review. Token/cost
+  metrics vẫn **live-only, chưa persist qua reopen** (giới hạn cũ).
+- **Logging/telemetry cục bộ** (Wave 6, PO-observed 2026-07-17): log JSON-lines xoay vòng trong
+  `data/logs` (đã ẩn secret trước khi ghi); telemetry **chỉ đếm tổng hợp trên máy**, không network,
+  gated bởi toggle. **Bộ đếm telemetry là danh sách cố định** (launches, chat turn completed/failed,
+  permission approved/denied, file created/modified/deleted, errors); các bộ đếm khác (provider
+  connect, preview kind) là mở rộng tương lai (bảng đếm là name→value dạng generic, không cần migration
+  mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
 - **Web / Next.js** vẫn deferred.
