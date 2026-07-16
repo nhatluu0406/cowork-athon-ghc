@@ -5,6 +5,7 @@
 
 import type { ServiceClient, SettingsView, ThemePreference } from "./service-client.js";
 import { applyThemePreference } from "./theme-manager.js";
+import { getShellBridge } from "./bridge.js";
 
 export interface SettingsViewDeps {
   readonly client: Pick<ServiceClient, "getSettings" | "updateGeneral">;
@@ -25,6 +26,14 @@ const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
 
 function themeLabel(theme: ThemePreference): string {
   return theme === "system" ? "Theo hệ thống" : theme === "light" ? "Sáng" : "Tối";
+}
+
+async function applyDevToolsPreference(enabled: boolean): Promise<void> {
+  try {
+    await getShellBridge().setDevToolsEnabled(enabled);
+  } catch {
+    // Packaged without shell bridge (tests): ignore.
+  }
 }
 
 export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps): void {
@@ -51,6 +60,7 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
       const next = await action();
       render(next);
       applyThemePreference(next.general.theme);
+      void applyDevToolsPreference(next.general.devtoolsEnabled);
       setStatus("Đã lưu");
       window.setTimeout(() => setStatus(""), 1800);
     } catch (error) {
@@ -128,6 +138,12 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
         view.general.telemetryEnabled,
         (checked) => run("Đang lưu telemetry", () => deps.client.updateGeneral({ telemetryEnabled: checked })),
       ),
+      switchRow(
+        "DevTools",
+        "Mở cửa sổ DevTools (Console) để xem log và đo hiệu năng. Tắt để đóng.",
+        view.general.devtoolsEnabled,
+        (checked) => run("Đang lưu DevTools", () => deps.client.updateGeneral({ devtoolsEnabled: checked })),
+      ),
     );
 
     generalBox.append(appearance.root, diagnostics.root);
@@ -139,6 +155,7 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
       const view = await deps.client.getSettings();
       render(view);
       applyThemePreference(view.general.theme);
+      void applyDevToolsPreference(view.general.devtoolsEnabled);
       setStatus("");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Không tải được cài đặt.");

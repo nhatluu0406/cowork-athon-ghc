@@ -21,23 +21,26 @@
     "dev:renderer": "npm run dev --workspace @cowork-ghc/ui",
     "build:shell": "npm run build --workspace @cowork-ghc/shell",
     "build:app": "npm run build:renderer && npm run build:shell",
-    "package:win": "npm run build:app && electron-builder --win --config app/shell/electron-builder.yml",
+    "rebuild:native:electron": "electron-rebuild -f -w better-sqlite3",
+    "rebuild:native:node": "npm rebuild better-sqlite3",
+    "package:win": "npm run build:app && npm run rebuild:native:electron && electron-builder --win --config app/shell/electron-builder.yml && npm run rebuild:native:node",
+    "verify:native-sqlite": "node tools/verify/native-sqlite-electron.mjs",
     "verify:release": "node tools/verify/release-regression.mjs",
     "app": "node tools/app/cli.mjs",
     "clean": "node tools/app/cli.mjs clean"
   },
   "dependencies": {
-    "@napi-rs/keyring": "1.3.0"
+    "better-sqlite3": "12.11.1"
   },
   "devDependencies": {
+    "@electron/rebuild": "^3.7.2",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/node": "^22.10.0",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vite": "^6.0.0"
-  },
-  "optionalDependencies": {
-    "@napi-rs/keyring-win32-x64-msvc": "1.3.0"
   }
 }

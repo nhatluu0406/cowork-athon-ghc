@@ -107,9 +107,13 @@ export function renderStatusBar(
   dom.providerLabel.textContent = provider.label;
   dom.provider.dataset["tooltip"] = provider.detail;
   dom.provider.setAttribute("aria-label", `Mở cài đặt nhà cung cấp: ${provider.label}`);
+  const active = input.settings?.providerProfiles?.find((p) => p.isActive);
+  const persistedFail =
+    active?.verificationCurrent === true && active.lastVerifiedOk === false;
+  const failed = input.connectionTestState === "failed" || persistedFail;
   dom.provider.classList.toggle("is-ok", provider.ok);
-  dom.provider.classList.toggle("is-warn", !provider.ok && input.connectionTestState !== "failed");
-  dom.provider.classList.toggle("is-danger", input.connectionTestState === "failed");
+  dom.provider.classList.toggle("is-warn", !provider.ok && !failed);
+  dom.provider.classList.toggle("is-danger", failed);
 }
 
 function shortWorkspaceLabel(path: string): string {

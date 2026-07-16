@@ -62,7 +62,13 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
   );
   const thinking = el("div", "thinking");
   thinking.hidden = true;
-  thinking.append(el("span", "thinking__dots", "..."), el("span", "thinking__label", "Đang xử lý"));
+  thinking.setAttribute("role", "status");
+  thinking.setAttribute("aria-live", "polite");
+  thinking.setAttribute("aria-label", "Đang xử lý");
+  const dots = el("span", "thinking__dots");
+  dots.setAttribute("aria-hidden", "true");
+  dots.append(el("span", "thinking__dot"), el("span", "thinking__dot"), el("span", "thinking__dot"));
+  thinking.append(dots, el("span", "thinking__label", "Đang xử lý"));
   transcriptInner.append(emptyState, thinking);
   transcript.append(transcriptInner);
 
@@ -93,11 +99,13 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
 
   const permissionModeControl = createPermissionModeControl();
 
+  // Read-only summary chip (Wave 2B): no drawer/selector here, click navigates to the
+  // full Kỹ năng & MCP surface (handler wired in app-shell.ts).
   const skillsButton = el("button", "skills-btn composer-skills-btn") as HTMLButtonElement;
   skillsButton.type = "button";
-  skillsButton.textContent = "Kỹ năng: 0";
-  skillsButton.dataset["tooltip"] = "Quản lý kỹ năng cho lượt chat";
-  skillsButton.setAttribute("aria-label", "Mở Kỹ năng");
+  skillsButton.textContent = "0 Skill · 0 MCP";
+  skillsButton.dataset["tooltip"] = "Mở Skill & MCP";
+  skillsButton.setAttribute("aria-label", "Mở Skill & MCP");
 
   const providerControl = createConversationProviderControl();
 

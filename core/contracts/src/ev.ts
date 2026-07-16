@@ -44,8 +44,33 @@ export type EvEventKind =
   | "file_mutation"
   | "token"
   | "progress"
+  | "metrics"
   | "error"
   | "terminal";
+
+/**
+ * Per-turn runtime metrics (issue #4). Non-secret counts only — token COUNTS and cost, never
+ * any prompt/response content or credential. Every field is optional because a provider may
+ * report only a subset (e.g. total without a prompt/completion breakdown).
+ */
+export interface TurnMetrics {
+  /** Prompt/input tokens. */
+  readonly tokensInput?: number;
+  /** Completion/output tokens. */
+  readonly tokensOutput?: number;
+  /** Total tokens (may include cache/reasoning depending on the provider). */
+  readonly tokensTotal?: number;
+  /** Reasoning tokens, when the provider reports them separately. */
+  readonly tokensReasoning?: number;
+  /**
+   * Cached-context tokens (prompt-cache read + write) when the provider reports them. Most of a
+   * turn's `tokensTotal` is usually this — the runtime's system prompt + tool schemas reused
+   * across turns — so surfacing it explains why `tokensTotal` dwarfs `tokensInput`.
+   */
+  readonly tokensCache?: number;
+  /** Estimated cost in USD, when the provider reports it. */
+  readonly costUsd?: number;
+}
 
 /** A recovery action attached to an error so the UI can offer a next step (EV6). */
 export interface RecoveryAction {
@@ -122,6 +147,12 @@ export interface ProgressEvent extends EvBase {
   readonly ratio?: number;
 }
 
+/** Per-turn runtime/token metrics, forwarded from the runtime's step-finish usage (issue #4). */
+export interface MetricsEvent extends EvBase {
+  readonly kind: "metrics";
+  readonly metrics: TurnMetrics;
+}
+
 /** EV6 — an error carrying a recovery action. */
 export interface ErrorEvent extends EvBase {
   readonly kind: "error";
@@ -144,5 +175,6 @@ export type EvEvent =
   | FileMutationEvent
   | TokenEvent
   | ProgressEvent
+  | MetricsEvent
   | ErrorEvent
   | TerminalEvent;

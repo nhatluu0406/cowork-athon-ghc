@@ -87,3 +87,45 @@ test("Workspace mode keeps Cowork visible as a companion panel", () => {
   assert.equal(frame.coworkView.hidden, false);
   assert.equal(frame.coworkView.classList.contains("cowork-view--companion"), false);
 });
+
+test("closing settings invokes wrapped closeSettings so layout can re-render", () => {
+  const root = document.createElement("main");
+  const frame = createAppFrame(root);
+  let closedRenders = 0;
+  const baseClose = frame.closeSettings;
+  frame.closeSettings = () => {
+    baseClose();
+    // Simulate app-shell renderState after settings close: restore chrome hidden while settings were open.
+    frame.sidebar.hidden = false;
+    frame.coworkView.hidden = false;
+    frame.composer.hidden = false;
+    closedRenders += 1;
+  };
+
+  frame.openSettings();
+  frame.sidebar.hidden = true;
+  frame.coworkView.hidden = true;
+  frame.composer.hidden = true;
+  assert.equal(frame.settingsSurface.hidden, false);
+  assert.equal(frame.shellFrame.classList.contains("shell-frame--settings"), true);
+
+  frame.closeSettingsButton.click();
+  assert.equal(frame.settingsSurface.hidden, true);
+  assert.equal(frame.shellFrame.classList.contains("shell-frame--settings"), false);
+  assert.equal(closedRenders, 1);
+  assert.equal(frame.sidebar.hidden, false);
+  assert.equal(frame.coworkView.hidden, false);
+  assert.equal(frame.composer.hidden, false);
+});
+
+test("cowork chrome uses animated processing indicator and short search placeholder", () => {
+  const root = document.createElement("main");
+  const frame = createAppFrame(root);
+
+  assert.equal(frame.sessionSearch.placeholder, "Tìm kiếm");
+  assert.equal(frame.sessionSearch.getAttribute("aria-label"), "Tìm kiếm");
+
+  assert.equal(frame.thinking.getAttribute("role"), "status");
+  assert.equal(frame.thinking.querySelectorAll(".thinking__dot").length, 3);
+  assert.match(frame.thinking.textContent ?? "", /Đang xử lý/);
+});
