@@ -11,6 +11,7 @@
  * defaults (see `tier2-seams.ts`); the live supervisor (CGHC-028) injects real ones.
  */
 
+import { dirname, join } from "node:path";
 import { sanitizeErrorMessage } from "../execution/index.js";
 import { startService, type RunningService } from "../start.js";
 import {
@@ -22,7 +23,10 @@ import { createKeyringStore, createMemoryStore } from "../credential/index.js";
 import {
   createNodeSettingsFs,
   createSettingsRouter,
+  createRedactingLogger,
+  createFileSink,
   openSettingsStore,
+  type RedactingLogger,
   type SettingsFs,
   type SettingsModelPort,
 } from "../diagnostics/index.js";
@@ -152,7 +156,27 @@ export async function createCoworkService(
   // learns a credential VALUE when it is stored (router POST) or resolved at launch, so
   // value-based redaction is ACTIVE for every credential that passes through the credential layer.
   const scrubber = createSecretScrubber();
-  const redactError = (message: string): string => sanitizeErrorMessage(scrubber.scrub(message));
+
+  // --- Local structured logging (Wave 6). A bounded, rotating, JSON-lines file sink under
+  // `data/logs` (derived from dbPath so the service never imports the shell path resolver — the
+  // import-direction rule). The logger scrubs every message/field through the SAME scrubber before
+  // the sink, so no secret can reach disk. Verbose (debug) is applied from settings once loaded and
+  // updated live when the toggle changes; error/warn/info always emit. Console-only when there is no
+  // dbPath (unit tests) or when a file sink cannot be created.
+  const logDir =
+    options.logDir ??
+    (options.dbPath !== undefined ? join(dirname(options.dbPath), "logs") : undefined);
+  const logger: RedactingLogger = createRedactingLogger({
+    scrubber,
+    ...(logDir !== undefined ? { sink: createFileSink({ dir: logDir }).sink } : {}),
+  });
+  // Route the boundary error-redaction seam through the logger so redacted errors are persisted
+  // locally (still returned to callers for renderer display, unchanged).
+  const redactError = (message: string): string => {
+    const scrubbed = sanitizeErrorMessage(scrubber.scrub(message));
+    logger.error(scrubbed);
+    return scrubbed;
+  };
 
   // --- Local SQLite vault (ADR 0007) when dbPath / sqliteDatabase is provided. ---
   let sqliteDatabase: SqliteDatabase | undefined = options.sqliteDatabase;
@@ -308,6 +332,17 @@ export async function createCoworkService(
     providerPort,
     modelConfig,
   );
+
+  // Detailed (verbose/debug) logging is a user setting. Apply it now and keep it live: intercept
+  // `updateGeneral` so toggling "Ghi log chi tiết" in Settings takes effect immediately without a
+  // relaunch. (Telemetry enable is wired into this same seam in the telemetry slice.)
+  logger.setVerbose(settingsStore.general().verboseLogging === true);
+  const baseUpdateGeneral = settingsStore.updateGeneral.bind(settingsStore);
+  settingsStore.updateGeneral = async (patch) => {
+    const next = await baseUpdateGeneral(patch);
+    logger.setVerbose(next.verboseLogging === true);
+    return next;
+  };
 
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
   const sessionService = createSessionService({
@@ -510,8 +545,11 @@ export async function createCoworkService(
     ...(options.extraRouters ?? []),
   ];
 
+  logger.info("service composed", { logging: logDir !== undefined ? "file" : "console" });
+
   const deps: CoworkServiceDeps = {
     scrubber,
+    logger,
     credentialService,
     providerPort,
     modelConfig,

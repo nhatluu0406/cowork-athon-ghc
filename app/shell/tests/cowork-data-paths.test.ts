@@ -25,6 +25,7 @@ test("packaged mode resolves under LOCALAPPDATA\\Cowork GHC\\data", () => {
   assert.equal(paths.dataRoot, "C:\\Users\\x\\AppData\\Local\\Cowork GHC\\data");
   assert.equal(paths.databasePath, "C:\\Users\\x\\AppData\\Local\\Cowork GHC\\data\\cowork-ghc.db");
   assert.equal(paths.backupRoot, "C:\\Users\\x\\AppData\\Local\\Cowork GHC\\data\\backups");
+  assert.equal(paths.logRoot, "C:\\Users\\x\\AppData\\Local\\Cowork GHC\\data\\logs");
 });
 
 test("packaged mode fails clearly when LOCALAPPDATA is missing", () => {
@@ -61,6 +62,7 @@ test("COWORK_GHC_RUNTIME_ROOT overrides packaged and development defaults", () =
     });
     assert.equal(paths.databasePath, join(root, "data", "cowork-ghc.db"));
     assert.ok(existsSync(paths.backupRoot));
+    assert.ok(existsSync(paths.logRoot), "ensureDirectories creates the logs dir");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

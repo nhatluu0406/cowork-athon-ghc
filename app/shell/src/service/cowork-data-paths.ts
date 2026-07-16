@@ -48,6 +48,13 @@ export interface CoworkDataPaths {
   readonly databasePath: string;
   /** Absolute path to `data/backups/`. */
   readonly backupRoot: string;
+  /**
+   * Absolute path to `data/logs/` — the canonical home for local structured logs (Wave 6). The
+   * service derives the same location from its `dbPath` (`dirname(dbPath)/logs`) because the
+   * service package must not import this shell module (import-direction rule); this field keeps the
+   * layout defined in one place and ensures the directory exists.
+   */
+  readonly logRoot: string;
 }
 
 export class CoworkDataPathError extends Error {
@@ -95,11 +102,13 @@ export function resolveCoworkDataPaths(input: ResolveCoworkDataPathsInput): Cowo
   }
 
   const backupRoot = join(dataRoot, "backups");
+  const logRoot = join(dataRoot, "logs");
   const databasePath = join(dataRoot, "cowork-ghc.db");
 
   if (input.ensureDirectories !== false) {
     mkdirSync(backupRoot, { recursive: true });
+    mkdirSync(logRoot, { recursive: true });
   }
 
-  return { dataRoot, databasePath, backupRoot };
+  return { dataRoot, databasePath, backupRoot, logRoot };
 }
