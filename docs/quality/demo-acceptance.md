@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-15"
+updated_at: "2026-07-16"
 ---
 
 # Demo acceptance
@@ -21,7 +21,7 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 - [ ] `Cho phép một lần` tạo file thật, đúng nội dung.
 - [ ] Yêu cầu modify rồi Deny; file không đổi.
 - [ ] Assistant không hiển thị internal tool/Skill narration.
-- [ ] Workspace tự refresh/open file liên quan sau Agent mutation.
+- [x] Workspace tự refresh/open file liên quan sau Agent mutation. (PO-observed 2026-07-16)
 - [ ] Reopen conversation và relaunch giữ history/configuration.
 
 ## Provider demo
@@ -34,10 +34,14 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 
 ## Workspace demo
 
-- [ ] Text/Markdown opens and edits safely.
-- [ ] PDF renders in packaged app.
+- [x] Text/Markdown opens and edits safely.
+- [x] Code files (.py/.css/.cpp/.js/.ts/…) open with syntax highlight + line numbers; "Sửa" edits then Lưu.
+- [x] PDF renders in packaged app (Chromium PDFium; default no-toolbar + fit-to-width; PO-observed 2026-07-16).
 - [ ] Image/DOCX/XLSX safe preview states are clear.
-- [ ] Agent file update refreshes current file without overwriting dirty edits.
+- [x] Agent file update refreshes current file without overwriting dirty edits (keep-mine / reload-from-disk).
+- [x] Verified delete of the open file clears the preview and cannot recreate it.
+- Note: verified delete VIA THE AGENT is blocked upstream — the pinned OpenCode build exposes no
+  delete tool (see known-limitations), so this journey is only observable when the delete is verified.
 
 ## Settings / Skills / Inspector
 

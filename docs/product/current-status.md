@@ -13,7 +13,7 @@ Cowork GHC desktop POC. Wave 0A/0B (local vault + conversation SQLite) đã land
 | Capability | Status | Note |
 |---|---|---|
 | Cowork chat | WORKS | Progressive streaming; live attach gated. Skills are OpenCode native on-demand (no full prompt injection). |
-| Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
+| Workspace | WORKS — Wave 4 | Text/code preview + edit: syntax highlight (highlight.js) + line numbers, read-only → nút "Sửa" → textarea → Lưu; text cắt ở 512 KiB, highlight bỏ qua khi > 256 KiB. PDF preview packaged (Chromium PDFium; mặc định ẩn toolbar + fit-to-width). Live refresh: auto-refresh navigator sau verified mutation; auto-open ≤1 safe file/turn (bỏ ngoài-workspace/secret/unsupported); verified-delete xoá file đang mở → clear + chặn recreate; dirty-edit conflict (giữ bản đang sửa + cảnh báo ghi đè bền vững / tải lại từ đĩa). Ảnh/DOCX/XLSX xem an toàn. Không có Office editor; không đảm bảo mọi PDF (malformed/password). |
 | Provider profiles | WORKS — BASIC | Verified fingerprint + status bar. |
 | Local database | WORKS | Settings/credentials/conversations/MCP config in SQLite vault. |
 | Local app authentication | WORKS | Unlock + encrypted vault master key. |
