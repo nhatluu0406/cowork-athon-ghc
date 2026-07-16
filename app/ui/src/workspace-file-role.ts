@@ -1,5 +1,7 @@
 /** Maps workspace-relative paths to companion preview roles. */
 
+import { isTextFilePath } from "@cowork-ghc/contracts";
+
 export type WorkspaceFileRole =
   | "text"
   | "image"
@@ -12,11 +14,12 @@ export function detectWorkspaceFileRole(relativePath: string): WorkspaceFileRole
   const ext = relativePath.includes(".")
     ? relativePath.slice(relativePath.lastIndexOf(".")).toLowerCase()
     : "";
-  if (ext === ".txt" || ext === ".md") return "text";
   if (ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".webp") return "image";
   if (ext === ".pdf") return "pdf";
   if (ext === ".docx") return "docx";
   if (ext === ".xlsx") return "spreadsheet";
+  // Text/code (incl. .txt/.md and code files) — shared with the service via isTextFilePath.
+  if (isTextFilePath(relativePath)) return "text";
   return "unsupported";
 }
 
