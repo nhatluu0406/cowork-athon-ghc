@@ -321,7 +321,9 @@ export function mountWorkspaceCompanionPane(
     if (file.kind === "pdf" && file.dataBase64) {
       blobUrl = base64ToBlobUrl(file.dataBase64, "application/pdf");
       const frame = el("iframe", "workspace-companion-pane__pdf") as HTMLIFrameElement;
-      frame.src = blobUrl;
+      // PDFium open params: hide the viewer toolbar + thumbnail rail and fit the page to width for
+      // a clean, embedded preview by default (the user can still scroll/zoom via the context menu).
+      frame.src = `${blobUrl}#toolbar=0&navpanes=0&view=FitH`;
       frame.title = file.relativePath;
       body.replaceChildren(frame);
       return;
