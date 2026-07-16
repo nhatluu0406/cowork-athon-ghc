@@ -9,6 +9,7 @@ import mammoth from "mammoth";
 import * as XLSX from "xlsx";
 import { isTextFilePath } from "@cowork-ghc/contracts";
 import { createWorkspaceGuard } from "./guard.js";
+import { parsePptxSlides, type PptxSlideView } from "./pptx.js";
 import { validateWorkspaceSelection, nodeFsProbe } from "./validate.js";
 
 const TEXT_EDIT_MAX_BYTES = 512 * 1024;
@@ -20,6 +21,7 @@ export type WorkspaceFileContentKind =
   | "pdf"
   | "docx"
   | "spreadsheet"
+  | "presentation"
   | "missing"
   | "unsupported";
 
@@ -27,6 +29,8 @@ export interface SpreadsheetSheetView {
   readonly name: string;
   readonly rows: readonly (readonly string[])[];
 }
+
+export type { PptxSlideView } from "./pptx.js";
 
 export interface WorkspaceFileContentResult {
   readonly relativePath: string;
@@ -37,6 +41,7 @@ export interface WorkspaceFileContentResult {
   readonly html?: string;
   readonly dataBase64?: string;
   readonly sheets?: readonly SpreadsheetSheetView[];
+  readonly slides?: readonly PptxSlideView[];
   readonly truncated: boolean;
   readonly sizeBytes: number;
 }
@@ -49,6 +54,7 @@ export interface WorkspaceFileWriteInput {
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 const SPREADSHEET_EXTENSIONS = new Set([".xlsx"]);
+const PRESENTATION_EXTENSIONS = new Set([".pptx"]);
 // Which files are treated as editable text/code is shared with the renderer via
 // `isTextFilePath` (@cowork-ghc/contracts) so the two never drift.
 
@@ -185,17 +191,48 @@ export async function readWorkspaceFileContent(
     }
     const buf = await readFile(realPath);
     const workbook = XLSX.read(buf, { type: "buffer" });
-    const sheets: SpreadsheetSheetView[] = workbook.SheetNames.map((name) => {
+    // `workbook.Workbook.Sheets[i].Hidden`: 0 = visible, 1 = hidden, 2 = very hidden. Aligned by
+    // index with `SheetNames`. Skip non-visible sheets so a hidden sheet is never surfaced.
+    const meta = workbook.Workbook?.Sheets;
+    const sheets: SpreadsheetSheetView[] = [];
+    workbook.SheetNames.forEach((name, i) => {
+      if ((meta?.[i]?.Hidden ?? 0) !== 0) return;
       const sheet = workbook.Sheets[name];
-      if (sheet === undefined) return { name, rows: [] as string[][] };
+      if (sheet === undefined) {
+        sheets.push({ name, rows: [] as string[][] });
+        return;
+      }
       const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" }) as string[][];
-      return { name, rows };
+      sheets.push({ name, rows });
     });
     return {
       relativePath,
       kind: "spreadsheet",
       editable: false,
       sheets,
+      truncated: false,
+      sizeBytes,
+    };
+  }
+
+  if (PRESENTATION_EXTENSIONS.has(ext)) {
+    if (sizeBytes > BINARY_PREVIEW_MAX_BYTES) {
+      return { relativePath, kind: "unsupported", editable: false, truncated: true, sizeBytes };
+    }
+    const buf = await readFile(realPath);
+    let slides: PptxSlideView[];
+    try {
+      slides = await parsePptxSlides(buf);
+    } catch {
+      // Malformed or encrypted (an encrypted .pptx is an OLE compound file, not a ZIP): surface a
+      // clear unsupported state rather than crashing the read.
+      return { relativePath, kind: "unsupported", editable: false, truncated: false, sizeBytes };
+    }
+    return {
+      relativePath,
+      kind: "presentation",
+      editable: false,
+      slides,
       truncated: false,
       sizeBytes,
     };

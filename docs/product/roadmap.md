@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-16"
+updated_at: "2026-07-17"
 ---
 
 # Roadmap V2 — basic-first, one wave at a time
@@ -64,6 +64,10 @@ updated_at: "2026-07-16"
 - [x] Explicit current-file context in companion chat.
 - [x] Verified-delete of the open file clears the preview and blocks accidental recreate.
 - [x] Code-file viewing: syntax highlight (highlight.js) + line numbers, read-only with an edit toggle.
+- [x] Office preview (bounded follow-up): read-only `.pptx` slide preview (text-first, prev/next
+      navigation, parsed locally in-memory via JSZip; `.ppt` legacy unsupported) and multi-sheet
+      `.xlsx` navigation (visible-sheet tabs, hidden sheets filtered, read-only). No Office editor,
+      no cloud/LibreOffice conversion.
 
 ## WAVE 5 — Inspector Phase 1
 

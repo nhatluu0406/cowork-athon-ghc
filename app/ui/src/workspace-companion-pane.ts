@@ -73,6 +73,10 @@ export function mountWorkspaceCompanionPane(
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
   // Text/code files show a read-only, syntax-highlighted view first; the user opts into editing.
   let editMode = false;
+  // Active sheet index for a multi-sheet spreadsheet, and active slide index for a presentation.
+  // Both reset to 0 in renderFile so opening a new workbook/deck starts at the first item.
+  let sheetIndex = 0;
+  let slideIndex = 0;
 
   const root = el("div", "workspace-companion-pane");
   const toolbar = el("div", "workspace-companion-pane__toolbar");
@@ -126,7 +130,7 @@ export function mountWorkspaceCompanionPane(
   const emptyIcon = el("div", "workspace-companion-pane__empty-icon");
   emptyIcon.append(icon("workspace", "Workspace"));
   const formats = el("div", "workspace-companion-pane__formats");
-  for (const format of ["TXT", "MD", "DOCX", "PDF", "Ảnh", "XLSX"]) {
+  for (const format of ["TXT", "MD", "DOCX", "PDF", "Ảnh", "XLSX", "PPTX"]) {
     formats.append(el("span", "workspace-companion-pane__format", format));
   }
   empty.append(
@@ -227,11 +231,44 @@ export function mountWorkspaceCompanionPane(
   };
 
   const renderSpreadsheet = (file: WorkspaceFileContentView): void => {
-    const sheet = file.sheets?.[0];
-    if (sheet === undefined) {
-      body.replaceChildren(el("p", "workspace-companion-pane__message", "Không có sheet."));
+    const sheets = file.sheets ?? [];
+    if (sheets.length === 0) {
+      body.replaceChildren(
+        el("p", "workspace-companion-pane__message", "Workbook không có sheet hiển thị được."),
+      );
       return;
     }
+    if (sheetIndex >= sheets.length) sheetIndex = 0;
+    const sheet = sheets[sheetIndex]!;
+
+    const wrap = el("div", "workspace-companion-pane__sheet-wrap");
+
+    // Sheet selector: a compact tab row near the header. Only shown when there is more than one
+    // visible sheet. Switching a sheet re-renders only this grid — no full Workspace reload.
+    if (sheets.length > 1) {
+      const tabs = el("div", "workspace-companion-pane__sheet-tabs");
+      tabs.setAttribute("role", "tablist");
+      sheets.forEach((s, i) => {
+        const tab = el(
+          "button",
+          "workspace-companion-pane__sheet-tab" +
+            (i === sheetIndex ? " workspace-companion-pane__sheet-tab--active" : ""),
+          s.name,
+        ) as HTMLButtonElement;
+        tab.type = "button";
+        tab.setAttribute("role", "tab");
+        tab.setAttribute("aria-selected", String(i === sheetIndex));
+        tab.title = s.name;
+        tab.addEventListener("click", () => {
+          if (i === sheetIndex) return;
+          sheetIndex = i;
+          renderSpreadsheet(file);
+        });
+        tabs.append(tab);
+      });
+      wrap.append(tabs);
+    }
+
     const table = el("table", "workspace-companion-pane__grid");
     const tbody = el("tbody", "workspace-companion-pane__grid-body");
     const rows = sheet.rows.map((row: readonly string[]) => [...row]);
@@ -267,9 +304,70 @@ export function mountWorkspaceCompanionPane(
       tbody.append(tr);
     }
     table.append(tbody);
-    body.replaceChildren(table);
+    wrap.append(table);
+    body.replaceChildren(wrap);
     (table as unknown as { __rows: string[][] }).__rows = rows;
     (table as unknown as { __sheetName: string }).__sheetName = sheet.name;
+  };
+
+  /**
+   * Render a read-only PowerPoint (.pptx) preview: one slide at a time with previous/next
+   * navigation and a "Slide X / Y" counter. Text-first (no pixel-perfect rendering). Switching
+   * slides only re-renders this deck, never the whole Workspace.
+   */
+  const renderPresentation = (file: WorkspaceFileContentView): void => {
+    const slides = file.slides ?? [];
+    if (slides.length === 0) {
+      body.replaceChildren(
+        el("p", "workspace-companion-pane__message", "Không có slide nào để hiển thị."),
+      );
+      return;
+    }
+    if (slideIndex >= slides.length) slideIndex = 0;
+    if (slideIndex < 0) slideIndex = 0;
+    const slide = slides[slideIndex]!;
+
+    const deck = el("div", "workspace-companion-pane__deck");
+    const nav = el("div", "workspace-companion-pane__deck-nav");
+    const prev = el("button", "workspace-companion-pane__deck-btn") as HTMLButtonElement;
+    prev.type = "button";
+    prev.dataset["tooltip"] = "Slide trước";
+    prev.setAttribute("aria-label", "Slide trước");
+    prev.append(icon("arrow-left", "Slide trước"));
+    prev.disabled = slideIndex === 0;
+    const counter = el(
+      "span",
+      "workspace-companion-pane__deck-counter",
+      `Slide ${slideIndex + 1} / ${slides.length}`,
+    );
+    const next = el("button", "workspace-companion-pane__deck-btn") as HTMLButtonElement;
+    next.type = "button";
+    next.dataset["tooltip"] = "Slide sau";
+    next.setAttribute("aria-label", "Slide sau");
+    next.append(icon("arrow-right", "Slide sau"));
+    next.disabled = slideIndex === slides.length - 1;
+    prev.addEventListener("click", () => {
+      if (slideIndex === 0) return;
+      slideIndex -= 1;
+      renderPresentation(file);
+    });
+    next.addEventListener("click", () => {
+      if (slideIndex >= slides.length - 1) return;
+      slideIndex += 1;
+      renderPresentation(file);
+    });
+    nav.append(prev, counter, next);
+
+    const stage = el("div", "workspace-companion-pane__slide");
+    if (slide.text.trim().length === 0) {
+      stage.append(
+        el("p", "workspace-companion-pane__slide-empty", "Slide này không có nội dung văn bản."),
+      );
+    } else {
+      stage.append(el("pre", "workspace-companion-pane__slide-text", slide.text));
+    }
+    deck.append(nav, stage);
+    body.replaceChildren(deck);
   };
 
   const collectSpreadsheetRows = (): { name: string; rows: string[][] } => {
@@ -286,6 +384,8 @@ export function mountWorkspaceCompanionPane(
     current = file;
     dirty = false;
     editMode = false;
+    sheetIndex = 0;
+    slideIndex = 0;
     hideConflict();
     setDiskChanged(false);
     editButton.hidden = true;
@@ -337,6 +437,11 @@ export function mountWorkspaceCompanionPane(
     if (file.kind === "spreadsheet") {
       renderSpreadsheet(file);
       if (!file.editable) setStatus("Chỉ xem — bảo toàn công thức và định dạng XLSX", 0);
+      return;
+    }
+    if (file.kind === "presentation") {
+      renderPresentation(file);
+      setStatus("Chỉ xem — bản xem trước văn bản PowerPoint (không hiển thị đúng 100%)", 0);
       return;
     }
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Không hiển thị được tệp."));
