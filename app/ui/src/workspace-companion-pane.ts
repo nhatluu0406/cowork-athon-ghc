@@ -51,18 +51,63 @@ export interface WorkspaceCompanionPaneHandle {
   readonly openIfSafe: (relativePath: string) => Promise<boolean>;
 }
 
-function base64ToBlobUrl(base64: string, mime: string): string {
+function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
-  const blob = new Blob([bytes], { type: mime });
+  return bytes;
+}
+
+function base64ToBlobUrl(base64: string, mime: string): string {
+  const blob = new Blob([base64ToBytes(base64)], { type: mime });
   return URL.createObjectURL(blob);
+}
+
+/**
+ * Minimal surface of `@aiden0z/pptx-renderer`'s PptxViewer that this pane drives. Kept local so the
+ * pane depends on a small contract (and tests can inject a fake), not the library's full type.
+ */
+export interface PptxViewerLike {
+  open(
+    input: ArrayBuffer | Uint8Array | Blob,
+    options?: { renderMode?: "list" | "slide"; signal?: AbortSignal },
+  ): Promise<void>;
+  goToSlide(index: number): Promise<void>;
+  readonly slideCount: number;
+  readonly currentSlideIndex: number;
+  on(type: "slidechange", listener: (event: { detail: { index: number } }) => void): unknown;
+  destroy(): void;
+}
+
+export interface PptxViewerModuleLike {
+  readonly PptxViewer: new (
+    container: HTMLElement,
+    options?: Record<string, unknown>,
+  ) => PptxViewerLike;
+  readonly RECOMMENDED_ZIP_LIMITS: unknown;
+}
+
+export interface WorkspaceCompanionPaneOptions {
+  /**
+   * Loads the local PPTX rendering engine. Defaults to a dynamic import of the self-contained
+   * browser build (code-split so the ~1.5 MiB engine is only fetched when a deck is opened). Tests
+   * inject a fake to exercise the wiring without a real browser layout engine.
+   */
+  readonly loadPptxViewer?: () => Promise<PptxViewerModuleLike>;
 }
 
 export function mountWorkspaceCompanionPane(
   container: HTMLElement,
   client: ServiceClient,
+  options: WorkspaceCompanionPaneOptions = {},
 ): WorkspaceCompanionPaneHandle {
+  const loadPptxViewer =
+    options.loadPptxViewer ??
+    (() =>
+      // The `/browser` entry is self-contained (JSZip + ECharts inlined) and strips Node `process.env`
+      // checks at build time — it runs under our strict `script-src 'self'` CSP (no eval on any live
+      // path) with no remote/CDN fetch.
+      import("@aiden0z/pptx-renderer/browser") as unknown as Promise<PptxViewerModuleLike>);
   let openPath: string | null = null;
   let current: WorkspaceFileContentView | null = null;
   let dirty = false;
@@ -77,6 +122,9 @@ export function mountWorkspaceCompanionPane(
   // Both reset to 0 in renderFile so opening a new workbook/deck starts at the first item.
   let sheetIndex = 0;
   let slideIndex = 0;
+  // High-fidelity PowerPoint viewer state (lazy-loaded engine). See destroyPptxViewer.
+  let pptxViewer: PptxViewerLike | null = null;
+  let pptxGeneration = 0;
 
   const root = el("div", "workspace-companion-pane");
   const toolbar = el("div", "workspace-companion-pane__toolbar");
@@ -163,6 +211,20 @@ export function mountWorkspaceCompanionPane(
     if (blobUrl !== null) {
       URL.revokeObjectURL(blobUrl);
       blobUrl = null;
+    }
+  };
+
+  // Active high-fidelity PPTX viewer, if any. `pptxGeneration` guards against races when the user
+  // switches files while a deck is still loading: an outdated load resolves into a discarded viewer.
+  const destroyPptxViewer = (): void => {
+    pptxGeneration += 1;
+    if (pptxViewer !== null) {
+      try {
+        pptxViewer.destroy();
+      } catch {
+        // destroy() best-effort: never let viewer teardown break rendering the next file.
+      }
+      pptxViewer = null;
     }
   };
 
@@ -311,11 +373,11 @@ export function mountWorkspaceCompanionPane(
   };
 
   /**
-   * Render a read-only PowerPoint (.pptx) preview: one slide at a time with previous/next
-   * navigation and a "Slide X / Y" counter. Text-first (no pixel-perfect rendering). Switching
-   * slides only re-renders this deck, never the whole Workspace.
+   * Text-first PowerPoint fallback: one slide's extracted text at a time with previous/next
+   * navigation and a "Slide X / Y" counter. Used when raw bytes are unavailable or when the
+   * high-fidelity engine fails at runtime. Switching slides re-renders only this deck.
    */
-  const renderPresentation = (file: WorkspaceFileContentView): void => {
+  const renderPresentationText = (file: WorkspaceFileContentView): void => {
     const slides = file.slides ?? [];
     if (slides.length === 0) {
       body.replaceChildren(
@@ -349,12 +411,12 @@ export function mountWorkspaceCompanionPane(
     prev.addEventListener("click", () => {
       if (slideIndex === 0) return;
       slideIndex -= 1;
-      renderPresentation(file);
+      renderPresentationText(file);
     });
     next.addEventListener("click", () => {
       if (slideIndex >= slides.length - 1) return;
       slideIndex += 1;
-      renderPresentation(file);
+      renderPresentationText(file);
     });
     nav.append(prev, counter, next);
 
@@ -368,6 +430,120 @@ export function mountWorkspaceCompanionPane(
     }
     deck.append(nav, stage);
     body.replaceChildren(deck);
+  };
+
+  /**
+   * Render a read-only PowerPoint (.pptx) preview with the local high-fidelity engine: real slide
+   * layout (text position/size/colour, images, shapes, tables, charts, theme backgrounds) rendered
+   * as HTML/SVG DOM, one slide at a time, with previous/next navigation and a "Slide X / Y" counter.
+   * The engine runs fully local (no cloud/LibreOffice/remote), under our strict CSP. Switching slides
+   * calls goToSlide on the existing viewer — never a whole-Workspace reload. On any runtime failure it
+   * degrades to the text-first fallback so the user still sees the deck content.
+   */
+  const renderPresentationHiFi = (file: WorkspaceFileContentView, bytes: Uint8Array): void => {
+    destroyPptxViewer();
+    const generation = pptxGeneration;
+
+    const deck = el("div", "workspace-companion-pane__deck");
+    const nav = el("div", "workspace-companion-pane__deck-nav");
+    const prev = el("button", "workspace-companion-pane__deck-btn") as HTMLButtonElement;
+    prev.type = "button";
+    prev.dataset["tooltip"] = "Slide trước";
+    prev.setAttribute("aria-label", "Slide trước");
+    prev.append(icon("arrow-left", "Slide trước"));
+    prev.disabled = true;
+    let total = file.slides?.length ?? 0;
+    const counter = el(
+      "span",
+      "workspace-companion-pane__deck-counter",
+      `Slide 1 / ${total > 0 ? total : "…"}`,
+    );
+    const next = el("button", "workspace-companion-pane__deck-btn") as HTMLButtonElement;
+    next.type = "button";
+    next.dataset["tooltip"] = "Slide sau";
+    next.setAttribute("aria-label", "Slide sau");
+    next.append(icon("arrow-right", "Slide sau"));
+    next.disabled = true;
+    nav.append(prev, counter, next);
+
+    const stage = el("div", "workspace-companion-pane__slide workspace-companion-pane__slide--hifi");
+    const mount = el("div", "workspace-companion-pane__slide-mount");
+    const loading = el("p", "workspace-companion-pane__slide-loading", "Đang dựng slide…");
+    stage.append(mount, loading);
+    deck.append(nav, stage);
+    body.replaceChildren(deck);
+    setStatus("Chỉ xem — bản dựng PowerPoint cục bộ (không hiển thị đúng 100%)", 0);
+
+    let index = 0;
+    const sync = (): void => {
+      counter.textContent = `Slide ${Math.min(index + 1, total)} / ${total}`;
+      prev.disabled = index <= 0;
+      next.disabled = index >= total - 1;
+    };
+
+    loadPptxViewer()
+      .then(async (mod) => {
+        if (generation !== pptxGeneration) return;
+        const viewer = new mod.PptxViewer(mount, {
+          fitMode: "contain",
+          // EMF/PDF-fallback rendering (pdf.js) is disabled: it would need `worker-src blob:` in the
+          // CSP, which we do not grant. Charts still render via the bundled ECharts.
+          pdfjs: false,
+          // Bound ZIP parsing (entry count / uncompressed size / media size) to cap the DoS surface.
+          zipLimits: mod.RECOMMENDED_ZIP_LIMITS,
+        });
+        await viewer.open(bytes, { renderMode: "slide" });
+        if (generation !== pptxGeneration) {
+          try {
+            viewer.destroy();
+          } catch {
+            /* best-effort */
+          }
+          return;
+        }
+        pptxViewer = viewer;
+        total = viewer.slideCount || total;
+        index = viewer.currentSlideIndex || 0;
+        loading.remove();
+        viewer.on("slidechange", (event) => {
+          if (generation !== pptxGeneration) return;
+          index = event.detail.index;
+          sync();
+        });
+        prev.addEventListener("click", () => {
+          if (index <= 0) return;
+          index -= 1;
+          sync();
+          void viewer.goToSlide(index);
+        });
+        next.addEventListener("click", () => {
+          if (index >= total - 1) return;
+          index += 1;
+          sync();
+          void viewer.goToSlide(index);
+        });
+        sync();
+      })
+      .catch(() => {
+        if (generation !== pptxGeneration) return;
+        // The engine failed at runtime (unexpected geometry, chart, etc.). Degrade to text-first so
+        // the deck's content is still readable, and say so honestly.
+        renderPresentationText(file);
+        setStatus("Không dựng được bản đầy đủ — hiển thị văn bản slide.", 0);
+      });
+  };
+
+  /**
+   * Dispatch to the high-fidelity engine when the raw .pptx bytes are present, else the text-first
+   * fallback. The service only sets `dataBase64` for a deck it could structurally parse.
+   */
+  const renderPresentation = (file: WorkspaceFileContentView): void => {
+    if (file.dataBase64) {
+      renderPresentationHiFi(file, base64ToBytes(file.dataBase64));
+      return;
+    }
+    renderPresentationText(file);
+    setStatus("Chỉ xem — bản xem trước văn bản PowerPoint (không hiển thị đúng 100%)", 0);
   };
 
   const collectSpreadsheetRows = (): { name: string; rows: string[][] } => {
@@ -392,6 +568,7 @@ export function mountWorkspaceCompanionPane(
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
     revokeBlob();
+    destroyPptxViewer();
     pathLabel.textContent = file.relativePath;
     statusBadge.hidden = true;
     pathLabel.title = file.relativePath;
@@ -441,7 +618,6 @@ export function mountWorkspaceCompanionPane(
     }
     if (file.kind === "presentation") {
       renderPresentation(file);
-      setStatus("Chỉ xem — bản xem trước văn bản PowerPoint (không hiển thị đúng 100%)", 0);
       return;
     }
     body.replaceChildren(el("p", "workspace-companion-pane__message", "Không hiển thị được tệp."));
