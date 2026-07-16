@@ -24,3 +24,11 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
 - **Web / Next.js** vẫn deferred.
+- **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
+  workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)
+  làm instruction/system prompt. Hệ quả quan sát được (2026-07-16): một `AGENTS.md` ở thư mục cha
+  đã âm thầm đổi danh tính agent từ "Cowork GHC" thành một persona khác cho mọi workspace con.
+  Đây là hành vi của OpenCode, không phải file-mutation, nên không vi phạm ranh giới ghi file —
+  nhưng instruction ngoài workspace có thể đổi hành vi/danh tính agent mà người dùng không biết.
+  Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
+  cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
