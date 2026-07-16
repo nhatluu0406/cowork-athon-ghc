@@ -137,7 +137,8 @@ textarea,
 .shell-frame.shell-frame--settings .view--workspace,
 .shell-frame.shell-frame--settings .view--knowledge,
 .shell-frame.shell-frame--settings .view--integration,
-.shell-frame.shell-frame--settings .view--skills-mcp {
+.shell-frame.shell-frame--settings .view--skills-mcp,
+.shell-frame.shell-frame--settings .view--gateway {
   display: none !important;
 }
 
@@ -249,6 +250,7 @@ textarea,
 .view--microsoft,
 .view--code,
 .view--skills-mcp,
+.view--gateway,
 .view--settings {
   min-width: 0;
   min-height: 0;
@@ -271,6 +273,7 @@ textarea,
 .view--microsoft,
 .view--code,
 .view--skills-mcp,
+.view--gateway,
 .view--settings {
   grid-area: main;
 }
