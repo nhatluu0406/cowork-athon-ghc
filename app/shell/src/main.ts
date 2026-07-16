@@ -17,7 +17,7 @@
  */
 
 import { app, BrowserWindow, Menu, protocol, session } from "electron";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +37,10 @@ import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
 import { resolvePackagedPaths } from "./service/packaged-paths.js";
+import {
+  CoworkDataPathError,
+  resolveCoworkDataPaths,
+} from "./service/cowork-data-paths.js";
 import { createSettingsOnlyStartService } from "./service/tiered-start-service.js";
 import { createHealthVerifiedStartService } from "./service/wait-for-health.js";
 import {
@@ -44,6 +48,7 @@ import {
   createPersistedSettingsSource,
 } from "./service/persisted-settings-source.js";
 import { loadProjectEnvFile } from "./load-project-env.js";
+import { clearRememberedUnlock } from "./service/session-unlock.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -76,21 +81,37 @@ function resolveRuntimePaths() {
     userData: app.getPath("userData"),
     devAppRoot: DEV_APP_ROOT,
   });
-  const settingsFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "settings.json");
-  const conversationsDir = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "conversations");
-  const skillsStateFilePath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills-enabled.json");
+  const dataPaths = resolveCoworkDataPaths({
+    isPackaged: app.isPackaged,
+    repoRoot: DEV_APP_ROOT,
+    ...(process.env["LOCALAPPDATA"] !== undefined
+      ? { localAppData: process.env["LOCALAPPDATA"] }
+      : {}),
+  });
+  // Writable app root owns settings/conversations beside `data/` (never beside the .exe).
+  const appDataRoot = dirname(dataPaths.dataRoot);
+  const settingsFilePath = join(appDataRoot, "settings.json");
+  const conversationsDir = join(appDataRoot, "conversations");
+  const skillsStateFilePath = join(appDataRoot, "skills-enabled.json");
+  const dbPath = dataPaths.databasePath;
+  maybeMigrateLegacyDatabase(join(app.getPath("userData"), "cowork-ghc.db"), dbPath);
   const userSkillsRoot =
-    process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() ||
-    join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "skills");
+    process.env["COWORK_GHC_E2E_SKILLS_ROOT"]?.trim() || join(appDataRoot, "skills");
   const builtInSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
-  lifecycleLogPath = join(packaged.runtimeRoot ?? DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
+  lifecycleLogPath = join(appDataRoot, "service-lifecycle.log");
+  mkdirSync(conversationsDir, { recursive: true });
+  if (process.env["COWORK_GHC_VERBOSE_LOGGING"] === "1") {
+    writeStartupTrace(`database_path:${dbPath}`);
+  }
   return {
     packaged,
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
+    dbPath,
+    dataPaths,
     skillRoots: [
       { path: builtInSkillsRoot, source: "built_in" as const },
       { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
@@ -102,6 +123,7 @@ function createShellController(
   settingsFilePath: string,
   conversationsDir: string,
   skillsStateFilePath: string,
+  dbPath: string,
   skillRoots: readonly {
     readonly path: string;
     readonly source: "built_in" | "user_local";
@@ -112,9 +134,11 @@ function createShellController(
   const liveSource = createFirstConfiguredSource([
     createPersistedSettingsSource({
       settingsFilePath,
+      dbPath,
       allowedOrigins: [APP_ORIGIN],
       binPath: packaged.binPath,
       appRoot: DEV_APP_ROOT,
+      conversationsDir,
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
       skillsStateFilePath,
       skillRoots,
@@ -124,6 +148,8 @@ function createShellController(
       binPath: packaged.binPath,
       allowedOrigins: [APP_ORIGIN],
       settingsFilePath,
+      dbPath,
+      conversationsDir,
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
       skillsStateFilePath,
       skillRoots,
@@ -134,6 +160,7 @@ function createShellController(
     settingsFilePath,
     conversationsDir,
     skillsStateFilePath,
+    dbPath,
     skillRoots,
     allowedOrigins: [APP_ORIGIN] as const,
     allowEnvCredentialImport: envCredentialImportEnabled(),
@@ -164,6 +191,21 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+
+function maybeMigrateLegacyDatabase(legacyPath: string, nextPath: string): void {
+  if (existsSync(nextPath) || !existsSync(legacyPath)) return;
+  try {
+    mkdirSync(dirname(nextPath), { recursive: true });
+    copyFileSync(legacyPath, nextPath);
+    for (const suffix of ["-wal", "-shm"] as const) {
+      const side = `${legacyPath}${suffix}`;
+      if (existsSync(side)) copyFileSync(side, `${nextPath}${suffix}`);
+    }
+    writeStartupTrace(`database_migrated_from_legacy:${legacyPath}`);
+  } catch {
+    // Best-effort; startup continues with a fresh DB if copy fails.
+  }
+}
 
 /**
  * The persistent settings file is resolved AFTER `app.whenReady()` so Electron's final
@@ -217,7 +259,10 @@ function tracedStartService(name: string, start: StartService): StartService {
 const lifecycleApp: LifecycleApp = {
   whenReady: () => app.whenReady(),
   onBeforeQuit: (listener) => {
-    app.on("before-quit", listener);
+    app.on("before-quit", (event) => {
+      clearRememberedUnlock();
+      listener(event);
+    });
   },
   quit: () => app.quit(),
 };
@@ -235,20 +280,30 @@ void runShellLifecycle({
     if (envCredentialImportEnabled()) {
       loadProjectEnvFile(DEV_APP_ROOT);
     }
-    const {
-      packaged,
-      settingsFilePath,
-      conversationsDir,
-      skillsStateFilePath,
-      skillRoots,
-    } = resolveRuntimePaths();
-    shellController = createShellController(
-      settingsFilePath,
-      conversationsDir,
-      skillsStateFilePath,
-      skillRoots,
-      packaged,
-    );
+    try {
+      const {
+        packaged,
+        settingsFilePath,
+        conversationsDir,
+        skillsStateFilePath,
+        dbPath,
+        skillRoots,
+      } = resolveRuntimePaths();
+      shellController = createShellController(
+        settingsFilePath,
+        conversationsDir,
+        skillsStateFilePath,
+        dbPath,
+        skillRoots,
+        packaged,
+      );
+    } catch (error) {
+      if (error instanceof CoworkDataPathError) {
+        writeStartupTrace(`data_path_error:${error.message}`);
+        throw error;
+      }
+      throw error;
+    }
   },
   onReady: () => {
     if (shellController === null) {
@@ -257,6 +312,9 @@ void runShellLifecycle({
     installAppProtocol(protocol, RENDERER_DIR);
     installCsp(session.defaultSession);
     Menu.setApplicationMenu(null);
+    if (process.platform === "win32") {
+      app.setAppUserModelId("com.coworkghc.desktop");
+    }
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
     // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
     // now re-resolves the persisted config). Stop+start are each idempotent + own the child.

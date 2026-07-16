@@ -8,7 +8,6 @@ import type { ConversationRecord } from "./service-client.js";
 import type { SettingsView } from "./service-client.js";
 import type { ReadinessState } from "./readiness-controller.js";
 import type { RuntimePhase } from "./conversation-controller.js";
-import { needsContinuation } from "./conversation-controller.js";
 import { PROVIDER_PRESETS } from "./provider-presets.js";
 
 const DEEPSEEK_MODELS = [
@@ -178,9 +177,23 @@ export function providerStatus(
     }
     if (connectionTestState === "ok") {
       return {
-        label: `${subject} · Sẵn sàng`,
+        label: `${subject} · Đã kiểm tra`,
         detail: `${profile.modelId} · khoá API đã cấu hình.`,
         ok: true,
+      };
+    }
+    if (profile.verificationCurrent && profile.lastVerifiedOk === true) {
+      return {
+        label: `${subject} · Đã kiểm tra`,
+        detail: `${profile.modelId} · đã xác minh${profile.lastVerifiedAt !== undefined ? ` · ${profile.lastVerifiedAt}` : ""}.`,
+        ok: true,
+      };
+    }
+    if (profile.verificationCurrent && profile.lastVerifiedOk === false) {
+      return {
+        label: `${subject} · Kết nối thất bại`,
+        detail: "Lần kiểm tra gần nhất thất bại — mở cài đặt để sửa rồi thử lại.",
+        ok: false,
       };
     }
     return {
@@ -244,7 +257,7 @@ export function providerStatus(
   }
   if (connectionTestState === "ok") {
     return {
-      label: `${subject} · Sẵn sàng`,
+      label: `${subject} · Đã kiểm tra`,
       detail: `${model.modelID} · khoá API đã cấu hình.`,
       ok: true,
     };
@@ -274,32 +287,16 @@ export function runtimeReadinessKind(phase: RuntimePhase): ReadinessKind {
   }
 }
 
-export function assessSendPreflight(input: ProviderReadinessInput): SendPreflight {
+/**
+ * Provider / workspace configuration readiness only.
+ * Used mid-send after the turn already claimed `runtimePhase = "starting"`.
+ */
+export function assessConfigPreflight(input: ProviderReadinessInput): SendPreflight {
   if (!input.localServiceReady) {
     return {
       canSend: false,
       blockKind: "local_service_unavailable",
       message: "Local service chưa sẵn sàng. Đợi kết nối hoặc thử lại.",
-      showSettingsCta: false,
-    };
-  }
-  if (input.composerLocked) {
-    return {
-      canSend: false,
-      blockKind: "composer_locked",
-      message: "Tiếp tục cuộc trò chuyện lịch sử trước khi gửi tin mới.",
-      showSettingsCta: false,
-    };
-  }
-  if (
-    input.runtimePhase === "running" ||
-    input.runtimePhase === "starting" ||
-    input.runtimePhase === "cancelling"
-  ) {
-    return {
-      canSend: false,
-      blockKind: "runtime_busy",
-      message: "Đang xử lý yêu cầu trước.",
       showSettingsCta: false,
     };
   }
@@ -402,18 +399,37 @@ export function assessSendPreflight(input: ProviderReadinessInput): SendPrefligh
   };
 }
 
-export function shouldShowContinuationBanner(
-  activeConversationId: string | null,
-  record: ConversationRecord | null,
-  runtimePhase: RuntimePhase,
-): boolean {
-  if (activeConversationId === null) return false;
-  if (record === null || record.messages.length === 0) return false;
-  if (!needsContinuation(record)) return false;
-  if (runtimePhase === "running" || runtimePhase === "starting" || runtimePhase === "cancelling") {
-    return false;
+export function assessSendPreflight(input: ProviderReadinessInput): SendPreflight {
+  if (input.composerLocked) {
+    return {
+      canSend: false,
+      blockKind: "composer_locked",
+      message: "Tiếp tục cuộc trò chuyện lịch sử trước khi gửi tin mới.",
+      showSettingsCta: false,
+    };
   }
-  return true;
+  if (
+    input.runtimePhase === "running" ||
+    input.runtimePhase === "starting" ||
+    input.runtimePhase === "cancelling"
+  ) {
+    return {
+      canSend: false,
+      blockKind: "runtime_busy",
+      message: "Đang xử lý yêu cầu trước.",
+      showSettingsCta: false,
+    };
+  }
+  return assessConfigPreflight(input);
+}
+
+export function shouldShowContinuationBanner(
+  _activeConversationId: string | null,
+  _record: ConversationRecord | null,
+  _runtimePhase: RuntimePhase,
+): boolean {
+  // Historical conversations continue on the next send — no banner gate.
+  return false;
 }
 
 export function buildReadinessInput(
@@ -434,12 +450,9 @@ export function buildReadinessInput(
 ): ProviderReadinessInput {
   const record = state.conv.state.activeRecord;
   const phase = state.conv.state.runtimePhase;
-  const composerLocked =
-    phase !== "running" &&
-    phase !== "starting" &&
-    phase !== "cancelling" &&
-    needsContinuation(record) &&
-    !state.continuationUnlocked;
+  // Continuation is transparent: the runtime planner opens a new turn under the same
+  // conversation id. Never lock the composer for historical/completed sessions.
+  void state.continuationUnlocked;
 
   return {
     localServiceReady,
@@ -448,7 +461,7 @@ export function buildReadinessInput(
     runtimePhase: phase,
     activeConversationId: state.conv.state.activeConversationId,
     activeRecord: record,
-    composerLocked,
+    composerLocked: false,
     connectionTestState: state.connectionTestState,
   };
 }

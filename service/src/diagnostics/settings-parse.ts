@@ -95,5 +95,11 @@ export function parseGeneralPatch(record: Record<string, unknown>): Partial<Gene
     }
     patch.telemetryEnabled = record.telemetryEnabled;
   }
+  if (record.devtoolsEnabled !== undefined) {
+    if (typeof record.devtoolsEnabled !== "boolean") {
+      throw new SettingsRequestError("devtoolsEnabled must be a boolean.");
+    }
+    patch.devtoolsEnabled = record.devtoolsEnabled;
+  }
   return patch;
 }

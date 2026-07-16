@@ -10,6 +10,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { AddressInfo } from "node:net";
+import { OPENCODE_PIN } from "@cowork-ghc/runtime";
 
 export interface RecordedRequest {
   readonly method: string;
@@ -55,7 +56,7 @@ export interface FakeOpencodeServer {
   close(): Promise<void>;
 }
 
-const PIN = "v1.17.11";
+const PIN = OPENCODE_PIN;
 
 export async function startFakeOpencodeServer(): Promise<FakeOpencodeServer> {
   const requests: RecordedRequest[] = [];

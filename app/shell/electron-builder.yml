@@ -22,13 +22,15 @@ copyright: Copyright (c) 2026 Cowork GHC
 directories:
   # Packaged artifacts land at repo-root/dist-app (kept out of any workspace dist/).
   output: dist-app
+  buildResources: app/shell/assets
 
 asar: true
-# The native keyring addon MUST be unpacked from the asar archive: a `.node` addon cannot be
-# loaded from inside asar. `@napi-rs/keyring` loads its platform binding from the sibling
-# `@napi-rs/keyring-win32-x64-msvc` package, so BOTH are unpacked. (The OpenCode binary is NOT
-# in the asar at all — it ships via `extraResources` below.)
+# Native better-sqlite3 MUST be unpacked from the asar archive: a `.node` addon cannot be
+# loaded from inside asar. (The OpenCode binary is NOT in the asar at all — it ships via
+# `extraResources` below.)
 asarUnpack:
+  - "**/node_modules/better-sqlite3/**"
+  # Keyring remains until Wave 0A migration consumers are fully retired (ADR 0007 §6).
   - "**/node_modules/@napi-rs/keyring/**"
   - "**/node_modules/@napi-rs/keyring-win32-x64-msvc/**"
 
@@ -40,11 +42,12 @@ asarUnpack:
 # also removes the exact ESM `main.js` whose top-level `require` threw `ReferenceError: require is
 # not defined in ES module scope` — keeping it out of the artifact prevents a silent regression if
 # the entry is ever mis-pointed. Only the bundled main + preload (`.cjs`), the renderer (`app/ui/
-# dist`, whose own `.js` are Vite output and MUST stay), the root-hoisted native keyring, and the
-# manifests go into the asar. Sourcemaps/TS/build metadata are excluded.
+# dist`, whose own `.js` are Vite output and MUST stay), the root-hoisted native SQLite module, and
+# the manifests go into the asar. Sourcemaps/TS/build metadata are excluded.
 files:
   - "app/shell/dist/**"
   - "app/ui/dist/**"
+  - "node_modules/better-sqlite3/**"
   - "node_modules/@napi-rs/keyring/**"
   - "node_modules/@napi-rs/keyring-win32-x64-msvc/**"
   - "package.json"
@@ -63,20 +66,40 @@ extraResources:
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  - from: "app/shell/assets/cowork-ghc.ico"
+    to: "branding/cowork-ghc.ico"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.
+#
+# Keep `signAndEditExecutable: false` on developer Windows: enabling it downloads winCodeSign
+# and fails extracting Darwin symlinks without SeCreateSymbolicLinkPrivilege / Developer Mode.
+# Exe icon + VERSIONINFO are applied instead by `afterPack` → `scripts/after-pack-win-icon.cjs`
+# via `@electron/rcedit` (Explorer then shows cowork-ghc.ico on Cowork GHC.exe).
 win:
+  icon: app/shell/assets/cowork-ghc.ico
   target:
     - nsis
     - portable
   signAndEditExecutable: false
 forceCodeSigning: false
 
+# Apply branding icon to the unpacked main EXE after pack (see note above).
+afterPack: app/shell/scripts/after-pack-win-icon.cjs
+
+# Rebuild native addons (better-sqlite3) for the packaged Electron ABI. The repo's Node (>=22)
+# prebuild is ABI-incompatible with Electron 33 (NODE_MODULE_VERSION 130 vs 137); packaging
+# without this leaves a blank Settings → Nhà cung cấp surface because the vault service fails to
+# start. `package:win` also runs an explicit `@electron/rebuild` pass before electron-builder.
+npmRebuild: true
+
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  installerIcon: app/shell/assets/cowork-ghc.ico
+  uninstallerIcon: app/shell/assets/cowork-ghc.ico
+  installerHeaderIcon: app/shell/assets/cowork-ghc.ico
   artifactName: "${productName}-${version}-setup.${ext}"
 
 portable:
