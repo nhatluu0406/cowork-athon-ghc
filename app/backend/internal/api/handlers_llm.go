@@ -22,8 +22,8 @@ type LLMConfigResponse struct {
 
 // HandleLLMConfig はLLM設定変更エンドポイント
 // JWT 認証必須、設定を動的に更新
-func HandleLLMConfig(jwtAuth *auth.JWTAuth) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func HandleLLMConfig(jwtAuth *auth.JWTAuth) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
@@ -89,7 +89,7 @@ func HandleLLMConfig(jwtAuth *auth.JWTAuth) http.Handler {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(LLMConfigResponse{OK: true})
-	})
+	}
 }
 
 func extractBearerToken(r *http.Request) string {

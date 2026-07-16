@@ -1,0 +1,58 @@
+[package]
+name = "llm-svc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.35", features = ["full"] }
+tonic = "0.10"
+prost = "0.12"
+prost-types = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+thiserror = "1.0"
+dotenv = "0.15"
+config = { version = "0.13", features = ["toml"] }
+reqwest = { version = "0.11", features = ["json"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+once_cell = "1.19"
+
+# Model inference
+# - ONNX (ort crate): requires prebuilt ONNX Runtime — only available for
+#   x86_64-pc-windows-msvc / linux / darwin. Gated behind the `onnx` feature
+#   so the service compiles on x86_64-pc-windows-gnu (TDM-GCC) without ONNX.
+# - GGUF (llama-gguf): Pure Rust, no C++ / cmake needed — always compiled.
+ort        = { version = "2.0.0-rc.12", optional = true }
+tokenizers = { version = "0.23.1",      optional = true }
+ndarray    = { version = "0.17.2",      optional = true }
+llama-gguf = "0.14"  # T161: Pure Rust GGUF inference without cmake
+
+[features]
+# Enable local ONNX inference. Requires MSVC or a platform where ort ships
+# prebuilt binaries. Do NOT enable on x86_64-pc-windows-gnu (TDM-GCC).
+onnx = ["dep:ort", "dep:tokenizers", "dep:ndarray"]
+default = []
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[build-dependencies]
+tonic-build = "0.10"
+
+[lib]
+name = "llm_svc"
+path = "src/lib.rs"
+
+[[bin]]
+name = "llm-svc"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

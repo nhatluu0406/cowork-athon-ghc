@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-14"
+updated_at: "2026-07-15"
 ---
 
 # Trạng thái hiện tại
@@ -47,6 +47,29 @@ request create file
 → File Work Review có bằng chứng
 → assistant chỉ báo verified success sau mutation
 ```
+
+---
+
+## M365KG Stack Bundling — offline-first single-app (2026-07-15)
+
+| Item | Status |
+|---|---|
+| ADR | `docs/architecture/decisions/0010-m365kg-stack-bundling.md` — accepted |
+| electron-builder.yml | `extraResources` đã khai báo đủ 3 ZIPs + 2 binary + migrations |
+| `m365kg-stack-paths.ts` | Thêm `vendorRoot` + `binaryRoots` — packaged có giá trị, dev mode là `null` |
+| `m365kg-stack-launch.ts` | `extractBundledComponents()` — giải nén ZIPs + copy binary trước `isProvisioned` check, idempotent |
+| `scripts/vendor-download.ps1` | Tải PostgreSQL 16.14 + Neo4j 5.26.28 + Temurin JRE 21 vào `vendor/` |
+| `scripts/build-backend.bat` | `go build` → `app/backend/bin/m365-knowledge-graph.exe` |
+| `scripts/build-llm-svc.bat` | `cargo build --release` → `app/llm-svc/target/release/llm-svc.exe` |
+| `scripts/build.bat` | Tích hợp giai đoạn build-backend + build-llm-svc (graceful skip nếu thiếu toolchain) |
+| `.gitignore` | `vendor/*.zip` + `vendor/*.part` đã thêm |
+| `vendor/.gitkeep` | Đã tạo — giữ thư mục `vendor/` trong git |
+
+### Điểm kiểm tra còn mở
+
+- Typecheck TypeScript (m365kg-stack-paths.ts + m365kg-stack-launch.ts) chưa chạy trong phiên này — cần xác minh trước khi merge.
+- Chưa có packaged test thật (cần máy có đủ vendor ZIPs + Go + Rust trên PATH).
+- License Neo4j Community 5.26.x cần xác minh pháp lý trước GA (xem ADR-0010 §Open items).
 
 ---
 

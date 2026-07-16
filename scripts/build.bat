@@ -37,6 +37,28 @@ if errorlevel 1 goto :locked
 echo [Cowork GHC] Stage: packaged app is stopped
 echo.
 
+set "STAGE=build-backend"
+echo [Cowork GHC] Stage: build Go backend (m365-knowledge-graph)
+where go >nul 2>nul
+if errorlevel 1 (
+  echo [Cowork GHC] WARN: Go not found — skipping backend build. Run scripts\build-backend.bat manually.
+) else (
+  call "%ROOT%\scripts\build-backend.bat"
+  if errorlevel 1 goto :failed
+)
+echo.
+
+set "STAGE=build-llm-svc"
+echo [Cowork GHC] Stage: build Rust LLM service (llm-svc)
+where cargo >nul 2>nul
+if errorlevel 1 (
+  echo [Cowork GHC] WARN: cargo not found — skipping llm-svc build. Run scripts\build-llm-svc.bat manually.
+) else (
+  call "%ROOT%\scripts\build-llm-svc.bat"
+  if errorlevel 1 goto :failed
+)
+echo.
+
 set "STAGE=typecheck"
 echo [Cowork GHC] Stage: npm run typecheck
 call npm run typecheck
@@ -44,6 +66,19 @@ if errorlevel 1 goto :failed
 
 set "STAGE=package:win"
 echo.
+rem Check if M365KG vendor ZIPs are present. Missing ZIPs cause the NSIS script
+rem to fail with only APP_ID printed. Warn clearly rather than silently fail.
+set "M365KG_READY=1"
+if not exist "%ROOT%\vendor\postgresql-16.14-windows-x64-binaries.zip" set "M365KG_READY=0"
+if not exist "%ROOT%\vendor\neo4j-community-5.26.28-windows.zip" set "M365KG_READY=0"
+if not exist "%ROOT%\vendor\jre-21-windows-x64.zip" set "M365KG_READY=0"
+if "%M365KG_READY%"=="0" (
+  echo [Cowork GHC] WARN: M365KG vendor ZIPs not found in vendor\.
+  echo   The packaged app will not include PostgreSQL / Neo4j / JRE bundles.
+  echo   Run scripts\vendor-download.ps1 before build to include them.
+  echo   Building with EB_SKIP_M365KG_VENDOR=1 to exclude missing vendor files.
+  set "EB_SKIP_M365KG_VENDOR=1"
+)
 echo [Cowork GHC] Stage: npm run package:win
 call npm run package:win
 if errorlevel 1 goto :failed

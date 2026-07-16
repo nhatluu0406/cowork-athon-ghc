@@ -21,7 +21,7 @@
     "dev:renderer": "npm run dev --workspace @cowork-ghc/ui",
     "build:shell": "npm run build --workspace @cowork-ghc/shell",
     "build:app": "npm run build:renderer && npm run build:shell",
-    "package:win": "npm run build:app && electron-builder --win --config app/shell/electron-builder.yml",
+    "package:win": "npm run build:app && electron-builder --win --config electron-builder.config.cjs",
     "verify:release": "node tools/verify/release-regression.mjs",
     "app": "node tools/app/cli.mjs",
     "clean": "node tools/app/cli.mjs clean"

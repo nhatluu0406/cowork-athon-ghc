@@ -13,6 +13,13 @@ node_modules/
 .pnp
 .pnp.js
 
+# --- Vendor ZIPs (large binaries, populated by scripts\vendor-download.ps1) ---
+vendor/*.zip
+vendor/*.part
+
+# --- Downloaded build tools (protoc, etc — populated automatically by build scripts) ---
+.tools/
+
 # --- Build / compile output ---
 dist/
 **/dist/

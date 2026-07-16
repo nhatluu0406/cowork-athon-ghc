@@ -1,0 +1,2 @@
+# vendor/ is .gitignore'd for binary ZIPs.
+# Run scripts\vendor-download.ps1 before scripts\build.bat to populate it.
