@@ -154,6 +154,11 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         const props = asRecord(frame.properties);
         const delta = readString(props, "delta");
         if (!delta) return [];
+        // Only the answer's `text` field becomes visible tokens. Reasoning/"thinking" deltas
+        // (`field: "reasoning"`, emitted by DeepSeek/GLM-style models) must NOT leak into the
+        // assistant bubble. A frame without a `field` is treated as text (older runtime frames).
+        const field = readString(props, "field");
+        if (field !== undefined && field !== "text") return [];
         const messageId = readString(props, "messageID");
         if (!isAssistantMessageRole(messageRoles.roleOf(messageId))) return [];
         const partId = readString(props, "partID");
