@@ -50,7 +50,8 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
       Microsoft PowerPoint. **Chưa hỗ trợ:** animation/transition, phát media (video/audio), macro/OLE
       nhúng, và ảnh EMF (pdf.js fallback tắt để không cần `worker-src blob:` trong CSP). Giới hạn ZIP
       (RECOMMENDED_ZIP_LIMITS) để chặn DoS; lỗi runtime của engine sẽ **degrade về xem text từng slide**.
-      *(Code hoàn tất + test tự động; xác nhận hiển thị trực quan trên packaged app do PO quan sát.)*
+      Ảnh nhúng cần `img-src ... blob:` trong CSP (engine tạo blob URL cùng-origin từ ppt/media/*);
+      `script-src` vẫn strict. *(PO quan sát packaged 2026-07-17: slide + ảnh + bảng/biểu đồ hiển thị.)*
     - **`.ppt` legacy** (OLE nhị phân) **không hỗ trợ** — hiện trạng thái unsupported.
     - **Malformed / mã hoá mật khẩu / vượt 8 MiB** ở mọi loại Office → trạng thái unsupported rõ
       ràng, không crash renderer. Không có **editor Office** đầy đủ.
