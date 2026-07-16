@@ -20,6 +20,7 @@ import type {
   SessionStatus,
   StepStatus,
   TerminalState,
+  TurnMetrics,
 } from "@cowork-ghc/contracts";
 import { sessionStatusForTerminal } from "@cowork-ghc/contracts";
 
@@ -74,6 +75,12 @@ export interface SessionView {
    * once the run is over), so a terminal view never carries a stale in-progress bar.
    */
   readonly progress?: ProgressView;
+  /**
+   * Per-turn runtime metrics (issue #4) — token counts + cost forwarded from the runtime's
+   * step-finish usage. A later metrics event REPLACES the older one (latest step snapshot);
+   * it survives the terminal event so a completed turn can display its usage.
+   */
+  readonly metrics?: TurnMetrics;
 }
 
 /** A fresh, honest view: `idle`, nothing observed, no fabricated completion. */
@@ -178,6 +185,10 @@ function foldOne(view: SessionView, event: EvEvent): SessionView {
           ...(typeof event.ratio === "number" ? { ratio: event.ratio } : {}),
         },
       };
+    case "metrics":
+      // Issue #4: keep the newest per-turn usage snapshot; it survives the terminal fold so a
+      // completed turn shows its runtime/token stats.
+      return { ...view, status: liveStatus(view), metrics: event.metrics };
     case "error":
       // An EV6 error does not itself end the run; it surfaces a recoverable failure and
       // keeps the run live until a real terminal arrives.
