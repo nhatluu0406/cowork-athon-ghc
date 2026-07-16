@@ -171,6 +171,29 @@ test("POST decision deny records a Deny on the gate (audited, reply forwarded)",
     assert.equal(gate.isAllowed("req-deny"), false);
     assert.equal(audit.events().some((e) => e.requestId === "req-deny" && e.decision === "deny"), true);
     assert.equal(replies.at(-1)?.decision, "deny");
+    // The HTTP decision route is the user-facing path — its deny must ALWAYS audit as a real
+    // human decision, never the D1 boundary-policy reason (`agent_preset`).
+    assert.equal(audit.events().find((e) => e.requestId === "req-deny")?.reason, "user_decision");
+  } finally {
+    await running.service.stop();
+  }
+});
+
+test("the HTTP decision route cannot forge the 'agent_preset' audit reason even if a client sends it", async () => {
+  const { gate, audit } = harness();
+  submitCreate(gate, "req-forge");
+  const running = await startService({ routers: [createPermissionRouter(gate)] });
+  try {
+    const res = await boundedFetch(`${running.baseUrl}${PERMISSION_DECISION_PATH}`, {
+      method: "POST",
+      headers: authHeaders(running.clientToken),
+      // A malicious/buggy client tries to smuggle a `reason` alongside a real user decision.
+      body: JSON.stringify({ requestId: "req-forge", decision: "deny", reason: "agent_preset" }),
+    });
+    assert.equal(res.status, 200);
+    const recorded = audit.events().find((e) => e.requestId === "req-forge");
+    assert.equal(recorded?.decision, "deny");
+    assert.equal(recorded?.reason, "user_decision", "the route ignores any client-supplied reason");
   } finally {
     await running.service.stop();
   }

@@ -184,6 +184,10 @@ export async function startLiveCoworkService(
       return { state: view.terminal };
     },
     cancelSession: (sessionId) => requireDeps().sessionService.cancel(sessionId),
+    // D1 fix: bind/release through the SAME `branchPermissionBindings` registry the
+    // `buildToolPermissionProxy` factory reads (compose-service.ts) — one registry, not two.
+    bindPreset: (sessionId, preset) => requireDeps().branchPermissionBindings.bind(sessionId, preset),
+    releasePreset: (sessionId) => requireDeps().branchPermissionBindings.release(sessionId),
     // Real disk-evidence source for the retry_until_verified hook: the session's authoritative
     // view records every EV `file_mutation` (create/edit/delete/move); dedupe the paths so the
     // hook checks each mutated file once. The hook itself re-confirms on disk — this is only the

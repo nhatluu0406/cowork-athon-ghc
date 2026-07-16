@@ -22,7 +22,12 @@ import type {
 } from "../provider/index.js";
 import type { WorkspaceFsProbe, RecentExistenceProbe, RecentWorkspaces } from "../workspace/index.js";
 import type { WorkspaceGuard } from "../workspace/index.js";
-import type { PermissionGate, RuntimeReplyPort, InMemoryAuditSink } from "../permission/index.js";
+import type {
+  PermissionGate,
+  RuntimeReplyPort,
+  InMemoryAuditSink,
+  BranchPermissionBindings,
+} from "../permission/index.js";
 import type { ToolPermissionProxy } from "../files/index.js";
 import type { SessionService, RuntimeHealth, SessionStore, SendPrompt } from "../session/index.js";
 import type { ConversationStore } from "../conversation/index.js";
@@ -129,6 +134,13 @@ export interface CoworkServiceDeps {
   readonly recentWorkspaces: RecentWorkspaces;
   readonly permissionGate: PermissionGate;
   readonly permissionAudit: InMemoryAuditSink;
+  /**
+   * D1 fix (ADR 0011 Open item): session→preset bindings a dispatch branch registers before its
+   * first prompt, read by {@link buildToolPermissionProxy}'s proxy to auto-deny a tool the
+   * branch's own agent preset forbids. The SAME instance is threaded into the live branch runner
+   * (`composition/compose-live.ts`) so one registry — not two — decides for both sides.
+   */
+  readonly branchPermissionBindings: BranchPermissionBindings;
   readonly sessionService: SessionService;
   readonly streamHub: SessionStreamHub;
   /** File-backed conversation index (session management slice). */
