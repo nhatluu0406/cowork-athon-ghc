@@ -1,32 +1,13 @@
 /**
  * Mode-aware {@link StartService} for the shell: boot an ONBOARDING-capable service even when
  * nothing is configured yet (first-run onboarding fix).
- *
- * The shell previously wired ONLY the live `StartService`: when no workspace + provider was
- * configured, the live options resolver threw {@link ServiceLaunchNotConfiguredError}, the
- * ServiceController surfaced the empty "not connected" handshake, and the renderer never reached
- * `ready` — so the folder picker + provider/model settings UI (which mount only after a real
- * `health()`) were unreachable. Chicken-and-egg: you could not configure because the service was
- * down, and the service was down because it was not configured.
- *
- * This resolves it by falling back to the Tier-1 SETTINGS-ONLY service (`startCoworkService`),
- * which mounts every router — workspace, credential, settings, provider, session — with honest
- * NOT-ATTACHED runtime seams and needs NO workspace/provider to start. It spawns NO OpenCode child
- * and makes NO provider call: it exists so the renderer reaches `ready` and the user can onboard
- * (pick a workspace, enter a key, configure a provider/model). Actually starting the live runtime
- * stays a separate, user-gated step (the "Connect" action → a service restart into the live path).
- *
- * The fallback is keyed on the typed {@link ServiceLaunchNotConfiguredError} ONLY — any other live
- * failure (a real misconfiguration, a spawn error) still propagates so the ServiceController
- * records it honestly. The Tier-1 fallback and the live path share the SAME absolute
- * `settingsFilePath`, so a provider/model the user saves during onboarding is the same persisted
- * state the subsequent live launch reads.
  */
 
 import { startCoworkService, RuntimeSpawnError } from "@cowork-ghc/service";
 
 import type { StartService, StartedService } from "./service-controller.js";
 import { ServiceLaunchNotConfiguredError } from "./launch-config.js";
+import { peekRememberedUnlock, rememberUnlock } from "./session-unlock.js";
 
 export interface TieredStartServiceOptions {
   /**
@@ -39,6 +20,8 @@ export interface TieredStartServiceOptions {
 /** Options for the Tier-1 settings-only fallback start. */
 export interface SettingsOnlyStartOptions {
   readonly settingsFilePath: string;
+  /** Absolute path to the local SQLite database (ADR 0007). */
+  readonly dbPath: string;
   readonly conversationsDir?: string;
   readonly skillsStateFilePath?: string;
   readonly skillRoots?: readonly {
@@ -53,12 +36,13 @@ export interface SettingsOnlyStartOptions {
 
 /**
  * Build the Tier-1 settings-only {@link StartService}: start the fully-wired loopback service with
- * honest not-attached runtime seams and normalize its handle to the shell's minimal shape. It
- * opens the OS keyring + the settings store, but spawns no child and calls no provider.
+ * honest not-attached runtime seams. Opens the local SQLite vault + settings store; spawns no child.
  */
 export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions): StartService {
   return async (): Promise<StartedService> => {
+    const autoUnlock = peekRememberedUnlock();
     const { running } = await startCoworkService({
+      dbPath: options.dbPath,
       settingsFilePath: options.settingsFilePath,
       ...(options.conversationsDir !== undefined
         ? { conversationsDir: options.conversationsDir }
@@ -67,6 +51,8 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
         ? { skillsStateFilePath: options.skillsStateFilePath }
         : {}),
       ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
+      ...(autoUnlock !== null ? { autoUnlock } : {}),
+      rememberUnlock,
       allowedOrigins: options.allowedOrigins,
       allowEnvCredentialImport: options.allowEnvCredentialImport === true,
     });

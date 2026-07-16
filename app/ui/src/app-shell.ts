@@ -31,12 +31,12 @@ import { getShellBridge } from "./bridge.js";
 import {
   createConversationManager,
   formatConversationMeta,
-  needsContinuation,
   type ConversationManager,
   type RuntimePhase,
 } from "./conversation-controller.js";
 import { createReadinessController, type ReadinessState } from "./readiness-controller.js";
 import {
+  assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
   localServiceStatus,
@@ -60,13 +60,13 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
-import { mountSkillsPanel } from "./skills-panel.js";
 import type { MicrosoftIntegrationView } from "./integration-slots.js";
 import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
+import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
@@ -84,6 +84,7 @@ import {
 } from "./attachment-pending.js";
 import type { AttachmentMetadata, SkillUseMetadata } from "./service-client.js";
 import {
+  beginTurnFinalization,
   resolveFinalAssistantText,
   runtimePhaseForCompleted,
   shouldPollSessionView,
@@ -93,6 +94,12 @@ import {
   mapTerminalToRuntimePhase,
   type ResolvedFinalText,
 } from "./session-finalization.js";
+import { shouldShowProcessing } from "./turn-ui-state.js";
+import {
+  createTurnTimingTracker,
+  TURN_PERF_DEMO_ENABLED,
+  type TurnTimingTracker,
+} from "./turn-timing.js";
 import { createProductIcon } from "./product-icons.js";
 import { PRODUCT_SURFACES, hasKnowledgeGraphCapability, type ProductSurfaceDefinition, type ProductSurfaceId } from "./surface-registry.js";
 import { createAppFrame, type AppFrameDom } from "./ui-shell/create-app-frame.js";
@@ -107,13 +114,24 @@ import { renderKnowledgeTab,
   type KnowledgeTab,
 } from "./ui-shell/knowledge-view.js";
 import { renderIntegrationSurface } from "./ui-shell/integration-view.js";
+import { renderSkillsMcpTab, type SkillsMcpTab } from "./ui-shell/skills-mcp-view.js";
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+// Module-level so the verified-mutation handler (finalizeFileMutationReview) can auto-refresh the
+// file trees after an agent create/modify/delete, not just the mount closure.
+let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
+let codeNavigator: WorkspaceNavigatorHandle | null = null;
+/** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
+let permissionRefreshNow: (() => void) | null = null;
+/** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
+let permissionPausePoll: (() => void) | null = null;
+let permissionResumePoll: (() => void) | null = null;
 
 const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
   connectionState: "disconnected",
@@ -151,6 +169,12 @@ interface AppState {
   streamWatchdog: ReturnType<typeof setInterval> | null;
   lastStreamActivityAt: number;
   finalizingTurn: boolean;
+  finalizedRuntimeSessions: Set<string>;
+  turnTiming: TurnTimingTracker;
+  /** Wall-clock start (ms) of the current turn, for the per-turn runtime metric (issue #4). */
+  turnStartedAtMs: number | null;
+  /** Wave 4: at most one safe auto-open per turn, so the preview never flickers across files. */
+  autoOpenedThisTurn: boolean;
   currentFileActionIntent: FileActionIntent | null;
   fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
@@ -160,11 +184,22 @@ interface AppState {
   activeSurface: ProductSurfaceId;
   workMode: WorkMode;
   knowledgeTab: KnowledgeTab;
+  skillsMcpTab: SkillsMcpTab;
   serviceLabel: string;
   serviceOk: boolean;
   codeOpenFiles: OpenCodeFile[];
   codeActiveKey: string | null;
   permissionMode: PermissionMode;
+  /** Conversation that owns the current processing indicator (`Đang xử lý`). */
+  processingConversationId: string | null;
+  /** Optimistic user bubble awaiting service acknowledgement. */
+  pendingUserRow: HTMLElement | null;
+  /**
+   * True only after a successful user-gated `connectLive` (OpenCode attached).
+   * Settings-only bootstrap also answers `GET /v1/health`, so health alone must NOT
+   * skip connect — that path hits not-attached session create → Internal boundary.
+   */
+  liveAttached: boolean;
 }
 
 type AppDom = AppFrameDom;
@@ -275,8 +310,21 @@ function shortPath(path: string): string {
 }
 
 function safeError(error: unknown): string {
-  if (error instanceof ServiceClientError) return sanitizeErrorMessage(error.message);
-  if (error instanceof Error) return sanitizeErrorMessage(error.message);
+  if (error instanceof ServiceClientError) {
+    if (error.code === "internal" || /internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    if (error.code === "runtime_unavailable" || error.code === "runtime_not_attached") {
+      return "Runtime chưa sẵn sàng. Đợi local service / OpenCode khởi động rồi gửi lại.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
+  if (error instanceof Error) {
+    if (/internal boundary error/i.test(error.message)) {
+      return "Local service gặp lỗi nội bộ. Thử lại hoặc mở Settings kiểm tra provider / runtime.";
+    }
+    return sanitizeErrorMessage(error.message);
+  }
   return "Có lỗi xảy ra.";
 }
 
@@ -362,9 +410,11 @@ function appendMessage(
   historical = false,
   attachments?: readonly AttachmentMetadata[],
   skills?: readonly SkillUseMetadata[],
+  options?: { readonly pending?: boolean },
 ): HTMLElement {
   dom.emptyState.hidden = true;
-  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}`);
+  const pendingClass = options?.pending === true ? " msg--pending" : "";
+  const row = el("div", `msg msg--${role}${historical ? " msg--historical" : ""}${pendingClass}`);
   if (role === "assistant") row.append(el("div", "msg__avatar", "AI"));
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
@@ -374,19 +424,11 @@ function appendMessage(
   textBox.append(p);
   body.append(textBox);
 
+  // Skills remain persisted for provenance; do not render chips/versions in the visible transcript.
+  void skills;
   const meta = el("div", "msg__meta");
   if (attachments !== undefined && attachments.length > 0) {
     meta.append(renderAttachmentMetaList(attachments));
-  }
-  if (skills !== undefined && skills.length > 0) {
-    const skillWrap = el("div", "msg__skills");
-    for (const skill of skills) {
-      const chip = el("span", "skill-use-chip", `${skill.name} · v${skill.version}`);
-      chip.dataset["tooltip"] = `Kỹ năng · ${skill.source}`;
-      chip.setAttribute("aria-label", `Kỹ năng ${skill.name}, phiên bản ${skill.version}`);
-      skillWrap.append(chip);
-    }
-    meta.append(skillWrap);
   }
   if (meta.childElementCount > 0) body.append(meta);
   row.append(body);
@@ -395,11 +437,30 @@ function appendMessage(
   return row;
 }
 
+function confirmPendingUserMessage(row: HTMLElement | null): void {
+  if (row === null) return;
+  row.classList.remove("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+}
+
+function attachSendRetry(
+  row: HTMLElement,
+  onRetry: () => void,
+): void {
+  row.classList.add("msg--pending");
+  row.querySelector(".msg__retry")?.remove();
+  const retry = el("button", "msg__retry", "Thử lại") as HTMLButtonElement;
+  retry.type = "button";
+  retry.addEventListener("click", () => onRetry());
+  row.querySelector(".msg__body")?.append(retry);
+}
+
 function renderAttachmentMetaList(attachments: readonly AttachmentMetadata[]): HTMLElement {
   const wrap = el("div", "msg__attachments");
   for (const att of attachments) {
     const chip = el("span", "attachment-chip attachment-chip--historical");
-    chip.title = att.relativePath;
+    chip.dataset["tooltip"] = att.relativePath;
+    chip.removeAttribute("title");
     const status = att.inclusionStatus ?? "included";
     const statusNote =
       status === "included"
@@ -430,7 +491,8 @@ function renderPendingAttachmentChips(
   dom.attachmentChips.hidden = false;
   for (const item of pending) {
     const chip = el("span", `attachment-chip${item.status === "error" ? " attachment-chip--error" : ""}`);
-    chip.title = item.relativePath;
+    chip.removeAttribute("title");
+    chip.dataset["tooltip"] = item.relativePath;
     const trunc =
       item.metadata?.truncated === true ? " (đã cắt)" : "";
     chip.append(
@@ -444,7 +506,7 @@ function renderPendingAttachmentChips(
     remove.addEventListener("click", () => onRemove(item.id));
     chip.append(remove);
     if (item.status === "error" && item.errorMessage !== undefined) {
-      chip.title = item.errorMessage;
+      chip.dataset["tooltip"] = item.errorMessage;
     }
     dom.attachmentChips.append(chip);
   }
@@ -742,7 +804,9 @@ async function finalizeFileMutationReview(
     }
     if (after === undefined) return;
     const review = await state.client.buildFileReview({
-      id: `review-${event.seq}`,
+      // Globally unique: OpenCode `seq` restarts per session and would collide across
+      // conversations on file_review_refs.id (PRIMARY KEY) → PATCH /v1/conversations 500.
+      id: `review-${sessionId}-${event.seq}`,
       relativePath,
       at: event.at,
       seq: event.seq,
@@ -753,12 +817,39 @@ async function finalizeFileMutationReview(
       ...(pendingEntry?.before !== undefined ? { before: pendingEntry.before } : {}),
       after,
     });
+    if (state.fileReviews.some((existing) => existing.id === review.id)) {
+      refreshActivityUi(state, dom);
+      return;
+    }
     state.fileReviews = [...state.fileReviews, review];
+    state.turnTiming.mark("FILE_VERIFIED", relativePath);
     refreshActivityUi(state, dom);
     void persistActivity(state);
+    // Wave 4 — reflect the verified mutation in the workspace surface.
+    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
+    void workspaceNavigator?.refresh();
+    void codeNavigator?.refresh();
+    // 2) Update the open file, or auto-open the affected file when safe.
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
-    if (openPath !== null && openPath === relativePath && event.operation !== "delete") {
-      workspaceCompanion?.showAgentUpdated();
+    if (openPath !== null && openPath === relativePath) {
+      if (event.operation === "delete") {
+        // The open file was verifiably deleted: clear the stale preview, show a deleted empty
+        // state, and block Save so it cannot recreate the file. Never auto-open another file.
+        workspaceCompanion?.showDeleted();
+      } else {
+        // The open file changed: reload it, or raise a conflict banner if the buffer is dirty
+        // (showAgentUpdated never overwrites unsaved edits).
+        workspaceCompanion?.showAgentUpdated();
+      }
+    } else if (event.operation !== "delete" && !state.autoOpenedThisTurn) {
+      // A different/unopened file changed: auto-open ONE safe file per turn (never over a dirty
+      // buffer, never a secret/unsupported/oversize file). Claim the slot synchronously so a
+      // multi-file turn does not flicker the preview across files; release it if this one bails.
+      state.autoOpenedThisTurn = true;
+      void workspaceCompanion?.openIfSafe(relativePath).then((opened) => {
+        if (opened) workspaceNavigator?.selectPath(relativePath);
+        else state.autoOpenedThisTurn = false;
+      });
     }
   } catch {
     // best effort
@@ -869,6 +960,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const isKnowledgeSurface = state.activeSurface === "knowledge";
   const isMicrosoftSurface = state.activeSurface === "microsoft";
   const isCodeSurface = state.activeSurface === "code";
+  const isSkillsMcpSurface = state.activeSurface === "skills-mcp";
   const settingsOpen = !dom.settingsSurface.hidden;
   const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
   const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
@@ -888,9 +980,15 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden =
-    settingsOpen || isCoworkSurface || isKnowledgeSurface || isMicrosoftSurface || isCodeSurface;
+    settingsOpen ||
+    isCoworkSurface ||
+    isKnowledgeSurface ||
+    isMicrosoftSurface ||
+    isCodeSurface ||
+    isSkillsMcpSurface;
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
+  dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
@@ -899,6 +997,8 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
+  } else if (isSkillsMcpSurface) {
+    renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
     renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
   }
@@ -965,7 +1065,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     phase === "running" ||
     phase === "cancelling" ||
     state.activeWorkspace === null;
-  dom.thinking.hidden = phase !== "running" && phase !== "starting" && phase !== "cancelling";
+  syncProcessingIndicator(dom, state);
   dom.sendButton.disabled =
     locked ||
     phase === "starting" ||
@@ -994,34 +1094,143 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
     state.settings = await state.client.getSettings();
     state.activeWorkspace = state.settings.activeWorkspace?.rootPath ?? null;
     applyThemePreference(state.settings.general.theme);
+    void getShellBridge()
+      .setDevToolsEnabled(state.settings.general.devtoolsEnabled)
+      .catch(() => undefined);
+    const active = state.settings.providerProfiles?.find((p) => p.isActive);
+    if (active?.verificationCurrent === true && active.lastVerifiedOk === true) {
+      state.connectionTestState = "ok";
+    } else if (active?.verificationCurrent === true && active.lastVerifiedOk === false) {
+      state.connectionTestState = "failed";
+    }
   } catch {
     state.settings = null;
   }
   renderState(dom, state, handlers);
 }
 
-async function awaitLiveClient(
-  state: AppState,
-  readiness: ReturnType<typeof createReadinessController>,
-): Promise<ServiceClient> {
-  readiness.retry();
-  for (let i = 0; i < 120; i += 1) {
-    if (state.client !== null) {
-      try {
-        await state.client.health();
-        return state.client;
-      } catch {
-        // Service may still be restarting into live mode.
-      }
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error("Không kết nối lại được local service.");
-}
-
 function updateAssistantBubble(state: AppState, text: string): void {
   const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
   if (assistant !== null) assistant.textContent = text;
+  if (text.trim().length > 0 && state.activeAssistant !== null) {
+    state.activeAssistant.classList.remove("msg--awaiting");
+    const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");
+    if (thinking !== null) {
+      thinking.hidden = true;
+      const host = state.activeAssistant.closest(".transcript__inner");
+      if (host !== null) host.append(thinking);
+    }
+    state.turnTiming.mark("FIRST_PAINT");
+  }
+}
+
+/** Human-readable turn duration ("820ms" / "2.3s"). */
+function formatTurnDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Render the per-turn runtime + token metrics footer under the assistant answer (issue #4).
+ * Non-secret counts only. No-op when neither a runtime nor any token count is available.
+ */
+function renderTurnMetrics(state: AppState, view: SessionView): void {
+  const row = state.activeAssistant;
+  if (row === null) return;
+  const parts: string[] = [];
+  if (state.turnStartedAtMs !== null) {
+    parts.push(`⏱ ${formatTurnDuration(Date.now() - state.turnStartedAtMs)}`);
+  }
+  const m = view.metrics;
+  if (m !== undefined) {
+    if (typeof m.tokensTotal === "number") {
+      const io = [
+        typeof m.tokensInput === "number" ? `${m.tokensInput.toLocaleString("vi-VN")}↑` : null,
+        typeof m.tokensOutput === "number" ? `${m.tokensOutput.toLocaleString("vi-VN")}↓` : null,
+        // Most of `total` is usually cached runtime context (system prompt + tool schemas);
+        // surface it so the number stops looking like fresh spend on the very first turn.
+        typeof m.tokensCache === "number" && m.tokensCache > 0
+          ? `${m.tokensCache.toLocaleString("vi-VN")} cache`
+          : null,
+      ]
+        .filter((x): x is string => x !== null)
+        .join(" · ");
+      parts.push(`${m.tokensTotal.toLocaleString("vi-VN")} tokens${io.length > 0 ? ` (${io})` : ""}`);
+    }
+    if (typeof m.costUsd === "number" && m.costUsd > 0) {
+      parts.push(`$${m.costUsd.toFixed(4)}`);
+    }
+  }
+  if (parts.length === 0) return;
+  const host = row.querySelector<HTMLElement>(".msg__body") ?? row;
+  let footer = host.querySelector<HTMLElement>(".turn-metrics");
+  if (footer === null) {
+    footer = document.createElement("p");
+    footer.className = "turn-metrics";
+    host.append(footer);
+  }
+  footer.textContent = parts.join(" · ");
+}
+
+/** Keep the processing indicator under the live assistant label when the bubble is still empty. */
+function syncProcessingIndicator(dom: AppDom, state: AppState): void {
+  const show = shouldShowProcessing({
+    activeConversationId: state.conv.state.activeConversationId,
+    processingConversationId: state.processingConversationId,
+    runtimePhase: state.conv.state.runtimePhase,
+  });
+  const awaiting =
+    show &&
+    state.activeAssistant !== null &&
+    (state.assistantText.trim().length === 0);
+
+  for (const row of dom.transcriptInner.querySelectorAll(".msg--awaiting")) {
+    if (row !== state.activeAssistant) row.classList.remove("msg--awaiting");
+  }
+
+  if (!show) {
+    dom.thinking.hidden = true;
+    state.activeAssistant?.classList.remove("msg--awaiting");
+    if (dom.thinking.parentElement !== dom.transcriptInner) {
+      dom.transcriptInner.append(dom.thinking);
+    }
+    return;
+  }
+
+  dom.thinking.hidden = false;
+  if (awaiting && state.activeAssistant !== null) {
+    state.activeAssistant.classList.add("msg--awaiting");
+    const body = state.activeAssistant.querySelector(".msg__body");
+    if (body !== null && dom.thinking.parentElement !== body) {
+      body.append(dom.thinking);
+    }
+    return;
+  }
+
+  state.activeAssistant?.classList.remove("msg--awaiting");
+  if (dom.thinking.parentElement !== dom.transcriptInner) {
+    dom.transcriptInner.append(dom.thinking);
+  }
+}
+
+/**
+ * Composer keystrokes must not rebuild the session list / status chrome.
+ * That full renderState path was the main input lag on the packaged app.
+ */
+function syncComposerChrome(dom: AppDom, state: AppState): void {
+  saveComposerDraft(state, dom);
+  const locked = isComposerLocked(state);
+  const phase = state.conv.state.runtimePhase;
+  const readinessInput = buildReadinessInput(state.localServiceReady, state);
+  const sendPreflight = assessSendPreflight(readinessInput);
+  const composerText = textFromComposer(dom.composerInput);
+  renderComposerPreflight(dom, sendPreflight, composerText.length > 0);
+  dom.sendButton.disabled =
+    locked ||
+    phase === "starting" ||
+    phase === "running" ||
+    phase === "cancelling" ||
+    composerText.length === 0;
 }
 
 function stopStreamWatchdog(state: AppState): void {
@@ -1093,7 +1302,10 @@ async function finalizeConversationTurn(
   handlers: Parameters<typeof renderState>[2],
   sessionId: string,
 ): Promise<void> {
-  if (view.terminal === null || state.finalizingTurn) return;
+  if (view.terminal === null) return;
+  if (!beginTurnFinalization(state.finalizedRuntimeSessions, sessionId, state.finalizingTurn)) {
+    return;
+  }
   const terminal = view.terminal;
   state.finalizingTurn = true;
   stopStreamWatchdog(state);
@@ -1141,8 +1353,10 @@ async function finalizeConversationTurn(
   state.assistantText = resolved.text;
   const displayText = sanitizeAssistantForDisplay(resolved.text);
   updateAssistantBubble(state, displayText);
+  renderTurnMetrics(state, view);
   setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
+  state.turnTiming.mark("FINAL_RESPONSE");
 
   const phase =
     terminal === "completed"
@@ -1163,7 +1377,15 @@ async function finalizeConversationTurn(
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.continuationUnlocked = true;
+  if (state.processingConversationId === state.conv.state.activeConversationId) {
+    state.processingConversationId = null;
+  }
+  state.pendingUserRow = null;
   renderState(dom, state, handlers);
+  state.turnTiming.mark("FINAL_UI");
+  const timingReport = state.turnTiming.report();
+  (window as unknown as { __CGHC_LAST_TURN_TIMING__?: unknown }).__CGHC_LAST_TURN_TIMING__ =
+    timingReport;
 }
 
 function stopStream(state: AppState): void {
@@ -1183,6 +1405,22 @@ function bindEvStream(
   if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) return;
   stopStream(state);
   state.streamSessionId = sessionId;
+  let activityRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  const scheduleActivityRefresh = (immediate = false): void => {
+    if (immediate) {
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
+      refreshActivityUi(state, dom);
+      return;
+    }
+    if (activityRefreshTimer !== null) return;
+    activityRefreshTimer = setTimeout(() => {
+      activityRefreshTimer = null;
+      refreshActivityUi(state, dom);
+    }, 32);
+  };
   state.stream = startEvStream({
     baseUrl: bootstrap.serviceBaseUrl,
     clientToken: bootstrap.clientToken,
@@ -1191,9 +1429,19 @@ function bindEvStream(
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
       state.evEvents = [...mergeEvEvents(state.evEvents, [event])];
-      refreshActivityUi(state, dom);
+      // Tokens are frequent — debounce Inspector rebuild. Tool/file/plan events paint ASAP.
+      scheduleActivityRefresh(event.kind !== "token");
+      if (event.kind === "token" && event.delta.length > 0) {
+        state.turnTiming.mark("FIRST_TOKEN");
+      }
       if (event.kind === "tool_call") {
-        void captureBeforeOnToolStart(state, event);
+        if (event.status === "running") {
+          state.turnTiming.mark("TOOL_REQUEST", event.toolName);
+          permissionRefreshNow?.();
+          void captureBeforeOnToolStart(state, event);
+        } else if (event.status === "completed" || event.status === "errored" || event.status === "cancelled") {
+          state.turnTiming.mark("TOOL_FINISHED", event.toolName);
+        }
       }
       if (event.kind === "file_mutation") {
         const task = finalizeFileMutationReview(
@@ -1210,19 +1458,33 @@ function bindEvStream(
     onView: (view) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
       touchStreamActivity(state);
+      const displayText = sanitizeAssistantForDisplay(view.text);
+      if (view.text.trim().length > 0) {
+        state.turnTiming.mark("FIRST_TOKEN");
+      }
       state.lastView = view;
       state.assistantText = view.text;
-      updateAssistantBubble(state, sanitizeAssistantForDisplay(view.text));
+      // Paint only when there is user-visible text. Internal/Skill-only deltas must not
+      // count as FIRST_PAINT — otherwise a long tool/permission wait is mislabeled as UI.
+      if (displayText.trim().length > 0) {
+        updateAssistantBubble(state, displayText);
+      }
       setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
-      refreshActivityUi(state, dom);
       if (view.terminal !== null) {
+        scheduleActivityRefresh(true);
         void finalizeConversationTurn(state, dom, view, handlers, sessionId);
         return;
       }
-      renderState(dom, state, handlers);
+      // Streaming tokens: update the bubble only. Full shell re-render thrashing is the main
+      // jank source; composer/cancel were already set when the turn started.
+      scheduleActivityRefresh(false);
     },
     onError: (message) => {
       if (!state.conv.shouldApplyStreamView(sessionId)) return;
+      if (activityRefreshTimer !== null) {
+        clearTimeout(activityRefreshTimer);
+        activityRefreshTimer = null;
+      }
       stopStreamWatchdog(state);
       void state.conv.setRuntimePhase("failed");
       appendMessage(dom, "assistant", message);
@@ -1230,18 +1492,70 @@ function bindEvStream(
     },
   });
   startStreamWatchdog(state, dom, sessionId, handlers);
+  state.turnTiming.mark("STREAM_BOUND", sessionId);
 }
 
 async function ensureLive(
   state: AppState,
   readiness: ReturnType<typeof createReadinessController>,
 ): Promise<ServiceClient> {
-  await getShellBridge().connectLive();
-  const client = await awaitLiveClient(state, readiness);
-  const bootstrap = await getShellBridge().getBootstrap();
-  if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) throw new Error("Shell chưa cung cấp kết nối live.");
-  state.bootstrap = bootstrap;
-  return client;
+  // Fast path only after a prior connectLive succeeded. Settings-only also passes health().
+  if (
+    state.liveAttached &&
+    state.client !== null &&
+    state.bootstrap?.serviceBaseUrl &&
+    state.bootstrap.clientToken
+  ) {
+    try {
+      await state.client.health();
+      return state.client;
+    } catch {
+      state.liveAttached = false;
+      // Fall through to a real reconnect.
+    }
+  }
+
+  // Pause permission polls BEFORE stopping settings-only: otherwise the 100ms poller keeps
+  // hitting the dying base URL and DevTools fills with net::ERR_CONNECTION_REFUSED.
+  permissionPausePoll?.();
+  state.liveAttached = false;
+  state.client = null;
+  state.bootstrap = null;
+
+  try {
+    await getShellBridge().connectLive();
+    readiness.retry();
+    // Adopt the post-restart bootstrap immediately. Health-checking the pre-restart base URL
+    // (connection refused) was burning ~2–3s before first token and spamming permission polls.
+    for (let i = 0; i < 120; i += 1) {
+      try {
+        const bootstrap = await getShellBridge().getBootstrap();
+        if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) {
+          throw new Error("bootstrap incomplete");
+        }
+        const changed =
+          state.client === null ||
+          state.bootstrap?.serviceBaseUrl !== bootstrap.serviceBaseUrl ||
+          state.bootstrap?.clientToken !== bootstrap.clientToken;
+        if (changed) {
+          state.bootstrap = bootstrap;
+          state.client = createServiceClient(bootstrap.serviceBaseUrl, bootstrap.clientToken);
+        }
+        const client = state.client;
+        if (client === null) throw new Error("client missing");
+        await client.health();
+        state.liveAttached = true;
+        return client;
+      } catch {
+        // Service may still be restarting into live mode.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    state.liveAttached = false;
+    throw new Error("Không kết nối lại được local service.");
+  } finally {
+    permissionResumePoll?.();
+  }
 }
 
 async function ensureRuntimeSession(
@@ -1253,7 +1567,8 @@ async function ensureRuntimeSession(
   if (state.client === null) throw new Error("Service chưa sẵn sàng.");
   await refreshSettings(state, dom, handlers);
 
-  const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+  // Turn already claimed (`runtimePhase = "starting"`); only re-check config readiness.
+  const preflight = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
     throw new Error(preflight.message);
@@ -1273,31 +1588,46 @@ async function ensureRuntimeSession(
   const plan = await planRuntimeTurn(state.client, record);
 
   if (plan.action === "reuse") {
-    state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
-    bindEvStream(state, dom, handlers, plan.runtimeSessionId);
-    state.conv.state.runtimePhase = "ready";
-    return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+    // Never reuse a session that this UI already saw go terminal — OpenCode single-turn finality.
+    if (state.lastView.sessionId === plan.runtimeSessionId && state.lastView.terminal !== null) {
+      await state.conv.startContinuation();
+    } else {
+      state.lastView = (await state.client.getRuntimeSession(plan.runtimeSessionId)).view;
+      if (state.lastView.terminal !== null) {
+        await state.conv.startContinuation();
+      } else {
+        bindEvStream(state, dom, handlers, plan.runtimeSessionId);
+        state.conv.state.runtimePhase =
+          state.processingConversationId !== null ? "starting" : "ready";
+        return { runtimeSessionId: plan.runtimeSessionId, contextMessages: [] };
+      }
+    }
   }
 
   state.conv.state.runtimePhase = "starting";
   renderState(dom, state, handlers);
   const client = await ensureLive(state, readiness);
 
-  if (record.runtimeSessionId !== null) {
+  const activeRecord = state.conv.state.activeRecord;
+  if (activeRecord?.runtimeSessionId !== null && activeRecord !== null) {
     await state.conv.startContinuation();
   }
 
   const meta = await client.createSession({
     workspaceId: state.activeWorkspace,
-    title: record.title,
+    title: (state.conv.state.activeRecord ?? record).title,
     model,
   });
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
-  state.conv.state.runtimePhase = "ready";
+  // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
+  state.conv.state.runtimePhase =
+    state.processingConversationId !== null ? "starting" : "ready";
   bindEvStream(state, dom, handlers, meta.id);
   renderState(dom, state, handlers);
-  return { runtimeSessionId: meta.id, contextMessages: plan.priorMessages };
+  const contextMessages =
+    plan.action === "new_turn" ? plan.priorMessages : (state.conv.state.activeRecord?.messages ?? record.messages);
+  return { runtimeSessionId: meta.id, contextMessages };
 }
 
 async function switchConversation(
@@ -1318,16 +1648,61 @@ async function switchConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
   await state.conv.select(id);
-  state.continuationUnlocked = !needsContinuation(state.conv.state.activeRecord);
+  state.continuationUnlocked = true;
+  state.finalizedRuntimeSessions.clear();
+  state.finalizingTurn = false;
   loadActivityFromRecord(state, state.conv.state.activeRecord);
   renderTranscriptFromRecord(dom, state.conv.state.activeRecord);
   restoreComposerDraft(state, dom, id);
   renderState(dom, state, handlers);
   dom.composerInput.focus();
+}
+
+async function ensureDraftConversation(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+  await refreshSettings(state, dom, handlers);
+  if (state.activeWorkspace === null) throw new Error("Chọn workspace trước.");
+  if (state.conv.state.activeConversationId !== null) return;
+
+  const reusableDraft = state.conv.state.summaries.find(
+    (summary) =>
+      summary.status === "draft" &&
+      summary.messageCount === 0 &&
+      summary.workspacePath === state.activeWorkspace,
+  );
+  if (reusableDraft !== undefined) {
+    await state.conv.select(reusableDraft.id);
+    if (state.conv.state.activeConversationId === reusableDraft.id) return;
+  }
+
+  const model = state.settings?.defaultModel;
+  const activeProfile = state.settings?.providerProfiles?.find((p) => p.isActive);
+  const providerSnapshot =
+    activeProfile !== undefined
+      ? {
+          profileId: activeProfile.id,
+          displayName: activeProfile.displayName,
+          providerType: activeProfile.providerType,
+          modelId: activeProfile.modelId,
+          baseUrl: activeProfile.baseUrl,
+        }
+      : undefined;
+  await state.conv.createNew(
+    state.activeWorkspace,
+    model?.providerID,
+    model?.modelID,
+    providerSnapshot,
+  );
 }
 
 async function newConversation(
@@ -1368,6 +1743,8 @@ async function newConversation(
   stopStream(state);
   state.activeAssistant = null;
   state.assistantText = "";
+  state.processingConversationId = null;
+  state.pendingUserRow = null;
   state.currentFileActionIntent = null;
   state.fileVerificationTasks.clear();
   state.lastView = initialSessionView("");
@@ -1542,6 +1919,9 @@ async function sendPrompt(
 
   if (isComposerLocked(state)) return;
 
+  state.turnTiming.reset();
+  state.turnTiming.mark("SEND_START", `${prompt.length}c`);
+
   const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
   if (!preflight.canSend) {
     renderComposerPreflight(dom, preflight, true);
@@ -1556,104 +1936,178 @@ async function sendPrompt(
     return;
   }
   if (state.client === null) return;
-  const enabledSkills = await state.client.enabledSkillSnapshots();
 
   const priorMessages = state.conv.state.activeRecord?.messages ?? [];
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, enabledSkills);
+  // Wave 4: when the Workspace companion has a file open, tell the agent which file it is
+  // (path only) so "tệp này / file đang mở" resolves without the user pasting a path.
+  const openFilePath =
+    state.workMode === "workspace" ? (workspaceCompanionHandle?.getOpenPath() ?? null) : null;
+  const workspaceContext = openFilePath !== null ? { openFilePath } : undefined;
+  // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
+  // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
+  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, [], workspaceContext);
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
   }
-  if (state.conv.state.activeConversationId === null) {
-    await newConversation(state, dom, handlers);
-  }
-  if (state.client === null || state.conv.state.activeConversationId === null) return;
+  state.turnTiming.mark("PREPARE_DONE", `dispatch=${dispatchPlan.text.length}c`);
 
-  const { runtimeSessionId } = await ensureRuntimeSession(
-    state,
-    dom,
-    readiness,
-    handlers,
-  );
+  try {
+    // Ensure a conversation before clearing the composer so a failed draft create keeps the prompt.
+    if (state.conv.state.activeConversationId === null) {
+      await ensureDraftConversation(state, dom, handlers);
+    }
+    if (state.client === null || state.conv.state.activeConversationId === null) {
+      throw new Error("Không tạo được cuộc trò chuyện.");
+    }
 
-  resetLiveActivity(state);
-  state.currentFileActionIntent = detectFileActionIntent(prompt);
-  state.fileVerificationTasks.clear();
-  const includedMetadata = dispatchPlan.includedMetadata;
-  appendMessage(
-    dom,
-    "user",
-    prompt,
-    false,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  state.activeAssistant = appendMessage(dom, "assistant", "");
-  const pendingCleared = state.pendingAttachments;
-  if (promptOverride === undefined) {
-    setComposerText(dom.composerInput, "");
-  }
-  if (!skipAttachments) {
-    state.pendingAttachments = [];
-  }
-  if (promptOverride === undefined) {
-    state.composerDrafts.delete(state.conv.state.activeConversationId);
-  }
-  await state.conv.recordUserMessage(
-    prompt,
-    includedMetadata.length > 0 ? includedMetadata : undefined,
-    dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
-  );
-  await state.conv.markLastActive();
-  state.conv.state.runtimePhase = "running";
-  state.continuationUnlocked = true;
-  recordAttachmentActivity(state, includedMetadata, []);
-  renderState(dom, state, handlers);
+    if (promptOverride === undefined) {
+      setComposerText(dom.composerInput, "");
+    }
+    if (!skipAttachments) {
+      state.pendingAttachments = [];
+    }
 
-  const dispatchText = dispatchPlan.text;
+    state.processingConversationId = state.conv.state.activeConversationId;
+    if (promptOverride === undefined) {
+      state.composerDrafts.delete(state.conv.state.activeConversationId);
+    }
 
-  const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
-  if (!result.accepted) {
-    state.pendingAttachments = pendingCleared;
-    if (result.reason === "session_completed") {
-      await state.conv.startContinuation();
-      const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
-      const retryPlan = planDispatchPrompt(
-        retry.contextMessages,
-        snapshots,
-        prompt,
-        undefined,
-        enabledSkills,
-      );
-      if (!retryPlan.ok) {
+    const includedMetadata = dispatchPlan.includedMetadata;
+    state.pendingUserRow = appendMessage(
+      dom,
+      "user",
+      prompt,
+      false,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+      { pending: true },
+    );
+    state.activeAssistant = appendMessage(dom, "assistant", "");
+    state.assistantText = "";
+    state.conv.state.runtimePhase = "starting";
+    renderState(dom, state, handlers);
+    state.turnTiming.mark("OPTIMISTIC_UI");
+
+    const { runtimeSessionId } = await ensureRuntimeSession(
+      state,
+      dom,
+      readiness,
+      handlers,
+    );
+    state.turnTiming.mark("RUNTIME_READY", runtimeSessionId);
+
+    resetLiveActivity(state);
+    state.turnStartedAtMs = Date.now();
+    state.autoOpenedThisTurn = false;
+    state.currentFileActionIntent = detectFileActionIntent(prompt);
+    state.fileVerificationTasks.clear();
+    await state.conv.recordUserMessage(
+      prompt,
+      includedMetadata.length > 0 ? includedMetadata : undefined,
+      dispatchPlan.skillMetadata.length > 0 ? dispatchPlan.skillMetadata : undefined,
+    );
+    confirmPendingUserMessage(state.pendingUserRow);
+    state.pendingUserRow = null;
+    await state.conv.markLastActive();
+    state.conv.state.runtimePhase = "running";
+    state.continuationUnlocked = true;
+    recordAttachmentActivity(state, includedMetadata, []);
+    renderState(dom, state, handlers);
+
+    const dispatchText = dispatchPlan.text;
+    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    if (result.accepted) {
+      state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
+    }
+    permissionRefreshNow?.();
+    const needsContinuation =
+      !result.accepted &&
+      (result.reason === "session_completed" ||
+        ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
+          state.lastView.terminal !== null));
+    if (!result.accepted) {
+      if (needsContinuation) {
+        await state.conv.startContinuation();
+        const retry = await ensureRuntimeSession(state, dom, readiness, handlers);
+        // Wave 2: OpenCode native on-demand — same empty-content dispatch as the first attempt.
+        const retryPlan = planDispatchPrompt(
+          retry.contextMessages,
+          snapshots,
+          prompt,
+          undefined,
+          [],
+          workspaceContext,
+        );
+        if (!retryPlan.ok) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(state, retryPlan.message);
+          renderState(dom, state, handlers);
+          return;
+        }
+        const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
+        if (second.accepted) {
+          state.turnTiming.mark("PROMPT_ACCEPTED", "retry-ok");
+        }
+        permissionRefreshNow?.();
+        if (!second.accepted) {
+          state.currentFileActionIntent = null;
+          state.fileVerificationTasks.clear();
+          state.processingConversationId = null;
+          await state.conv.setRuntimePhase("failed");
+          updateAssistantBubble(
+            state,
+            second.reason === "runtime_not_attached" || second.reason === "runtime_unavailable"
+              ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+              : `Không gửi được yêu cầu (${second.reason}).`,
+          );
+        }
+      } else {
         state.currentFileActionIntent = null;
         state.fileVerificationTasks.clear();
+        state.processingConversationId = null;
         await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", retryPlan.message);
-        renderState(dom, state, handlers);
-        return;
+        updateAssistantBubble(
+          state,
+          result.reason === "runtime_not_attached" || result.reason === "runtime_unavailable"
+            ? "Runtime chưa sẵn sàng. Thử gửi lại sau vài giây."
+            : `Không gửi được yêu cầu (${result.reason}).`,
+        );
+        if (state.pendingUserRow === null) {
+          const lastUser = [...dom.transcriptInner.querySelectorAll(".msg--user")].at(-1) as
+            | HTMLElement
+            | undefined;
+          if (lastUser !== undefined) {
+            attachSendRetry(lastUser, () => {
+              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+            });
+          }
+        }
       }
-      const second = await state.client.sendSessionMessage(retry.runtimeSessionId, retryPlan.text);
-      if (!second.accepted) {
-        state.currentFileActionIntent = null;
-        state.fileVerificationTasks.clear();
-        await state.conv.setRuntimePhase("failed");
-        appendMessage(dom, "assistant", "Không gửi được yêu cầu sau khi tạo phiên tiếp nối.");
-      }
+      renderState(dom, state, handlers);
+      return;
+    }
+    refreshActivityUi(state, dom);
+  } catch (error) {
+    state.processingConversationId = null;
+    await state.conv.setRuntimePhase("failed").catch(() => undefined);
+    const message = error instanceof Error ? error.message : "Không gửi được yêu cầu.";
+    if (state.activeAssistant !== null) {
+      updateAssistantBubble(state, message);
     } else {
-      state.currentFileActionIntent = null;
-      state.fileVerificationTasks.clear();
-      await state.conv.setRuntimePhase("failed");
-      appendMessage(
-        dom,
-        "assistant",
-        result.reason === "runtime_not_attached" ? "Runtime chưa sẵn sàng." : "Không gửi được yêu cầu.",
-      );
+      appendMessage(dom, "assistant", message);
+    }
+    const pendingRow = state.pendingUserRow;
+    if (pendingRow !== null) {
+      attachSendRetry(pendingRow, () => {
+        void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+      });
     }
     renderState(dom, state, handlers);
-    return;
   }
-  refreshActivityUi(state, dom);
 }
 
 async function cancelRun(
@@ -1726,6 +2180,14 @@ export function mountCoworkApp(root: HTMLElement): void {
     streamWatchdog: null,
     lastStreamActivityAt: 0,
     finalizingTurn: false,
+    finalizedRuntimeSessions: new Set(),
+    turnTiming: createTurnTimingTracker({
+      enabled: () =>
+        TURN_PERF_DEMO_ENABLED || state.settings?.general.verboseLogging === true,
+      log: (line) => console.info(line),
+    }),
+    turnStartedAtMs: null,
+    autoOpenedThisTurn: false,
     currentFileActionIntent: null,
     fileVerificationTasks: new Set(),
     pendingAttachments: [],
@@ -1735,11 +2197,15 @@ export function mountCoworkApp(root: HTMLElement): void {
     activeSurface: "cowork",
     workMode: "cowork",
     knowledgeTab: "base",
+    skillsMcpTab: "skills",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
     codeOpenFiles: [],
     codeActiveKey: null,
     permissionMode: readPermissionMode(),
+    processingConversationId: null,
+    pendingUserRow: null,
+    liveAttached: false,
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);
@@ -1776,6 +2242,17 @@ export function mountCoworkApp(root: HTMLElement): void {
     },
   };
 
+  const baseCloseSettings = dom.closeSettings;
+  const baseOpenSettings = dom.openSettings;
+  dom.closeSettings = () => {
+    baseCloseSettings();
+    renderState(dom, state, handlers);
+  };
+  dom.openSettings = () => {
+    baseOpenSettings();
+    renderState(dom, state, handlers);
+  };
+
   for (const [id, button] of dom.surfaceButtons) {
     button.addEventListener("click", () => {
       dom.closeSettings();
@@ -1784,7 +2261,6 @@ export function mountCoworkApp(root: HTMLElement): void {
       if (id === "cowork") {
         state.workMode = "cowork";
       }
-      dom.skillsPanel.hidden = true;
       renderState(dom, state, handlers);
     });
   }
@@ -1808,16 +2284,36 @@ export function mountCoworkApp(root: HTMLElement): void {
     });
   }
 
+  dom.skillsMcpView.skillsTab.addEventListener("click", () => {
+    state.skillsMcpTab = "skills";
+    renderState(dom, state, handlers);
+  });
+  dom.skillsMcpView.mcpTab.addEventListener("click", () => {
+    state.skillsMcpTab = "mcp";
+    renderState(dom, state, handlers);
+  });
+
+  // Read-only chip: no drawer toggle. Click navigates to the full Kỹ năng & MCP surface.
   dom.skillsButton.addEventListener("click", () => {
-    dom.skillsPanel.hidden = !dom.skillsPanel.hidden;
+    dom.closeSettings();
+    dom.closeDrawers();
+    state.activeSurface = "skills-mcp";
+    renderState(dom, state, handlers);
   });
 
   let featuresMounted = false;
   let conversationRestored = false;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
-  let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
-  let codeNavigator: WorkspaceNavigatorHandle | null = null;
   let workspacePicker: WorkspacePickerHandle | null = null;
+  let skillsEnabledCount = 0;
+  let mcpEnabledCount = 0;
+  const updateSkillsMcpChip = (): void => {
+    dom.skillsButton.textContent = `${skillsEnabledCount} Skill · ${mcpEnabledCount} MCP`;
+    dom.skillsButton.setAttribute(
+      "aria-label",
+      `Mở Skill & MCP — ${skillsEnabledCount} Skill, ${mcpEnabledCount} MCP đang bật`,
+    );
+  };
   const dynamicClient = createDynamicClient(state);
   const readiness = createReadinessController({
     getBootstrap: () => getShellBridge().getBootstrap(),
@@ -1835,39 +2331,31 @@ export function mountCoworkApp(root: HTMLElement): void {
       dom.serviceDetail.textContent = copy.detail;
       state.localServiceReady = readinessState.phase === "ready";
       if (readinessState.phase === "ready" && state.client !== null) {
-        void refreshSettings(state, dom, handlers);
-        void state.conv.refreshList().then(async () => {
-          if (!conversationRestored && state.conv.state.activeConversationId === null) {
-            // PO fix #6: start with a clean new-chat slate.
-            // History is loaded into the sidebar list but no conversation is auto-opened.
-            // User must click a history item to load it. continuationBanner must not appear on startup.
-            // We do NOT call state.conv.select() here; leave activeConversationId null so
-            // the composer starts fresh. A persisted conversation is created only when the
-            // first message is sent (conversation-controller handles that path).
-            conversationRestored = true;
-          }
-          renderState(dom, state, handlers);
-        });
-        if (!featuresMounted) {
-          featuresMounted = true;
-          workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
-            bridge: getShellBridge(),
-            client: dynamicClient,
-            onActivated: (rootPath) => {
-              state.activeWorkspace = rootPath;
-              void refreshSettings(state, dom, handlers);
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
-            onDeactivated: () => {
-              state.activeWorkspace = null;
-              void workspaceNavigator?.refresh();
-              void codeNavigator?.refresh();
-              renderState(dom, state, handlers);
-            },
-          });
-          workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
+        const client = state.client;
+        void (async () => {
+          await ensureAppUnlocked(dom.root, client);
+          // Mount Settings/workspace features immediately after unlock so a refresh failure
+          // cannot leave Settings → Nhà cung cấp permanently empty.
+          if (!featuresMounted) {
+            featuresMounted = true;
+            workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
+              bridge: getShellBridge(),
+              client: dynamicClient,
+              onActivated: (rootPath) => {
+                state.activeWorkspace = rootPath;
+                void refreshSettings(state, dom, handlers);
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+              onDeactivated: () => {
+                state.activeWorkspace = null;
+                void workspaceNavigator?.refresh();
+                void codeNavigator?.refresh();
+                renderState(dom, state, handlers);
+              },
+            });
+            workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onChooseWorkspace: () => void workspacePicker?.choose(),
@@ -1907,23 +2395,169 @@ export function mountCoworkApp(root: HTMLElement): void {
               renderState(dom, state, handlers);
             },
           });
-          mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
-          mountSkillsSettingsPanel(dom.settingsSkillsBody, dynamicClient, (skills) => {
-            const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
-            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+
+          // Composer model switcher (item 9): the provider control opens a menu of configured
+          // profiles and switches the active one. With none configured it opens Settings to add one.
+          let providerMenu: HTMLElement | null = null;
+          const closeProviderMenu = (): void => {
+            providerMenu?.remove();
+            providerMenu = null;
+            document.removeEventListener("click", onProviderMenuDocClick, true);
+          };
+          function onProviderMenuDocClick(event: MouseEvent): void {
+            const target = event.target as Node | null;
+            if (
+              providerMenu !== null &&
+              target !== null &&
+              !providerMenu.contains(target) &&
+              !dom.providerControl.root.contains(target)
+            ) {
+              closeProviderMenu();
+            }
+          }
+          const openProviderMenu = (): void => {
+            if (providerMenu !== null) {
+              closeProviderMenu();
+              return;
+            }
+            const profiles = state.settings?.providerProfiles ?? [];
+            if (profiles.length === 0) {
+              dom.openSettings();
+              return;
+            }
+            const menu = document.createElement("div");
+            menu.className = "provider-menu";
+            menu.setAttribute("role", "menu");
+            for (const profile of profiles) {
+              const item = document.createElement("button");
+              item.type = "button";
+              item.className = "provider-menu__item" + (profile.isActive ? " provider-menu__item--active" : "");
+              item.setAttribute("role", "menuitemradio");
+              item.setAttribute("aria-checked", profile.isActive ? "true" : "false");
+              const mark = document.createElement("span");
+              mark.className = "provider-menu__check";
+              mark.textContent = profile.isActive ? "✓" : "";
+              const name = document.createElement("span");
+              name.className = "provider-menu__name";
+              name.textContent = profile.displayName;
+              const model = document.createElement("span");
+              model.className = "provider-menu__model";
+              model.textContent = profile.modelId;
+              const text = document.createElement("span");
+              text.className = "provider-menu__text";
+              text.append(name, model);
+              item.append(mark, text);
+              item.addEventListener("click", () => {
+                closeProviderMenu();
+                if (profile.isActive) return;
+                void (async () => {
+                  try {
+                    const view = await dynamicClient.setActiveProviderProfile(profile.id);
+                    state.settings = view;
+                    renderState(dom, state, handlers);
+                  } catch {
+                    /* keep the current selection; a failed switch is non-fatal */
+                  }
+                })();
+              });
+              menu.append(item);
+            }
+            const manage = document.createElement("button");
+            manage.type = "button";
+            manage.className = "provider-menu__manage";
+            manage.textContent = "Quản lý nhà cung cấp…";
+            manage.addEventListener("click", () => {
+              closeProviderMenu();
+              dom.openSettings();
+            });
+            menu.append(manage);
+            document.body.append(menu);
+            const rect = dom.providerControl.root.getBoundingClientRect();
+            menu.style.left = `${Math.round(rect.left)}px`;
+            menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 6)}px`;
+            providerMenu = menu;
+            // Defer so this same click does not immediately close the just-opened menu.
+            setTimeout(() => document.addEventListener("click", onProviderMenuDocClick, true), 0);
+          };
+          dom.providerControl.root.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openProviderMenu();
           });
-          mountSkillsPanel(dom.skillsPanel, dynamicClient, (skills) => {
-            const enabled = skills.filter((skill) => skill.status === "enabled").length;
-            dom.skillsButton.textContent = `Kỹ năng: ${enabled}`;
-            dom.skillsButton.setAttribute("aria-label", `Mở Kỹ năng, ${enabled} đang bật`);
+
+          mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
+          mountSkillsSettingsPanel(dom.skillsMcpView.skillsBody, dynamicClient, (skills) => {
+            skillsEnabledCount = skills.filter((skill) => skill.status === "enabled").length;
+            updateSkillsMcpChip();
+          });
+          const toMcpView = (server: import("./service-client.js").McpServerListItem): import("./mcp-panel.js").McpServerView => ({
+            id: server.id,
+            name: server.name,
+            transport: server.url !== undefined ? "url" : "stdio",
+            ...(server.command !== undefined ? { command: server.command } : {}),
+            ...(server.url !== undefined ? { url: server.url } : {}),
+            hasHeaderSecret: server.hasHeaderSecret,
+            enabled: server.enabled,
+            health:
+              server.connection === "connected"
+                ? "ok"
+                : server.connection === "unavailable"
+                  ? "error"
+                  : "unknown",
+            toolCount: server.toolCount,
+          });
+          const mcpCallbacks: McpPanelCallbacks = {
+            listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
+            createMcpServer: async (input) =>
+              toMcpView(
+                await dynamicClient.createMcpServer({
+                  ...(input.id !== undefined ? { id: input.id } : {}),
+                  name: input.name,
+                  ...(input.transport === "stdio" && input.command !== undefined
+                    ? { command: input.command }
+                    : {}),
+                  ...(input.transport === "url" && input.url !== undefined ? { url: input.url } : {}),
+                  ...(input.headerSecret !== undefined && input.headerSecret.length > 0
+                    ? { headerSecret: input.headerSecret }
+                    : {}),
+                }),
+              ),
+            updateMcpServer: async (id, input) => {
+              const patch: {
+                readonly name?: string;
+                readonly command?: string;
+                readonly url?: string;
+                readonly headerSecret?: string | null;
+              } = {
+                name: input.name,
+                ...(input.headerSecret !== undefined
+                  ? { headerSecret: input.headerSecret.length > 0 ? input.headerSecret : null }
+                  : {}),
+              };
+              const withTransport =
+                input.transport === "stdio" && input.command !== undefined
+                  ? { ...patch, command: input.command }
+                  : input.transport === "url" && input.url !== undefined
+                    ? { ...patch, url: input.url }
+                    : patch;
+              return toMcpView(await dynamicClient.updateMcpServer(id, withTransport));
+            },
+            deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
+            setMcpServerEnabled: async (id, enabled) =>
+              toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+          };
+          mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
+            mcpEnabledCount = servers.filter((server) => server.enabled).length;
+            updateSkillsMcpChip();
           });
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
+            // Discover permission ASAP — workspace_auto still needs the poll to see pending.
+            pollIntervalMs: 100,
             getMode: () => state.permissionMode,
             onPending: (request) => {
               touchStreamActivity(state);
+              state.turnTiming.mark("PERMISSION_SHOWN", request.requestId);
               void capturePermissionBeforeSnapshot(state, request);
               const target =
                 request.action.targetPath !== undefined
@@ -1943,6 +2577,12 @@ export function mountCoworkApp(root: HTMLElement): void {
             },
             onDecision: ({ request, outcome, requestedDecision }) => {
               touchStreamActivity(state);
+              if (
+                outcome.status === "resolved" &&
+                requestedDecision !== "deny"
+              ) {
+                state.turnTiming.mark("PERMISSION_APPROVED", request.requestId);
+              }
               const target =
                 request.action.targetPath !== undefined
                   ? toRelativePath(request.action.targetPath, state.activeWorkspace)
@@ -1970,6 +2610,15 @@ export function mountCoworkApp(root: HTMLElement): void {
               void persistActivity(state);
             },
           });
+          permissionRefreshNow = () => {
+            void permissions.refresh();
+          };
+          permissionPausePoll = () => {
+            permissions.pause();
+          };
+          permissionResumePoll = () => {
+            permissions.resume();
+          };
           permissions.start();
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
@@ -1997,7 +2646,21 @@ export function mountCoworkApp(root: HTMLElement): void {
             openWorkspaceFileFromCowork(state, dom, handlers, workspaceNavigator, workspaceCompanionHandle, relativePath);
             void showFilePreview(dom.activityPanel, state.client, change);
           });
-        }
+          }
+          await refreshSettings(state, dom, handlers);
+          await state.conv.refreshList().then(async () => {
+            if (!conversationRestored && state.conv.state.activeConversationId === null) {
+              // PO fix #6: start with a clean new-chat slate.
+              // History is loaded into the sidebar list but no conversation is auto-opened.
+              // User must click a history item to load it. continuationBanner must not appear on startup.
+              // We do NOT call state.conv.select() here; leave activeConversationId null so
+              // the composer starts fresh. A persisted conversation is created only when the
+              // first message is sent (conversation-controller handles that path).
+              conversationRestored = true;
+            }
+            renderState(dom, state, handlers);
+          });
+        })();
       }
     },
   });
@@ -2108,7 +2771,7 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => renderState(dom, state, handlers));
+  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
     if (event.key === "Enter" && !event.shiftKey) {

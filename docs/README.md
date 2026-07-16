@@ -1,35 +1,48 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-15"
 ---
 
-# Cowork GHC — Tài liệu dự án
+# Cowork GHC — Bản đồ tài liệu
 
-Đọc theo thứ tự sau khi làm việc trên repository:
+Đây là điểm vào canonical duy nhất cho tài liệu dự án.
 
-1. [Trạng thái hiện tại](../product/current-status.md) — sự thật hiện tại về năng lực và giới hạn.
-2. [Kế hoạch sản phẩm](../product/product-plan.md) — tầm nhìn, phạm vi, và năng lực sản phẩm.
-3. [Lộ trình](../product/roadmap.md) — NOW / NEXT / LATER / WAITING.
-4. [Tổng quan kiến trúc](../architecture/system-overview.md) — runtime, service, shell, boundary.
-5. [Demo acceptance](../quality/demo-acceptance.md) — tiêu chí chấp nhận cho hành trình demo.
-6. [Giới hạn đã biết](../quality/known-limitations.md) — hạn chế thực tế chưa giải quyết.
-7. [Hướng dẫn demo](../demo/demo-guide.md) — các bước và prompt mẫu cho buổi demo.
+## Đọc nhanh
 
-## Tài liệu bổ sung (không canonical)
+1. [Trạng thái hiện tại](product/current-status.md)
+2. [Kế hoạch sản phẩm](product/product-plan.md)
+3. [Lộ trình](product/roadmap.md)
+4. [Tổng quan kiến trúc](architecture/system-overview.md)
+5. [Demo acceptance](quality/demo-acceptance.md)
+6. [Known limitations](quality/known-limitations.md)
+7. [Hướng dẫn demo](demo/demo-guide.md)
 
-- ADR trong `docs/architecture/decisions/`
-- Tham chiếu nghiên cứu trong `docs/references/`
-- Bằng chứng gói trong `reports/` (chỉ giữ các batch còn dùng cho acceptance)
+## Canonical owners
 
-## Quy tắc cập nhật
+| Tài liệu | Sở hữu thông tin |
+|---|---|
+| `product/current-status.md` | Sự thật hiện tại: WORKS / PARTIAL / NOT IMPLEMENTED / DEFERRED |
+| `product/product-plan.md` | Tầm nhìn, phạm vi và capability sản phẩm |
+| `product/roadmap.md` | NOW / NEXT / LATER / WAITING với checkbox |
+| `architecture/system-overview.md` | Boundary và kiến trúc đang chạy |
+| `architecture/ev-stream-events.md` | Định dạng EV event streaming theo turn (thinking/tool/metrics) |
+| `architecture/opencode-runtime-notes.md` | Forensic runtime OpenCode (delete/question tool, turn-perf, fix) |
+| `quality/demo-acceptance.md` | Happy path phải kiểm tra trên packaged app |
+| `quality/known-limitations.md` | Giới hạn thực tế chưa xử lý |
+| `demo/demo-guide.md` | Kịch bản và prompt cho buổi demo |
 
-- `current-status.md` mô tả **chỉ** trạng thái hiện tại; không lặp lại lịch sử branch dài.
-- `product-plan.md` mô tả khả năng và phạm vi sản phẩm.
-- `roadmap.md` dùng NOW / NEXT / LATER / WAITING.
-- Không nhúng giá trị Git HEAD vào nhiều tài liệu — Git history là archive.
+## Supporting documents
 
-## Điểm vào cho agent
+- ADR: `architecture/decisions/`
+- Integration intake: `integration/`
+- Research/reference: `references/`
+- Development Skill: `.agents/skills/cowork-ghc-commercial-ui/SKILL.md`
 
-- Codex / agent chung: [`AGENTS.md`](../../AGENTS.md)
-- Claude Code: [`CLAUDE.md`](../../CLAUDE.md)
+## Quy tắc
+
+- Không ghi cùng một status ở nhiều tài liệu.
+- Không đặt Git HEAD thay đổi liên tục vào nhiều file.
+- Git history là archive; không tạo thêm thư mục archive cho report cũ.
+- Report/screenshot generated mặc định không commit, trừ accepted milestone evidence.
+- Khi product truth thay đổi, cập nhật `current-status`, `roadmap`, `demo-acceptance` hoặc `known-limitations` đúng owner.

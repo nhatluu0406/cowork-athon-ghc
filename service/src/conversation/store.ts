@@ -1,5 +1,6 @@
 /**
- * File-backed conversation store under user-data (atomic writes, corrupt-entry isolation).
+ * File-backed conversation store (legacy / tests without SQLite).
+ * Production Wave 0B uses {@link createSqliteConversationStore} as the sole source.
  */
 
 import { randomUUID } from "node:crypto";

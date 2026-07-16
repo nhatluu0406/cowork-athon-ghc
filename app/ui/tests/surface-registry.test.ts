@@ -17,11 +17,12 @@ import { getIntegrationSurfaceAdapter } from "../src/integration-surface-adapter
 import { createAppFrame } from "../src/ui-shell/create-app-frame.js";
 import { renderIntegrationSurface } from "../src/ui-shell/integration-view.js";
 
-test("surface registry declares the six top-level product surfaces", () => {
+test("surface registry declares the seven top-level product surfaces", () => {
   const registry = createSurfaceRegistry();
   const ids = registry.map((surface) => surface.id);
   assert.deepEqual(ids, [
     "cowork",
+    "skills-mcp",
     "dispatch",
     "gateway",
     "knowledge",
@@ -41,6 +42,7 @@ test("production default exposes all navigable product rail surfaces", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
     ["cowork", "available"],
+    ["skills-mcp", "available"],
     ["dispatch", "awaiting_integration"],
     ["gateway", "awaiting_integration"],
     ["knowledge", "awaiting_integration"],
@@ -49,9 +51,17 @@ test("production default exposes all navigable product rail surfaces", () => {
   ]);
 });
 
+test("skills-mcp surface sits directly below Cowork in the rail", () => {
+  const visible = visibleProductSurfaces(createSurfaceRegistry());
+  assert.equal(visible[0]?.id, "cowork");
+  assert.equal(visible[1]?.id, "skills-mcp");
+  assert.equal(visible[1]?.label, "Skill & MCP");
+  assert.equal(visible[1]?.icon, "skills");
+});
+
 test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
-  assert.deepEqual(visible.map((surface) => surface.id), ["cowork", "code"]);
+  assert.deepEqual(visible.map((surface) => surface.id), ["cowork", "skills-mcp", "code"]);
 });
 
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
@@ -73,10 +83,10 @@ test("integration adapters declare stable mount boundaries", () => {
   assert.equal(getIntegrationSurfaceAdapter("cowork"), null);
 });
 
-test("product rail renders six surface buttons with mount-ready integration placeholders", () => {
+test("product rail renders seven surface buttons with mount-ready integration placeholders", () => {
   const root = document.createElement("main");
   const frame = createAppFrame(root);
-  assert.equal(frame.surfaceButtons.size, 6);
+  assert.equal(frame.surfaceButtons.size, 7);
   assert.ok(frame.surfaceButtons.has("dispatch"));
   assert.ok(frame.surfaceButtons.has("gateway"));
   assert.equal(frame.knowledgeView.root.id, "d3-knowledge-root");

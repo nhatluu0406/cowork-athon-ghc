@@ -12,8 +12,15 @@ import type {
   EvEvent,
   FileMutationOp,
   StepStatus,
+  TurnMetrics,
 } from "@cowork-ghc/contracts";
 import { asRecord, readString, type RawPart } from "./opencode-events.js";
+
+/** Read a finite number from a raw record field (ignores strings/NaN). */
+function readNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
 
 /** Allocates the next {@link EvBase} (sessionId + monotonic seq + timestamp). */
 export type BaseAllocator = () => EvBase;
@@ -128,6 +135,43 @@ function mapToolPart(part: RawPart, alloc: BaseAllocator): readonly EvEvent[] {
     events.push({ ...alloc(), kind: "file_mutation", operation: op, path });
   }
   return events;
+}
+
+/**
+ * Map a `step-finish` part's token/cost usage to a per-turn {@link MetricsEvent} (issue #4).
+ * OpenCode carries usage on the raw `step-finish` part as `tokens` + `cost`; only non-secret
+ * COUNTS are forwarded (never prompt/response content). Returns `[]` when no usage is present.
+ */
+export function mapStepMetrics(
+  part: RawPart,
+  partRaw: Record<string, unknown>,
+  alloc: BaseAllocator,
+): readonly EvEvent[] {
+  if (part.type !== "step-finish") return [];
+  const tokens = asRecord(partRaw["tokens"]);
+  const input = readNumber(tokens, "input");
+  const output = readNumber(tokens, "output");
+  const total = readNumber(tokens, "total");
+  const reasoning = readNumber(tokens, "reasoning");
+  const cost = readNumber(partRaw, "cost");
+  // OpenCode reports prompt-cache usage as a nested `{ read, write }`; sum to one non-secret count.
+  const cacheRec = asRecord(tokens["cache"]);
+  const cacheRead = readNumber(cacheRec, "read");
+  const cacheWrite = readNumber(cacheRec, "write");
+  const cache =
+    cacheRead !== undefined || cacheWrite !== undefined
+      ? (cacheRead ?? 0) + (cacheWrite ?? 0)
+      : undefined;
+  const metrics: TurnMetrics = {
+    ...(input !== undefined ? { tokensInput: input } : {}),
+    ...(output !== undefined ? { tokensOutput: output } : {}),
+    ...(total !== undefined ? { tokensTotal: total } : {}),
+    ...(reasoning !== undefined ? { tokensReasoning: reasoning } : {}),
+    ...(cache !== undefined ? { tokensCache: cache } : {}),
+    ...(cost !== undefined ? { costUsd: cost } : {}),
+  };
+  if (Object.keys(metrics).length === 0) return [];
+  return [{ ...alloc(), kind: "metrics", metrics }];
 }
 
 /**

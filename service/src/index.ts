@@ -97,10 +97,12 @@ export {
   type Unsubscribe,
 } from "./server/session-stream-hub.js";
 
+export * as db from "./db/index.js";
+
 // Domain modules (L6 wave 2), namespaced to avoid export-name collisions (e.g. the shared
 // SecretScrubber is re-exported by both credential and diagnostics). Each has its own barrel:
 //   workspace  — grant + confinement (W4/F4, CGHC-007)
-//   credential — @napi-rs/keyring store + inject-at-launch (PR9/SEC-1, CGHC-009)
+//   credential — store + inject-at-launch (PR9/SEC-1, CGHC-009); vault replaces keyring (ADR 0007)
 //   diagnostics— value-based scrubber + redacting logger + bundle export (PR8/SD*, CGHC-021)
 //   execution  — OpenCode SSE -> EV mapper + reducer (EV1-EV7, CGHC-012)
 export * as workspace from "./workspace/index.js";
@@ -108,6 +110,7 @@ export * as credential from "./credential/index.js";
 export * as diagnostics from "./diagnostics/index.js";
 export * as execution from "./execution/index.js";
 export * as skills from "./skills/index.js";
+export * as mcp from "./mcp/index.js";
 
 // Composition root (Tier 1): the integration assembly that wires the domain modules above into
 // ONE running loopback service and mounts every router. The shell/scripts call `startCoworkService`;
@@ -156,6 +159,7 @@ export {
   type ProcessTimesProbe,
   type ProcessTimes,
   type OpencodeProviderConfig,
+  type OpencodeSkillsConfig,
   RuntimeSpawnError,
   RuntimeHealthTimeoutError,
   RuntimePortInUseError,
@@ -173,6 +177,7 @@ export {
 export {
   createProviderProfileStore,
   createProviderConnectionTester,
+  createProfileModelDiscovery,
   createProfileRuntimeBridge,
   createProviderProfileRouter,
   migrateLegacySettingsToProfiles,
@@ -181,6 +186,7 @@ export {
   type ProviderProfile,
   type ProviderProfileView,
   type ProviderProfileStore,
+  type ProfileModelDiscovery,
 } from "./provider-profiles/index.js";
 
 export {

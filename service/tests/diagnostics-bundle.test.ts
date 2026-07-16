@@ -80,7 +80,7 @@ test("diagnostics bundle: exported JSON contains the secret VALUE 0 times (bundl
   const execution = plantExecution();
   const inputs: DiagnosticsBundleInputs = {
     capturedAt: "2026-07-11T12:00:00.000Z",
-    versions: { coworkGhc: "0.1.0", runtime: "v1.17.11" },
+    versions: { coworkGhc: "0.1.0", runtime: "v1.18.1" },
     runtimeStatus: { state: "running", healthy: true, pid: 4242, host: "127.0.0.1", port: 49876 },
     logs,
     execution,
@@ -104,7 +104,7 @@ test("diagnostics bundle: exported JSON contains the secret VALUE 0 times (bundl
     logging: { verbose: boolean };
   };
   assert.equal(parsed.versions.coworkGhc, "0.1.0");
-  assert.equal(parsed.versions.runtime, "v1.17.11");
+  assert.equal(parsed.versions.runtime, "v1.18.1");
   assert.equal(parsed.runtimeStatus.state, "running");
   assert.equal(parsed.runtimeStatus.pid, 4242);
   assert.equal(parsed.logging.verbose, true, "verbose reported truthfully (SD3)");
@@ -119,7 +119,7 @@ test("MEDIUM-1 — a secret with JSON-escapable chars in a status field is redac
 
   const inputs: DiagnosticsBundleInputs = {
     capturedAt: "2026-07-11T12:00:00.000Z",
-    versions: { coworkGhc: "0.1.0", runtime: "v1.17.11" },
+    versions: { coworkGhc: "0.1.0", runtime: "v1.18.1" },
     // Planted in a caller-supplied status field.
     runtimeStatus: { state: "errored", host: `bind failed for ${specialSecret}` },
     logs: [],
@@ -141,7 +141,7 @@ test("compose reports status/versions truthfully and never fabricates them", () 
   const scrubber = createSecretScrubber();
   const inputs: DiagnosticsBundleInputs = {
     capturedAt: "2026-07-11T12:00:00.000Z",
-    versions: { coworkGhc: "0.2.3", runtime: "v1.17.11" },
+    versions: { coworkGhc: "0.2.3", runtime: "v1.18.1" },
     runtimeStatus: { state: "stopped" },
     logs: [],
     execution: null,

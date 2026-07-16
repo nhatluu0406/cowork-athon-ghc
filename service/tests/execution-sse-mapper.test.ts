@@ -14,6 +14,7 @@ import type { RawOpencodeEvent } from "../src/execution/index.js";
 import {
   createEvMapper,
   decodeSseChunk,
+  foldEv,
   KNOWN_IGNORED_FRAME_TYPES,
 } from "../src/execution/index.js";
 
@@ -71,7 +72,8 @@ test("a completed write tool part → EV3 tool_call + EV4 file_mutation", () => 
   assert.equal(call.callId, "call-write");
   assert.equal(call.toolName, "write");
   assert.equal(call.status, "completed");
-  assert.equal(call.summary, "Write src/a.ts");
+  // Summary prefers the concrete file path (the tool name is shown separately in the trace).
+  assert.equal(call.summary, "src/a.ts");
   const mut = out[1] as Extract<EvEvent, { kind: "file_mutation" }>;
   assert.equal(mut.kind, "file_mutation");
   assert.equal(mut.operation, "create");
@@ -96,8 +98,15 @@ test("step-start / step-finish parts → EV2 step events", () => {
   assert.equal((finish[0] as Extract<EvEvent, { kind: "step" }>).status, "completed");
 });
 
+/** Seed the message role so the assistant-only token gate lets deltas through (as in a real run). */
+function assistantMessage(mapper: ReturnType<typeof newMapper>, id: string): void {
+  mapper.map({ type: "message.updated", properties: { info: { id, role: "assistant" } } });
+}
+
 test("message.part.delta → S2 token event; a text part emits nothing (deltas own tokens)", () => {
-  const tok = newMapper().map({
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const tok = mapper.map({
     type: "message.part.delta",
     properties: { sessionID: SID, messageID: "m", partID: "p", field: "text", delta: "Hello" },
   });
@@ -108,6 +117,72 @@ test("message.part.delta → S2 token event; a text part emits nothing (deltas o
     partFrame({ id: "p", sessionID: SID, messageID: "m", type: "text", text: "Hello" }),
   );
   assert.equal(textPart.length, 0);
+});
+
+test("message.part.delta with field=reasoning emits NO token (thinking must not leak)", () => {
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const reasoning = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "r", field: "reasoning", delta: "Let me think..." },
+  });
+  assert.equal(reasoning.length, 0, "reasoning deltas must not become visible tokens");
+
+  // A field-less delta stays backward-compatible (treated as answer text).
+  const legacy = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "p", delta: "Answer" },
+  });
+  assert.equal(legacy.length, 1);
+  assert.equal((legacy[0] as Extract<EvEvent, { kind: "token" }>).delta, "Answer");
+});
+
+test("step-finish part → EV metrics event with token counts + cost (issue #4)", () => {
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const out = mapper.map(
+    partFrame({
+      id: "s1",
+      sessionID: SID,
+      messageID: "m",
+      type: "step-finish",
+      tokens: { input: 31, output: 126, total: 157, reasoning: 0, cache: { read: 7808, write: 0 } },
+      cost: 0.0001,
+    }),
+  );
+  const metrics = out.find((e) => e.kind === "metrics") as Extract<EvEvent, { kind: "metrics" }> | undefined;
+  assert.ok(metrics, "a step-finish with usage emits a metrics event");
+  assert.equal(metrics.metrics.tokensInput, 31);
+  assert.equal(metrics.metrics.tokensOutput, 126);
+  assert.equal(metrics.metrics.tokensTotal, 157);
+  assert.equal(metrics.metrics.tokensCache, 7808, "cache read+write folded into tokensCache");
+  assert.equal(metrics.metrics.costUsd, 0.0001);
+});
+
+test("a step-finish with no usage emits no metrics event", () => {
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const out = mapper.map(partFrame({ id: "s2", sessionID: SID, messageID: "m", type: "step-finish" }));
+  assert.equal(out.filter((e) => e.kind === "metrics").length, 0);
+});
+
+test("reducer keeps metrics through the terminal fold (completed turn shows usage)", () => {
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+  const events = [
+    ...mapper.map(
+      partFrame({
+        id: "s1", sessionID: SID, messageID: "m", type: "step-finish",
+        tokens: { input: 31, output: 126, total: 157 }, cost: 0,
+      }),
+    ),
+    ...mapper.map({ type: "session.idle", properties: { sessionID: SID } }),
+  ];
+  const view = foldEv(SID, events);
+  assert.equal(view.terminal, "completed");
+  assert.equal(view.metrics?.tokensTotal, 157);
+  assert.equal(view.metrics?.tokensInput, 31);
+  assert.equal(view.metrics?.tokensOutput, 126);
 });
 
 test("session.idle → terminal completed (the only completed source)", () => {

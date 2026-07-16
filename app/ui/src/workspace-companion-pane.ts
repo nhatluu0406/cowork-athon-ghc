@@ -4,6 +4,7 @@
 
 import type { ServiceClient } from "./service-client.js";
 import { el, icon } from "./ui-shell/dom-utils.js";
+import { isAutoOpenSafe } from "./workspace-file-role.js";
 
 export type WorkspaceFileContentView = Awaited<ReturnType<ServiceClient["readWorkspaceFileContent"]>>;
 
@@ -20,7 +21,25 @@ export interface WorkspaceCompanionPaneHandle {
   readonly open: (relativePath: string) => Promise<void>;
   readonly refresh: () => Promise<void>;
   readonly getOpenPath: () => string | null;
+  /**
+   * A verified agent mutation touched the currently-open file. Reloads from disk when the
+   * buffer is clean; when the buffer is dirty it shows a conflict banner instead of
+   * overwriting the user's unsaved edits (the user picks keep-mine or reload-from-disk).
+   */
   readonly showAgentUpdated: () => void;
+  /**
+   * A verified DELETE removed the currently-open file. Clears the stale preview/editor, shows a
+   * "Tệp đã bị xóa" empty state, and blocks Save so it cannot silently recreate the file. Only
+   * call this for a verified delete — never on a model's unverified claim.
+   */
+  readonly showDeleted: () => void;
+  /**
+   * Auto-open a file affected by a verified agent mutation, but only when it is SAFE:
+   * a supported non-secret previewable kind, not oversized (the service returns
+   * `unsupported`), and not while the current buffer has unsaved edits. Returns whether the
+   * file was opened. Never yanks the user off a dirty buffer.
+   */
+  readonly openIfSafe: (relativePath: string) => Promise<boolean>;
 }
 
 function base64ToBlobUrl(base64: string, mime: string): string {
@@ -38,6 +57,9 @@ export function mountWorkspaceCompanionPane(
   let openPath: string | null = null;
   let current: WorkspaceFileContentView | null = null;
   let dirty = false;
+  // The disk version changed under a dirty buffer and the user chose "keep mine": stays true so
+  // the UI keeps warning that a Save will overwrite the agent's version, until reload/save/reopen.
+  let diskChanged = false;
   let blobUrl: string | null = null;
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -55,6 +77,32 @@ export function mountWorkspaceCompanionPane(
   saveButton.setAttribute("aria-label", "Lưu tệp");
   saveButton.append(icon("save", "Lưu tệp"));
   toolbar.append(pathWrap, statusBadge, saveButton);
+
+  // Conflict banner: shown when an agent edits the open file while the buffer is dirty.
+  const conflictBanner = el("div", "workspace-companion-pane__conflict");
+  conflictBanner.hidden = true;
+  conflictBanner.setAttribute("role", "alert");
+  const conflictText = el(
+    "span",
+    "workspace-companion-pane__conflict-text",
+    'Agent đã sửa tệp này trên đĩa, còn bạn có thay đổi chưa lưu. ' +
+      '"Tải lại từ đĩa" sẽ bỏ toàn bộ thay đổi chưa lưu của bạn.',
+  );
+  const conflictActions = el("div", "workspace-companion-pane__conflict-actions");
+  const keepButton = el(
+    "button",
+    "workspace-companion-pane__conflict-btn",
+    "Giữ bản đang sửa",
+  ) as HTMLButtonElement;
+  keepButton.type = "button";
+  const reloadButton = el(
+    "button",
+    "workspace-companion-pane__conflict-btn workspace-companion-pane__conflict-btn--danger",
+    "Tải lại từ đĩa",
+  ) as HTMLButtonElement;
+  reloadButton.type = "button";
+  conflictActions.append(keepButton, reloadButton);
+  conflictBanner.append(conflictText, conflictActions);
 
   const body = el("div", "workspace-companion-pane__body");
   const empty = el("div", "workspace-companion-pane__empty");
@@ -75,8 +123,20 @@ export function mountWorkspaceCompanionPane(
     formats,
   );
   body.append(empty);
-  root.append(toolbar, body);
+  root.append(toolbar, conflictBanner, body);
   container.replaceChildren(root);
+
+  const hideConflict = (): void => {
+    conflictBanner.hidden = true;
+  };
+
+  // Persistent "disk changed under your edits" indicator that survives after the user chooses
+  // "keep mine", so they cannot forget the conflict and Save over the agent's version.
+  const setDiskChanged = (on: boolean): void => {
+    diskChanged = on;
+    saveButton.classList.toggle("workspace-companion-pane__save--warn", on);
+    saveButton.dataset["tooltip"] = on ? "Lưu sẽ GHI ĐÈ bản đã đổi trên đĩa" : "Lưu tệp";
+  };
 
   const revokeBlob = (): void => {
     if (blobUrl !== null) {
@@ -161,6 +221,8 @@ export function mountWorkspaceCompanionPane(
   const renderFile = (file: WorkspaceFileContentView): void => {
     current = file;
     dirty = false;
+    hideConflict();
+    setDiskChanged(false);
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
     revokeBlob();
@@ -254,6 +316,7 @@ export function mountWorkspaceCompanionPane(
           });
         }
         dirty = false;
+        hideConflict();
         setStatus("Đã lưu", 2500);
         await load(openPath!);
       } catch (error) {
@@ -261,6 +324,22 @@ export function mountWorkspaceCompanionPane(
         saveButton.disabled = false;
       }
     })();
+  });
+
+  // Keep my unsaved edits: dismiss the banner but KEEP the buffer dirty and leave a persistent
+  // warning so the user cannot forget the disk changed and Save over the agent's version.
+  keepButton.addEventListener("click", () => {
+    hideConflict();
+    setDiskChanged(true);
+    setStatus("Bản trên đĩa đã thay đổi — Lưu sẽ ghi đè bản của Agent.", 0);
+  });
+  // Reload from disk: discard local edits and re-read the agent's version (banner already warns
+  // this drops unsaved edits). load() → renderFile() clears the dirty + disk-changed state.
+  reloadButton.addEventListener("click", () => {
+    if (openPath === null) return;
+    dirty = false;
+    hideConflict();
+    void load(openPath);
   });
 
   return {
@@ -275,12 +354,53 @@ export function mountWorkspaceCompanionPane(
     },
     getOpenPath: () => openPath,
     showAgentUpdated: () => {
+      // Dirty buffer: never silently overwrite — surface a conflict banner with a choice.
       if (dirty) {
-        setStatus("Agent đã cập nhật tệp. Thay đổi chưa lưu của bạn được giữ nguyên.", 0);
+        conflictBanner.hidden = false;
+        setStatus("Xung đột: Agent đã sửa tệp đang mở.", 0);
         return;
       }
       setStatus("Agent đã cập nhật tệp", 3500);
       void load(openPath ?? "");
+    },
+    showDeleted: () => {
+      const deleted = openPath;
+      revokeBlob();
+      current = null;
+      dirty = false;
+      openPath = null; // no target → a stray Save cannot recreate the deleted file
+      hideConflict();
+      setDiskChanged(false);
+      saveButton.hidden = true;
+      saveButton.disabled = true;
+      pathLabel.textContent = deleted ?? "Tệp đã bị xóa";
+      pathLabel.title = "";
+      statusBadge.hidden = true;
+      body.replaceChildren(
+        el(
+          "p",
+          "workspace-companion-pane__message",
+          deleted ? `Tệp "${deleted}" đã bị xóa.` : "Tệp đã bị xóa.",
+        ),
+      );
+    },
+    openIfSafe: async (relativePath) => {
+      // Normalize Windows separators to POSIX (casing preserved — the FS access needs the real
+      // case). Never yank the user off unsaved work, never force-open secret/unsupported files.
+      const path = relativePath.replace(/\\/g, "/");
+      if (dirty) return false;
+      if (!isAutoOpenSafe(path)) return false;
+      try {
+        const file = await client.readWorkspaceFileContent(path);
+        // Oversize files come back as `unsupported`/`missing` — do not present them.
+        if (file.kind === "unsupported" || file.kind === "missing") return false;
+        openPath = path;
+        renderFile(file);
+        setStatus("Agent đã tạo/cập nhật tệp — đã mở tại đây.", 3500);
+        return true;
+      } catch {
+        return false;
+      }
     },
   };
 }

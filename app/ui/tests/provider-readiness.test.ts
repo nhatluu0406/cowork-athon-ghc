@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SettingsView } from "../src/service-client.js";
 import {
+  assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
   isBaseUrlLocallyValid,
@@ -66,6 +67,7 @@ test("providerStatus treats an untested active profile as warning, not healthy",
         updatedAt: "2026-07-14T00:00:00.000Z",
         credentialConfigured: true,
         isActive: true,
+        verificationCurrent: false,
       },
     ],
     activeProfileId: "deepseek-main",
@@ -73,6 +75,32 @@ test("providerStatus treats an untested active profile as warning, not healthy",
   const copy = providerStatus(settings, "unknown");
   assert.equal(copy.label, "DeepSeek · Chưa kiểm tra");
   assert.equal(copy.ok, false);
+});
+
+test("providerStatus trusts persisted verificationCurrent after restart", () => {
+  const settings: SettingsView = {
+    ...baseSettings(),
+    providerProfiles: [
+      {
+        id: "deepseek-main",
+        displayName: "DeepSeek",
+        providerType: "deepseek",
+        baseUrl: "https://api.deepseek.com/v1",
+        modelId: "deepseek-chat",
+        createdAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+        credentialConfigured: true,
+        isActive: true,
+        verificationCurrent: true,
+        lastVerifiedOk: true,
+        lastVerifiedAt: "2026-07-15T12:00:00.000Z",
+      },
+    ],
+    activeProfileId: "deepseek-main",
+  };
+  const copy = providerStatus(settings, "unknown");
+  assert.equal(copy.label, "DeepSeek · Đã kiểm tra");
+  assert.equal(copy.ok, true);
 });
 
 test("providerStatus reports missing credential separately from local service", () => {
@@ -116,13 +144,101 @@ test("assessSendPreflight blocks malformed base URL locally", () => {
   assert.equal(preflight.blockKind, "base_url_invalid");
 });
 
-test("assessSendPreflight allows locally_ready configuration", () => {
-  const preflight = assessSendPreflight(input());
-  assert.equal(preflight.canSend, true);
+test("assessSendPreflight blocks runtime busy phases", () => {
+  const busy = assessSendPreflight(
+    input({
+      conv: {
+        state: {
+          runtimePhase: "starting",
+          activeConversationId: "c1",
+          activeRecord: null,
+        },
+      },
+    }),
+  );
+  assert.equal(busy.canSend, false);
+  assert.equal(busy.blockKind, "runtime_busy");
 });
 
-test("shouldShowContinuationBanner false for empty first-run state", () => {
+test("assessConfigPreflight allows mid-send starting phase so ensureRuntimeSession can proceed", () => {
+  const midSend = assessConfigPreflight(
+    input({
+      conv: {
+        state: {
+          runtimePhase: "starting",
+          activeConversationId: "c1",
+          activeRecord: null,
+        },
+      },
+    }),
+  );
+  assert.equal(midSend.canSend, true);
+  assert.equal(midSend.blockKind, null);
+});
+
+test("assessConfigPreflight still blocks missing credential", () => {
+  const settings = baseSettings();
+  const noCred: SettingsView = {
+    ...settings,
+    providers: [{ providerId: "custom-openai-compat", hasCredential: false }],
+  };
+  const preflight = assessConfigPreflight(input({ settings: noCred }));
+  assert.equal(preflight.canSend, false);
+  assert.equal(preflight.blockKind, "credential_missing");
+});
+
+test("historical completed conversation is not composer-locked", () => {
+  const preflight = assessSendPreflight(
+    input({
+      continuationUnlocked: false,
+      conv: {
+        state: {
+          runtimePhase: "idle",
+          activeConversationId: "c1",
+          activeRecord: {
+            id: "c1",
+            title: "Old",
+            workspacePath: "C:\\ws",
+            runtimeSessionId: "rt-old",
+            status: "completed",
+            createdAt: "2026-07-14T00:00:00.000Z",
+            updatedAt: "2026-07-14T00:00:00.000Z",
+            messageCount: 2,
+            messages: [
+              { id: "m1", role: "user", text: "hi", at: "2026-07-14T00:00:00.000Z" },
+              { id: "m2", role: "assistant", text: "yo", at: "2026-07-14T00:00:01.000Z" },
+            ],
+            runtimeTurns: [],
+          },
+        },
+      },
+    }),
+  );
+  assert.equal(preflight.canSend, true);
+  assert.equal(preflight.blockKind, null);
+});
+
+test("shouldShowContinuationBanner stays off for completed history", () => {
   assert.equal(shouldShowContinuationBanner(null, null, "idle"), false);
+  assert.equal(
+    shouldShowContinuationBanner(
+      "c1",
+      {
+        id: "c1",
+        title: "Old",
+        workspacePath: "C:\\ws",
+        runtimeSessionId: "rt",
+        status: "completed",
+        createdAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+        messageCount: 1,
+        messages: [{ id: "m1", role: "user", text: "hi", at: "2026-07-14T00:00:00.000Z" }],
+        runtimeTurns: [],
+      },
+      "idle",
+    ),
+    false,
+  );
 });
 
 test("isBaseUrlLocallyValid rejects garbage", () => {

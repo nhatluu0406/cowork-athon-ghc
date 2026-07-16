@@ -34,6 +34,7 @@ export {
 
 export {
   createSsrfPolicy,
+  orderConnectCandidates,
   SsrfBlockedError,
   type SsrfPolicy,
   type SsrfPolicyOptions,
@@ -117,6 +118,14 @@ export {
 } from "./http-dialer.js";
 
 export { probeUrlFor, authHeadersFor } from "./probe-profiles.js";
+
+export {
+  createModelDiscovery,
+  parseModelList,
+  type ModelDiscovery,
+  type ModelDiscoveryOptions,
+  type ModelDiscoveryTarget,
+} from "./model-discovery.js";
 
 export {
   createProviderRouter,
