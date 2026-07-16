@@ -27,6 +27,7 @@ updated_at: "2026-07-15"
 | `product/roadmap.md` | NOW / NEXT / LATER / WAITING với checkbox |
 | `architecture/system-overview.md` | Boundary và kiến trúc đang chạy |
 | `architecture/ev-stream-events.md` | Định dạng EV event streaming theo turn (thinking/tool/metrics) |
+| `architecture/opencode-runtime-notes.md` | Forensic runtime OpenCode (delete/question tool, turn-perf, fix) |
 | `quality/demo-acceptance.md` | Happy path phải kiểm tra trên packaged app |
 | `quality/known-limitations.md` | Giới hạn thực tế chưa xử lý |
 | `demo/demo-guide.md` | Kịch bản và prompt cho buổi demo |
