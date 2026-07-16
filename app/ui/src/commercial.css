@@ -908,12 +908,12 @@ button {
   color: var(--cghc-accent);
 }
 
-/* Kỹ năng & MCP hub tabs — same visual language as settings-surface tabs. */
+/* Skill & MCP hub tabs — segmented pill group, same visual language as .knowledge-tabs. */
 .skills-mcp-tabs__btn {
-  min-height: 36px;
+  min-height: 32px;
   padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 10px 10px 0 0;
+  border: 0;
+  border-radius: 8px;
   background: transparent;
   color: var(--cghc-text-muted);
   font-weight: 600;
@@ -921,15 +921,13 @@ button {
 }
 
 .skills-mcp-tabs__btn:hover {
-  background: var(--cghc-surface-muted);
   color: var(--cghc-text-primary);
 }
 
 .skills-mcp-tabs__btn--active {
-  border-color: color-mix(in srgb, var(--cghc-accent) 25%, var(--cghc-border));
-  border-bottom-color: transparent;
-  background: var(--cghc-accent-soft);
-  color: var(--cghc-accent);
+  background: var(--cghc-surface);
+  color: var(--cghc-text-primary);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
 }
 
 .settings-surface__content {

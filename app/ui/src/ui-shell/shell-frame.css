@@ -524,19 +524,28 @@ textarea,
   min-height: 0;
 }
 
+/* Header carries title + tabs on one row — same visual language as .knowledge-header. */
 .skills-mcp-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 20px 26px 0;
+  min-height: 58px;
+  padding: 18px 26px 12px;
+}
+
+.skills-mcp-header__text {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
 }
 
 .skills-mcp-header__title {
   margin: 0;
   color: var(--text-strong);
-  font-size: 22px;
-  font-weight: 650;
+  font-size: 20px;
+  font-weight: 600;
 }
 
 .skills-mcp-header__summary {
@@ -544,17 +553,20 @@ textarea,
   font-size: 13px;
 }
 
+/* Segmented pill tab group (mirrors .knowledge-tabs). */
 .skills-mcp-tabs {
-  display: flex;
-  gap: 6px;
-  padding: 14px 26px 0;
-  border-bottom: 1px solid var(--line-soft);
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--paper);
 }
 
 .skills-mcp-body {
   flex: 1;
   min-height: 0;
-  padding: 18px 26px 28px;
+  padding: 6px 26px 28px;
   overflow: hidden;
 }
 
