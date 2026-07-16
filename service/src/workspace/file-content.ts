@@ -225,14 +225,19 @@ export async function readWorkspaceFileContent(
       slides = await parsePptxSlides(buf);
     } catch {
       // Malformed or encrypted (an encrypted .pptx is an OLE compound file, not a ZIP): surface a
-      // clear unsupported state rather than crashing the read.
+      // clear unsupported state rather than crashing the read. The text parser doubles as a
+      // structural gate — if it cannot even read the ZIP, the high-fidelity renderer would fail too.
       return { relativePath, kind: "unsupported", editable: false, truncated: false, sizeBytes };
     }
     return {
       relativePath,
       kind: "presentation",
       editable: false,
+      // `slides` (text-first) stays as a lightweight fallback/diagnostics view and slide count.
+      // `dataBase64` ships the raw .pptx bytes (bounded by BINARY_PREVIEW_MAX_BYTES above) so the
+      // renderer can drive the local high-fidelity viewer — same in-contract binary path as pdf/image.
       slides,
+      dataBase64: buf.toString("base64"),
       truncated: false,
       sizeBytes,
     };

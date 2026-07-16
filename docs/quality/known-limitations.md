@@ -41,12 +41,16 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
     - **XLSX đa sheet:** đọc toàn bộ workbook, hiện tab chọn sheet (mặc định sheet đầu), đổi sheet
       không reload Workspace; **sheet hidden/very-hidden bị lọc** không hiện. Vẫn **chỉ xem** —
       chỉnh sửa XLSX bị vô hiệu hoá để không mất công thức/định dạng/merged cell/chart/metadata.
-    - **PPTX** xem trước **text-first** từng slide (điều hướng trước/sau, đếm "Slide X / Y"). Parse
-      **cục bộ trong bộ nhớ** bằng JSZip (PPTX là ZIP container): không giải nén ra đĩa, không mở URL
-      remote, không chạy macro/active content, không upload cloud/không dùng M365 conversion. **Không
-      render đúng 100%**: chưa hiển thị layout/ảnh/biểu đồ/animation — chỉ trích text theo thứ tự
-      slide (giới hạn 500 slide, 50 KiB text/slide). Slide chỉ có ảnh sẽ hiện trạng thái "không có
-      nội dung văn bản".
+    - **PPTX** xem trước **high-fidelity, chỉ đọc**: dựng từng slide (chữ theo vị trí/kích thước/
+      màu tương đối, **ảnh, shape/fill/border, bảng, biểu đồ, nền/theme cơ bản**) thành HTML/SVG bằng
+      engine cục bộ `@aiden0z/pptx-renderer` (Apache-2.0). Điều hướng trước/sau + "Slide X / Y",
+      fit-to-panel. Chạy **hoàn toàn cục bộ** dưới CSP `script-src 'self'` (không eval trên nhánh chạy
+      thực; engine self-contained, JSZip + ECharts đóng gói sẵn): không upload cloud, không URL remote,
+      không LibreOffice/server, không chạy macro/OLE/active content. **Không hiển thị đúng 100%** như
+      Microsoft PowerPoint. **Chưa hỗ trợ:** animation/transition, phát media (video/audio), macro/OLE
+      nhúng, và ảnh EMF (pdf.js fallback tắt để không cần `worker-src blob:` trong CSP). Giới hạn ZIP
+      (RECOMMENDED_ZIP_LIMITS) để chặn DoS; lỗi runtime của engine sẽ **degrade về xem text từng slide**.
+      *(Code hoàn tất + test tự động; xác nhận hiển thị trực quan trên packaged app do PO quan sát.)*
     - **`.ppt` legacy** (OLE nhị phân) **không hỗ trợ** — hiện trạng thái unsupported.
     - **Malformed / mã hoá mật khẩu / vượt 8 MiB** ở mọi loại Office → trạng thái unsupported rõ
       ràng, không crash renderer. Không có **editor Office** đầy đủ.

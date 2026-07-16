@@ -86,6 +86,10 @@ test("read path returns kind=presentation with slides for a .pptx in the workspa
   assert.equal(result.editable, false);
   assert.equal(result.slides?.length, 2);
   assert.match(result.slides?.[0]?.text ?? "", /Slide one/);
+  // The raw deck bytes ride the existing binary contract field so the renderer can drive the local
+  // high-fidelity engine; they round-trip to exactly what is on disk.
+  assert.ok(result.dataBase64, "ships the raw .pptx bytes for high-fidelity rendering");
+  assert.deepEqual(Buffer.from(result.dataBase64!, "base64"), buf, "bytes match the file on disk");
   await rm(join(root, ".."), { recursive: true, force: true });
 });
 

@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   mountWorkspaceCompanionPane,
+  type PptxViewerLike,
+  type PptxViewerModuleLike,
   type WorkspaceFileContentView,
 } from "../src/workspace-companion-pane.js";
 import type { ServiceClient } from "../src/service-client.js";
@@ -283,6 +285,162 @@ function spreadsheetFile(
     sizeBytes: 0,
   } as WorkspaceFileContentView;
 }
+
+/**
+ * A deck the service could structurally parse: carries both the raw bytes (`dataBase64`, drives the
+ * high-fidelity engine) and the text `slides` (fallback + slide count). Bytes are a placeholder —
+ * the engine is faked in these tests since happy-dom has no real layout engine.
+ */
+function presentationHiFiFile(
+  relativePath: string,
+  slides: { title: string; text: string }[] = [{ title: "Intro", text: "Intro slide" }],
+): WorkspaceFileContentView {
+  return {
+    relativePath,
+    kind: "presentation",
+    editable: false,
+    slides: slides.map((s, i) => ({ index: i + 1, title: s.title, text: s.text })),
+    dataBase64: "AAAA",
+    truncated: false,
+    sizeBytes: 4,
+  } as WorkspaceFileContentView;
+}
+
+interface FakeViewerRec {
+  readonly instances: number;
+  readonly opened: (ArrayBuffer | Uint8Array | Blob)[];
+  readonly gotos: number[];
+  readonly destroyed: number;
+  readonly lastOptions: Record<string, unknown> | undefined;
+}
+
+/** A fake PptxViewer + module loader recording how the pane drives the engine. */
+function makeFakeViewer(opts: { slideCount?: number; failOpen?: boolean } = {}): {
+  load: () => Promise<PptxViewerModuleLike>;
+  rec: FakeViewerRec;
+} {
+  const rec = {
+    instances: 0,
+    opened: [] as (ArrayBuffer | Uint8Array | Blob)[],
+    gotos: [] as number[],
+    destroyed: 0,
+    lastOptions: undefined as Record<string, unknown> | undefined,
+  };
+  class FakePptxViewer implements PptxViewerLike {
+    slideCount = opts.slideCount ?? 1;
+    currentSlideIndex = 0;
+    private listeners: ((event: { detail: { index: number } }) => void)[] = [];
+    constructor(
+      private readonly mount: HTMLElement,
+      options?: Record<string, unknown>,
+    ) {
+      rec.instances += 1;
+      rec.lastOptions = options;
+    }
+    async open(input: ArrayBuffer | Uint8Array | Blob): Promise<void> {
+      rec.opened.push(input);
+      if (opts.failOpen) throw new Error("engine failure");
+      // Simulate the engine mounting a real rendered slide node.
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      this.mount.appendChild(svg);
+    }
+    async goToSlide(index: number): Promise<void> {
+      this.currentSlideIndex = index;
+      rec.gotos.push(index);
+      this.listeners.forEach((l) => l({ detail: { index } }));
+    }
+    on(_type: "slidechange", listener: (event: { detail: { index: number } }) => void): unknown {
+      this.listeners.push(listener);
+      return this;
+    }
+    destroy(): void {
+      rec.destroyed += 1;
+      this.listeners = [];
+    }
+  }
+  const load = async (): Promise<PptxViewerModuleLike> => ({
+    PptxViewer: FakePptxViewer,
+    RECOMMENDED_ZIP_LIMITS: { maxEntries: 4000 },
+  });
+  return { load, rec };
+}
+
+/** Flush the fire-and-forget viewer-load promise chain (dynamic import + open). */
+async function flushViewer(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0));
+}
+
+test("pptx high-fidelity: renders via the local engine and wires nav to goToSlide", async () => {
+  const { load, rec } = makeFakeViewer({ slideCount: 3 });
+  const { client } = makeClient({ "d.pptx": presentationHiFiFile("d.pptx") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client, { loadPptxViewer: load });
+  await handle.open("d.pptx");
+  await flushViewer();
+
+  assert.equal(rec.instances, 1, "one engine instance for the deck");
+  assert.equal(rec.opened.length, 1, "engine was handed the deck bytes to render");
+  assert.equal(rec.lastOptions?.["pdfjs"], false, "pdf.js/EMF worker fallback disabled (CSP)");
+  assert.ok(rec.lastOptions?.["zipLimits"], "bounded ZIP limits passed for DoS safety");
+  // A real rendered node is mounted — not just an empty container / a text list.
+  assert.ok(
+    container.querySelector(".workspace-companion-pane__slide-mount svg"),
+    "the engine's rendered slide node is mounted",
+  );
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__slide-text"),
+    null,
+    "high-fidelity path does not fall back to the text <pre>",
+  );
+
+  const counter = () =>
+    container.querySelector<HTMLElement>(".workspace-companion-pane__deck-counter")?.textContent;
+  const prev = () =>
+    container.querySelectorAll<HTMLButtonElement>(".workspace-companion-pane__deck-btn")[0]!;
+  const next = () =>
+    container.querySelectorAll<HTMLButtonElement>(".workspace-companion-pane__deck-btn")[1]!;
+  assert.equal(counter(), "Slide 1 / 3", "counter uses the engine's slide count");
+  assert.equal(prev().disabled, true, "prev disabled on the first slide");
+
+  next().click();
+  assert.deepEqual(rec.gotos, [1], "next drives the engine's goToSlide, not a Workspace reload");
+  assert.equal(counter(), "Slide 2 / 3", "counter advances");
+  assert.equal(next().disabled, false, "next still enabled mid-deck");
+});
+
+test("pptx high-fidelity failure degrades to the text-first fallback", async () => {
+  const { load } = makeFakeViewer({ failOpen: true });
+  const { client } = makeClient({
+    "d.pptx": presentationHiFiFile("d.pptx", [
+      { title: "Intro", text: "Intro slide" },
+      { title: "Body", text: "Body slide" },
+    ]),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client, { loadPptxViewer: load });
+  await handle.open("d.pptx");
+  await flushViewer();
+
+  const slideText = container.querySelector<HTMLElement>(
+    ".workspace-companion-pane__slide-text",
+  )?.textContent;
+  assert.equal(slideText, "Intro slide", "falls back to the text-first slide view on engine failure");
+});
+
+test("switching files destroys the active pptx viewer (no leak)", async () => {
+  const { load, rec } = makeFakeViewer({ slideCount: 2 });
+  const { client } = makeClient({
+    "d.pptx": presentationHiFiFile("d.pptx"),
+    "a.txt": textFile("a.txt", "hi"),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client, { loadPptxViewer: load });
+  await handle.open("d.pptx");
+  await flushViewer();
+  assert.equal(rec.destroyed, 0, "viewer alive while the deck is open");
+  await handle.open("a.txt");
+  assert.ok(rec.destroyed >= 1, "opening another file tears the viewer down");
+});
 
 test("pptx preview shows slide 1 of N and navigates with previous/next", async () => {
   const { client } = makeClient({

@@ -2783,6 +2783,30 @@ button {
   color: var(--cghc-text-secondary);
   font-size: 13px;
 }
+/* High-fidelity engine stage: the mounted slide keeps the document's own colours; the surrounding
+   chrome follows the app theme. The engine fits each slide to the mount width (fitMode:'contain'),
+   so we only need to center it and let tall slides scroll vertically — never horizontally. */
+.workspace-companion-pane__slide--hifi {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14px;
+  overflow: auto;
+}
+.workspace-companion-pane__slide-mount {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.workspace-companion-pane__slide-mount > * {
+  max-width: 100%;
+}
+.workspace-companion-pane__slide-loading {
+  margin: auto;
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+}
 
 .workspace-companion-pane__editor {
   padding: 18px 20px;
