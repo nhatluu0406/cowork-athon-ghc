@@ -2668,6 +2668,21 @@ button {
   box-shadow: none;
 }
 
+/*
+ * The PDF preview is an <iframe>, which (unlike the editor/image) has no intrinsic content
+ * height. The shared rule above sets `min-height: 100%`, but a percentage min-height only
+ * resolves when every ancestor up the pane has a definite height; if that chain is ever
+ * indefinite the iframe collapses to its ~150px default and the PDFium viewer renders blank.
+ * A pixel floor guarantees it is always tall enough to show the document, while `height: 100%`
+ * still lets it fill a taller pane. This must come AFTER the shared block to win the cascade
+ * (it also restores the intent of `shell-frame.css`'s `min-height: 480px`, which the shared
+ * `min-height: 100%` above otherwise overrides because commercial.css loads last).
+ */
+.workspace-companion-pane__pdf {
+  height: 100%;
+  min-height: 480px;
+}
+
 .workspace-companion-pane__editor {
   padding: 18px 20px;
   font-size: 14px;
