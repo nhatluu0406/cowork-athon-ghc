@@ -36,7 +36,7 @@ function settings(profiles: readonly ProviderProfileView[]): SettingsView {
   };
 }
 
-test("provider form exposes one primary Lưu & kiểm tra action plus overflow menu", async () => {
+test("provider form shows inline actions (no overflow menu) with a distinct danger delete", async () => {
   const root = document.createElement("div");
   document.body.append(root);
   const listed = [profile({ verificationCurrent: true, lastVerifiedOk: true, lastVerifiedAt: "2026-07-15T03:00:00.000Z" })];
@@ -62,14 +62,17 @@ test("provider form exposes one primary Lưu & kiểm tra action plus overflow m
   assert.equal(root.querySelectorAll(".provider-profiles__primary").length, 1);
   assert.match(root.querySelector(".provider-profiles__primary")?.textContent ?? "", /Lưu & kiểm tra/u);
   assert.equal(root.querySelectorAll(".llm-test-connection").length, 0);
-  assert.ok(root.querySelector(".provider-profiles__overflow-toggle"));
+  // No overflow menu — actions are inline now.
+  assert.equal(root.querySelectorAll(".provider-profiles__overflow-toggle").length, 0);
+  assert.match(root.querySelector(".provider-profiles__secondary")?.textContent ?? "", /Lưu/u);
   assert.match(root.querySelector(".provider-profiles__test-status")?.textContent ?? "", /Đã kiểm tra/u);
 
-  root.querySelector<HTMLButtonElement>(".provider-profiles__overflow-toggle")!.click();
-  const items = [...root.querySelectorAll(".provider-profiles__overflow-item")].map((n) => n.textContent);
-  assert.ok(items.some((t) => t?.includes("Lưu không kiểm tra")));
-  assert.ok(items.some((t) => t?.includes("Xoá khoá API")));
-  assert.ok(items.some((t) => t?.includes("Xoá hồ sơ")));
+  // Inline utility + a visually-distinct danger delete (not hidden in a menu).
+  assert.match(root.querySelector(".provider-profiles__utility")?.textContent ?? "", /Xoá khoá API/u);
+  const danger = root.querySelector<HTMLButtonElement>(".provider-profiles__danger");
+  assert.ok(danger);
+  assert.match(danger.textContent ?? "", /Xoá hồ sơ/u);
+  assert.ok(root.querySelector(".provider-profiles__danger-zone"));
   root.remove();
 });
 
