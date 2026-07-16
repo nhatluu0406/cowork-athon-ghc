@@ -75,6 +75,13 @@ export interface PermissionControllerHandle {
   start(): void;
   /** Stop polling and close any open modal. */
   stop(): void;
+  /**
+   * Pause the poll interval without tearing down the controller (settings→live restart gap).
+   * Stops hammering a soon-to-die loopback port with `net::ERR_CONNECTION_REFUSED`.
+   */
+  pause(): void;
+  /** Resume polling after {@link pause} once the live bootstrap is adopted. */
+  resume(): void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {
@@ -320,6 +327,19 @@ export function createPermissionController(
       stopInterval();
       clearBackoff();
       closeModal();
+    },
+    pause: () => {
+      // Keep `polling === true` so resume() can restart; only silence the timer/backoff.
+      stopInterval();
+      clearBackoff();
+    },
+    resume: () => {
+      if (!polling || visibility.isHidden()) return;
+      clearBackoff();
+      consecutivePollFailures = 0;
+      clearTransportErrorNote();
+      void refresh();
+      startInterval();
     },
   };
 }
