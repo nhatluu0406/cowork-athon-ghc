@@ -155,6 +155,7 @@ test("step-finish part → EV metrics event with token counts + cost (issue #4)"
   assert.equal(metrics.metrics.tokensInput, 31);
   assert.equal(metrics.metrics.tokensOutput, 126);
   assert.equal(metrics.metrics.tokensTotal, 157);
+  assert.equal(metrics.metrics.tokensCache, 7808, "cache read+write folded into tokensCache");
   assert.equal(metrics.metrics.costUsd, 0.0001);
 });
 

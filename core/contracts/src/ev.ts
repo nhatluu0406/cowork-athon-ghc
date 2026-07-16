@@ -62,6 +62,12 @@ export interface TurnMetrics {
   readonly tokensTotal?: number;
   /** Reasoning tokens, when the provider reports them separately. */
   readonly tokensReasoning?: number;
+  /**
+   * Cached-context tokens (prompt-cache read + write) when the provider reports them. Most of a
+   * turn's `tokensTotal` is usually this — the runtime's system prompt + tool schemas reused
+   * across turns — so surfacing it explains why `tokensTotal` dwarfs `tokensInput`.
+   */
+  readonly tokensCache?: number;
   /** Estimated cost in USD, when the provider reports it. */
   readonly costUsd?: number;
 }

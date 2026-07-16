@@ -28,6 +28,33 @@ You are Cowork GHC, a local-first desktop AI coworker.
 - On failure: say what did not happen and what the user can do next.
 </cowork-ghc>`;
 
+/** Trusted "currently open file" hint for the Workspace companion turn (path only). */
+export interface WorkspaceDispatchContext {
+  readonly openFilePath: string;
+}
+
+const WORKSPACE_CONTEXT_START = "<cowork-workspace-context>";
+const WORKSPACE_CONTEXT_END = "</cowork-workspace-context>";
+
+/**
+ * Build a small, trusted "currently open file" context block. It carries only the
+ * workspace-relative PATH (never the file bytes — the agent reads/edits it with its tools), so
+ * it stays a couple of lines and does not bloat the dispatch. Trusted app metadata, not
+ * untrusted file content, so it is phrased as context rather than wrapped as an attachment.
+ */
+export function assembleWorkspaceContext(ctx: WorkspaceDispatchContext | undefined): string {
+  const path = ctx?.openFilePath?.trim();
+  if (path === undefined || path.length === 0) return "";
+  const safe = path.replace(/[\r\n]+/g, " ").replace(/`/g, "'").slice(0, 400);
+  return (
+    `${WORKSPACE_CONTEXT_START}\n` +
+    `Người dùng đang mở tệp này trong Workspace: \`${safe}\`. ` +
+    `Khi họ nói "tệp này", "file đang mở", "file này" mà không nêu đường dẫn, hiểu là tệp trên. ` +
+    `Đọc/chỉnh sửa bằng công cụ workspace theo đường dẫn workspace-relative đó.\n` +
+    `${WORKSPACE_CONTEXT_END}`
+  );
+}
+
 export type AttachmentInclusionStatus =
   | "selected"
   | "included"
@@ -85,9 +112,11 @@ export function planDispatchPrompt(
   userPrompt: string,
   maxChars: number = DISPATCH_MAX_CHARS,
   skills: readonly EnabledSkillSnapshot[] = [],
+  workspaceContext?: WorkspaceDispatchContext,
 ): DispatchPlan {
   const userBlock = buildUserBlock(userPrompt);
   const skillContext = assembleSkillContext(skills);
+  const workspaceContextText = assembleWorkspaceContext(workspaceContext);
   const entries: AttachmentDispatchEntry[] = attachments.map((s) => ({
     relativePath: s.metadata.relativePath,
     filename: s.metadata.filename,
@@ -98,6 +127,7 @@ export function planDispatchPrompt(
     COWORK_SYSTEM_PROMPT.length +
     2 +
     userBlock.length +
+    (workspaceContextText.length > 0 ? workspaceContextText.length + 2 : 0) +
     (skillContext.text.length > 0 ? skillContext.text.length + 2 : 0);
   if (fixedChars > maxChars - 200) {
     const names = skills.map((skill) => skill.metadata.name).join(", ");
@@ -113,6 +143,7 @@ export function planDispatchPrompt(
   if (attachments.length === 0) {
     const prior = assembleTranscriptContext(priorMessages, maxChars - fixedChars - 4);
     const parts: string[] = [COWORK_SYSTEM_PROMPT];
+    if (workspaceContextText.length > 0) parts.push(workspaceContextText);
     if (prior.text.length > 0) parts.push(prior.text);
     if (skillContext.text.length > 0) parts.push(skillContext.text);
     parts.push(userBlock);
@@ -183,6 +214,7 @@ export function planDispatchPrompt(
   }
 
   const parts: string[] = [COWORK_SYSTEM_PROMPT];
+  if (workspaceContextText.length > 0) parts.push(workspaceContextText);
   if (prior.text.length > 0) parts.push(prior.text);
   if (skillContext.text.length > 0) parts.push(skillContext.text);
   if (attachmentAssembly.text.length > 0) parts.push(attachmentAssembly.text);
