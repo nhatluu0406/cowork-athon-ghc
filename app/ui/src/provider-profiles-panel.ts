@@ -57,11 +57,26 @@ function userFacingProviderError(error?: { message?: string } | string): string 
   return "Kiểm tra kết nối thất bại.";
 }
 
+/** Human-readable local time for a verification timestamp (never the raw ISO string). */
+function formatWhen(iso?: string): string {
+  if (iso === undefined) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function formatVerifiedStatus(profile?: ProviderProfileView): string {
   if (profile === undefined) return "Chưa kiểm tra.";
   if (!profile.verificationCurrent || profile.lastVerifiedOk === undefined) return "Chưa kiểm tra.";
-  const when = profile.lastVerifiedAt !== undefined ? ` · ${profile.lastVerifiedAt}` : "";
-  return profile.lastVerifiedOk ? `Đã kiểm tra${when}` : `Kiểm tra thất bại${when}`;
+  const when = formatWhen(profile.lastVerifiedAt);
+  const suffix = when.length > 0 ? ` lúc ${when}` : "";
+  return profile.lastVerifiedOk ? `Đã kiểm tra${suffix}` : `Kiểm tra thất bại${suffix}`;
 }
 
 const ONLY_PROFILE_DELETE_MESSAGE = "Bạn cần tạo một profile khác trước khi xóa profile này.";
@@ -145,7 +160,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const discoverStatus = el("p", "provider-profiles__discover-status");
   discoverStatus.setAttribute("role", "status");
   discoverStatus.setAttribute("aria-live", "polite");
-  modelCustomLabel.append(modelCustomInput, modelDatalist, discoverBtn, discoverStatus);
+  // Model ID is a combobox: a free-text input (manual entry always works) with an inline
+  // "Dò model" adornment that fills the datalist with ids fetched from the endpoint.
+  const modelRow = el("div", "provider-profiles__model-row");
+  modelRow.append(modelCustomInput, discoverBtn);
+  modelCustomLabel.append(modelRow, modelDatalist, discoverStatus);
 
   const baseUrlLabel = el("label", "llm-field", "Base URL");
   const baseUrlInput = document.createElement("input");
@@ -164,39 +183,39 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const testStatus = el("p", "provider-profiles__test-status");
   const deleteStatus = el("p", "provider-profiles__delete-status");
 
+  // Primary save actions, both shown inline (no collapsed overflow menu).
+  const saveOnlyBtn = el("button", "provider-profiles__secondary", "Lưu") as HTMLButtonElement;
+  saveOnlyBtn.type = "button";
+  saveOnlyBtn.dataset["tooltip"] = "Lưu, không kiểm tra kết nối";
   const saveAndTestBtn = el("button", "llm-save-credential provider-profiles__primary", "Lưu & kiểm tra") as HTMLButtonElement;
   saveAndTestBtn.type = "button";
 
-  const overflow = el("div", "provider-profiles__overflow");
-  const overflowBtn = el("button", "provider-profiles__overflow-toggle") as HTMLButtonElement;
-  overflowBtn.type = "button";
-  overflowBtn.dataset["tooltip"] = "Thêm thao tác";
-  overflowBtn.setAttribute("aria-label", "Thêm thao tác");
-  overflowBtn.setAttribute("aria-haspopup", "menu");
-  overflowBtn.setAttribute("aria-expanded", "false");
-  overflowBtn.removeAttribute("title");
-  overflowBtn.append(icon("more", "Thêm thao tác"));
-  const overflowMenu = el("div", "provider-profiles__overflow-menu");
-  overflowMenu.setAttribute("role", "menu");
-  overflowMenu.hidden = true;
-
-  const saveOnlyBtn = el("button", "provider-profiles__overflow-item", "Lưu không kiểm tra") as HTMLButtonElement;
-  saveOnlyBtn.type = "button";
-  saveOnlyBtn.setAttribute("role", "menuitem");
-  const setActiveBtn = el("button", "provider-profiles__overflow-item", "Đặt làm mặc định") as HTMLButtonElement;
-  setActiveBtn.type = "button";
-  setActiveBtn.setAttribute("role", "menuitem");
-  const deleteCredBtn = el("button", "provider-profiles__overflow-item", "Xoá khoá API") as HTMLButtonElement;
-  deleteCredBtn.type = "button";
-  deleteCredBtn.setAttribute("role", "menuitem");
-  const deleteBtn = el("button", "provider-profiles__overflow-item provider-profiles__overflow-item--danger", "Xoá hồ sơ") as HTMLButtonElement;
-  deleteBtn.type = "button";
-  deleteBtn.setAttribute("role", "menuitem");
-  overflowMenu.append(saveOnlyBtn, setActiveBtn, deleteCredBtn, deleteBtn);
-  overflow.append(overflowBtn, overflowMenu);
-
   const actions = el("div", "llm-actions provider-profiles__actions");
-  actions.append(backBtn, saveAndTestBtn, overflow);
+  actions.append(backBtn, saveOnlyBtn, saveAndTestBtn);
+
+  // Secondary utility actions — visible inline (edit mode only), not buried in a menu.
+  const setActiveBtn = el("button", "provider-profiles__utility-btn", "Đặt làm mặc định") as HTMLButtonElement;
+  setActiveBtn.type = "button";
+  const deleteCredBtn = el("button", "provider-profiles__utility-btn", "Xoá khoá API") as HTMLButtonElement;
+  deleteCredBtn.type = "button";
+  const utility = el("div", "provider-profiles__utility");
+  utility.append(setActiveBtn, deleteCredBtn);
+
+  // Danger zone: destructive delete kept visually distinct (red) + gated by a confirm so it
+  // is hard to trigger by accident.
+  const deleteBtn = el("button", "provider-profiles__danger", "Xoá hồ sơ") as HTMLButtonElement;
+  deleteBtn.type = "button";
+  const dangerZone = el("div", "provider-profiles__danger-zone");
+  const dangerCopy = el(
+    "p",
+    "provider-profiles__danger-copy",
+    "Xoá vĩnh viễn hồ sơ và khoá API kèm theo. Không thể hoàn tác.",
+  );
+  dangerZone.append(dangerCopy, deleteBtn, deleteStatus);
+
+  const statusRow = el("div", "provider-profiles__status-row");
+  statusRow.append(credStatus, testStatus);
+
   formView.append(
     formTitle,
     nameLabel,
@@ -204,10 +223,10 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     modelCustomLabel,
     baseUrlLabel,
     credLabel,
-    credStatus,
-    testStatus,
-    deleteStatus,
+    statusRow,
     actions,
+    utility,
+    dangerZone,
   );
 
   root.append(title, intro, status, listView, formView);
@@ -223,11 +242,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     status.textContent = text;
     root.classList.toggle("is-error", kind === "err");
     root.classList.toggle("is-ok", kind === "ok");
-  };
-
-  const closeOverflow = (): void => {
-    overflowMenu.hidden = true;
-    overflowBtn.setAttribute("aria-expanded", "false");
   };
 
   const currentProfile = (): ProviderProfileView | undefined =>
@@ -285,16 +299,16 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     addingType = null;
     listView.hidden = false;
     formView.hidden = true;
-    closeOverflow();
   };
 
   const showForm = (mode: "edit" | "add", profile?: ProviderProfileView, type?: ProviderProfileType): void => {
     panel = mode;
     listView.hidden = true;
     formView.hidden = false;
-    closeOverflow();
     fillDiscoveredModels([]);
     discoverStatus.textContent = "";
+    // Never carry a previously-typed API key into another profile / re-opened form (item 1).
+    credInput.value = "";
     if (mode === "edit" && profile !== undefined) {
       editingId = profile.id;
       addingType = null;
@@ -303,9 +317,13 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       baseUrlInput.value = profile.baseUrl;
       fillModelOptions(profile.providerType, profile.modelId);
       baseUrlLabel.hidden = profile.providerType === "deepseek";
-      credStatus.textContent = profile.credentialConfigured ? "Đã cấu hình" : "Chưa cấu hình";
+      credStatus.textContent = profile.credentialConfigured
+        ? "Khoá API: đã cấu hình"
+        : "Khoá API: chưa cấu hình";
       deleteCredBtn.disabled = !profile.credentialConfigured;
+      utility.hidden = false;
       setActiveBtn.hidden = profile.isActive;
+      dangerZone.hidden = false;
       deleteBtn.hidden = false;
       deleteBtn.disabled = profiles.length <= 1 || profile.isActive;
       deleteStatus.textContent =
@@ -324,9 +342,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       baseUrlInput.value = addingType === "deepseek" ? "https://api.deepseek.com/v1" : "";
       fillModelOptions(addingType);
       baseUrlLabel.hidden = addingType === "deepseek";
-      credStatus.textContent = "Chưa cấu hình";
+      credStatus.textContent = "Khoá API: chưa cấu hình";
       deleteCredBtn.disabled = true;
+      utility.hidden = true;
       setActiveBtn.hidden = true;
+      dangerZone.hidden = true;
       deleteBtn.hidden = true;
       deleteBtn.disabled = true;
       deleteStatus.textContent = "";
@@ -390,10 +410,27 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   const saveProfileFields = async (options: { readonly runTest: boolean }): Promise<void> => {
     if (busy) return;
+    const providerType = addingType ?? currentProfile()?.providerType;
+    const modelId = selectedModelId();
+    // Friendly client-side validation instead of surfacing a raw store error (item 2).
+    if (nameInput.value.trim().length === 0) {
+      setStatus("Nhập tên hiển thị cho kết nối.", "err");
+      nameInput.focus();
+      return;
+    }
+    if (providerType !== "deepseek" && baseUrlInput.value.trim().length === 0) {
+      setStatus("Nhập Base URL của endpoint.", "err");
+      baseUrlInput.focus();
+      return;
+    }
+    if (modelId.length === 0) {
+      setStatus("Nhập Model ID (hoặc bấm Dò model để chọn) trước khi lưu.", "err");
+      if (providerType === "deepseek") modelSelect.focus();
+      else modelCustomInput.focus();
+      return;
+    }
     busy = true;
-    closeOverflow();
     try {
-      const modelId = selectedModelId();
       let profileId = editingId;
 
       if (panel === "add" && addingType !== null) {
@@ -474,15 +511,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     setStatus("");
   });
 
-  overflowBtn.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const open = overflowMenu.hidden;
-    overflowMenu.hidden = !open;
-    overflowBtn.setAttribute("aria-expanded", open ? "true" : "false");
-  });
-  root.addEventListener("click", () => closeOverflow());
-  overflowMenu.addEventListener("click", (event) => event.stopPropagation());
-
   addBtn.addEventListener("click", () => {
     const open = addChooser.hidden;
     addChooser.hidden = !open;
@@ -541,7 +569,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   deleteCredBtn.addEventListener("click", () => {
     if (editingId === null) return;
-    closeOverflow();
     void (async () => {
       setStatus("Đang xoá khoá API…");
       try {
@@ -559,7 +586,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   setActiveBtn.addEventListener("click", () => {
     if (editingId === null) return;
-    closeOverflow();
     void (async () => {
       setStatus("Đang đặt active…");
       try {
@@ -580,7 +606,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     if (editingId === null) return;
     const profile = currentProfile();
     if (profile === undefined) return;
-    closeOverflow();
     if (profiles.length <= 1) {
       setStatus(ONLY_PROFILE_DELETE_MESSAGE, "err");
       return;
