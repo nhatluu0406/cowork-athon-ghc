@@ -26,11 +26,16 @@
  * `pending` state is ever created for the request to appear as an Allow/Deny prompt. Only `deny`
  * is ever read from the preset — any other value (including a looser `allow` that should never
  * have passed `isNarrowingPreset`) is inert here, so this can only ever narrow, never widen, what
- * the gate/base-policy would otherwise decide.
+ * the gate/base-policy would otherwise decide. The preset key looked up for a given action kind
+ * is {@link presetKeyForActionKind} — imported from `@cowork-ghc/contracts` rather than kept as a
+ * local copy, so `validateAgentDefinition`'s notion of an "enforceable" key and this proxy's
+ * notion can never drift apart (D1 fix, follow-up finding 2). Concretely this means an MS365
+ * write is NOT governed by a branch's `permissionPreset` today: MS365 tool calls submit directly
+ * to the {@link PermissionGate} from `ms365/ms365-tools.ts` and never reach this proxy at all.
  */
 
 import path from "node:path";
-import type { PermissionActionKind, PermissionPreset } from "@cowork-ghc/contracts";
+import { presetKeyForActionKind, type PermissionActionKind, type PermissionPreset } from "@cowork-ghc/contracts";
 import type { WorkspaceGuard } from "../workspace/index.js";
 import { WorkspaceBoundaryError } from "../workspace/index.js";
 import {
@@ -77,39 +82,6 @@ export interface ToolPermissionProxyOptions {
    * function. Only a `deny` level is ever consulted (see the class doc for why this cannot widen).
    */
   readonly branchPreset?: (sessionId: string) => PermissionPreset | undefined;
-}
-
-/**
- * Map a boundary {@link PermissionActionKind} to the preset/base-policy key that governs it. The
- * live base policy (`LIVE_SESSION_PERMISSION_POLICY`, `runtime/opencode-config.ts`) gates every
- * file mutation — create, edit, delete, move — through the single `edit` key, and arbitrary code
- * execution through `bash`; a narrowing preset restricts the SAME keys, so this mirrors that
- * grouping.
- *
- * `ms365_write` is included ONLY so this `switch` stays exhaustive over the whole
- * {@link PermissionActionKind} union — it is NEVER actually reached through this function in
- * practice. `mapToolToActionKind` never produces `ms365_write` (nothing this proxy sees maps to
- * it), because MS365 tool calls do not flow through `ToolPermissionProxy` at all: they submit
- * directly to the {@link PermissionGate} from `ms365/ms365-tools.ts`. Concretely, this means an
- * MS365 write is NOT governed by a dispatch branch's `permissionPreset` today — a branch preset
- * that denies `edit` has NO effect on an MS365 write. MS365 is flag-gated off and outside
- * dispatch scope; extending preset enforcement to it is a separate, not-yet-built change.
- */
-function presetKeyForActionKind(kind: PermissionActionKind): string {
-  switch (kind) {
-    case "file_create":
-    case "file_edit":
-    case "file_delete":
-    case "file_move":
-    case "ms365_write":
-      return "edit";
-    case "command_exec":
-      return "bash";
-    default: {
-      const exhaustive: never = kind;
-      return exhaustive;
-    }
-  }
 }
 
 /**
