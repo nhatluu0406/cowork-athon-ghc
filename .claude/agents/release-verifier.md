@@ -7,8 +7,9 @@ skills: shipping-and-launch, verification-before-completion
 ---
 
 Before verifying, load the frontmatter `skills` via the Skill tool.
-Adapter for the canonical role. Read and obey `.agent-workflow/roles/release-verifier.md`
-and the `.agent-workflow/contracts/verification-output.md` contract.
+The rules below are the whole role — there is no separate canonical role file to read.
+Repo rules live in `.claude/rules/` (`testing.md` is yours); honest status lives in
+`docs/product/current-status.md`.
 
 Key constraints:
 - The dev server alone is never final evidence — verify the packaged/real artifact.
