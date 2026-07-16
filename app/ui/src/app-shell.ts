@@ -2308,6 +2308,95 @@ export function mountCoworkApp(root: HTMLElement): void {
               renderState(dom, state, handlers);
             },
           });
+
+          // Composer model switcher (item 9): the provider control opens a menu of configured
+          // profiles and switches the active one. With none configured it opens Settings to add one.
+          let providerMenu: HTMLElement | null = null;
+          const closeProviderMenu = (): void => {
+            providerMenu?.remove();
+            providerMenu = null;
+            document.removeEventListener("click", onProviderMenuDocClick, true);
+          };
+          function onProviderMenuDocClick(event: MouseEvent): void {
+            const target = event.target as Node | null;
+            if (
+              providerMenu !== null &&
+              target !== null &&
+              !providerMenu.contains(target) &&
+              !dom.providerControl.root.contains(target)
+            ) {
+              closeProviderMenu();
+            }
+          }
+          const openProviderMenu = (): void => {
+            if (providerMenu !== null) {
+              closeProviderMenu();
+              return;
+            }
+            const profiles = state.settings?.providerProfiles ?? [];
+            if (profiles.length === 0) {
+              dom.openSettings();
+              return;
+            }
+            const menu = document.createElement("div");
+            menu.className = "provider-menu";
+            menu.setAttribute("role", "menu");
+            for (const profile of profiles) {
+              const item = document.createElement("button");
+              item.type = "button";
+              item.className = "provider-menu__item" + (profile.isActive ? " provider-menu__item--active" : "");
+              item.setAttribute("role", "menuitemradio");
+              item.setAttribute("aria-checked", profile.isActive ? "true" : "false");
+              const mark = document.createElement("span");
+              mark.className = "provider-menu__check";
+              mark.textContent = profile.isActive ? "✓" : "";
+              const name = document.createElement("span");
+              name.className = "provider-menu__name";
+              name.textContent = profile.displayName;
+              const model = document.createElement("span");
+              model.className = "provider-menu__model";
+              model.textContent = profile.modelId;
+              const text = document.createElement("span");
+              text.className = "provider-menu__text";
+              text.append(name, model);
+              item.append(mark, text);
+              item.addEventListener("click", () => {
+                closeProviderMenu();
+                if (profile.isActive) return;
+                void (async () => {
+                  try {
+                    const view = await dynamicClient.setActiveProviderProfile(profile.id);
+                    state.settings = view;
+                    renderState(dom, state, handlers);
+                  } catch {
+                    /* keep the current selection; a failed switch is non-fatal */
+                  }
+                })();
+              });
+              menu.append(item);
+            }
+            const manage = document.createElement("button");
+            manage.type = "button";
+            manage.className = "provider-menu__manage";
+            manage.textContent = "Quản lý nhà cung cấp…";
+            manage.addEventListener("click", () => {
+              closeProviderMenu();
+              dom.openSettings();
+            });
+            menu.append(manage);
+            document.body.append(menu);
+            const rect = dom.providerControl.root.getBoundingClientRect();
+            menu.style.left = `${Math.round(rect.left)}px`;
+            menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 6)}px`;
+            providerMenu = menu;
+            // Defer so this same click does not immediately close the just-opened menu.
+            setTimeout(() => document.addEventListener("click", onProviderMenuDocClick, true), 0);
+          };
+          dom.providerControl.root.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openProviderMenu();
+          });
+
           mountSettingsView(dom.settingsGeneralBody, { client: dynamicClient });
           mountSkillsSettingsPanel(dom.skillsMcpView.skillsBody, dynamicClient, (skills) => {
             skillsEnabledCount = skills.filter((skill) => skill.status === "enabled").length;

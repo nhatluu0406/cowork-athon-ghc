@@ -240,7 +240,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   // Route through `dom.*` so app-shell can wrap open/close and re-render layout chrome.
   topbar.settingsButton.addEventListener("click", () => dom.openSettings());
   statusBar.provider.addEventListener("click", () => dom.openSettings());
-  cowork.providerControl.root.addEventListener("click", () => dom.openSettings());
+  // NB: the composer provider control is a MODEL SWITCHER — app-shell wires its click to a
+  // profile menu (falling back to Settings when none exist), so it is intentionally not wired here.
   cowork.composerPreflightCta.addEventListener("click", () => dom.openSettings());
   cowork.emptyStateCta.addEventListener("click", () => dom.openSettings());
   settingsSurface.closeButton.addEventListener("click", () => dom.closeSettings());
