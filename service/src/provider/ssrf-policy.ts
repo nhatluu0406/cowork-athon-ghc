@@ -66,9 +66,12 @@ const CLASS_TO_REASON: Readonly<Record<Exclude<IpClass, "public">, SsrfBlockReas
 export interface SsrfPolicyOptions {
   readonly resolver: DnsResolver;
   /**
-   * When `true`, EXPLICIT loopback is allowed and `http` is permitted on loopback. This
-   * flag must come only from {@link import("./test-mode.js").resolveLoopbackEscape} — it is
-   * never sourced from a request body. Everything else stays blocked. Defaults to `false`.
+   * When `true`, EXPLICIT loopback is allowed and `http` is permitted on loopback. This flag
+   * must come ONLY from a composition-root-resolved source — either
+   * {@link import("./test-mode.js").resolveLoopbackEscape} (the release-gated test-mode escape)
+   * or {@link import("./dev-loopback-http.js").readDevLoopbackHttpEscape} (the ungated
+   * developer-only override, never gated by `BUILD_PROFILE`) — and NEVER from a request body.
+   * Everything else stays blocked. Defaults to `false`.
    */
   readonly loopbackEscape?: boolean;
   /**
