@@ -48,6 +48,18 @@ export {
 } from "./telemetry-store.js";
 
 export {
+  createDiagnosticsRouter,
+  DIAGNOSTICS_PATH,
+  DIAGNOSTICS_CLEAR_PATH,
+  DIAGNOSTICS_EXPORT_PATH,
+  type DiagnosticsRouterDeps,
+  type DiagnosticsStatusView,
+  type DiagnosticsExportView,
+  type DiagnosticsClearTarget,
+  type LoggingStatusView,
+} from "./diagnostics-router.js";
+
+export {
   scrubExecutionMetadata,
   exportExecutionMetadataJson,
   type ExecutionMetadata,

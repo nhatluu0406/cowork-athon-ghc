@@ -414,8 +414,35 @@ export class ServiceClientError extends Error {
 }
 
 /** The renderer-visible client surface. Extended by later UI tasks. */
+/** Local diagnostics (Wave 6): logging status + local-only aggregate telemetry. */
+export interface DiagnosticsLoggingStatus {
+  readonly verbose: boolean;
+  readonly toFile: boolean;
+  readonly sizeBytes: number;
+}
+export interface DiagnosticsTelemetrySnapshot {
+  readonly enabled: boolean;
+  readonly counters: Readonly<Record<string, number>>;
+  readonly updatedAt: string | null;
+}
+export interface DiagnosticsStatus {
+  readonly logging: DiagnosticsLoggingStatus;
+  readonly telemetry: DiagnosticsTelemetrySnapshot;
+}
+export interface DiagnosticsExport {
+  readonly filename: string;
+  readonly json: string;
+}
+export type DiagnosticsClearTarget = "telemetry" | "logs" | "all";
+
 export interface ServiceClient {
   health(): Promise<ServiceHealth>;
+  /** Read local logging status + telemetry counters (Wave 6). */
+  getDiagnostics(): Promise<DiagnosticsStatus>;
+  /** Clear local telemetry counters and/or log files; returns the refreshed status. */
+  clearDiagnostics(target: DiagnosticsClearTarget): Promise<DiagnosticsStatus>;
+  /** Produce a redacted diagnostics JSON blob for the shell to save to a user-chosen file. */
+  exportDiagnostics(): Promise<DiagnosticsExport>;
   /**
    * Send the folder the user picked to the service for server-side validation + grant. The UI
    * never validates or grants itself — it renders whichever {@link WorkspaceGrantResult} comes
@@ -1033,6 +1060,14 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         canPrompt: data.view.terminal === null,
       };
     },
+
+    getDiagnostics: () => call<DiagnosticsStatus>("/v1/diagnostics"),
+    clearDiagnostics: (target) =>
+      call<DiagnosticsStatus>("/v1/diagnostics/clear", {
+        method: "POST",
+        body: JSON.stringify({ target }),
+      }),
+    exportDiagnostics: () => call<DiagnosticsExport>("/v1/diagnostics/export"),
 
     previewWorkspaceFile: async (relativePath) =>
       (

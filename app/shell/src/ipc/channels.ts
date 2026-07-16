@@ -21,6 +21,8 @@ export const IpcChannel = {
   SetWindowTheme: "cowork:set-window-theme",
   /** Renderer opens or closes Electron DevTools for the owning window. */
   SetDevToolsEnabled: "cowork:set-devtools-enabled",
+  /** Renderer asks the shell to save a text blob (diagnostics export) via a native save dialog. */
+  SaveTextFile: "cowork:save-text-file",
 } as const;
 
 /** Union of the allowed channel name literals. */
