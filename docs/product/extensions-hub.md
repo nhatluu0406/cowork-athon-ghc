@@ -1,19 +1,19 @@
 ---
-status: proposed
-updated_at: 2026-07-15
+status: accepted
+updated_at: 2026-07-16
 ---
 
 # Kỹ năng & MCP surface
 
 ## Navigation
 
-Add one product-rail item directly below Cowork:
+Product-rail item directly below Cowork:
 
 ```text
 Kỹ năng & MCP
 ```
 
-Remove Skills from Settings. Settings remains:
+Skills removed from Settings. Settings remains:
 
 - Nhà cung cấp
 - Chung
@@ -32,28 +32,24 @@ Left list/filter | Detail/editor
 
 ## Skills
 
-- Built-in and user-local.
-- Create/edit/delete user Skill.
-- Enable/disable.
-- Built-in read-only.
-- Active state persisted in SQLite.
-- OpenCode native Skill discovery/load-on-demand replaces full prompt injection.
+- Built-in and user-local via the filesystem Skill catalog (one product Skill system).
+- Extension Skill registry is deprecated.
+- Create/edit/delete user Skill; enable/disable; built-in read-only.
+- OpenCode native Skill discovery/load-on-demand: skill roots + allowlist written into `opencode.json` (`skills.paths` + `permission.skill`); full prompt injection removed.
 
 ## MCP Phase 1
 
-- Local stdio or remote URL.
-- Static header/API key secret in encrypted vault.
-- Add/edit/remove.
-- Enable/disable.
-- Health and tool count.
-- No OAuth in Phase 1.
+- Local stdio or remote URL (SSRF-validated).
+- Static header/API key in encrypted vault (`mcp:<id>:header`).
+- Add/edit/remove; enable/disable; health reachability probe.
+- No OAuth.
 
 ## Cowork/Workspace composer
 
 Read-only chip:
 
 ```text
-2 Kỹ năng · 1 MCP
+N Kỹ năng · M MCP
 ```
 
-No selector/dropdown. Click navigates to the full surface.
+Click navigates to the hub surface — no Skill/MCP selector drawer.

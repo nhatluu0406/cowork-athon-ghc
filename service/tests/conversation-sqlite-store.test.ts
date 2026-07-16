@@ -151,6 +151,47 @@ test("sqlite store: file review refs omit preview/diff bodies", async () => {
   assert.equal(reopened?.activity?.fileReviews?.length, 1);
 });
 
+test("sqlite store: same OpenCode-seq review ids across conversations must not collide", async () => {
+  const { store } = freshStore();
+  const a = await store.create({ workspacePath: "C:/ws-a" });
+  const b = await store.create({ workspacePath: "C:/ws-b" });
+  const review = {
+    id: "review-20",
+    eventKind: "file_created" as const,
+    relativePath: "x.txt",
+    at: FIXED_NOW(),
+    seq: 20,
+    source: "tool" as const,
+    beforeExists: false,
+    afterExists: true,
+    truncated: false,
+    diffTruncated: false,
+    previewTruncated: false,
+    isBinary: false,
+    contentRedacted: false,
+  };
+  await store.setActivity(a.id, {
+    items: [],
+    fileChanges: [],
+    permissionHistory: [],
+    readPaths: [],
+    terminalState: "completed",
+    fileReviews: [review],
+  });
+  // Without namespaced primary keys this threw SQLITE_CONSTRAINT; with conversation-scoped
+  // storage keys both conversations can keep a review that shared an OpenCode seq.
+  await store.setActivity(b.id, {
+    items: [],
+    fileChanges: [],
+    permissionHistory: [],
+    readPaths: [],
+    terminalState: "completed",
+    fileReviews: [review],
+  });
+  assert.equal((await store.get(a.id))?.activity?.fileReviews?.[0]?.id, "review-20");
+  assert.equal((await store.get(b.id))?.activity?.fileReviews?.[0]?.id, "review-20");
+});
+
 test("sqlite store: last active + recoverStaleRunning + continuation session field", async () => {
   const { store } = freshStore();
   const created = await store.create({ workspacePath: "C:/ws" });

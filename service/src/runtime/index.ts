@@ -38,6 +38,7 @@ export {
   writeOpencodeConfig,
   LIVE_SESSION_PERMISSION_POLICY,
   type OpencodeProviderConfig,
+  type OpencodeSkillsConfig,
 } from "./opencode-config.js";
 
 export {

@@ -23,9 +23,34 @@ export interface OpencodeProviderConfig {
 }
 
 /**
+ * Optional native-Skills launch inputs (OpenCode `skills.paths` + per-skill
+ * `permission.skill` map). Both are non-secret: absolute filesystem roots and product
+ * Skill ids only — never file content or a credential.
+ *
+ * OpenCode 1.18.1 requires `skills: { paths: [...] }`. A bare string array is rejected by
+ * the child (POST /session → HTTP 400) even when `/global/health` stays healthy.
+ */
+export interface OpencodeSkillsConfig {
+  /** Absolute Skill-root directories OpenCode scans for `SKILL.md` files. */
+  readonly skillsPaths?: readonly string[];
+  /**
+   * Enabled Skill ids (from `service/src/skills/catalog.ts`, the ONE product Skill
+   * source). When provided (even as an empty array), replaces the blanket
+   * `"skill": "allow"` policy with an explicit per-id allowlist (`"*": "deny"` + one
+   * `"allow"` entry per id) so OpenCode can only invoke a Skill Cowork GHC has enabled.
+   * An empty array denies every skill (honest: nothing is enabled yet).
+   */
+  readonly skillAllow?: readonly string[];
+}
+
+/**
  * Live-session policy. `edit` is explicit because OpenCode gates write/edit/apply_patch through
  * that single permission key. `doom_loop` is allowed so a headless `serve` process cannot stall on
  * an internal recovery prompt that Cowork does not present as a product permission.
+ * `question` is denied: OpenCode's interactive question tool blocks the turn until a structured
+ * reply arrives on a channel Cowork does not own yet (no product Question UI). Leaving it
+ * `allow` stalls `POST /session/.../message` → HTTP client timeout → product 503 on later turns.
+ * Clarifications stay in normal chat until a Question surface ships (see known-limitations.md).
  */
 export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = Object.freeze({
   "*": "ask",
@@ -34,7 +59,7 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   glob: "allow",
   grep: "allow",
   skill: "allow",
-  question: "allow",
+  question: "deny",
   todowrite: "allow",
   edit: "ask",
   bash: "deny",
@@ -101,12 +126,34 @@ function buildProvider(config: OpencodeProviderConfig): Record<string, unknown> 
   return { [config.providerId]: provider };
 }
 
+/**
+ * Build the `permission.skill` value: the blanket string unless {@link
+ * OpencodeSkillsConfig.skillAllow} is provided, in which case it becomes an explicit
+ * per-id allowlist object (deny-by-default) so OpenCode can only run an enabled Skill.
+ */
+function buildSkillPermission(skillAllow: readonly string[] | undefined): string | Record<string, string> {
+  if (skillAllow === undefined) return "allow";
+  const allow: Record<string, string> = { "*": "deny" };
+  for (const id of skillAllow) {
+    const trimmed = id.trim();
+    if (trimmed.length === 0) continue;
+    allow[trimmed] = "allow";
+  }
+  return allow;
+}
+
 /** Build the non-secret project config. A provider block is optional for built-in providers. */
-export function buildOpencodeConfig(config?: OpencodeProviderConfig): Record<string, unknown> {
-  const permission = {
+export function buildOpencodeConfig(
+  config?: OpencodeProviderConfig,
+  skills?: OpencodeSkillsConfig,
+): Record<string, unknown> {
+  const permission: Record<string, unknown> = {
     ...LIVE_SESSION_PERMISSION_POLICY,
     ...(config?.permission ?? {}),
   };
+  if (skills?.skillAllow !== undefined) {
+    permission["skill"] = buildSkillPermission(skills.skillAllow);
+  }
 
   return {
     $schema: "https://opencode.ai/config.json",
@@ -118,6 +165,11 @@ export function buildOpencodeConfig(config?: OpencodeProviderConfig): Record<str
         permission,
       },
     },
+    // OpenCode 1.18 `skills.paths`: absolute roots only, and only when non-empty (an
+    // empty/absent list leaves the key out entirely so OpenCode's own defaults do not apply).
+    ...(skills?.skillsPaths !== undefined && skills.skillsPaths.length > 0
+      ? { skills: { paths: [...skills.skillsPaths] } }
+      : {}),
     ...(config !== undefined ? { provider: buildProvider(config) } : {}),
   };
 }
@@ -127,8 +179,9 @@ export function writeOpencodeConfig(
   configDir: string,
   config?: OpencodeProviderConfig,
   forbiddenSecret?: string,
+  skills?: OpencodeSkillsConfig,
 ): string {
-  const serialized = JSON.stringify(buildOpencodeConfig(config), null, 2);
+  const serialized = JSON.stringify(buildOpencodeConfig(config, skills), null, 2);
   if (forbiddenSecret && forbiddenSecret.length > 0 && serialized.includes(forbiddenSecret)) {
     throw new Error("Refusing to write opencode.json: it unexpectedly contains the key value.");
   }

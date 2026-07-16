@@ -92,3 +92,9 @@ export {
   persistConversationRecord,
   META_LAST_ACTIVE_CONVERSATION,
 } from "./sqlite-conversation-store.js";
+export {
+  createSqliteMcpStore,
+  type McpStore,
+  type McpServerDocument,
+  type McpSecretRef,
+} from "./sqlite-mcp-store.js";

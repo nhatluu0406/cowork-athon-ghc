@@ -6,6 +6,14 @@
  * delegated to the runner seam; the honest default reports `unavailable` (no fabrication). All
  * fallible work goes through RE5 isolation, so a broken runner becomes a diagnostic + quarantine
  * and NEVER throws out of the registry.
+ *
+ * @deprecated This was a Tier 1 exploratory seam for a HYPOTHETICAL skill-execution runner
+ * (RE1). It is NOT the product Skills system. The ONE product Skill source is the local
+ * instruction-only catalog at `service/src/skills/catalog.ts` (filesystem `SKILL.md` discovery,
+ * enable/disable persistence, and the OpenCode native-Skills launch wiring in
+ * `service/src/runtime/opencode-config.ts`). Do not build new Skill features against this
+ * module — it stays mounted on `ExtensionRegistry.skills` only so existing tests keep
+ * compiling; it is not wired into composition beyond that and has no HTTP router.
  */
 
 import { createExtensionState, type ExtensionState } from "./extension-state.js";
@@ -14,7 +22,10 @@ import { BUILTIN_SKILLS, notAttachedSkillRunner } from "./skills-builtin.js";
 import type { ExtensionDiagnostic, ExtOutcome } from "./types.js";
 import { err, ok } from "./types.js";
 
-/** A Cowork-GHC skill definition (our shape, not OpenWork's). */
+/**
+ * A Cowork-GHC skill definition (our shape, not OpenWork's).
+ * @deprecated Not the product Skill shape — see `service/src/skills/types.ts` `SkillView`.
+ */
 export interface SkillDefinition {
   readonly id: string;
   readonly name: string;
@@ -23,7 +34,10 @@ export interface SkillDefinition {
   readonly inputs: readonly string[];
 }
 
-/** The outcome of a live skill run through the seam — success, or an honest `unavailable`. */
+/**
+ * The outcome of a live skill run through the seam — success, or an honest `unavailable`.
+ * @deprecated Exploratory execution-runner seam; not used by the product Skills feature.
+ */
 export type SkillRunOutcome =
   | { readonly status: "ok"; readonly output: unknown }
   | { readonly status: "unavailable"; readonly detail: string };
@@ -32,17 +46,22 @@ export type SkillRunOutcome =
  * The injectable execution seam. A real implementation drives OpenCode (Tier 2 / CGHC-028);
  * tests inject a fake. It may resolve `unavailable` (honest not-attached) or REJECT (a genuine
  * runner failure — captured by RE5 isolation).
+ * @deprecated Exploratory execution-runner seam; not used by the product Skills feature.
  */
 export interface SkillRunner {
   run(skill: SkillDefinition, input: Readonly<Record<string, unknown>>): Promise<SkillRunOutcome>;
 }
 
-/** A skill definition plus its live status (for `list()`). */
+/**
+ * A skill definition plus its live status (for `list()`).
+ * @deprecated Not the product Skill shape — see `service/src/skills/types.ts` `SkillView`.
+ */
 export interface SkillView {
   readonly definition: SkillDefinition;
   readonly status: "enabled" | "disabled" | "failed";
 }
 
+/** @deprecated Options for the deprecated exploratory skill registry; see module docblock. */
 export interface SkillRegistryOptions {
   /** Shared source of truth. Defaults to a private one (standalone use/tests). */
   readonly state?: ExtensionState;
@@ -54,6 +73,10 @@ export interface SkillRegistryOptions {
   readonly redact?: ExtRedactor;
 }
 
+/**
+ * @deprecated Exploratory RE1 skill registry — superseded by `service/src/skills/catalog.ts`
+ * (`SkillCatalog`) for the product Skills feature. See module docblock.
+ */
 export interface SkillRegistry {
   /** All known skills with their current status (RE1 list). */
   list(): readonly SkillView[];
@@ -82,6 +105,10 @@ export interface SkillRegistry {
   diagnostics(): readonly ExtensionDiagnostic[];
 }
 
+/**
+ * @deprecated Constructs the exploratory RE1 skill registry. Product Skill code must use
+ * `createSkillCatalog` from `service/src/skills/catalog.ts` instead. See module docblock.
+ */
 export function createSkillRegistry(options: SkillRegistryOptions = {}): SkillRegistry {
   const state = options.state ?? createExtensionState();
   const runner = options.runner ?? notAttachedSkillRunner();
