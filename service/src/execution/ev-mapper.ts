@@ -31,7 +31,7 @@ import {
   readString,
   type RawOpencodeEvent,
 } from "./opencode-events.js";
-import { mapPart, type BaseAllocator } from "./part-mapper.js";
+import { mapPart, mapStepMetrics, type BaseAllocator } from "./part-mapper.js";
 import { mapTodos } from "./todo-mapper.js";
 import { mapTextPartSnapshot, noteTextPartDelta, type TextPartCursorMap } from "./text-part-mapper.js";
 import { sanitizeErrorMessage } from "./error-sanitize.js";
@@ -147,8 +147,9 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         const toolEvents = mapPart(part, alloc);
         const role = messageRoles.roleOf(part.messageID);
         if (!isAssistantMessageRole(role)) return toolEvents;
+        const metricsEvents = mapStepMetrics(part, partRaw, alloc);
         const textEvents = mapTextPartSnapshot(part, partRaw, alloc, textPartCursors);
-        return textEvents.length > 0 ? [...toolEvents, ...textEvents] : toolEvents;
+        return [...toolEvents, ...metricsEvents, ...textEvents];
       }
       case "message.part.delta": {
         const props = asRecord(frame.properties);
