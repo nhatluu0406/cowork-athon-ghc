@@ -279,7 +279,7 @@ loại built-in; loại user-local đi qua router CRUD và lưu vào `.runtime/`
 Cowork GHC có một **cổng remote** để theo dõi và điều khiển từ điện thoại/trình duyệt khác, tương tự
 Remote Control của Claude Code. **Tắt mặc định**; bật bằng biến môi trường. Chi tiết kiến trúc:
 [ADR 0010](docs/architecture/decisions/0010-remote-gateway-and-pwa-surface.md) và
-[`agent-harness-plan.md`](agent-harness-plan.md).
+[`agent-harness-plan.md`](docs/superpowers/plans/agent-harness-plan.md).
 
 Một feature, **3 channel** (dùng chung một pairing registry + một permission gate):
 

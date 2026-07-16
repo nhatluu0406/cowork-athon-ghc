@@ -7,7 +7,7 @@ related: ["AGENT-HARNESS.md", "docs/product/current-status.md", "docs/product/ro
 
 # Agent Harness Plan — PWA Remote Control + Built-in Loops / Agents / Tasks
 
-Kế hoạch bổ sung cho [AGENT-HARNESS.md](./AGENT-HARNESS.md): xây một **cổng PWA điều khiển
+Kế hoạch bổ sung cho [AGENT-HARNESS.md](../../../AGENT-HARNESS.md): xây một **cổng PWA điều khiển
 Cowork app từ điện thoại** (giống dispatch/remote control của Claude Code), kèm theo
 **built-in loops, built-in skills, built-in agents với fan-out loop và task definition**.
 
@@ -45,7 +45,7 @@ client**, không phải web application đầy đủ).
 
 ## 2. Hiện trạng liên quan (as-is, đã audit 2026-07-14)
 
-Chi tiết trong [AGENT-HARNESS.md](./AGENT-HARNESS.md). Tóm tắt phần dùng được ngay:
+Chi tiết trong [AGENT-HARNESS.md](../../../AGENT-HARNESS.md). Tóm tắt phần dùng được ngay:
 
 | Seam có sẵn | File | Dùng cho |
 |---|---|---|
