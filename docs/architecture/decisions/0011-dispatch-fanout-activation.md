@@ -99,17 +99,22 @@ vẫn còn mở.
   đó cho worker pool (`service/src/dispatchers/fanout.ts:135,186`). Số nhánh cũng chặn ở
   `MAX_BRANCHES = 5` (`core/contracts/src/dispatch.ts:95`, enforce `:225-227`). Trần **enforce ở
   service**, không tin client (Q3, `review/idea.md:41`).
-- **Permission preset narrowing-only**: `isNarrowingPreset` (`core/contracts/src/dispatch.ts:109-122`)
-  từ chối bất kỳ preset nào **nới** so với base; `validateAgentDefinition` enforce (`:188-190`).
+- **Permission preset narrowing-only**: `isNarrowingPreset` (`core/contracts/src/dispatch.ts`)
+  từ chối bất kỳ preset nào **nới** so với base; `validateAgentDefinition` enforce. Từ `7a1cbdc`,
+  validator còn **từ chối key không enforce được**: `isNarrowingPreset` nhận *mọi* key (key lạ có
+  base rank mặc định `ask` nên `deny` luôn "narrow" và lọt), trong khi boundary chỉ tra `edit`/`bash`
+  ⇒ `{ "*": "deny" }` từng được nhận, lưu, hiển thị mà **không bao giờ** được enforce — một lockdown
+  không tồn tại. Nay mapping canonical nằm ở `core/contracts/src/permission-preset-keys.ts`, và
+  `ENFORCEABLE_PRESET_KEYS` được **derive** từ chính nó (check `never` giữ danh sách action kind
+  khớp union), cả validator lẫn proxy đọc **cùng một nguồn** nên không thể drift.
   Base là `LIVE_SESSION_PERMISSION_POLICY` (`service/src/runtime/opencode-config.ts:30-46`), áp cho
   built-in lúc boot (`service/src/agents/catalog.ts:78-81`), cho user agent (`:98`, `:120-125`), và
   cho agent do LLM đề xuất trong workflow draft (`service/src/composition/compose-service.ts:305`).
   **Preset được áp per-branch tại execution boundary** (commit `f3c01b1`, đóng Open item của chính
   ADR này — bản ADR đầu ghi nhận preset lúc đó *chỉ* được validate mà chưa enforce): `BranchPlan`
   mang `preset` của agent (`service/src/dispatchers/fanout.ts`), live branch runner **bind**
-  `sessionId → preset` sau `createSession` và **trước** `sendPrompt`, release trên **mọi** đường ra
-  (`try/finally`) nên không session id nào giữ binding cũ hay thừa hưởng preset của branch khác;
-  bind lỗi ⇒ branch `errored` và prompt **không bao giờ** được gửi (fail closed). Điểm enforce là
+  `sessionId → preset` sau `createSession` và **trước** `sendPrompt`; bind lỗi ⇒ branch `errored`
+  và prompt **không bao giờ** được gửi (fail closed). Điểm enforce là
   `ToolPermissionProxy.handle` (`service/src/files/tool-permission-proxy.ts`) — nơi duy nhất mọi
   tool-permission event đã đi qua trước khi tới gate: preset `deny` ⇒ auto-deny **trước** cả bước
   resolve path, **user không bao giờ bị hỏi** điều mà chính preset của agent cấm. Chỉ giá trị `deny`
@@ -117,6 +122,22 @@ vẫn còn mở.
   `reviewer` khai `{ edit: "deny" }` (`service/src/agents/builtins.ts:20,40`) nay thật sự không ghi
   được file. Tier 1 (không có child) không đổi: không có branch session thì không có gì để enforce —
   và nó không giả vờ enforce.
+- **Release binding là BẤT ĐỐI XỨNG với bind — cố ý** (commit `7a1cbdc`, sau security review 6.3).
+  Bản đầu release trong `finally` gắn với "runner đã return" chứ không phải bằng chứng child đã
+  chết ⇒ **fail-open**: `cancelSession` là best-effort, nuốt lỗi, và kể cả thành công vẫn còn cửa sổ
+  trước khi child thật dừng (terminal `cancelled` ở view local do `session/task-registry.ts` tự
+  synthesize, độc lập với child; `permissionBridge.handleFrame` vẫn forward frame thật). Sau release,
+  preset biến mất ⇒ request thành ask thường ⇒ user **hoặc phone** Allow được ⇒ agent chỉ-đọc ghi
+  file. Đường tới rất thường: guardrail `maxDurationMs`, hoặc cancel từ phone. Nay: release **chỉ** ở
+  một điểm — terminal thật quan sát qua poll **thường** (chưa từng đi qua nhánh abort). **Giữ**
+  binding khi: abort/cancel (dù `cancelSession` thành công hay lỗi), `sendPrompt` lỗi (POST có thể
+  đã tới child), session "biến mất" (`terminal() === undefined` là *không biết*, không phải *xác
+  nhận đã chết*), và mọi exception bất ngờ (**không** còn `finally` bao trùm — "không release" là
+  **mặc định**, không phải một allow-list các ngoại lệ được cho là an toàn). Lý do: binding còn sót
+  là leak trơ, bounded (session coi như đã chết, OpenCode luôn cấp session id **mới** cho branch
+  mới) — còn release sớm là fail-open. Thiết kế "poll rồi release khi timeout" đã bị loại vì là
+  theater: `cancelSession()` set terminal local ngay lập tức nên poll sẽ "xác nhận" giả gần như tức
+  thì. **Chưa seam nào báo cái chết thật của child** — ghi rõ ở module doc thay vì ngụ ý có.
 - **Audit ghi đúng ai từ chối**: preset-deny **không phải** quyết định của user và không được ghi như
   vậy. `PermissionDecisionReason` có thêm `"agent_preset"` (`service/src/permission/ports.ts`), và
   gate có method hẹp `denyByPolicy` (`service/src/permission/permission-gate.ts`) dùng lại đúng
@@ -192,9 +213,9 @@ vẫn còn mở.
   (`service/src/composition/compose-service.ts:384`), nên baseline **có** thay đổi so với "nothing
   built" của design đóng băng. Bù lại, không có child thì mọi branch báo lỗi trung thực chứ không giả
   vờ chạy.
-- **Reviewer gate vẫn bắt buộc**: Task 6.3 — independent review (security + release-verifier) — là
-  bắt buộc vì slice này chạm network exposure + process lifecycle (`agent-harness-plan.md:375-376`,
-  risk row `:406`). ADR này **không** thay thế review đó.
+- (~) **Task 6.3 security review đã chạy** (2026-07-16): không có permission bypass; hai finding đã
+  sửa ở `7a1cbdc`; phần còn mở đã ghi ở Open items. Phần **release-verifier** của gate vẫn **chưa**
+  chạy (cần packaged artifact — gắn với Checkpoint 5). ADR này **không** thay thế review đó.
 
 ## Alternatives considered
 
@@ -230,7 +251,45 @@ vẫn còn mở.
   http-on-loopback, hoặc mock LLM deterministic).
 - **Task 6.1** negative sweep (`agent-harness-plan.md:370-372`): gateway chết giữa fan-out, token hết
   hạn giữa phiên, phone reply sau khi desktop đã quyết, v.v.
-- **Task 6.3** independent security review — bắt buộc, chưa chạy.
+- ~~**Task 6.3** independent security review~~ — **ĐÃ CHẠY** 2026-07-16 trên `0da7509`. Kết luận:
+  **không có permission bypass** — không đường nào mutate filesystem mà không có Allow được ghi
+  nhận. Reviewer truy code và **xác nhận** (không phá được): `denyByPolicy` không forge được từ route
+  user; gateway allowlist chặn `%2e%2e`/traversal/case/method confusion; phone không CRUD task được
+  và không nhét được `TaskDefinition` inline; main client token không bao giờ tới remote client;
+  Discord không approve được (capability-based — không có hook `approve` để với tới, **mạnh hơn** mô
+  tả "bị từ chối trong adapter" ở trên); workspace boundary chặn traversal/symlink escape kể cả ở
+  evidence hook (`captureWorkspaceFileSnapshot` trả `exists: false` khi escape ⇒ **không** fabricate
+  được `verified: true`); draft không auto-run và `__proto__` bị `rejectUnknownShape` chặn; PWA không
+  XSS (`textContent`), không CSRF (token ở `sessionStorage` + header, không cookie); audit bỏ đúng
+  field free-form; `task: "deny"` giữ trong child policy. **Hai finding đã sửa** (`7a1cbdc`): release
+  fail-open lúc abort, và key preset không enforce được. **Còn mở** — xem ba mục dưới.
+- **Không có trần số dispatch run đồng thời, không rate limit trên route run từ phone**
+  (`service/src/dispatchers/run-registry.ts` — `prune()` chỉ evict run **đã kết thúc**). Có trần
+  per-run (5 branch, concurrency 5) nhưng **không** trần số run. Một phone đã pair POST
+  `/api/dispatch/tasks/{id}/run` liên tục ⇒ số child session và chi phí LLM không chặn trên; loop
+  `scheduled` sống tới `maxDurationMs` nên run không finish và không bị prune. Availability/cost,
+  không phải bypass.
+- **PLAUSIBLE — gate `states` map không bao giờ evict; `requestId` trùng làm child treo**
+  (`service/src/permission/permission-gate.ts`). Mọi `requestId` bị giữ suốt đời process;
+  `assertNewRequest` throw khi trùng; `permission-bridge` bắt lỗi, log, **không** forward reply ⇒
+  OpenCode chờ mãi và P6 timer chưa từng được arm. Fail-**closed** trên write (không Allow nào được
+  forward) nên là availability, nhưng mâu thuẫn với câu "runtime không bao giờ bị strand" ở docstring
+  P3. Phụ thuộc scheme id của OpenCode — chính `permission-bridge` cũng ghi ngờ id có thể chỉ
+  scoped theo session; nếu vậy fan-out (5 branch cùng đổ vào một keyspace global) làm va chạm **dễ**
+  hơn nhiều. Cần child thật để xác nhận ⇒ gắn vào Checkpoint 5. Pre-existing (CGHC-016/018), bị
+  slice này khuếch đại.
+- **`retry_until_verified` chứng minh "file đã khai có tồn tại", không phải "task thành công"**
+  (`service/src/tasks/verify-file-evidence.ts` chỉ kiểm `snapshot.exists`). Path đến từ EV
+  `file_mutation` thật nên phần đó trung thực, nhưng một agent ghi một file vặt cũng thỏa hook. Câu
+  "không thể fabricate success" ở §3 **mạnh hơn** những gì existence-check mua được — không khai
+  thác được nếu không có Allow của người, nhưng ngôn ngữ cần đúng mức.
+- **LAN mode gửi device token plaintext** (`CGHC_REMOTE_LAN=1` bind `0.0.0.0`, không TLS) — token đó
+  với tới `/api/permissions/decision` ⇒ **approve được lệnh ghi file**; ai trong Wi-Fi sniff được là
+  ghi được. ADR 0010 đã ghi đây là dev/demo flag, off mặc định, TLS là slice sau — reviewer đề xuất
+  **gate cứng** (từ chối LAN mode ngoài dev build) thay vì chỉ một comment. Liên quan: bảo đảm
+  "Discord không approve được" (Q5) **quy hết** về ranh giới pairing, mà trong LAN mode ranh giới đó
+  là một token plaintext — hai quyết định này tương tác mà **chưa ADR nào bàn** (thuộc 2.2, ngoài
+  scope D1).
 - ~~**Áp `permissionPreset` per-branch lúc dispatch**~~ — **ĐÃ ĐÓNG** bởi commit `f3c01b1`
   (xem Decision §3). Còn lại: **áp `skillIds` / `model` per-branch, hoặc bỏ field** — hai field này
   vẫn chỉ được validate mà không enforce lúc dispatch.
