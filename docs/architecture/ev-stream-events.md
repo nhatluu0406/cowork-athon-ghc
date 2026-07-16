@@ -46,6 +46,7 @@ Wire frame (hop 2): `event: ev\ndata: <json>\n\n`.
 | `tokensOutput?` | Completion/output tokens. |
 | `tokensTotal?` | Total tokens (may include cache/reasoning per provider). |
 | `tokensReasoning?` | Reasoning tokens, when reported separately. |
+| `tokensCache?` | Cached-context tokens (prompt-cache read + write). Usually most of `tokensTotal` — the runtime's reused system prompt + tool schemas. |
 | `costUsd?` | Estimated cost, when reported. |
 
 Source: OpenCode reports usage on `step-finish` parts (`properties.part.tokens` + `.cost`); the

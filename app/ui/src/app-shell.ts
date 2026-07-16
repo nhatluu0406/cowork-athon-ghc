@@ -1136,9 +1136,14 @@ function renderTurnMetrics(state: AppState, view: SessionView): void {
       const io = [
         typeof m.tokensInput === "number" ? `${m.tokensInput.toLocaleString("vi-VN")}↑` : null,
         typeof m.tokensOutput === "number" ? `${m.tokensOutput.toLocaleString("vi-VN")}↓` : null,
+        // Most of `total` is usually cached runtime context (system prompt + tool schemas);
+        // surface it so the number stops looking like fresh spend on the very first turn.
+        typeof m.tokensCache === "number" && m.tokensCache > 0
+          ? `${m.tokensCache.toLocaleString("vi-VN")} cache`
+          : null,
       ]
         .filter((x): x is string => x !== null)
-        .join(" ");
+        .join(" · ");
       parts.push(`${m.tokensTotal.toLocaleString("vi-VN")} tokens${io.length > 0 ? ` (${io})` : ""}`);
     }
     if (typeof m.costUsd === "number" && m.costUsd > 0) {
@@ -1922,9 +1927,14 @@ async function sendPrompt(
   if (state.client === null) return;
 
   const priorMessages = state.conv.state.activeRecord?.messages ?? [];
+  // Wave 4: when the Workspace companion has a file open, tell the agent which file it is
+  // (path only) so "tệp này / file đang mở" resolves without the user pasting a path.
+  const openFilePath =
+    state.workMode === "workspace" ? (workspaceCompanionHandle?.getOpenPath() ?? null) : null;
+  const workspaceContext = openFilePath !== null ? { openFilePath } : undefined;
   // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
   // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, []);
+  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, [], workspaceContext);
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
@@ -2015,6 +2025,7 @@ async function sendPrompt(
           prompt,
           undefined,
           [],
+          workspaceContext,
         );
         if (!retryPlan.ok) {
           state.currentFileActionIntent = null;

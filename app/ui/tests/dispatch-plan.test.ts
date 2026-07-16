@@ -45,6 +45,26 @@ test("planDispatchPrompt always prepends the Cowork GHC system prompt", () => {
   }
 });
 
+test("planDispatchPrompt injects the current open-file context when provided (path only)", () => {
+  const plan = planDispatchPrompt([], [], "Thêm thơ vào file này", undefined, [], {
+    openFilePath: "docs/bai_tho.md",
+  });
+  assert.equal(plan.ok, true);
+  if (plan.ok) {
+    assert.match(plan.text, /cowork-workspace-context/u, "context block present");
+    assert.ok(plan.text.includes("docs/bai_tho.md"), "names the open file path");
+    assert.match(plan.text, /tệp này|file đang mở/u, "explains the deictic reference");
+    // Path only — the file bytes are never inlined (agent reads with tools).
+    assert.doesNotMatch(plan.text, /CGHC_UNTRUSTED_ATTACHMENT_CONTEXT/u);
+  }
+});
+
+test("planDispatchPrompt omits the workspace-context block when no file is open", () => {
+  const plan = planDispatchPrompt([], [], "chào bạn", undefined, [], undefined);
+  assert.equal(plan.ok, true);
+  if (plan.ok) assert.doesNotMatch(plan.text, /cowork-workspace-context/u);
+});
+
 test("planDispatchPrompt includes single small attachment", () => {
   const plan = planDispatchPrompt([], [snapshot("a.txt", "VIOLET-428")], "what is the code?");
   assert.equal(plan.ok, true);
