@@ -19,7 +19,10 @@ export class AgentRequestError extends BadRequestError {
   }
 }
 
-function parseDraft(body: unknown): AgentDraft {
+/** Parse a raw (untrusted) body into an {@link AgentDraft}. Exported for reuse by the workflow
+ * draft/confirm router (Task 4.3), which validates an LLM-proposed agent through this SAME parser
+ * before handing it to the catalog — one shape check, not a duplicated one. */
+export function parseAgentDraft(body: unknown): AgentDraft {
   if (typeof body !== "object" || body === null) {
     throw new AgentRequestError("Body must be a JSON object.");
   }
@@ -80,7 +83,7 @@ export function createAgentRouter(catalog: AgentCatalog): BoundaryRouter {
         method: "POST",
         path: AGENTS_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
-          const agent = await guard(() => catalog.createUserAgent(parseDraft(ctx.body)));
+          const agent = await guard(() => catalog.createUserAgent(parseAgentDraft(ctx.body)));
           return { status: 201, data: { agent } };
         },
       },
@@ -88,7 +91,7 @@ export function createAgentRouter(catalog: AgentCatalog): BoundaryRouter {
         method: "PUT",
         path: AGENT_ITEM_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
-          const agent = await guard(() => catalog.updateUserAgent(requireId(ctx.params), parseDraft(ctx.body)));
+          const agent = await guard(() => catalog.updateUserAgent(requireId(ctx.params), parseAgentDraft(ctx.body)));
           return { status: 200, data: { agent } };
         },
       },

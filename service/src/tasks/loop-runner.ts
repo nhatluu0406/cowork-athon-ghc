@@ -21,6 +21,14 @@ export type AttemptStatus = "completed" | "errored";
 export interface AttemptResult {
   readonly status: AttemptStatus;
   readonly summary?: string;
+  /**
+   * Workspace-relative paths this attempt CLAIMS to have produced/mutated (the run's declared
+   * outputs). Optional — an executor that cannot make this claim simply omits it. A
+   * {@link VerificationHook} that checks real disk evidence (e.g.
+   * `createFileEvidenceVerificationHook`) reads this list; it never infers evidence from
+   * `status` alone.
+   */
+  readonly evidencePaths?: readonly string[];
 }
 
 /** Runs ONE attempt. Must honor `signal` (guardrail/cancel abort) and should not throw. */
