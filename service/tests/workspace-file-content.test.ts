@@ -82,6 +82,42 @@ test("reads xlsx as read-only and rejects destructive rewrite", async () => {
   await rm(join(root, ".."), { recursive: true, force: true });
 });
 
+test("exposes every visible sheet in workbook order", async () => {
+  const root = await tempWorkspace();
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["one"]]), "First");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["two"]]), "Second");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["three"]]), "Third");
+  const buf = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  await writeFile(join(root, "multi.xlsx"), buf);
+  const read = await readWorkspaceFileContent(root, "multi.xlsx");
+  assert.equal(read.kind, "spreadsheet");
+  assert.deepEqual(
+    read.sheets?.map((s) => s.name),
+    ["First", "Second", "Third"],
+  );
+  assert.deepEqual(read.sheets?.[1]?.rows[0], ["two"]);
+  await rm(join(root, ".."), { recursive: true, force: true });
+});
+
+test("hidden sheets are never surfaced", async () => {
+  const root = await tempWorkspace();
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["visible"]]), "Visible");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([["secret"]]), "Hidden");
+  // Mark the second sheet hidden (1 = hidden, 2 = very hidden). SheetNames order is preserved.
+  workbook.Workbook = { Sheets: [{ Hidden: 0 }, { Hidden: 1 }] };
+  const buf = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  await writeFile(join(root, "hidden.xlsx"), buf);
+  const read = await readWorkspaceFileContent(root, "hidden.xlsx");
+  assert.deepEqual(
+    read.sheets?.map((s) => s.name),
+    ["Visible"],
+    "the hidden sheet is filtered out",
+  );
+  await rm(join(root, ".."), { recursive: true, force: true });
+});
+
 test("rejects traversal on write", async () => {
   const root = await tempWorkspace();
   await assert.rejects(() =>

@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-16"
+updated_at: "2026-07-17"
 ---
 
 # Known limitations
@@ -37,6 +37,19 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
     kèm số dòng; bấm "Sửa" để chỉnh rồi Lưu. Text **cắt ở 512 KiB** (khoá sửa phần vượt); highlight
     **bỏ qua khi nội dung > 256 KiB** (vẫn hiện plain + số dòng) để giữ mượt. Chỉ nhận theo đuôi
     file/basename đã allowlist; **secret** (`.env*`, `.pem`, `.key`) cố ý loại trừ khỏi preview text.
+  - **Office preview (read-only, local-only):**
+    - **XLSX đa sheet:** đọc toàn bộ workbook, hiện tab chọn sheet (mặc định sheet đầu), đổi sheet
+      không reload Workspace; **sheet hidden/very-hidden bị lọc** không hiện. Vẫn **chỉ xem** —
+      chỉnh sửa XLSX bị vô hiệu hoá để không mất công thức/định dạng/merged cell/chart/metadata.
+    - **PPTX** xem trước **text-first** từng slide (điều hướng trước/sau, đếm "Slide X / Y"). Parse
+      **cục bộ trong bộ nhớ** bằng JSZip (PPTX là ZIP container): không giải nén ra đĩa, không mở URL
+      remote, không chạy macro/active content, không upload cloud/không dùng M365 conversion. **Không
+      render đúng 100%**: chưa hiển thị layout/ảnh/biểu đồ/animation — chỉ trích text theo thứ tự
+      slide (giới hạn 500 slide, 50 KiB text/slide). Slide chỉ có ảnh sẽ hiện trạng thái "không có
+      nội dung văn bản".
+    - **`.ppt` legacy** (OLE nhị phân) **không hỗ trợ** — hiện trạng thái unsupported.
+    - **Malformed / mã hoá mật khẩu / vượt 8 MiB** ở mọi loại Office → trạng thái unsupported rõ
+      ràng, không crash renderer. Không có **editor Office** đầy đủ.
 - **Inspector Phase 1** (plan/activity/file review) còn PARTIAL; diagnostics/logging PARTIAL (Wave 5–6).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).

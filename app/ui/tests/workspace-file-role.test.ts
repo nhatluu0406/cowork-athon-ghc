@@ -13,7 +13,16 @@ test("detectWorkspaceFileRole maps supported extensions", () => {
   assert.equal(detectWorkspaceFileRole("scan.pdf"), "pdf");
   assert.equal(detectWorkspaceFileRole("brief.docx"), "docx");
   assert.equal(detectWorkspaceFileRole("budget.xlsx"), "spreadsheet");
+  assert.equal(detectWorkspaceFileRole("deck.pptx"), "presentation");
   assert.equal(detectWorkspaceFileRole("app.exe"), "unsupported");
+});
+
+test("only modern .pptx previews; legacy .ppt stays unsupported", () => {
+  assert.equal(detectWorkspaceFileRole("Report.PPTX"), "presentation");
+  assert.equal(detectWorkspaceFileRole("legacy.ppt"), "unsupported");
+  // .pptx is safe to auto-open; .ppt is not (unsupported role).
+  assert.equal(isAutoOpenSafe("slides/deck.pptx"), true);
+  assert.equal(isAutoOpenSafe("slides/legacy.ppt"), false);
 });
 
 test("detectWorkspaceFileRole treats code files as editable text", () => {
