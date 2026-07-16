@@ -36,6 +36,8 @@ export interface BranchView {
   readonly agentName: string;
   status: BranchStatus;
   summary?: string;
+  /** Workspace-relative paths this branch claims to have produced/mutated (evidence, not proof). */
+  mutatedPaths?: readonly string[];
 }
 
 /** The result a {@link BranchRunner} returns for one branch. */
@@ -43,6 +45,8 @@ export interface BranchRunResult {
   readonly status: "completed" | "errored";
   /** Non-secret one-line summary of the branch outcome. */
   readonly summary?: string;
+  /** Workspace-relative paths this branch claims to have produced/mutated (a completed claim). */
+  readonly mutatedPaths?: readonly string[];
 }
 
 /** Injected per-branch runner. Must honor `signal` (cancel) and never throw for a normal error. */
@@ -156,6 +160,7 @@ export function createFanOutOrchestrator(options: FanOutOrchestratorOptions) {
         }
         view.status = result.status;
         if (result.summary !== undefined) view.summary = result.summary;
+        if (result.mutatedPaths !== undefined) view.mutatedPaths = result.mutatedPaths;
       } catch {
         // A runner that throws is an error branch — never a silent success.
         view.status = cancelled ? "cancelled" : "errored";

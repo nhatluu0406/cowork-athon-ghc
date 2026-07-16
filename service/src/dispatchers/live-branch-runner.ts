@@ -30,6 +30,13 @@ export interface LiveBranchRunnerSeams {
   readonly terminal: (sessionId: string) => BranchTerminal | null | undefined;
   /** Cancel the child session (S3 path) — used when the group is aborted. */
   readonly cancelSession: (sessionId: string) => Promise<void>;
+  /**
+   * Optional: workspace-relative paths the session's authoritative view recorded as mutated
+   * (real EV `file_mutation` events, not an LLM claim). Read ONLY on a completed terminal and
+   * attached to the {@link BranchRunResult} as the run's declared evidence for the
+   * `retry_until_verified` disk-evidence hook. Absent/empty = no evidence claimed.
+   */
+  readonly fileMutationPaths?: (sessionId: string) => readonly string[];
   /** Poll interval while waiting for the terminal. Default 500ms. */
   readonly pollIntervalMs?: number;
 }
@@ -88,9 +95,15 @@ export function createLiveBranchRunner(seams: LiveBranchRunnerSeams): BranchRunn
         return { status: "errored", summary: `Session ${sessionId} disappeared before a terminal.` };
       }
       if (terminal !== null) {
-        return terminal.state === "completed"
-          ? { status: "completed", summary: `Session ${sessionId} completed.` }
-          : { status: "errored", summary: `Session ${sessionId} ended: ${terminal.state}.` };
+        if (terminal.state !== "completed") {
+          return { status: "errored", summary: `Session ${sessionId} ended: ${terminal.state}.` };
+        }
+        const mutated = seams.fileMutationPaths?.(sessionId) ?? [];
+        return {
+          status: "completed",
+          summary: `Session ${sessionId} completed.`,
+          ...(mutated.length > 0 ? { mutatedPaths: mutated } : {}),
+        };
       }
       await sleep(interval, signal);
     }

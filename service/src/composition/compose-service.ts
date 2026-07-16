@@ -61,7 +61,13 @@ import { createSessionService, createSessionRouter, SessionRequestError } from "
 import { createConversationStore, createConversationRouter } from "../conversation/index.js";
 import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
 import { createAgentCatalog, createAgentRouter } from "../agents/index.js";
-import { createTaskStore, createTaskRouter } from "../tasks/index.js";
+import {
+  createTaskStore,
+  createTaskRouter,
+  createFileEvidenceVerificationHook,
+  createWorkflowBuilder,
+  createWorkflowRouter,
+} from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
@@ -78,6 +84,7 @@ import {
   notAttachedRuntimeReplyPort,
   notAttachedSendPrompt,
   notAttachedSessionStore,
+  notAttachedWorkflowDraftGenerator,
 } from "./tier2-seams.js";
 import { createDispatchRunRegistry, createDispatchRouter } from "../dispatchers/index.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
@@ -273,11 +280,29 @@ export async function createCoworkService(
 
   // Dispatch runs (Task 5.2 wiring): loop-runner over fan-out groups. Tier 1 mounts the router
   // with the honest not-attached branch runner (a branch errors truthfully without a child);
-  // the live composition injects the real session-backed runner.
+  // the live composition injects the real session-backed runner. The `retry_until_verified`
+  // verification hook (dispatch-verify-hook-retry-until-verified) reads each attempt's declared
+  // `evidencePaths` and confirms them on disk via the file-review snapshot primitive — Tier 1's
+  // not-attached branch runner never claims evidence, so a `retry_until_verified` task here ends
+  // `exhausted` honestly (never a fabricated `completed`); the live branch runner (compose-live)
+  // supplies real evidence from the session's recorded file mutations.
   const dispatchRuns = createDispatchRunRegistry({
     resolveAgent: (id) => agentCatalog.get(id),
     runBranch: options.branchRunner ?? notAttachedBranchRunner(),
+    verify: createFileEvidenceVerificationHook({
+      workspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    }),
     now,
+  });
+
+  // Workflow builder from prompt (Task 4.3): draft-only, MANDATORY contract validation, never
+  // auto-run. Tier 1 wires the honest not-attached generator (a draft request rejects rather than
+  // fabricating a TaskDefinition); the confirm route re-validates through the SAME agent
+  // catalog / task store boundaries used by every other write path.
+  const workflowBuilder = createWorkflowBuilder({
+    generate: options.workflowDraftGenerator ?? notAttachedWorkflowDraftGenerator(),
+    knownAgentIds: () => agentCatalog.knownIds(),
+    basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
 
   // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
@@ -355,6 +380,7 @@ export async function createCoworkService(
     createSkillRouter(skillCatalog),
     createAgentRouter(agentCatalog),
     createTaskRouter(taskStore),
+    createWorkflowRouter({ builder: workflowBuilder, tasks: taskStore, agents: agentCatalog }),
     createDispatchRouter({ runs: dispatchRuns, tasks: taskStore }),
     createFileReviewRouter({
       activeWorkspaceRoot: () => {

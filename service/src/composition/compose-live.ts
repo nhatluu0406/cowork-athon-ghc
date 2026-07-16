@@ -184,6 +184,15 @@ export async function startLiveCoworkService(
       return { state: view.terminal };
     },
     cancelSession: (sessionId) => requireDeps().sessionService.cancel(sessionId),
+    // Real disk-evidence source for the retry_until_verified hook: the session's authoritative
+    // view records every EV `file_mutation` (create/edit/delete/move); dedupe the paths so the
+    // hook checks each mutated file once. The hook itself re-confirms on disk — this is only the
+    // CLAIM of what to check, never trusted as proof by itself.
+    fileMutationPaths: (sessionId) => {
+      const view = requireDeps().sessionService.view(sessionId);
+      if (view === undefined) return [];
+      return [...new Set(view.fileMutations.map((m) => m.path))];
+    },
   });
 
   // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).

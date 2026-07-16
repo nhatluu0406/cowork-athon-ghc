@@ -11,4 +11,10 @@ export {
   type AgentDraft,
   type AgentStoreFs,
 } from "./catalog.js";
-export { createAgentRouter, AGENTS_PATH, AGENT_ITEM_PATH } from "./router.js";
+export {
+  createAgentRouter,
+  parseAgentDraft,
+  AGENTS_PATH,
+  AGENT_ITEM_PATH,
+  AgentRequestError,
+} from "./router.js";
