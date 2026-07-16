@@ -2,9 +2,18 @@
  * Workspace Companion pane — rich preview and basic editing.
  */
 
+import hljs from "highlight.js/lib/common";
+import { languageForPath } from "@cowork-ghc/contracts";
 import type { ServiceClient } from "./service-client.js";
 import { el, icon } from "./ui-shell/dom-utils.js";
 import { isAutoOpenSafe } from "./workspace-file-role.js";
+
+/**
+ * Above this size we render text/code as plain (no highlighting): highlighting a large file is
+ * slow and blocks the renderer, and the value of syntax colour drops for machine-sized files.
+ * Line numbers + monospace still apply. (The service separately truncates text at 512 KiB.)
+ */
+const HIGHLIGHT_MAX_BYTES = 256 * 1024;
 
 export type WorkspaceFileContentView = Awaited<ReturnType<ServiceClient["readWorkspaceFileContent"]>>;
 
@@ -62,6 +71,8 @@ export function mountWorkspaceCompanionPane(
   let diskChanged = false;
   let blobUrl: string | null = null;
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
+  // Text/code files show a read-only, syntax-highlighted view first; the user opts into editing.
+  let editMode = false;
 
   const root = el("div", "workspace-companion-pane");
   const toolbar = el("div", "workspace-companion-pane__toolbar");
@@ -70,13 +81,19 @@ export function mountWorkspaceCompanionPane(
   const pathLabel = el("span", "workspace-companion-pane__path", "Xem trước tệp");
   pathWrap.append(pathLabel);
   const statusBadge = el("span", "workspace-companion-pane__status", "Chưa chọn tệp");
+  const editButton = el("button", "workspace-companion-pane__edit") as HTMLButtonElement;
+  editButton.type = "button";
+  editButton.hidden = true;
+  editButton.dataset["tooltip"] = "Chỉnh sửa tệp";
+  editButton.setAttribute("aria-label", "Chỉnh sửa tệp");
+  editButton.append(icon("pencil", "Chỉnh sửa"));
   const saveButton = el("button", "workspace-companion-pane__save") as HTMLButtonElement;
   saveButton.type = "button";
   saveButton.hidden = true;
   saveButton.dataset["tooltip"] = "Lưu tệp";
   saveButton.setAttribute("aria-label", "Lưu tệp");
   saveButton.append(icon("save", "Lưu tệp"));
-  toolbar.append(pathWrap, statusBadge, saveButton);
+  toolbar.append(pathWrap, statusBadge, editButton, saveButton);
 
   // Conflict banner: shown when an agent edits the open file while the buffer is dirty.
   const conflictBanner = el("div", "workspace-companion-pane__conflict");
@@ -162,6 +179,53 @@ export function mountWorkspaceCompanionPane(
     saveButton.disabled = false;
   };
 
+  /**
+   * Render a text/code file. Read-only mode shows a syntax-highlighted, line-numbered view;
+   * edit mode shows the plain editable textarea (the Save path reads this textarea). Highlighting
+   * is skipped for very large content (plain, but still line-numbered) to keep the UI responsive.
+   */
+  const renderTextContent = (file: WorkspaceFileContentView): void => {
+    const content = file.content ?? "";
+
+    if (editMode && file.editable) {
+      const editor = el("textarea", "workspace-companion-pane__editor") as HTMLTextAreaElement;
+      editor.value = content;
+      editor.spellcheck = false;
+      editor.addEventListener("input", markDirty);
+      body.replaceChildren(editor);
+      editButton.hidden = true;
+      saveButton.hidden = false;
+      saveButton.disabled = !dirty;
+      editor.focus();
+      return;
+    }
+
+    const view = el("div", "workspace-companion-pane__code");
+    const lineCount = content.length === 0 ? 1 : content.split("\n").length;
+    let numbers = "";
+    for (let i = 1; i <= lineCount; i += 1) numbers += `${i}\n`;
+    const gutter = el("div", "workspace-companion-pane__code-gutter", numbers);
+    gutter.setAttribute("aria-hidden", "true");
+    const pre = el("pre", "workspace-companion-pane__code-pre");
+    const code = el("code", "workspace-companion-pane__code-content");
+    const language =
+      content.length <= HIGHLIGHT_MAX_BYTES ? languageForPath(file.relativePath) : undefined;
+    if (language !== undefined && hljs.getLanguage(language) !== undefined) {
+      // highlight.js HTML-escapes the source; `.value` contains only its own <span> markup, so
+      // assigning it as innerHTML on this detached <code> is XSS-safe for arbitrary file content.
+      code.innerHTML = hljs.highlight(content, { language, ignoreIllegals: true }).value;
+      code.classList.add("hljs");
+    } else {
+      code.textContent = content;
+    }
+    pre.append(code);
+    view.append(gutter, pre);
+    body.replaceChildren(view);
+
+    editButton.hidden = !file.editable;
+    saveButton.hidden = true;
+  };
+
   const renderSpreadsheet = (file: WorkspaceFileContentView): void => {
     const sheet = file.sheets?.[0];
     if (sheet === undefined) {
@@ -221,8 +285,10 @@ export function mountWorkspaceCompanionPane(
   const renderFile = (file: WorkspaceFileContentView): void => {
     current = file;
     dirty = false;
+    editMode = false;
     hideConflict();
     setDiskChanged(false);
+    editButton.hidden = true;
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
     revokeBlob();
@@ -239,12 +305,7 @@ export function mountWorkspaceCompanionPane(
       return;
     }
     if (file.kind === "text") {
-      const editor = el("textarea", "workspace-companion-pane__editor") as HTMLTextAreaElement;
-      editor.value = file.content ?? "";
-      editor.spellcheck = false;
-      editor.readOnly = !file.editable;
-      if (file.editable) editor.addEventListener("input", markDirty);
-      body.replaceChildren(editor);
+      renderTextContent(file);
       if (file.truncated) {
         setStatus("Đã cắt bớt — tệp lớn hơn 512 KiB", 0);
       }
@@ -296,6 +357,13 @@ export function mountWorkspaceCompanionPane(
       );
     }
   };
+
+  // Enter edit mode: swap the read-only highlighted view for the editable textarea.
+  editButton.addEventListener("click", () => {
+    if (current === null || current.kind !== "text" || !current.editable) return;
+    editMode = true;
+    renderTextContent(current);
+  });
 
   saveButton.addEventListener("click", () => {
     if (openPath === null || current === null || !current.editable) return;
@@ -369,8 +437,10 @@ export function mountWorkspaceCompanionPane(
       current = null;
       dirty = false;
       openPath = null; // no target → a stray Save cannot recreate the deleted file
+      editMode = false;
       hideConflict();
       setDiskChanged(false);
+      editButton.hidden = true;
       saveButton.hidden = true;
       saveButton.disabled = true;
       pathLabel.textContent = deleted ?? "Tệp đã bị xóa";

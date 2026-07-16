@@ -47,7 +47,18 @@ function makeClient(files: Record<string, WorkspaceFileContentView>): {
   return { client, reads };
 }
 
-/** Mount the pane, open a file, and make its buffer dirty by typing into the editor. */
+/** Click the "Sửa" (edit) button so the read-only text view swaps to the editable textarea. */
+function enterEditMode(container: HTMLElement): HTMLTextAreaElement {
+  const editBtn = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__edit");
+  assert.ok(editBtn, "editable text shows an Edit button");
+  assert.equal(editBtn.hidden, false, "Edit button is visible for editable text");
+  editBtn.click();
+  const editor = container.querySelector<HTMLTextAreaElement>(".workspace-companion-pane__editor");
+  assert.ok(editor, "clicking Edit reveals a textarea");
+  return editor;
+}
+
+/** Mount the pane, open a file, enter edit mode, and make its buffer dirty by typing. */
 async function mountWithDirtyOpenFile(
   files: Record<string, WorkspaceFileContentView>,
   openPath: string,
@@ -56,8 +67,7 @@ async function mountWithDirtyOpenFile(
   const container = document.createElement("div");
   const handle = mountWorkspaceCompanionPane(container, client);
   await handle.open(openPath);
-  const editor = container.querySelector<HTMLTextAreaElement>(".workspace-companion-pane__editor");
-  assert.ok(editor, "text file renders an editor");
+  const editor = enterEditMode(container);
   editor.value = "user local edit";
   editor.dispatchEvent(new Event("input"));
   return { container, handle };
@@ -116,9 +126,9 @@ test("conflict banner 'reload from disk' discards edits and re-reads the file", 
   const container = document.createElement("div");
   const handle = mountWorkspaceCompanionPane(container, client);
   await handle.open("a.txt");
-  const editor = container.querySelector<HTMLTextAreaElement>(".workspace-companion-pane__editor");
-  editor!.value = "user local edit";
-  editor!.dispatchEvent(new Event("input"));
+  const editor = enterEditMode(container);
+  editor.value = "user local edit";
+  editor.dispatchEvent(new Event("input"));
   handle.showAgentUpdated();
   const reloadBtn = container.querySelector<HTMLButtonElement>(
     ".workspace-companion-pane__conflict-btn--danger",
@@ -128,10 +138,11 @@ test("conflict banner 'reload from disk' discards edits and re-reads the file", 
   const banner = container.querySelector<HTMLElement>(".workspace-companion-pane__conflict");
   assert.equal(banner?.hidden, true, "banner hidden after reload");
   assert.deepEqual(reads, ["a.txt", "a.txt"], "the file was re-read from disk on reload");
-  const reloaded = container.querySelector<HTMLTextAreaElement>(
-    ".workspace-companion-pane__editor",
+  // After reload the view returns to read-only, showing the disk version.
+  const reloaded = container.querySelector<HTMLElement>(
+    ".workspace-companion-pane__code-content",
   );
-  assert.equal(reloaded?.value, "disk v1", "editor shows the disk version after reload");
+  assert.equal(reloaded?.textContent, "disk v1", "read-only view shows the disk version after reload");
 });
 
 test("openIfSafe refuses to auto-open over a dirty buffer", async () => {
@@ -189,17 +200,78 @@ test("openIfSafe normalizes Windows path separators to POSIX", async () => {
   assert.equal(handle.getOpenPath(), "docs/new.md", "open path stored as POSIX");
 });
 
+test("a code file opens as a read-only highlighted view with a line-number gutter", async () => {
+  const src = "def add(a, b):\n    return a + b\n";
+  const { client } = makeClient({ "main.py": textFile("main.py", src) });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("main.py");
+
+  // Read-only view, not a textarea, on open.
+  assert.ok(container.querySelector(".workspace-companion-pane__code"), "shows the code view");
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__editor"),
+    null,
+    "no editable textarea until Edit is clicked",
+  );
+  // Line-number gutter has one number per line.
+  const gutter = container.querySelector<HTMLElement>(".workspace-companion-pane__code-gutter");
+  assert.equal(gutter?.textContent, "1\n2\n3\n", "gutter numbers every line");
+  // Python highlighting produced hljs markup.
+  const code = container.querySelector<HTMLElement>(".workspace-companion-pane__code-content");
+  assert.ok(code?.classList.contains("hljs"), "highlighted with highlight.js");
+  assert.match(code?.innerHTML ?? "", /hljs-/u, "contains highlight token spans");
+});
+
+test("Edit button swaps to an editable textarea, dirty enables Save", async () => {
+  const { client } = makeClient({ "main.py": textFile("main.py", "x = 1\n") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("main.py");
+  const editor = enterEditMode(container);
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__code"),
+    null,
+    "read-only view is replaced while editing",
+  );
+  editor.value = "x = 2\n";
+  editor.dispatchEvent(new Event("input"));
+  const save = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__save");
+  assert.equal(save?.hidden, false, "Save is visible in edit mode");
+  assert.equal(save?.disabled, false, "Save enabled once the buffer is dirty");
+});
+
+test("very large text renders plain (no highlight) but still shows a gutter", async () => {
+  const big = "a\n".repeat(200_000); // ~400 KB, over the highlight cap
+  const { client } = makeClient({ "big.js": textFile("big.js", big) });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("big.js");
+  const code = container.querySelector<HTMLElement>(".workspace-companion-pane__code-content");
+  assert.ok(code, "still shows a code view");
+  assert.equal(code?.classList.contains("hljs"), false, "skips highlighting for oversize content");
+  assert.ok(
+    container.querySelector(".workspace-companion-pane__code-gutter"),
+    "line-number gutter still present",
+  );
+});
+
 test("showDeleted clears the open file, shows a deleted state, and blocks Save recreate", async () => {
   const { client } = makeClient({ "a.txt": textFile("a.txt", "disk v1") });
   const container = document.createElement("div");
   const handle = mountWorkspaceCompanionPane(container, client);
   await handle.open("a.txt");
-  // Editor is present before the delete.
-  assert.ok(container.querySelector(".workspace-companion-pane__editor"), "editor before delete");
+  // The read-only preview is present before the delete.
+  assert.ok(container.querySelector(".workspace-companion-pane__code"), "preview before delete");
 
   handle.showDeleted();
 
-  // No stale editor/content, a clear deleted message, and no open target.
+  // No stale preview/editor, a clear deleted message, and no open target.
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__code"),
+    null,
+    "preview cleared after delete",
+  );
   assert.equal(
     container.querySelector(".workspace-companion-pane__editor"),
     null,
