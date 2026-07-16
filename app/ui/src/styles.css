@@ -2138,6 +2138,39 @@ textarea,
   box-shadow: var(--shadow-sm);
 }
 
+/* Remote quick-access on the Dispatch surface: a real, working section that sits below the
+   honest "awaiting D1" card, so it must read as separate from the D1 placeholder. */
+.integration-remote {
+  width: min(620px, 100%);
+  margin-top: 18px;
+  padding: 24px 30px 28px;
+  border: 1px solid var(--line-warm);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.integration-remote__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.integration-remote__copy {
+  margin: 0 0 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.integration-remote__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 .integration-empty__icon {
   width: 48px;
   height: 48px;
@@ -2533,6 +2566,89 @@ body {
   border-color: rgba(222, 213, 201, 0.95);
   border-radius: 16px;
 }
+
+/* Remote-control panel (/remote command) — agent-harness-plan.md Task 2.4 */
+.remote-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(13, 17, 23, 0.42);
+}
+.remote-dialog {
+  width: min(460px, calc(100vw - 48px));
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  border: 1px solid var(--line-warm);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+.remote-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line-warm);
+}
+.remote-dialog__title { margin: 0; font-size: 16px; }
+.remote-dialog__close {
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  cursor: pointer;
+  color: inherit;
+}
+.remote-dialog__body { padding: 16px 20px 20px; }
+.remote-section { margin-bottom: 18px; }
+.remote-section__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+.remote-url {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 14px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(120, 120, 120, 0.12);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+.remote-code-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.remote-code {
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 26px;
+  letter-spacing: 0.14em;
+  font-weight: 700;
+}
+.remote-qr { display: flex; justify-content: center; }
+.remote-qr svg { width: 220px; height: 220px; background: #fff; border-radius: 10px; padding: 8px; }
+.remote-btn {
+  border: 1px solid var(--line-warm);
+  border-radius: 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.remote-btn:disabled { opacity: 0.5; cursor: default; }
+.remote-btn--danger { border-color: #b6524c; color: #b6524c; margin-top: 10px; }
+.remote-device {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line-warm);
+}
+.remote-device__name { font-weight: 600; }
+.remote-device__meta { opacity: 0.6; font-size: 12px; }
+.remote-note { font-size: 13px; opacity: 0.75; margin: 6px 0 0; }
 
 /* Local app lock (ADR 0007) ? minimal gate, token-styled */
 .app-lock {

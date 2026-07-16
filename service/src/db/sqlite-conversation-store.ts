@@ -424,6 +424,38 @@ export function createSqliteConversationStore(
       });
     },
 
+    async compact(id, summary, throughMessageId) {
+      return mutate(id, (record) => {
+        // Summarizing costs an LLM round-trip, so messages can land while it runs. Only the
+        // messages the caller actually summarized may be replaced; anything appended after
+        // its snapshot must survive, or a turn that completed mid-compaction is destroyed
+        // and is absent from the summary too.
+        let tail: readonly ConversationMessage[] = [];
+        if (throughMessageId !== undefined) {
+          const cut = record.messages.findIndex((m) => m.id === throughMessageId);
+          if (cut < 0) {
+            throw new Error("Compaction boundary message no longer exists; refusing to drop history.");
+          }
+          tail = record.messages.slice(cut + 1);
+        }
+
+        const prefix = "[Ngữ cảnh cuộc trò chuyện trước — dùng để trả lời nhất quán; không lặp lại nguyên văn trừ khi được hỏi.]";
+        const suffix = "[Hết ngữ cảnh — trả lời yêu cầu mới bên dưới.]";
+        const msgText = `${prefix}\n- Lịch sử hội thoại cũ đã được dọn dẹp và nén lại thành tóm tắt:\n${summary}\n${suffix}`;
+
+        const at = clock();
+        const summaryMessage: ConversationMessage = {
+          id: randomUUID(),
+          role: "assistant",
+          text: msgText,
+          at,
+        };
+
+        const messages = [summaryMessage, ...tail];
+        return { ...record, messages, messageCount: messages.length, updatedAt: at };
+      });
+    },
+
     async delete(id) {
       const existing = readRecord(id);
       if (existing === undefined) return false;

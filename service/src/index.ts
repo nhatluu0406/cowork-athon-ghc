@@ -186,3 +186,46 @@ export {
   type ProviderProfileView,
   type ProviderProfileStore,
 } from "./provider-profiles/index.js";
+
+export {
+  createPairingRegistry,
+  startRemoteGateway,
+  isRemoteEnabled,
+  resolveRemoteBindHost,
+  createRemoteRouter,
+  REMOTE_STATUS_PATH,
+  REMOTE_PAIRING_CODE_PATH,
+  REMOTE_REVOKE_PATH,
+  REMOTE_REVOKE_ALL_PATH,
+  type PairingRegistry,
+  type PairedDeviceView,
+  type RemoteGateway,
+  type RemoteGatewayOptions,
+  type RemoteStatusView,
+} from "./remote-gateway/index.js";
+
+export {
+  createDiscordAdapter,
+  createDiscordRestTransport,
+  readDiscordConfig,
+  type DiscordAdapter,
+  type DiscordTransport,
+  type DiscordConfig,
+} from "./remote-gateway/discord/index.js";
+
+export {
+  BUILTIN_AGENTS,
+  createAgentCatalog,
+  createAgentRouter,
+  AgentCatalogError,
+  type AgentCatalog,
+  type AgentDraft,
+} from "./agents/index.js";
+
+export {
+  BUILTIN_TASK_TEMPLATES,
+  createTaskStore,
+  createTaskRouter,
+  TaskStoreError,
+  type TaskStore,
+} from "./tasks/index.js";
