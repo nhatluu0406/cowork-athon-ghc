@@ -72,17 +72,20 @@ func (r *Retriever) Query(ctx context.Context, req QueryRequest) (*QueryResponse
 	// (Stage 4) already guards itself against empty allowedFiles by returning nil.
 	// This allows graph-only results to be returned while preserving permission
 	// scoping at the semantic search and final answer stages.
-
-	if len(allowedFiles) == 0 {
-		return &QueryResponse{Answer: "No access to documents", Intent: "permission_denied"}, nil
-	}
+	// (allowedFiles may be nil or empty; proceed to entity recognition and graph expansion.)
 	// Stage 1: Intent detection
 	intent := r.intentDetector.Detect(ctx, req.Query)
 
 	// Stage 2: Query entity recognition (NER against known graph entities)
 	var recognizedEntities []RecognizedEntity
 	if r.entityRecognizer != nil {
-		recognizedEntities, _ = r.entityRecognizer.Recognize(ctx, req.Query)
+		var err error
+		recognizedEntities, err = r.entityRecognizer.Recognize(ctx, req.Query)
+		if err != nil {
+			// Log the error but continue — NER failure should not block the entire query.
+			// This allows semantic search and graph results to still be returned.
+			// TODO: wire a logger into Retriever
+		}
 	}
 	if r.graphExpander != nil {
 		r.graphExpander.SetSeeds(recognizedEntities)

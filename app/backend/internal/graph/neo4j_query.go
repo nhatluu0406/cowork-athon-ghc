@@ -21,14 +21,6 @@ func validCypherIdentifier(s string) bool {
 	return cypherIdentifierPattern.MatchString(s)
 }
 
-type QueryBuilder struct {
-	driver neo4j.DriverWithContext
-}
-
-func NewQueryBuilder(driver neo4j.DriverWithContext) *QueryBuilder {
-	return &QueryBuilder{driver: driver}
-}
-
 type EntityDetail struct {
 	ID    string
 	Type  string
@@ -250,15 +242,8 @@ func (qb *QueryBuilder) ListNodes(ctx context.Context, label string, allowedFile
 		for res.Next(ctx) {
 			record := res.Record()
 			id, _ := record.Get("id")
-			labels, _ := record.Get("labels")
 			props, _ := record.Get("props")
 			displayName, _ := record.Get("display_name")
-
-			labelList, _ := labels.([]interface{})
-			nodeLabel := ""
-			if len(labelList) > 0 {
-				nodeLabel, _ = labelList[0].(string)
-			}
 
 			propsMap, _ := props.(map[string]interface{})
 			displayNameStr, _ := displayName.(string)
