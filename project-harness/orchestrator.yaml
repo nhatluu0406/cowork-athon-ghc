@@ -1,0 +1,66 @@
+# Supervisor-worker orchestration — SCOPED TO DISPATCH EXECUTION ONLY (user decision 2026-07-16):
+# this session's agents execute the remaining agent-harness-plan.md dispatch backlog (Phase 4-5
+# remnants + dispatch verification). Non-dispatch backlog (remote hardening 2.1/2.2, roadmap
+# NOW/NEXT UI + packaged golden path, SSRF save-path follow-up) stays in agent-harness-plan.md /
+# roadmap.md and is NOT fanned out here.
+# Orchestrator = Claude Fable 5 interactive session (model id claude-fable-5).
+# Workers/critics = .claude/agents/*.md (single source of truth; model+skills in frontmatter).
+pattern: supervisor-worker
+composed_with: planner-critic   # forced for any unit tagged risk: high
+kill_switch: true               # user interrupt / TaskStop halts all dispatched agents
+orchestrator:
+  model: fable
+  authorization: L2_recommend   # decomposes + dispatches + merges; never merges to main itself
+  rules:
+    - dispatch via Agent tool; one worker per independent unit; max_parallel below
+    - high-risk units MUST pass their critic gate before commit (repo CLAUDE.md rule)
+    - run scripts\verify-fast.bat before any commit; packaged verification for user-facing acceptance
+    - on cross-worker conflict: escalate_to_human (never auto-merge conflicting edits)
+decomposition:
+  method: module_boundary
+  max_parallel_workers: 3       # mirrors dispatch fan-out default (Q3: default 3, hard cap 5)
+
+# Remaining DISPATCH work units (source: agent-harness-plan.md §4 progress notes, 2026-07-16)
+fan_out:
+  - unit: task-4.3-workflow-builder-from-prompt
+    # NL prompt -> LLM draft TaskDefinition (+ agent pick, incl. fan-out) -> contract 0.3
+    # validation -> user confirm before save; NEVER auto-run; schema-injection negatives.
+    worker: runtime-llm-engineer
+    scope: service/src/tasks/**, service/src/agents/**, core/contracts/**, service/tests/**
+    risk: medium
+    gate: code-reviewer
+    depends_on: []            # agent catalog (5.1) and task store (4.1) already landed
+  - unit: dispatch-verify-hook-retry-until-verified
+    # Wire LoopPolicy retry_until_verified verification hook in composition to
+    # file-review/disk evidence (currently errors honestly: "requires a verification hook").
+    worker: runtime-llm-engineer
+    scope: service/src/composition/**, service/src/tasks/**, service/src/file-review/**, service/tests/**
+    risk: medium
+    gate: code-reviewer
+    depends_on: []
+  - unit: task-5.3-pwa-dispatch-board
+    # Phone: view dispatch catalog + run states, trigger saved task (1-touch); honest states only.
+    worker: frontend-desktop-engineer
+    scope: app/remote-pwa/**, service/src/remote-gateway/**(read-only)
+    risk: medium
+    gate: code-reviewer
+    depends_on: []
+  - unit: dispatch-packaged-live-verification
+    # Golden path dispatch on the packaged app with a real OpenCode child (Checkpoint 5):
+    # pick task -> fan-out 2 agents -> permission via ONE gate -> verified results aggregated.
+    worker: release-verifier
+    scope: dist-app/**, scripts/**, docs/product/current-status.md
+    risk: release-critical
+    gate: security-reviewer   # network/process lifecycle acceptance per repo rule
+    depends_on: [task-4.3-workflow-builder-from-prompt, dispatch-verify-hook-retry-until-verified]
+
+join:
+  after: all_workers_report
+  agent: release-verifier      # integration check: typecheck + dispatch suites + packaged smoke
+  on_conflict: escalate_to_human
+
+# Deferred (NOT in this session's scope — tracked in agent-harness-plan.md / roadmap.md):
+#   task-2.1-device-token-keyring, task-2.2-lan-qr-tls-cert-pinning (remote hardening),
+#   task-6.1-negative-test-sweep, roadmap-now-packaged-golden-path,
+#   roadmap-next-commercial-ui-pass, ssrf-save-path-validation (chip task_0c10eeca),
+#   adr-http-loopback-local-gateway (product-owner decision).

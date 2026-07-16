@@ -42,6 +42,9 @@ import {
   createProviderRouter,
   createSsrfPolicy,
   readE2eMockLlmBaseUrl,
+  readDevLoopbackHttpEscape,
+  DEV_LOOPBACK_HTTP_WARNING,
+  SsrfBlockedError,
 } from "../provider/index.js";
 import {
   createProviderConnectionTester,
@@ -58,6 +61,7 @@ import {
   nodeFsProbe,
 } from "../workspace/index.js";
 import {
+  createBranchPermissionBindings,
   createInMemoryAuditSink,
   createNodeScheduler,
   createPermissionGate,
@@ -77,7 +81,13 @@ import {
 import type { ConversationStore } from "../conversation/store.js";
 import { createSkillCatalog, createSkillRouter } from "../skills/index.js";
 import { createAgentCatalog, createAgentRouter } from "../agents/index.js";
-import { createTaskStore, createTaskRouter } from "../tasks/index.js";
+import {
+  createTaskStore,
+  createTaskRouter,
+  createFileEvidenceVerificationHook,
+  createWorkflowBuilder,
+  createWorkflowRouter,
+} from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
@@ -90,10 +100,13 @@ import {
 } from "./wiring.js";
 import {
   downRuntimeHealth,
+  notAttachedBranchRunner,
   notAttachedRuntimeReplyPort,
   notAttachedSendPrompt,
   notAttachedSessionStore,
+  notAttachedWorkflowDraftGenerator,
 } from "./tier2-seams.js";
+import { createDispatchRunRegistry, createDispatchRouter } from "../dispatchers/index.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import { createHttpConnectorBundle } from "./http-connector-factory.js";
 import { createWorkspaceLocalFileReader } from "./ms365-file-reader.js";
@@ -154,6 +167,10 @@ export async function createCoworkService(
   options: CoworkServiceOptions = {},
 ): Promise<CoworkService> {
   const now = options.now ?? (() => new Date().toISOString());
+  // Redacted, non-secret boot diagnostics (LOW-1 from the 2026-07-16 SSRF-brick review):
+  // a skipped persisted endpoint must leave a trace, never a silent swallow.
+  const bootDiagnostic =
+    options.onBootDiagnostic ?? ((line: string) => console.warn(`[cowork-service] ${line}`));
 
   // --- Cross-cutting: the ONE value-based scrubber + the composed EV redactor. ---
   // Composition = value-based scrub (real seeded key values) THEN shape sanitize. The scrubber
@@ -290,15 +307,27 @@ export async function createCoworkService(
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  // Developer-only loopback-http override (never gated by the release hard-assert — see
+  // ../provider/dev-loopback-http.js). Resolved ONCE here (process env, the composition root)
+  // and threaded to every `createSsrfPolicy` construction site below; never re-read from env in
+  // a scattered spot, and NEVER sourced from a request body (router.ts keeps ignoring such a
+  // field). Unset ⇒ `false` ⇒ every site below is byte-for-byte identical to before this change.
+  const devLoopbackHttpEscape = readDevLoopbackHttpEscape();
+  if (devLoopbackHttpEscape) {
+    // The banner IS the required WARN + local boot-diagnostic/audit event (bootDiagnostic is the
+    // existing redacted, non-secret audit sink for this composition root) — no parallel log path.
+    bootDiagnostic(DEV_LOOPBACK_HTTP_WARNING);
+  }
   const ssrf = createSsrfPolicy({
     resolver: dnsResolver,
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(devLoopbackHttpEscape ? { loopbackEscape: true } : {}),
   });
 
   // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
   const httpBundle =
     options.connector === undefined
-      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver)
+      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver, devLoopbackHttpEscape)
       : undefined;
   const providerPort =
     options.connector !== undefined
@@ -312,20 +341,29 @@ export async function createCoworkService(
   if (httpBundle !== undefined) {
     httpBundle.bindActiveModelResolver(() => modelConfig.activeModelFor() ?? undefined);
   }
-  await seedFromSettings(baseSettingsStore, providerPort, modelConfig);
+  await seedFromSettings(baseSettingsStore, providerPort, modelConfig, bootDiagnostic);
 
   const profileRuntimeBridge = createProfileRuntimeBridge({
     profiles: providerProfileStore,
     port: providerPort,
     modelConfig,
   });
-  await profileRuntimeBridge.syncActiveProfile();
+  // Boot must survive a persisted active profile the SSRF policy refuses (same degradation
+  // contract as seedFromSettings below): the endpoint stays unconfigured; the user repairs it
+  // in settings. Runtime profile switches still surface the typed refusal via the router.
+  try {
+    await profileRuntimeBridge.syncActiveProfile();
+  } catch (err) {
+    if (!(err instanceof SsrfBlockedError)) throw err;
+    bootDiagnostic(`boot_active_profile_endpoint_skipped (${err.reason})`);
+  }
 
   const profileConnectionTester = createProviderConnectionTester({
     credentials: credentialService,
     dnsResolver,
     now,
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(devLoopbackHttpEscape ? { loopbackEscape: true } : {}),
   });
 
   const profileModelDiscovery = createProfileModelDiscovery({
@@ -416,6 +454,12 @@ export async function createCoworkService(
     return outcome;
   };
 
+  // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
+  // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
+  // reads from at the SAME execution boundary every other tool-permission event flows through —
+  // never a second permission authority, only a narrowing input to `permissionGate` above.
+  const branchPermissionBindings = createBranchPermissionBindings();
+
   // --- Runtime-extension layer (CGHC-026): the MCP lifecycle (RE2) gets the Phase 1
   // reachability-probe adapter — never a full MCP protocol client yet (see
   // `createProcessMcpAdapter`); skill EXECUTION stays honest not-attached (that seam is the
@@ -485,6 +529,33 @@ export async function createCoworkService(
   const taskStore = await createTaskStore({
     fs: options.taskStoreFs ?? createNodeSettingsFs(options.taskStoreFilePath ?? DEFAULT_TASKS_PATH),
     knownAgentIds: () => agentCatalog.knownIds(),
+  });
+
+  // Dispatch runs (Task 5.2 wiring): loop-runner over fan-out groups. Tier 1 mounts the router
+  // with the honest not-attached branch runner (a branch errors truthfully without a child);
+  // the live composition injects the real session-backed runner. The `retry_until_verified`
+  // verification hook (dispatch-verify-hook-retry-until-verified) reads each attempt's declared
+  // `evidencePaths` and confirms them on disk via the file-review snapshot primitive — Tier 1's
+  // not-attached branch runner never claims evidence, so a `retry_until_verified` task here ends
+  // `exhausted` honestly (never a fabricated `completed`); the live branch runner (compose-live)
+  // supplies real evidence from the session's recorded file mutations.
+  const dispatchRuns = createDispatchRunRegistry({
+    resolveAgent: (id) => agentCatalog.get(id),
+    runBranch: options.branchRunner ?? notAttachedBranchRunner(),
+    verify: createFileEvidenceVerificationHook({
+      workspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    }),
+    now,
+  });
+
+  // Workflow builder from prompt (Task 4.3): draft-only, MANDATORY contract validation, never
+  // auto-run. Tier 1 wires the honest not-attached generator (a draft request rejects rather than
+  // fabricating a TaskDefinition); the confirm route re-validates through the SAME agent
+  // catalog / task store boundaries used by every other write path.
+  const workflowBuilder = createWorkflowBuilder({
+    generate: options.workflowDraftGenerator ?? notAttachedWorkflowDraftGenerator(),
+    knownAgentIds: () => agentCatalog.knownIds(),
+    basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
 
   // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
@@ -574,6 +645,8 @@ export async function createCoworkService(
     createSkillRouter(skillCatalog),
     createAgentRouter(agentCatalog),
     createTaskRouter(taskStore),
+    createWorkflowRouter({ builder: workflowBuilder, tasks: taskStore, agents: agentCatalog }),
+    createDispatchRouter({ runs: dispatchRuns, tasks: taskStore }),
     createFileReviewRouter({
       activeWorkspaceRoot: () => {
         const ws = settingsStore.activeWorkspace();
@@ -609,6 +682,7 @@ export async function createCoworkService(
     recentWorkspaces,
     permissionGate,
     permissionAudit,
+    branchPermissionBindings,
     sessionService,
     streamHub,
     extensions,
@@ -617,11 +691,18 @@ export async function createCoworkService(
     skillCatalog,
     agentCatalog,
     taskStore,
+    dispatchRuns,
     redactError,
     ...(localAuth !== undefined ? { localAuth } : {}),
     ...(sqliteDatabase !== undefined ? { sqliteDatabase } : {}),
     buildToolPermissionProxy: (guard) =>
-      new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),
+      new ToolPermissionProxy({
+        guard,
+        gate: permissionGate,
+        reply: runtimeReply,
+        now,
+        branchPreset: (sessionId) => branchPermissionBindings.presetFor(sessionId),
+      }),
   };
 
   return {
@@ -663,6 +744,7 @@ async function seedFromSettings(
   store: Awaited<ReturnType<typeof openSettingsStore>>,
   providerPort: ReturnType<typeof createProviderPort>,
   modelConfig: ReturnType<typeof createModelConfigService>,
+  bootDiagnostic: (line: string) => void,
 ): Promise<void> {
   const defaultModel = store.defaultModel();
   if (defaultModel !== undefined) {
@@ -670,7 +752,16 @@ async function seedFromSettings(
   }
   for (const provider of store.listProviderSettings()) {
     if (provider.baseUrl !== undefined) {
-      await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      // A persisted endpoint the SSRF policy refuses must not abort startup (it bricked the
+      // app: even the settings-only onboarding tier died, so the user could never repair the
+      // config). Degrade to "endpoint not configured"; the policy still blocks it everywhere
+      // at runtime, and the provider UI shows the unconfigured state honestly.
+      try {
+        await providerPort.configureEndpoint(provider.providerId, { baseUrl: provider.baseUrl });
+      } catch (err) {
+        if (!(err instanceof SsrfBlockedError)) throw err;
+        bootDiagnostic(`boot_provider_endpoint_skipped: ${provider.providerId} (${err.reason})`);
+      }
     }
     if (provider.credentialRef !== undefined) {
       providerPort.configureCredential(provider.providerId, provider.credentialRef);

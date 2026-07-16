@@ -231,3 +231,42 @@ export {
   TaskStoreError,
   type TaskStore,
 } from "./tasks/index.js";
+
+export {
+  startLoopRun,
+  type LoopOutcome,
+  type LoopRun,
+  type LoopTerminal,
+} from "./tasks/index.js";
+
+export {
+  createFileEvidenceVerificationHook,
+  type FileEvidenceVerificationOptions,
+} from "./tasks/index.js";
+
+export {
+  createWorkflowBuilder,
+  createWorkflowRouter,
+  WorkflowBuilderError,
+  WorkflowRequestError,
+  TASK_DRAFT_PATH,
+  TASK_DRAFT_CONFIRM_PATH,
+  type WorkflowBuilder,
+  type WorkflowDraftCandidate,
+  type WorkflowDraftGenerator,
+  type WorkflowDraftOutcome,
+} from "./tasks/index.js";
+
+export {
+  createDispatchRunRegistry,
+  createDispatchRouter,
+  createLiveBranchRunner,
+  DISPATCH_RUNS_PATH,
+  DISPATCH_RUN_ITEM_PATH,
+  DISPATCH_RUN_CANCEL_PATH,
+  DISPATCH_TASK_RUN_PATH,
+  type BranchRunner,
+  type BranchView,
+  type DispatchRunRegistry,
+  type DispatchRunView,
+} from "./dispatchers/index.js";

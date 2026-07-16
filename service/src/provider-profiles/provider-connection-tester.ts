@@ -29,6 +29,11 @@ export interface ProviderConnectionTesterOptions {
   readonly dnsResolver: DnsResolver;
   readonly now?: () => string;
   readonly e2eMockLlmBaseUrl?: string;
+  /**
+   * Developer-only loopback-http override (see `../provider/dev-loopback-http.js`). Sourced ONLY
+   * from process env at the composition root — never from a request. Defaults to `false`.
+   */
+  readonly loopbackEscape?: boolean;
 }
 
 const ENDPOINT_POLICY_ERROR: ProviderError = {
@@ -63,6 +68,7 @@ export function createProviderConnectionTester(
   const ssrf = createSsrfPolicy({
     resolver: options.dnsResolver,
     ...(options.e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl: options.e2eMockLlmBaseUrl } : {}),
+    ...(options.loopbackEscape === true ? { loopbackEscape: true } : {}),
   });
 
   function portForProfile(profile: ProviderProfile): ProviderPort {

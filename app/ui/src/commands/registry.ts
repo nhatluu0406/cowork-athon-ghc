@@ -182,6 +182,74 @@ export function createDefaultRegistry(): CommandRegistry {
     },
   });
 
+  // /dispatch — task catalog + fan-out runs from the composer (agent-harness-plan.md Task 5.3)
+  registry.register({
+    name: "dispatch",
+    description:
+      "Điều phối task cho built-in agents. Cú pháp: /dispatch · /dispatch run <task-id> · /dispatch runs · /dispatch cancel <run-id>.",
+    type: "client_side",
+    handler: async (ctx) => {
+      const [sub, arg] = ctx.arguments;
+      const client = ctx.client;
+
+      if (sub === undefined) {
+        const tasks = await client.listDispatchTasks();
+        if (tasks.length === 0) {
+          ctx.appendAssistantMessage("Chưa có task nào. Tạo task qua API `/v1/tasks` hoặc dùng template built-in.");
+          return;
+        }
+        const lines = tasks
+          .map((t) => `• \`${t.id}\` — ${t.name} (${t.source === "built_in" ? "built-in" : "user"})`)
+          .join("\n");
+        ctx.appendAssistantMessage(
+          `Task có thể chạy:\n${lines}\n\nChạy bằng \`/dispatch run <task-id>\`; theo dõi trên bề mặt Dispatch.`,
+        );
+        return;
+      }
+
+      const verb = sub.toLowerCase();
+      if (verb === "run") {
+        if (arg === undefined || arg.trim().length === 0) {
+          ctx.appendAssistantMessage("⛔ Thiếu task id. Cú pháp: `/dispatch run <task-id>` (xem id bằng `/dispatch`).");
+          return;
+        }
+        const run = await client.runDispatchTask(arg.trim());
+        const branches = run.branches.map((b) => `• ${b.agentName}: ${b.status}`).join("\n");
+        ctx.appendAssistantMessage(
+          `🚀 Đã bắt đầu run \`${run.runId}\` cho task **${run.taskName}** (${run.status}).\n${branches}\n\nTheo dõi trên bề mặt Dispatch; hủy bằng \`/dispatch cancel ${run.runId}\`.`,
+        );
+        return;
+      }
+
+      if (verb === "runs") {
+        const runs = await client.listDispatchRuns();
+        if (runs.length === 0) {
+          ctx.appendAssistantMessage("Chưa có lượt chạy dispatch nào.");
+          return;
+        }
+        const lines = runs
+          .map((r) => `• \`${r.runId}\` — ${r.taskName}: ${r.status} (lượt ${r.attempts})${r.verified ? " · đã xác minh" : ""}`)
+          .join("\n");
+        ctx.appendAssistantMessage(`Lượt chạy dispatch:\n${lines}`);
+        return;
+      }
+
+      if (verb === "cancel") {
+        if (arg === undefined || arg.trim().length === 0) {
+          ctx.appendAssistantMessage("⛔ Thiếu run id. Cú pháp: `/dispatch cancel <run-id>` (xem id bằng `/dispatch runs`).");
+          return;
+        }
+        await client.cancelDispatchRun(arg.trim());
+        ctx.appendAssistantMessage(`🛑 Đã yêu cầu hủy run \`${arg.trim()}\`.`);
+        return;
+      }
+
+      ctx.appendAssistantMessage(
+        `⛔ Không hiểu \`/dispatch ${sub}\`. Cú pháp: /dispatch · /dispatch run <task-id> · /dispatch runs · /dispatch cancel <run-id>.`,
+      );
+    },
+  });
+
   // /review (Nhóm B - Prompt Template)
   registry.register({
     name: "review",

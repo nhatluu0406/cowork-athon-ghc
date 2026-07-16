@@ -62,6 +62,12 @@ export {
   E2E_MOCK_LLM_ENV_KEY,
 } from "./e2e-mock-llm.js";
 
+export {
+  readDevLoopbackHttpEscape,
+  DEV_LOOPBACK_HTTP_ENV_KEY,
+  DEV_LOOPBACK_HTTP_WARNING,
+} from "./dev-loopback-http.js";
+
 export { mapProviderError } from "./error-map.js";
 
 export {

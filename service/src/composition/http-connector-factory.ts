@@ -34,11 +34,17 @@ export function createHttpConnectorBundle(
   credentialService: CredentialService,
   settingsStore: SettingsStore,
   dnsResolver: DnsResolver,
+  /**
+   * Developer-only loopback-http override, resolved ONCE by the caller (compose-service.ts) from
+   * process env — never read here directly, so this stays a pure function of its inputs.
+   */
+  loopbackEscape = false,
 ): HttpConnectorBundle {
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
   const ssrf = createSsrfPolicy({
     resolver: dnsResolver,
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(loopbackEscape ? { loopbackEscape: true } : {}),
   });
   let activeModelFor: () => ModelRef | undefined = () => undefined;
   let port!: ProviderPort;

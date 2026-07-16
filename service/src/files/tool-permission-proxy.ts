@@ -15,10 +15,27 @@
  *
  * The proxy never touches the filesystem itself and never trusts a client-supplied approval
  * level — enforcement lives in the gate + guard it delegates to.
+ *
+ * D1 fix (ADR 0011 Open item): when the event's session is bound to a dispatch branch's
+ * {@link PermissionPreset} (via the injected {@link ToolPermissionProxyOptions.branchPreset}
+ * lookup) and the preset's level for the mapped tool is `deny`, the request is auto-denied HERE,
+ * before it ever reaches {@link PermissionGate.submit} as an ask — via
+ * {@link PermissionGate.denyByPolicy}, the gate's SEPARATE boundary-policy deny path (not the
+ * user-facing `resolve()`), so the audit trail honestly records `reason: "agent_preset"` rather
+ * than misattributing the auto-deny to a human, no second permission path exists, and no
+ * `pending` state is ever created for the request to appear as an Allow/Deny prompt. Only `deny`
+ * is ever read from the preset — any other value (including a looser `allow` that should never
+ * have passed `isNarrowingPreset`) is inert here, so this can only ever narrow, never widen, what
+ * the gate/base-policy would otherwise decide. The preset key looked up for a given action kind
+ * is {@link presetKeyForActionKind} — imported from `@cowork-ghc/contracts` rather than kept as a
+ * local copy, so `validateAgentDefinition`'s notion of an "enforceable" key and this proxy's
+ * notion can never drift apart (D1 fix, follow-up finding 2). Concretely this means an MS365
+ * write is NOT governed by a branch's `permissionPreset` today: MS365 tool calls submit directly
+ * to the {@link PermissionGate} from `ms365/ms365-tools.ts` and never reach this proxy at all.
  */
 
 import path from "node:path";
-import type { PermissionActionKind } from "@cowork-ghc/contracts";
+import { presetKeyForActionKind, type PermissionActionKind, type PermissionPreset } from "@cowork-ghc/contracts";
 import type { WorkspaceGuard } from "../workspace/index.js";
 import { WorkspaceBoundaryError } from "../workspace/index.js";
 import {
@@ -46,7 +63,8 @@ export type ProxyRefusalReason = "path_escape" | "missing_path" | "unmappable_to
 /** Result of proxying one event. `submitted` handed a live request to the gate. */
 export type ProxyOutcome =
   | { readonly outcome: "submitted"; readonly requestId: string; readonly actionKind: PermissionActionKind }
-  | { readonly outcome: "refused"; readonly requestId: string; readonly reason: ProxyRefusalReason };
+  | { readonly outcome: "refused"; readonly requestId: string; readonly reason: ProxyRefusalReason }
+  | { readonly outcome: "denied_by_preset"; readonly requestId: string; readonly actionKind: PermissionActionKind };
 
 export interface ToolPermissionProxyOptions {
   readonly guard: WorkspaceGuard;
@@ -57,6 +75,13 @@ export interface ToolPermissionProxyOptions {
   readonly now: () => string;
   /** Redacting reporter for a refusal-deny transport failure. Receives only a non-secret line. */
   readonly onReplyError?: (message: string, requestId: string) => void;
+  /**
+   * D1 fix: look up the {@link PermissionPreset} bound to a dispatch branch session (absent for
+   * an ordinary interactive session — the common case, and byte-for-byte unchanged behavior).
+   * Backed by `permission/branch-permission-bindings.ts` in production; a test may inject any
+   * function. Only a `deny` level is ever consulted (see the class doc for why this cannot widen).
+   */
+  readonly branchPreset?: (sessionId: string) => PermissionPreset | undefined;
 }
 
 /**
@@ -100,6 +125,7 @@ export class ToolPermissionProxy {
   private readonly reply: RuntimeReplyPort;
   private readonly now: () => string;
   private readonly onReplyError: (message: string, requestId: string) => void;
+  private readonly branchPreset: ((sessionId: string) => PermissionPreset | undefined) | undefined;
 
   constructor(options: ToolPermissionProxyOptions) {
     this.guard = options.guard;
@@ -111,11 +137,19 @@ export class ToolPermissionProxy {
       ((message, requestId) =>
         // The deny reply object carries no secret; a non-secret diagnostic line is safe.
         console.error(`[files] refusal-deny transport error for ${requestId}: ${message}`));
+    this.branchPreset = options.branchPreset;
   }
 
   async handle(event: OpencodeToolPermissionEvent): Promise<ProxyOutcome> {
     const kind = mapToolToActionKind(event.tool);
     if (kind === undefined) return this.refuse(event.requestId, "unmappable_tool");
+
+    // D1 fix: checked BEFORE any path resolution — if the branch's own agent preset forbids this
+    // action kind entirely, there is nothing to ask about (fail fast, and never touch the fs).
+    const preset = this.branchPreset?.(event.sessionId);
+    if (preset !== undefined && preset[presetKeyForActionKind(kind)] === "deny") {
+      return this.denyByPreset(event, kind);
+    }
 
     if (kind === "command_exec") {
       return this.submit(event, kind, undefined);
@@ -165,6 +199,29 @@ export class ToolPermissionProxy {
     });
     this.gate.submit(request);
     return { outcome: "submitted", requestId: event.requestId, actionKind: kind };
+  }
+
+  /**
+   * D1 fix: auto-deny a request the branch's own preset forbids — through the SAME
+   * `PermissionGate`, not a second path, via {@link PermissionGate.denyByPolicy}. That method is
+   * NOT the user-facing `resolve()` path: it audits the honest `"agent_preset"` reason (never
+   * `"user_decision"` — a security reviewer must be able to tell a policy auto-deny apart from a
+   * real human decision), and it never creates a `pending` entry at all, so there is no window
+   * in which this request could be observed as an Allow/Deny prompt. The gate's usual deny
+   * handling (session driven terminal, explicit deny reply forwarded — P3) still applies.
+   */
+  private async denyByPreset(
+    event: OpencodeToolPermissionEvent,
+    kind: PermissionActionKind,
+  ): Promise<ProxyOutcome> {
+    const request = createPermissionRequest({
+      requestId: event.requestId,
+      sessionId: event.sessionId,
+      action: { kind, description: describe(event.tool, kind, undefined) },
+      requestedAt: this.now(),
+    });
+    await this.gate.denyByPolicy(request);
+    return { outcome: "denied_by_preset", requestId: event.requestId, actionKind: kind };
   }
 
   /** Refuse an event pre-gate: forward an explicit deny so the runtime is not stranded. */

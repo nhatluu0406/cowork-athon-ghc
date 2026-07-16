@@ -34,6 +34,11 @@ export {
 } from "./session-denial.js";
 
 export {
+  createBranchPermissionBindings,
+  type BranchPermissionBindings,
+} from "./branch-permission-bindings.js";
+
+export {
   createPermissionRouter,
   PermissionRequestError,
   PERMISSION_PENDING_PATH,

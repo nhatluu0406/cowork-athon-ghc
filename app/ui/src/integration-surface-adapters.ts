@@ -22,6 +22,10 @@ const ADAPTERS: Readonly<Record<ExternalSurfaceId, IntegrationSurfaceAdapter>> =
     surfaceId: "dispatch",
     mountId: "d1-dispatch-root",
     component: "DispatchIntegrationSlot",
+    // Fallback label/description for the shared adapter shape. In the running app the Dispatch
+    // surface always renders the real local dispatch board + phone quick-access (a client is
+    // always supplied — see ui-shell/integration-view.ts), so this "awaiting" copy is NOT shown
+    // for dispatch; it only appears in the no-client rendering path (tests).
     statusLabel: "Chờ tích hợp D1",
     description:
       "Điều phối fan-out agent và theo dõi tác vụ con. Backend D1 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
