@@ -8,7 +8,7 @@
 import type { CredentialRef } from "@cowork-ghc/contracts";
 
 /** Phase 1 provider kinds exposed to users (not raw adapter ids). */
-export type ProviderProfileType = "deepseek" | "custom-openai-compat";
+export type ProviderProfileType = "deepseek" | "fptcloud" | "custom-openai-compat";
 
 /** Optional preset metadata for factory-created profiles. */
 export interface ProviderProfilePresetMeta {
