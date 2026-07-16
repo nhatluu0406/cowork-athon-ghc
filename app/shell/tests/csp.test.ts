@@ -22,15 +22,30 @@ function parseCsp(policy: string): Map<string, string> {
   return map;
 }
 
-test("RENDERER_CSP forbids unsafe-inline and unsafe-eval anywhere", () => {
-  assert.doesNotMatch(RENDERER_CSP, /unsafe-inline/);
+test("RENDERER_CSP never allows unsafe-eval, and unsafe-inline ONLY for style-src", () => {
+  // unsafe-eval is forbidden everywhere.
   assert.doesNotMatch(RENDERER_CSP, /unsafe-eval/);
+  const csp = parseCsp(RENDERER_CSP);
+  // The security-critical script directive stays strict — no inline scripts (the real XSS lever).
+  assert.equal(csp.get("script-src"), "'self'", "script-src must remain 'self' only");
+  assert.ok(
+    !(csp.get("script-src") ?? "").includes("unsafe-inline"),
+    "script-src must never allow unsafe-inline",
+  );
+  assert.ok(
+    !(csp.get("default-src") ?? "").includes("unsafe-inline"),
+    "default-src must never allow unsafe-inline",
+  );
+  // style-src is the ONLY place unsafe-inline is permitted — required by Chromium's built-in PDF
+  // viewer (PDFium) whose inline layout styles would otherwise be refused, blanking the preview.
+  assert.match(csp.get("style-src") ?? "", /unsafe-inline/, "style-src must allow unsafe-inline for PDFium");
 });
 
 test("RENDERER_CSP sets the required restrictive directives", () => {
   const csp = parseCsp(RENDERER_CSP);
   assert.equal(csp.get("default-src"), "'self'");
   assert.equal(csp.get("script-src"), "'self'");
+  assert.equal(csp.get("style-src"), "'self' 'unsafe-inline'");
   assert.equal(csp.get("object-src"), "'none'");
   assert.equal(csp.get("base-uri"), "'none'");
   assert.equal(csp.get("frame-ancestors"), "'none'");
