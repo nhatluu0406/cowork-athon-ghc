@@ -75,10 +75,10 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     icon: "gateway",
     featureFlag: "d4.gateway",
     requiredCapability: "advanced_gateway_backend",
-    availability: "awaiting_integration",
+    availability: "available",
     dependency: "D4",
     description:
-      "Gateway đa provider, failover và key pool. Backend D4 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
+      "Gateway đa provider, failover và key pool. Quản lý API key và kích hoạt tài khoản theo provider.",
     component: "GatewayIntegrationSlot",
   },
   {

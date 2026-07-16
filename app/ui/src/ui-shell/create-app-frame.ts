@@ -92,6 +92,7 @@ export interface AppFrameDom {
   readonly sidebarRailToggle: HTMLButtonElement;
   readonly microsoftView: MicrosoftViewDom;
   readonly codeView: ClaudeCodeViewDom;
+  readonly gatewayView: HTMLElement;
   openSettings: () => void;
   /** Opens the native workspace folder picker (wired by app-shell once the picker is mounted). */
   pickWorkspace: () => void;
@@ -122,6 +123,10 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     onRuntimeModeChange: (mode) => dom.onCodeRuntimeModeChange(mode),
   });
   const skillsMcpView = createSkillsMcpView();
+  const gatewayView = el("section", "view view--gateway");
+  gatewayView.dataset["view"] = "gateway";
+  gatewayView.hidden = true;
+  gatewayView.setAttribute("aria-label", "Gateway");
   const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
   const statusBar = createStatusBar();
@@ -139,6 +144,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     microsoftView.root,
     codeView.root,
     skillsMcpView.root,
+    gatewayView,
     settingsSurface.root,
     inspector.root,
   );
@@ -218,6 +224,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     sidebarRailToggle: rail.sidebarToggle,
     microsoftView,
     codeView,
+    gatewayView,
     openSettings: () => undefined,
     pickWorkspace: () => undefined,
     closeSettings: () => undefined,

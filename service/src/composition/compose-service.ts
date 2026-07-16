@@ -172,6 +172,12 @@ import {
   type VaultCredentialStore,
 } from "../db/index.js";
 import type { CredentialStore } from "../credential/index.js";
+import {
+  createGatewayService,
+  createGatewayRouter,
+  createNodeGatewayStoreFs,
+  openGatewayStore,
+} from "../gateway/index.js";
 
 /**
  * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11), matching the
@@ -192,6 +198,7 @@ const MS365_SCOPES: readonly string[] = [
 ];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
+const DEFAULT_GATEWAY_DATA_DIR = ".runtime";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
 const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
@@ -322,6 +329,18 @@ export async function createCoworkService(
   const credentialStore: CredentialStore =
     options.credentialStore ?? vaultStore ?? createMemoryStore();
   const credentialService = createCredentialService({ store: credentialStore, scrubber });
+
+  // --- Gateway service: manages named API-key accounts across providers. ---
+  const gatewayStoreFs = createNodeGatewayStoreFs(DEFAULT_GATEWAY_DATA_DIR);
+  const gatewayStore = await openGatewayStore(gatewayStoreFs);
+  const gatewayService = createGatewayService({
+    store: gatewayStore,
+    storeCredential: (account, key) =>
+      credentialService.store({ providerId: "gateway", account, secret: key }),
+    removeCredential: (ref) => credentialService.remove(ref).then(() => undefined),
+    generateId: () => crypto.randomUUID(),
+    now,
+  });
 
   // --- Settings store (persistent SD1 source of truth), loaded through the fs seam. ---
   let baseSettingsStore = await openSettingsStore({ fs: settingsFs });
@@ -836,6 +855,7 @@ export async function createCoworkService(
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
     ...(ms365Router !== undefined ? [ms365Router] : []),
+    createGatewayRouter(gatewayService),
     ...(options.extraRouters ?? []),
   ];
 
@@ -877,6 +897,7 @@ export async function createCoworkService(
         now,
         branchPreset: (sessionId) => branchPermissionBindings.presetFor(sessionId),
       }),
+    gatewayService,
   };
 
   return {

@@ -63,6 +63,7 @@ import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { createMentionTypeahead } from "./mention-typeahead.js";
+import { mountGatewayIntegrationSlot } from "./gateway-surface.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -992,6 +993,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const isMicrosoftSurface = state.activeSurface === "microsoft";
   const isCodeSurface = state.activeSurface === "code";
   const isSkillsMcpSurface = state.activeSurface === "skills-mcp";
+  const isGatewaySurface = state.activeSurface === "gateway";
   const settingsOpen = !dom.settingsSurface.hidden;
   const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
   const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
@@ -1016,10 +1018,12 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     isKnowledgeSurface ||
     isMicrosoftSurface ||
     isCodeSurface ||
-    isSkillsMcpSurface;
+    isSkillsMcpSurface ||
+    isGatewaySurface;
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
+  dom.gatewayView.hidden = settingsOpen || !isGatewaySurface;
   // Drive the runtime panes: only in Code surface + Preview mode; Web drives the embedded preview,
   // Ứng dụng drives the desktop-app pane. Exactly one is active at a time.
   const codePreviewActive = isCodeSurface && !settingsOpen && dom.codeView.mode === "preview";
@@ -1036,7 +1040,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
-  } else if (!isCoworkSurface) {
+  } else if (!isCoworkSurface && !isGatewaySurface) {
     // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
     // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
     const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
@@ -3052,6 +3056,13 @@ export function mountCoworkApp(root: HTMLElement): void {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
             updateSkillsMcpChip();
           });
+          if (state.bootstrap !== null) {
+            const bootstrap = state.bootstrap;
+            mountGatewayIntegrationSlot(dom.gatewayView, {
+              getBaseUrl: () => bootstrap.serviceBaseUrl ?? "",
+              getClientToken: () => bootstrap.clientToken ?? "",
+            });
+          }
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,
