@@ -186,6 +186,12 @@ test("router: a task with a bad plan maps to 400, not 500", async () => {
 
 // ---- Live branch runner (fake seams — no child, no network) ---------------------------
 
+// D1 fix: every live-branch-runner fixture below now must supply `bindPreset`/`releasePreset`
+// (required seams — a runner cannot be wired without wiring preset enforcement) and every
+// `BranchPlan` literal must carry a `preset`. These tests care about session/prompt/terminal
+// lifecycle, not preset enforcement itself (see `tests/live-branch-runner-preset.test.ts` for
+// that), so the seams below are harmless no-ops.
+
 test("live branch runner: create → prompt (persona prepended) → terminal completed", async () => {
   const prompts: string[] = [];
   const runner = createLiveBranchRunner({
@@ -195,9 +201,18 @@ test("live branch runner: create → prompt (persona prepended) → terminal com
     },
     terminal: () => ({ state: "completed" }),
     cancelSession: async () => undefined,
+    bindPreset: () => undefined,
+    releasePreset: () => undefined,
     pollIntervalMs: 1,
   });
-  const plan = { branchId: "b1", agentId: "researcher", agentName: "Researcher", systemPrompt: "research well", prompt: "do the work" };
+  const plan = {
+    branchId: "b1",
+    agentId: "researcher",
+    agentName: "Researcher",
+    systemPrompt: "research well",
+    prompt: "do the work",
+    preset: {},
+  };
   const result = await runner(plan, new AbortController().signal);
   assert.equal(result.status, "completed");
   assert.equal(prompts[0], composeBranchPrompt(plan));
@@ -211,10 +226,12 @@ test("live branch runner: a non-completed terminal is an errored branch (honest)
     sendPrompt: async () => undefined,
     terminal: () => ({ state: "errored" }),
     cancelSession: async () => undefined,
+    bindPreset: () => undefined,
+    releasePreset: () => undefined,
     pollIntervalMs: 1,
   });
   const result = await runner(
-    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y" },
+    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y", preset: {} },
     new AbortController().signal,
   );
   assert.equal(result.status, "errored");
@@ -231,10 +248,12 @@ test("live branch runner: abort mid-wait cancels the child session", async () =>
     cancelSession: async (id) => {
       cancelledSession = id;
     },
+    bindPreset: () => undefined,
+    releasePreset: () => undefined,
     pollIntervalMs: 5,
   });
   const pending = runner(
-    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y" },
+    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y", preset: {} },
     controller.signal,
   );
   setTimeout(() => controller.abort(), 10);
@@ -251,9 +270,11 @@ test("live branch runner: session create failure is an errored branch, never a c
     sendPrompt: async () => undefined,
     terminal: () => null,
     cancelSession: async () => undefined,
+    bindPreset: () => undefined,
+    releasePreset: () => undefined,
   });
   const result = await runner(
-    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y" },
+    { branchId: "b1", agentId: "a", agentName: "A", systemPrompt: "x", prompt: "y", preset: {} },
     new AbortController().signal,
   );
   assert.equal(result.status, "errored");

@@ -25,10 +25,16 @@ import type {
 } from "@cowork-ghc/contracts";
 
 /**
- * Why a request reached a decision (P5 audit). `user_decision` is an explicit Allow/Deny;
- * `fail_closed_timeout` is the P6 auto-deny when no decision arrived in time.
+ * Why a request reached a decision (P5 audit). `user_decision` is an explicit Allow/Deny made
+ * through the user-facing decision route; `fail_closed_timeout` is the P6 auto-deny when no
+ * decision arrived in time; `agent_preset` is a boundary POLICY auto-deny (D1 fix) — a dispatch
+ * branch's own `AgentDefinition.permissionPreset` forbade the tool, so the gate denied it on its
+ * own authority via {@link import("./permission-gate.js").PermissionGate.denyByPolicy} before any
+ * human was ever asked. Keeping these distinct matters: this reason is what a security reviewer
+ * reads to reconstruct WHO (or what) decided — collapsing a policy auto-deny into
+ * `user_decision` would misattribute a machine decision to a human.
  */
-export type PermissionDecisionReason = "user_decision" | "fail_closed_timeout";
+export type PermissionDecisionReason = "user_decision" | "fail_closed_timeout" | "agent_preset";
 
 /**
  * A LOCAL audit record for one Allow/Deny decision (P5). Deliberately carries ONLY
