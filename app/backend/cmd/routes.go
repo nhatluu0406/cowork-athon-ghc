@@ -61,7 +61,8 @@ func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedb
 	router.Register("/api/m365/sync/status", api.HandleM365SyncStatus(m365Deps))
 
 	// LLM config (dynamic configuration from service/src/provider)
-	router.Register("/api/llm/config", api.HandleLLMConfig(jwtAuth))
+	router.Register("/api/llm/config", api.HandleLLMConfig(statsDB, jwtAuth))         // POST: update config
+	router.Register("/api/llm/config/current", api.HandleLLMConfigGet(statsDB, jwtAuth)) // GET: retrieve current config
 
 	// Knowledge / Q&A + entities
 	router.Register("/api/knowledge/query", api.HandleKnowledgeQuery(retriever, jwtAuth))
