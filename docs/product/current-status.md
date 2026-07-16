@@ -128,6 +128,32 @@ còn thiếu của dispatch:
   cho verification không cần LLM thật.
 - **Chưa làm trong scope dispatch**: full-suite test sweep; đo cost/token của fan-out thật.
 
+## D1 compliance + security review 6.3 — 2026-07-16 (`fe79ff8`, `f3c01b1`, `0da7509`, `7a1cbdc`)
+
+| Item | Status |
+|---|---|
+| **ADR 0011** (`fe79ff8`) | Đóng gap compliance: design đóng băng L4 (§7:156-157) khóa D1 ở "`DispatchPort` seam shape only", nhưng Phase 4-5 đã ship fan-out chạy thật mà **không** ADR nào ghi lại. ADR 0011 supersede **chỉ dòng D1** (D3/D4 vẫn boundary-only; ADR 0001-0006 không đụng ⇒ L4 giữ `COMPLETED`) — ADR superseding **đầu tiên** của repo. Ghi ánh xạ `DispatchPort` → `BranchRunner` (tên trong design **chưa từng** tồn tại trong code; chốt `BranchRunner` là canonical). |
+| **Enforce `permissionPreset`** (`f3c01b1`) | Lỗ thật: preset chỉ được validate, **không** áp lúc dispatch ⇒ built-in `researcher`/`reviewer` khai `edit: "deny"` (và docstring nói "cannot write") vẫn rơi về `edit: "ask"` — user dispatch một reviewer chỉ-đọc vẫn bị hiện prompt xin ghi file và có thể Allow. Nay enforce tại `ToolPermissionProxy.handle`; bind `sessionId → preset` trước `sendPrompt`; bind lỗi ⇒ branch `errored`, prompt **không** gửi. Chỉ đọc `deny` ⇒ chỉ siết, không nới. Tier 1 không đổi. |
+| **Audit trung thực** (`f3c01b1`) | Preset-deny **không phải** quyết định của user và không được ghi như vậy: thêm reason `agent_preset` + `PermissionGate.denyByPolicy` (dùng lại validation của `submit` + `finalizeDeny`, **không** tạo `pending`, **không** arm timer). Route user **không forge được**: `ResolutionInput` không có field `reason`. |
+| **Security review 6.3** | **ĐÃ CHẠY** (bắt buộc do network exposure) — **không có permission bypass**. Xác nhận không phá được: gateway allowlist (chặn `%2e%2e`/traversal/case/method), phone không CRUD task, main token không rò, Discord không approve (capability-based), workspace boundary + symlink escape ở evidence hook, draft không auto-run, PWA không XSS/CSRF, audit bỏ field free-form. |
+| **2 finding đã sửa** (`7a1cbdc`) | (1) **Release preset fail-open**: `finally` release binding khi runner return, trong khi child **có thể còn sống** (`cancelSession` best-effort, nuốt lỗi; terminal `cancelled` là do local tự synthesize) ⇒ preset biến mất ⇒ ask thường ⇒ user/phone Allow ⇒ agent chỉ-đọc ghi file. Đường tới thường: guardrail `maxDurationMs` hoặc cancel từ phone. Nay release **chỉ** khi thấy terminal thật qua poll thường; **giữ** binding ở mọi trường hợp không chắc (giữ = leak trơ bounded; release sớm = fail-open). (2) **Key preset không enforce được**: `{ "*": "deny" }` validate lọt nhưng boundary bỏ qua ⇒ lockdown không tồn tại; nay validator từ chối, mapping canonical ở `core/contracts/src/permission-preset-keys.ts` dùng chung validator + proxy. |
+| Verified | `tsc --noEmit` exit 0 (service + core/contracts); **146/146** test service (dispatch + permission + files) + **9/9** contracts PASS. Test retention wire **module thật** (proxy + bindings + runner thật, chỉ fake seam hướng child), encode đúng repro của reviewer cho cả nhánh `cancelSession` thành công lẫn lỗi. |
+
+### Giới hạn trung thực (còn mở sau 6.3)
+
+1. **Chưa packaged/live** — Checkpoint 5 vẫn chưa bắt đầu; phần **release-verifier** của gate 6.3
+   chưa chạy (cần packaged artifact).
+2. **Không có trần số dispatch run đồng thời / không rate limit** route run từ phone — availability
+   + chi phí LLM không chặn trên (`run-registry.ts` chỉ prune run đã kết thúc).
+3. **PLAUSIBLE**: gate `states` không evict; `requestId` trùng ⇒ bridge không forward reply ⇒ child
+   treo (fail-**closed** trên write, nhưng mâu thuẫn "không bao giờ strand" ở P3). Cần child thật để
+   xác nhận ⇒ gắn vào Checkpoint 5.
+4. **`retry_until_verified` chỉ chứng minh "file đã khai có tồn tại"**, không phải task thành công —
+   ngôn ngữ "không thể fabricate success" mạnh hơn thực tế existence-check mua được.
+5. **LAN mode gửi device token plaintext** (`CGHC_REMOTE_LAN=1`, không TLS) — token đó approve được
+   lệnh ghi file. Off mặc định và docs thừa nhận là dev/demo flag, nhưng reviewer đề xuất **gate
+   cứng** thay vì comment. Thuộc hardening 2.2, ngoài scope D1.
+
 ## Hotfix: app tự brick khi settings chứa endpoint http loopback (2026-07-16)
 
 | Item | Status |
