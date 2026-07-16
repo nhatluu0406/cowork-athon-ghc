@@ -66,7 +66,7 @@ updated_at: "2026-07-17"
 - [x] Code-file viewing: syntax highlight (highlight.js) + line numbers, read-only with an edit toggle.
 - [x] Office preview (bounded follow-up): read-only multi-sheet `.xlsx` navigation (visible-sheet
       tabs, hidden sheets filtered, read-only).
-- [~] Office preview — high-fidelity `.pptx` (code complete; packaged PO visual acceptance pending):
+- [x] Office preview — high-fidelity `.pptx` (packaged PO-observed 2026-07-17, incl. embedded images):
       read-only slide rendering (text/images/shapes/tables/charts/theme as HTML/SVG) via a local,
       CSP-safe engine (`@aiden0z/pptx-renderer`, Apache-2.0), prev/next + "Slide X / Y", fit-to-panel,
       degrades to a text-first fallback on failure. `.ppt` legacy unsupported; animation/macro/OLE/
