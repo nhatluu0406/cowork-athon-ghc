@@ -49,6 +49,7 @@ import {
   nodeFsProbe,
 } from "../workspace/index.js";
 import {
+  createBranchPermissionBindings,
   createInMemoryAuditSink,
   createNodeScheduler,
   createPermissionGate,
@@ -240,6 +241,12 @@ export async function createCoworkService(
     now,
   });
 
+  // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
+  // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
+  // reads from at the SAME execution boundary every other tool-permission event flows through —
+  // never a second permission authority, only a narrowing input to `permissionGate` above.
+  const branchPermissionBindings = createBranchPermissionBindings();
+
   // --- Runtime-extension layer (CGHC-026): honest not-attached skill/MCP seams, the composed
   // redactor for RE5 diagnostics, and the SAME SSRF policy the provider port uses for URL MCP
   // endpoints. No router is mounted (Tier 2 / CGHC-028 attaches live execution + a UI).
@@ -403,6 +410,7 @@ export async function createCoworkService(
     recentWorkspaces,
     permissionGate,
     permissionAudit,
+    branchPermissionBindings,
     sessionService,
     streamHub,
     extensions,
@@ -413,7 +421,13 @@ export async function createCoworkService(
     dispatchRuns,
     redactError,
     buildToolPermissionProxy: (guard) =>
-      new ToolPermissionProxy({ guard, gate: permissionGate, reply: runtimeReply, now }),
+      new ToolPermissionProxy({
+        guard,
+        gate: permissionGate,
+        reply: runtimeReply,
+        now,
+        branchPreset: (sessionId) => branchPermissionBindings.presetFor(sessionId),
+      }),
   };
 
   return {

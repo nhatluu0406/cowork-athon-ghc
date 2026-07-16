@@ -16,7 +16,12 @@
  * honest visibility hold.
  */
 
-import { effectiveConcurrency, type AgentDefinition, type TaskDefinition } from "@cowork-ghc/contracts";
+import {
+  effectiveConcurrency,
+  type AgentDefinition,
+  type PermissionPreset,
+  type TaskDefinition,
+} from "@cowork-ghc/contracts";
 
 /** A planned branch: which agent runs, and the exact prompt it receives. */
 export interface BranchPlan {
@@ -25,6 +30,13 @@ export interface BranchPlan {
   readonly agentName: string;
   readonly systemPrompt: string;
   readonly prompt: string;
+  /**
+   * The agent's (narrowing-only, catalog-validated) tool-permission preset. Carried onto the
+   * plan so the live branch runner can bind it to the branch's child session BEFORE the first
+   * prompt — the runtime enforcement point (`ToolPermissionProxy`) reads it from that binding,
+   * never from this plan directly (D1 fix — see agent-harness-plan.md ADR 0011 Open items).
+   */
+  readonly preset: PermissionPreset;
 }
 
 export type BranchStatus = "pending" | "running" | "completed" | "errored" | "cancelled";
@@ -111,6 +123,7 @@ export function planBranches(
       agentName: agent.name,
       systemPrompt: agent.systemPrompt,
       prompt: `${task.goal}${focus}`,
+      preset: agent.permissionPreset,
     };
   });
 }

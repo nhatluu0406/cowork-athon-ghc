@@ -100,6 +100,19 @@ export interface PermissionGate {
   proceed<T>(requestId: string, perform: () => T): ProceedResult<T>;
   /** Snapshot of still-pending requests (for the CGHC-017 UI). */
   pending(): readonly PermissionRequest[];
+  /**
+   * D1 fix (follow-up): a SEPARATE, narrow boundary-POLICY deny — used ONLY by a boundary
+   * component denying on its own authority (e.g. {@link import("../files/tool-permission-proxy.js").ToolPermissionProxy}
+   * auto-denying a tool a dispatch branch's `permissionPreset` forbids), NEVER by the
+   * user-facing decision route (`resolve`'s {@link ResolutionInput} has no `reason` field — the
+   * router cannot reach this method or forge its reason). Registers `request` with the SAME
+   * validation guarantees as {@link submit} (non-empty ids, duplicate-requestId rejection) and
+   * IMMEDIATELY finalizes it as denied with the honest `"agent_preset"` audit reason — no
+   * `pending` state is ever created and no fail-closed timer is armed (there is no one to wait
+   * for an answer from). The deny reply is still forwarded (P3, never stranded) and the session
+   * still driven terminal, exactly like any other gate deny.
+   */
+  denyByPolicy(request: PermissionRequest): Promise<PermissionReply>;
 }
 
 export function createPermissionGate(options: PermissionGateOptions): PermissionGate {
@@ -135,17 +148,22 @@ export function createPermissionGate(options: PermissionGateOptions): Permission
     return { requestId: request.requestId, decision: "deny" };
   }
 
+  /** Shared "is this a valid, brand-new request id" guard for `submit` AND `denyByPolicy`. */
+  function assertNewRequest(request: PermissionRequest, callerLabel: string): void {
+    if (typeof request.requestId !== "string" || request.requestId.length === 0) {
+      throw new Error(`PermissionGate.${callerLabel}: requestId must be a non-empty string`);
+    }
+    if (typeof request.sessionId !== "string" || request.sessionId.length === 0) {
+      throw new Error(`PermissionGate.${callerLabel}: sessionId must be a non-empty string`);
+    }
+    if (states.has(request.requestId)) {
+      throw new Error(`PermissionGate.${callerLabel}: duplicate requestId ${JSON.stringify(request.requestId)}`);
+    }
+  }
+
   return {
     submit(request) {
-      if (typeof request.requestId !== "string" || request.requestId.length === 0) {
-        throw new Error("PermissionGate.submit: requestId must be a non-empty string");
-      }
-      if (typeof request.sessionId !== "string" || request.sessionId.length === 0) {
-        throw new Error("PermissionGate.submit: sessionId must be a non-empty string");
-      }
-      if (states.has(request.requestId)) {
-        throw new Error(`PermissionGate.submit: duplicate requestId ${JSON.stringify(request.requestId)}`);
-      }
+      assertNewRequest(request, "submit");
       // P4: the level is boundary-authoritative — recompute from the action kind, never
       // trust the field on the incoming request (a client cannot downgrade a delete).
       const level = classifyApprovalLevel(request.action.kind);
@@ -215,6 +233,19 @@ export function createPermissionGate(options: PermissionGateOptions): Permission
         states.set(requestId, { status: "consumed", request: state.request, level: state.level });
       }
       return { performed: true, result };
+    },
+
+    async denyByPolicy(request) {
+      // Same brand-new-request guarantees as `submit` — including the duplicate-requestId
+      // rejection, so a policy deny can never silently override (or be confused with) a request
+      // already known to the gate via the ordinary ask path.
+      assertNewRequest(request, "denyByPolicy");
+      const level = classifyApprovalLevel(request.action.kind);
+      // No `pending` state is ever set and no timer is armed — this request is decided already;
+      // there is nothing to wait for and nothing to auto-deny later.
+      const reply = finalizeDeny(request, level, "agent_preset");
+      await options.reply.reply(reply).catch((error) => reportReplyError(error, request.requestId));
+      return reply;
     },
 
     pending() {
