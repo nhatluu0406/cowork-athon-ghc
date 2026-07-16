@@ -99,11 +99,13 @@ export function createCoworkView(defaultTitle: string): CoworkViewDom {
 
   const permissionModeControl = createPermissionModeControl();
 
+  // Read-only summary chip (Wave 2B): no drawer/selector here, click navigates to the
+  // full Kỹ năng & MCP surface (handler wired in app-shell.ts).
   const skillsButton = el("button", "skills-btn composer-skills-btn") as HTMLButtonElement;
   skillsButton.type = "button";
-  skillsButton.textContent = "Kỹ năng: 0";
-  skillsButton.dataset["tooltip"] = "Quản lý kỹ năng cho lượt chat";
-  skillsButton.setAttribute("aria-label", "Mở Kỹ năng");
+  skillsButton.textContent = "0 Kỹ năng · 0 MCP";
+  skillsButton.dataset["tooltip"] = "Mở Kỹ năng & MCP";
+  skillsButton.setAttribute("aria-label", "Mở Kỹ năng & MCP");
 
   const providerControl = createConversationProviderControl();
 

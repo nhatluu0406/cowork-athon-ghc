@@ -36,14 +36,14 @@ updated_at: "2026-07-15"
 
 ## WAVE 2 — OpenCode compatibility + Kỹ năng & MCP Hub
 
-- [ ] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
-- [ ] Add `Kỹ năng & MCP` rail surface below Cowork.
-- [ ] Remove Skills from Settings.
-- [ ] Remove Skill/MCP selection from composer.
-- [ ] Show active summary only in Cowork/Workspace.
-- [ ] Use OpenCode native Skill load-on-demand.
-- [ ] Add persistent MCP config and live adapter.
-- [ ] Phase 1 MCP: local/remote + static encrypted API headers, no OAuth.
+- [x] Test OpenCode 1.18.1 compatibility; fallback target 1.17.20.
+- [x] Add `Kỹ năng & MCP` rail surface below Cowork.
+- [x] Remove Skills from Settings.
+- [x] Remove Skill/MCP selectors from Cowork/Workspace composer.
+- [x] Show active summary only in Cowork/Workspace.
+- [x] Use OpenCode native Skill load-on-demand.
+- [x] Add persistent MCP config and live adapter.
+- [x] Phase 1 MCP: local/remote + static encrypted API headers, no OAuth.
 
 ## WAVE 3 — Provider model discovery
 
