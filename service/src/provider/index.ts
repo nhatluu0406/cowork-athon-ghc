@@ -113,6 +113,14 @@ export {
 export { probeUrlFor, authHeadersFor } from "./probe-profiles.js";
 
 export {
+  createModelDiscovery,
+  parseModelList,
+  type ModelDiscovery,
+  type ModelDiscoveryOptions,
+  type ModelDiscoveryTarget,
+} from "./model-discovery.js";
+
+export {
   createProviderRouter,
   ProviderRequestError,
   PROVIDERS_PATH,

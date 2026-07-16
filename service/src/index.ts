@@ -177,6 +177,7 @@ export {
 export {
   createProviderProfileStore,
   createProviderConnectionTester,
+  createProfileModelDiscovery,
   createProfileRuntimeBridge,
   createProviderProfileRouter,
   migrateLegacySettingsToProfiles,
@@ -185,6 +186,7 @@ export {
   type ProviderProfile,
   type ProviderProfileView,
   type ProviderProfileStore,
+  type ProfileModelDiscovery,
 } from "./provider-profiles/index.js";
 
 export {

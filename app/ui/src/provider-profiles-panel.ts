@@ -28,6 +28,7 @@ export interface ProviderProfilesPanelDeps {
     | "storeProfileCredential"
     | "removeProfileCredential"
     | "testProfileConnection"
+    | "discoverProfileModels"
   >;
   readonly onSettingsUpdated?: (view: SettingsView) => void;
   readonly onConnectionTestResult?: (profileId: string, ok: boolean) => void;
@@ -133,7 +134,18 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const modelCustomLabel = el("label", "llm-field", "Model ID");
   const modelCustomInput = document.createElement("input");
   modelCustomInput.className = "provider-profiles__model-custom";
-  modelCustomLabel.append(modelCustomInput);
+  modelCustomInput.placeholder = "Nhập Model ID thủ công hoặc dò từ endpoint";
+  // A datalist turns the free-text input into a searchable combobox while ALWAYS retaining
+  // manual entry (the user can type any id the discovered list does not contain).
+  const modelDatalist = document.createElement("datalist");
+  modelDatalist.id = "provider-profiles-model-options";
+  modelCustomInput.setAttribute("list", modelDatalist.id);
+  const discoverBtn = el("button", "provider-profiles__discover", "Dò model") as HTMLButtonElement;
+  discoverBtn.type = "button";
+  const discoverStatus = el("p", "provider-profiles__discover-status");
+  discoverStatus.setAttribute("role", "status");
+  discoverStatus.setAttribute("aria-live", "polite");
+  modelCustomLabel.append(modelCustomInput, modelDatalist, discoverBtn, discoverStatus);
 
   const baseUrlLabel = el("label", "llm-field", "Base URL");
   const baseUrlInput = document.createElement("input");
@@ -245,6 +257,28 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     }
   };
 
+  const fillDiscoveredModels = (models: readonly string[]): void => {
+    modelDatalist.replaceChildren();
+    for (const id of models) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      modelDatalist.append(opt);
+    }
+  };
+
+  // Discovery needs a persisted profile (id) with a stored credential; a brand-new draft must
+  // be saved once first. Manual entry is always available regardless.
+  const updateDiscoverAvailability = (): void => {
+    const profile = currentProfile();
+    const providerType = addingType ?? profile?.providerType;
+    if (providerType === "deepseek") return; // deepseek uses a fixed model select
+    const canDiscover = editingId !== null && profile?.credentialConfigured === true && !busy;
+    discoverBtn.disabled = !canDiscover;
+    discoverBtn.dataset["tooltip"] = canDiscover
+      ? "Lấy danh sách model từ endpoint"
+      : "Lưu hồ sơ và khoá API trước, rồi dò model";
+  };
+
   const showList = (): void => {
     panel = "list";
     editingId = null;
@@ -259,6 +293,8 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     listView.hidden = true;
     formView.hidden = false;
     closeOverflow();
+    fillDiscoveredModels([]);
+    discoverStatus.textContent = "";
     if (mode === "edit" && profile !== undefined) {
       editingId = profile.id;
       addingType = null;
@@ -279,6 +315,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
             ? ACTIVE_PROFILE_DELETE_MESSAGE
             : "";
       testStatus.textContent = formatVerifiedStatus(profile);
+      updateDiscoverAvailability();
     } else {
       editingId = null;
       addingType = type ?? "custom-openai-compat";
@@ -294,6 +331,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       deleteBtn.disabled = true;
       deleteStatus.textContent = "";
       testStatus.textContent = "Chưa kiểm tra.";
+      updateDiscoverAvailability();
     }
   };
 
@@ -459,6 +497,39 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     addChooser.hidden = true;
     addBtn.setAttribute("aria-expanded", "false");
     showForm("add", undefined, "custom-openai-compat");
+  });
+
+  discoverBtn.addEventListener("click", () => {
+    if (busy || editingId === null) return;
+    const profileId = editingId;
+    busy = true;
+    updateDiscoverAvailability();
+    discoverStatus.textContent = "Đang dò model…";
+    void (async () => {
+      try {
+        const baseUrl = baseUrlInput.value.trim();
+        const result = await deps.client.discoverProfileModels(
+          profileId,
+          baseUrl.length > 0 ? baseUrl : undefined,
+        );
+        if (result.ok && result.models !== undefined) {
+          fillDiscoveredModels(result.models);
+          discoverStatus.textContent =
+            result.models.length > 0
+              ? `Tìm thấy ${result.models.length} model. Chọn hoặc nhập thủ công.`
+              : "Không có model nào. Nhập Model ID thủ công.";
+        } else {
+          fillDiscoveredModels([]);
+          discoverStatus.textContent = userFacingProviderError(result.error);
+        }
+      } catch (error) {
+        fillDiscoveredModels([]);
+        discoverStatus.textContent = error instanceof Error ? error.message : "Dò model thất bại.";
+      } finally {
+        busy = false;
+        updateDiscoverAvailability();
+      }
+    })();
   });
 
   saveAndTestBtn.addEventListener("click", () => {

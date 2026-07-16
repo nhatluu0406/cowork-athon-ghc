@@ -1463,9 +1463,27 @@ button:disabled {
 }
 
 .provider-profiles__item-meta,
-.provider-profiles__test-status {
+.provider-profiles__test-status,
+.provider-profiles__discover-status {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.provider-profiles__discover {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.provider-profiles__discover:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .provider-profiles__add-row {
