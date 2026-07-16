@@ -23,9 +23,12 @@ export interface OpencodeProviderConfig {
 }
 
 /**
- * Optional native-Skills launch inputs (OpenCode 1.18 array-form `skills` config +
- * per-skill `permission.skill` map). Both are non-secret: absolute filesystem roots and
- * product Skill ids only — never file content or a credential.
+ * Optional native-Skills launch inputs (OpenCode `skills.paths` + per-skill
+ * `permission.skill` map). Both are non-secret: absolute filesystem roots and product
+ * Skill ids only — never file content or a credential.
+ *
+ * OpenCode 1.18.1 requires `skills: { paths: [...] }`. A bare string array is rejected by
+ * the child (POST /session → HTTP 400) even when `/global/health` stays healthy.
  */
 export interface OpencodeSkillsConfig {
   /** Absolute Skill-root directories OpenCode scans for `SKILL.md` files. */
@@ -44,6 +47,10 @@ export interface OpencodeSkillsConfig {
  * Live-session policy. `edit` is explicit because OpenCode gates write/edit/apply_patch through
  * that single permission key. `doom_loop` is allowed so a headless `serve` process cannot stall on
  * an internal recovery prompt that Cowork does not present as a product permission.
+ * `question` is denied: OpenCode's interactive question tool blocks the turn until a structured
+ * reply arrives on a channel Cowork does not own yet (no product Question UI). Leaving it
+ * `allow` stalls `POST /session/.../message` → HTTP client timeout → product 503 on later turns.
+ * Clarifications stay in normal chat until a Question surface ships (see known-limitations.md).
  */
 export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = Object.freeze({
   "*": "ask",
@@ -52,7 +59,7 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   glob: "allow",
   grep: "allow",
   skill: "allow",
-  question: "allow",
+  question: "deny",
   todowrite: "allow",
   edit: "ask",
   bash: "deny",
@@ -158,10 +165,10 @@ export function buildOpencodeConfig(
         permission,
       },
     },
-    // OpenCode 1.18 array-form Skills launch: absolute roots only, and only when non-empty (an
+    // OpenCode 1.18 `skills.paths`: absolute roots only, and only when non-empty (an
     // empty/absent list leaves the key out entirely so OpenCode's own defaults do not apply).
     ...(skills?.skillsPaths !== undefined && skills.skillsPaths.length > 0
-      ? { skills: [...skills.skillsPaths] }
+      ? { skills: { paths: [...skills.skillsPaths] } }
       : {}),
     ...(config !== undefined ? { provider: buildProvider(config) } : {}),
   };
