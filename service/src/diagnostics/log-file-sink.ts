@@ -71,6 +71,8 @@ export interface FileSink {
   readonly filePath: string;
   /** Current active-file size in bytes (as tracked by this sink). */
   size(): number;
+  /** Delete the active log file and all rotated archives (user "Clear logs"). */
+  clear(): void;
 }
 
 const DEFAULT_MAX_BYTES = 1024 * 1024;
@@ -135,5 +137,18 @@ export function createFileSink(options: FileSinkOptions): FileSink {
     }
   };
 
-  return { sink, filePath, size: () => currentSize };
+  const clear = (): void => {
+    try {
+      if (fs.existsSync(filePath)) fs.rmSync(filePath);
+      for (let i = 1; i <= maxFiles; i += 1) {
+        const archive = archivePath(i);
+        if (fs.existsSync(archive)) fs.rmSync(archive);
+      }
+      currentSize = 0;
+    } catch {
+      // best-effort
+    }
+  };
+
+  return { sink, filePath, size: () => currentSize, clear };
 }

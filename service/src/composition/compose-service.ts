@@ -27,6 +27,7 @@ import {
   createFileSink,
   createTelemetryStore,
   recordEventTelemetry,
+  createDiagnosticsRouter,
   openSettingsStore,
   type RedactingLogger,
   type TelemetryStore,
@@ -169,9 +170,10 @@ export async function createCoworkService(
   const logDir =
     options.logDir ??
     (options.dbPath !== undefined ? join(dirname(options.dbPath), "logs") : undefined);
+  const fileSink = logDir !== undefined ? createFileSink({ dir: logDir }) : undefined;
   const logger: RedactingLogger = createRedactingLogger({
     scrubber,
-    ...(logDir !== undefined ? { sink: createFileSink({ dir: logDir }).sink } : {}),
+    ...(fileSink !== undefined ? { sink: fileSink.sink } : {}),
   });
   // Local aggregate telemetry (Wave 6). Assigned once the SQLite database + persisted setting are
   // available (below); referenced early here so the error counter can ride the redaction seam.
@@ -577,6 +579,13 @@ export async function createCoworkService(
         const ws = settingsStore.activeWorkspace();
         return ws?.rootPath;
       },
+    }),
+    createDiagnosticsRouter({
+      logger,
+      ...(fileSink !== undefined ? { fileSink } : {}),
+      ...(telemetry !== undefined ? { telemetry } : {}),
+      scrubber,
+      now,
     }),
     ...(mcpStore !== undefined
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]

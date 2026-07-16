@@ -7,12 +7,15 @@
  * service (ADR 0003), not here — these handlers only expose native OS capabilities.
  */
 
+import { writeFile } from "node:fs/promises";
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from "electron";
 import type {
   ConnectLiveResult,
   PickedWorkspaceFile,
   PickedWorkspaceFolder,
   RendererBootstrap,
+  SaveTextFileRequest,
+  SaveTextFileResult,
   WindowTheme,
 } from "@cowork-ghc/contracts";
 
@@ -154,6 +157,32 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
         return { canceled: true };
       }
       return { canceled: false, filePath: first };
+    },
+  );
+
+  ipcMain.handle(
+    IpcChannel.SaveTextFile,
+    async (event: IpcMainInvokeEvent, request: SaveTextFileRequest): Promise<SaveTextFileResult> => {
+      const filename =
+        typeof request?.filename === "string" && request.filename.length > 0
+          ? request.filename
+          : "cowork-ghc-export.json";
+      const content = typeof request?.content === "string" ? request.content : "";
+      const owner = BrowserWindow.fromWebContents(event.sender);
+      const options = { defaultPath: filename, filters: [{ name: "JSON", extensions: ["json"] }] };
+      const result = owner
+        ? await dialog.showSaveDialog(owner, options)
+        : await dialog.showSaveDialog(options);
+      if (result.canceled || result.filePath === undefined || result.filePath === "") {
+        return { canceled: true };
+      }
+      try {
+        await writeFile(result.filePath, content, "utf8");
+        return { canceled: false, path: result.filePath };
+      } catch {
+        // Honest failure: report canceled rather than a fake success (the write did not happen).
+        return { canceled: true };
+      }
     },
   );
 }

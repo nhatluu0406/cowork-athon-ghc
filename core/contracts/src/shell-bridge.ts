@@ -55,6 +55,21 @@ export interface ConnectLiveResult {
   readonly restarted: boolean;
 }
 
+/** Request to save a text blob to a user-chosen path via the native save dialog (diagnostics export). */
+export interface SaveTextFileRequest {
+  /** Suggested file name shown in the save dialog. */
+  readonly filename: string;
+  /** UTF-8 text content to write. The shell writes it verbatim to the chosen path. */
+  readonly content: string;
+}
+
+/** Result of a native save-dialog write. `path` is present only when the user confirmed a location. */
+export interface SaveTextFileResult {
+  readonly canceled: boolean;
+  /** Absolute path written; omitted when canceled or on write failure. */
+  readonly path?: string;
+}
+
 /** Visual theme used to keep the native Windows title-bar overlay aligned with the renderer. */
 export type WindowTheme = "light" | "dark";
 
@@ -82,6 +97,11 @@ export interface CoworkShellBridge {
   readonly setWindowTheme: (theme: WindowTheme) => Promise<void>;
   /** Open or close Electron DevTools for the main window (Settings → Chung). */
   readonly setDevToolsEnabled: (enabled: boolean) => Promise<void>;
+  /**
+   * Save a text blob (the redacted diagnostics export) to a user-chosen path via the native save
+   * dialog. The shell owns the dialog + the write; the renderer never chooses an arbitrary path.
+   */
+  readonly saveTextFile: (request: SaveTextFileRequest) => Promise<SaveTextFileResult>;
 }
 
 /** Global key under which the preload exposes {@link CoworkShellBridge} on `window`. */
