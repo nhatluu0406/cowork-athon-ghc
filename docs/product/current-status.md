@@ -22,8 +22,8 @@ Cowork GHC desktop POC. Wave 0A/0B (local vault + conversation SQLite) đã land
 | MCP | WORKS — Phase 1 | Persistent SQLite + vault header secrets; router mounted; stdio or URL (SSRF); no OAuth; reachability adapter (toolCount 0). |
 | OpenCode | PINNED 1.18.1 | Server-contract matrix PASS; fallback 1.17.20 also PASS. |
 | MS365 | SOURCE PRESENT | Vault tokens after unlock. |
-| Inspector | PARTIAL | Phase 1 planned. |
-| Logging/telemetry | PARTIAL | Toggles exist; full contract pending. |
+| Inspector | WORKS — Phase 1 | Cowork-only pane: Kế hoạch/Hoạt động/Tệp(+Xem lại) from normalized EV events (no raw SSE/token/tool payloads), reuses File Work Review, clear empty/loading/error states, persists across reopen. PO-observed 2026-07-17. |
+| Logging/telemetry | WORKS — Wave 6 | Local rotating redacted file logs under `data/logs` ("Ghi log chi tiết" → service debug); local-only aggregate telemetry (SQLite counters, allowlist, toggle gates collection); Settings → Chẩn đoán shows status/counters with redacted Export (save dialog) + Clear. No network egress. PO-observed 2026-07-17. |
 
 ## Security direction
 
