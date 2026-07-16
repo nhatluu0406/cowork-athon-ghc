@@ -174,16 +174,20 @@ export function persistConversationRecord(db: SqliteDatabase, record: Conversati
     }
 
     deleteReviewRefs.run(record.id);
+    const seenReviewIds = new Set<string>();
     for (const review of record.activity?.fileReviews ?? []) {
       if (typeof review !== "object" || review === null) continue;
       const rec = review as Record<string, unknown>;
       const reviewId = typeof rec.id === "string" && rec.id.length > 0 ? rec.id : randomUUID();
+      if (seenReviewIds.has(reviewId)) continue;
+      seenReviewIds.add(reviewId);
       const relativePath = typeof rec.relativePath === "string" ? rec.relativePath : "";
+      // Scope the PRIMARY KEY by conversation: OpenCode seq-based review ids collide globally.
       insertReviewRef.run({
-        id: reviewId,
+        id: `${record.id}:${reviewId}`,
         conversationId: record.id,
         relativePath,
-        documentJson: reviewRefDocument(rec),
+        documentJson: reviewRefDocument({ ...rec, id: reviewId }),
       });
     }
   });

@@ -123,6 +123,9 @@ import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
 let permissionRefreshNow: (() => void) | null = null;
+/** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
+let permissionPausePoll: (() => void) | null = null;
+let permissionResumePoll: (() => void) | null = null;
 
 const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
   connectionState: "disconnected",
@@ -791,7 +794,9 @@ async function finalizeFileMutationReview(
     }
     if (after === undefined) return;
     const review = await state.client.buildFileReview({
-      id: `review-${event.seq}`,
+      // Globally unique: OpenCode `seq` restarts per session and would collide across
+      // conversations on file_review_refs.id (PRIMARY KEY) → PATCH /v1/conversations 500.
+      id: `review-${sessionId}-${event.seq}`,
       relativePath,
       at: event.at,
       seq: event.seq,
@@ -802,6 +807,10 @@ async function finalizeFileMutationReview(
       ...(pendingEntry?.before !== undefined ? { before: pendingEntry.before } : {}),
       after,
     });
+    if (state.fileReviews.some((existing) => existing.id === review.id)) {
+      refreshActivityUi(state, dom);
+      return;
+    }
     state.fileReviews = [...state.fileReviews, review];
     state.turnTiming.mark("FILE_VERIFIED", relativePath);
     refreshActivityUi(state, dom);
@@ -1425,36 +1434,47 @@ async function ensureLive(
     }
   }
 
-  await getShellBridge().connectLive();
-  readiness.retry();
-  // Adopt the post-restart bootstrap immediately. Health-checking the pre-restart base URL
-  // (connection refused) was burning ~2–3s before first token and spamming permission polls.
-  for (let i = 0; i < 120; i += 1) {
-    try {
-      const bootstrap = await getShellBridge().getBootstrap();
-      if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) {
-        throw new Error("bootstrap incomplete");
-      }
-      const changed =
-        state.client === null ||
-        state.bootstrap?.serviceBaseUrl !== bootstrap.serviceBaseUrl ||
-        state.bootstrap?.clientToken !== bootstrap.clientToken;
-      if (changed) {
-        state.bootstrap = bootstrap;
-        state.client = createServiceClient(bootstrap.serviceBaseUrl, bootstrap.clientToken);
-      }
-      const client = state.client;
-      if (client === null) throw new Error("client missing");
-      await client.health();
-      state.liveAttached = true;
-      return client;
-    } catch {
-      // Service may still be restarting into live mode.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  // Pause permission polls BEFORE stopping settings-only: otherwise the 100ms poller keeps
+  // hitting the dying base URL and DevTools fills with net::ERR_CONNECTION_REFUSED.
+  permissionPausePoll?.();
   state.liveAttached = false;
-  throw new Error("Không kết nối lại được local service.");
+  state.client = null;
+  state.bootstrap = null;
+
+  try {
+    await getShellBridge().connectLive();
+    readiness.retry();
+    // Adopt the post-restart bootstrap immediately. Health-checking the pre-restart base URL
+    // (connection refused) was burning ~2–3s before first token and spamming permission polls.
+    for (let i = 0; i < 120; i += 1) {
+      try {
+        const bootstrap = await getShellBridge().getBootstrap();
+        if (!bootstrap.serviceBaseUrl || !bootstrap.clientToken) {
+          throw new Error("bootstrap incomplete");
+        }
+        const changed =
+          state.client === null ||
+          state.bootstrap?.serviceBaseUrl !== bootstrap.serviceBaseUrl ||
+          state.bootstrap?.clientToken !== bootstrap.clientToken;
+        if (changed) {
+          state.bootstrap = bootstrap;
+          state.client = createServiceClient(bootstrap.serviceBaseUrl, bootstrap.clientToken);
+        }
+        const client = state.client;
+        if (client === null) throw new Error("client missing");
+        await client.health();
+        state.liveAttached = true;
+        return client;
+      } catch {
+        // Service may still be restarting into live mode.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    state.liveAttached = false;
+    throw new Error("Không kết nối lại được local service.");
+  } finally {
+    permissionResumePoll?.();
+  }
 }
 
 async function ensureRuntimeSession(
@@ -2413,6 +2433,12 @@ export function mountCoworkApp(root: HTMLElement): void {
           });
           permissionRefreshNow = () => {
             void permissions.refresh();
+          };
+          permissionPausePoll = () => {
+            permissions.pause();
+          };
+          permissionResumePoll = () => {
+            permissions.resume();
           };
           permissions.start();
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {

@@ -35,7 +35,7 @@ Left list/filter | Detail/editor
 - Built-in and user-local via the filesystem Skill catalog (one product Skill system).
 - Extension Skill registry is deprecated.
 - Create/edit/delete user Skill; enable/disable; built-in read-only.
-- OpenCode native Skill discovery/load-on-demand: skill roots + allowlist written into `opencode.json` (`skills` array + `permission.skill`); full prompt injection removed.
+- OpenCode native Skill discovery/load-on-demand: skill roots + allowlist written into `opencode.json` (`skills.paths` + `permission.skill`); full prompt injection removed.
 
 ## MCP Phase 1
 
