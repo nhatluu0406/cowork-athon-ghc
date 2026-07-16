@@ -27,6 +27,14 @@ test("webPreferences also close the adjacent node-integration escape hatches", (
   assert.equal(prefs.experimentalFeatures, false);
 });
 
+test("webPreferences enable the built-in PDF viewer plugin (packaged PDF preview)", () => {
+  const prefs = buildMainWindowWebPreferences("/abs/preload.js");
+  // Chromium's PDFium viewer is gated behind `plugins`; the blob: PDF iframe stays blank
+  // in the packaged window without it. Hardening flags are unchanged (asserted above).
+  assert.equal(prefs.plugins, true, "plugins must be true so PDF renders packaged");
+  assert.equal(prefs.sandbox, true, "sandbox stays true even with plugins enabled");
+});
+
 test("webPreferences wire in the provided preload path", () => {
   const prefs = buildMainWindowWebPreferences("/abs/preload.js");
   assert.equal(prefs.preload, "/abs/preload.js");
