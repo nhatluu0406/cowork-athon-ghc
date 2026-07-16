@@ -77,7 +77,7 @@ test("showAgentUpdated on a DIRTY open file raises a conflict banner, does not o
   assert.equal(editor?.value, "user local edit");
 });
 
-test("conflict banner 'keep mine' dismisses the banner and preserves the buffer", async () => {
+test("conflict banner 'keep mine' preserves the buffer AND keeps a persistent conflict indicator", async () => {
   const { container, handle } = await mountWithDirtyOpenFile(
     { "a.txt": textFile("a.txt", "disk v1") },
     "a.txt",
@@ -91,6 +91,24 @@ test("conflict banner 'keep mine' dismisses the banner and preserves the buffer"
   assert.equal(banner?.hidden, true, "banner hidden after keep-mine");
   const editor = container.querySelector<HTMLTextAreaElement>(".workspace-companion-pane__editor");
   assert.equal(editor?.value, "user local edit", "local edit preserved");
+  // A persistent Save-overwrite warning survives so the user cannot forget the disk changed.
+  const save = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__save");
+  assert.ok(
+    save?.classList.contains("workspace-companion-pane__save--warn"),
+    "Save keeps a persistent overwrite warning after keep-mine",
+  );
+});
+
+test("conflict banner warns that reload discards unsaved local edits", async () => {
+  const { container, handle } = await mountWithDirtyOpenFile(
+    { "a.txt": textFile("a.txt", "disk v1") },
+    "a.txt",
+  );
+  handle.showAgentUpdated();
+  const text = container.querySelector<HTMLElement>(
+    ".workspace-companion-pane__conflict-text",
+  )?.textContent;
+  assert.match(text ?? "", /bỏ .*thay đổi chưa lưu/iu, "reload consequence is spelled out");
 });
 
 test("conflict banner 'reload from disk' discards edits and re-reads the file", async () => {
@@ -159,4 +177,37 @@ test("openIfSafe skips a file the service reports as unsupported (e.g. oversize)
   const opened = await handle.openIfSafe("big.pdf");
   assert.equal(opened, false, "oversize/unsupported content is not presented");
   assert.equal(handle.getOpenPath(), null, "open path unchanged when auto-open bails");
+});
+
+test("openIfSafe normalizes Windows path separators to POSIX", async () => {
+  const { client, reads } = makeClient({ "docs/new.md": textFile("docs/new.md", "hi") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  const opened = await handle.openIfSafe("docs\\new.md");
+  assert.equal(opened, true, "backslash path resolves");
+  assert.deepEqual(reads, ["docs/new.md"], "read uses the normalized POSIX path");
+  assert.equal(handle.getOpenPath(), "docs/new.md", "open path stored as POSIX");
+});
+
+test("showDeleted clears the open file, shows a deleted state, and blocks Save recreate", async () => {
+  const { client } = makeClient({ "a.txt": textFile("a.txt", "disk v1") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("a.txt");
+  // Editor is present before the delete.
+  assert.ok(container.querySelector(".workspace-companion-pane__editor"), "editor before delete");
+
+  handle.showDeleted();
+
+  // No stale editor/content, a clear deleted message, and no open target.
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__editor"),
+    null,
+    "editor cleared after delete",
+  );
+  const msg = container.querySelector<HTMLElement>(".workspace-companion-pane__message");
+  assert.match(msg?.textContent ?? "", /đã bị xóa/iu, "shows a deleted empty state");
+  assert.equal(handle.getOpenPath(), null, "no open path → a stray Save cannot recreate it");
+  const save = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__save");
+  assert.equal(save?.hidden, true, "Save is hidden in the deleted state");
 });

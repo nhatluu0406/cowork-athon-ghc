@@ -1247,6 +1247,13 @@ button {
   color: var(--danger);
 }
 
+/* Persistent "disk changed under your edits" warning on the Save button after "keep mine". */
+.workspace-companion-pane__save--warn {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--cghc-border));
+  color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 18%, transparent);
+}
+
 .workspace-companion-pane__editor {
   padding: 20px;
   color: var(--cghc-text-primary);
