@@ -20,6 +20,7 @@ import {
   parseModelList,
   ProbeTimeoutError,
   providerEnvSpec,
+  SocketPinViolationError,
   type DnsResolver,
   type HttpDialer,
   type HttpProbeRequest,
@@ -204,6 +205,51 @@ test("profile discovery caches per target and re-probes after endpoint/key chang
   clock += 60_001;
   await discovery.discoverForProfile(base);
   assert.equal(dialer.calls.length, 4);
+});
+
+// ---- 7. Dual-stack IP-pinned Happy-Eyeballs fallback (the FPT Cloud symptom) ----------
+
+const DUAL_STACK: DnsResolver = async () => [
+  { address: "2606:4700:10::ac42:aa78", family: 6 }, // dead IPv6 (no egress on many machines)
+  { address: "104.20.28.61", family: 4 }, // working IPv4
+];
+
+async function dualStackDiscover(dialer: HttpDialer) {
+  const credentials = createCredentialService({ store: createMemoryStore() });
+  const ref = await credentials.store({
+    providerId: CUSTOM_OPENAI_COMPAT_ID,
+    secret: "sk-dual-abc123456789012",
+    account: "profile:p1",
+  });
+  const ssrf = createSsrfPolicy({ resolver: DUAL_STACK });
+  return createModelDiscovery({ ssrf, credentials, dialer }).discover({
+    baseUrl: "https://mkp-api.fptcloud.com/v1",
+    credentialRef: ref,
+    envSpec: providerEnvSpec(CUSTOM_OPENAI_COMPAT_ID, "CUSTOM_OPENAI_COMPAT_API_KEY"),
+  });
+}
+
+test("dual-stack: a dead IPv6 pin falls back to the validated IPv4", async () => {
+  const dialer = fakeDialer((req) => {
+    if (req.family === 6) throw new ProbeTimeoutError(8_000);
+    return { status: 200, headers: {}, dialedIp: req.ip, bodyText: LIST_BODY };
+  });
+  const result = await dualStackDiscover(dialer);
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, ["deepseek-chat", "deepseek-reasoner"]);
+  assert.equal(dialer.calls.length, 2);
+  assert.equal(dialer.calls[0]!.family, 6);
+  assert.equal(dialer.calls[1]!.family, 4);
+});
+
+test("F2 still holds: a socket reporting an unvalidated IP is refused even with fallback", async () => {
+  // The socket reports a DIFFERENT, unvalidated IP than the pinned candidate.
+  const dialer = fakeDialer(() => ({
+    status: 200,
+    headers: {},
+    dialedIp: "203.0.113.9", // never in the validated set
+  }));
+  await assert.rejects(dualStackDiscover(dialer), SocketPinViolationError);
 });
 
 test("profile discovery without a stored credential is a non-blocking error (no dial)", async () => {
