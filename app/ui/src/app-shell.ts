@@ -173,6 +173,8 @@ interface AppState {
   turnTiming: TurnTimingTracker;
   /** Wall-clock start (ms) of the current turn, for the per-turn runtime metric (issue #4). */
   turnStartedAtMs: number | null;
+  /** Wave 4: at most one safe auto-open per turn, so the preview never flickers across files. */
+  autoOpenedThisTurn: boolean;
   currentFileActionIntent: FileActionIntent | null;
   fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
@@ -830,14 +832,23 @@ async function finalizeFileMutationReview(
     // 2) Update the open file, or auto-open the affected file when safe.
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
     if (openPath !== null && openPath === relativePath) {
-      // The open file itself changed: reload it, or raise a conflict banner if the buffer is
-      // dirty (showAgentUpdated never overwrites unsaved edits). Skip on delete.
-      if (event.operation !== "delete") workspaceCompanion?.showAgentUpdated();
-    } else if (event.operation !== "delete") {
-      // A different/unopened file changed: auto-open it only when safe (never over a dirty
-      // buffer, never a secret/unsupported/oversize file), and select it in the navigator.
+      if (event.operation === "delete") {
+        // The open file was verifiably deleted: clear the stale preview, show a deleted empty
+        // state, and block Save so it cannot recreate the file. Never auto-open another file.
+        workspaceCompanion?.showDeleted();
+      } else {
+        // The open file changed: reload it, or raise a conflict banner if the buffer is dirty
+        // (showAgentUpdated never overwrites unsaved edits).
+        workspaceCompanion?.showAgentUpdated();
+      }
+    } else if (event.operation !== "delete" && !state.autoOpenedThisTurn) {
+      // A different/unopened file changed: auto-open ONE safe file per turn (never over a dirty
+      // buffer, never a secret/unsupported/oversize file). Claim the slot synchronously so a
+      // multi-file turn does not flicker the preview across files; release it if this one bails.
+      state.autoOpenedThisTurn = true;
       void workspaceCompanion?.openIfSafe(relativePath).then((opened) => {
         if (opened) workspaceNavigator?.selectPath(relativePath);
+        else state.autoOpenedThisTurn = false;
       });
     }
   } catch {
@@ -1988,6 +1999,7 @@ async function sendPrompt(
 
     resetLiveActivity(state);
     state.turnStartedAtMs = Date.now();
+    state.autoOpenedThisTurn = false;
     state.currentFileActionIntent = detectFileActionIntent(prompt);
     state.fileVerificationTasks.clear();
     await state.conv.recordUserMessage(
@@ -2175,6 +2187,7 @@ export function mountCoworkApp(root: HTMLElement): void {
       log: (line) => console.info(line),
     }),
     turnStartedAtMs: null,
+    autoOpenedThisTurn: false,
     currentFileActionIntent: null,
     fileVerificationTasks: new Set(),
     pendingAttachments: [],
