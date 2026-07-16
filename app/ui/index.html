@@ -5,11 +5,16 @@
     <!--
       Defense-in-depth CSP (the authoritative one is the response header set by the
       shell in app/shell/src/security/csp.ts). frame-ancestors/form-action are enforced
-      by the header, not by a meta tag.
+      by the header, not by a meta tag. NOTE: the browser enforces this meta AND the
+      response-header policy together (a request must satisfy BOTH), so any relaxation must
+      be mirrored here or the stricter side wins. `style-src` includes 'unsafe-inline' to
+      match the header: Chromium's built-in PDF viewer (PDFium) applies inline styles to lay
+      out its chrome; blocking them collapses the PDF preview to a blank box. script-src
+      stays strict ('self') — the XSS-critical control is unchanged.
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; frame-src 'self' blob:; font-src 'self'; connect-src 'self' http://127.0.0.1:* http://localhost:*; object-src 'none'; base-uri 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Cowork GHC</title>
