@@ -121,12 +121,19 @@ export type WorkspaceFileContentKind =
   | "pdf"
   | "docx"
   | "spreadsheet"
+  | "presentation"
   | "missing"
   | "unsupported";
 
 export interface WorkspaceSpreadsheetSheetView {
   readonly name: string;
   readonly rows: readonly (readonly string[])[];
+}
+
+export interface WorkspacePresentationSlideView {
+  readonly index: number;
+  readonly title: string;
+  readonly text: string;
 }
 
 export interface WorkspaceFileContentView {
@@ -138,6 +145,7 @@ export interface WorkspaceFileContentView {
   readonly html?: string;
   readonly dataBase64?: string;
   readonly sheets?: readonly WorkspaceSpreadsheetSheetView[];
+  readonly slides?: readonly WorkspacePresentationSlideView[];
   readonly truncated: boolean;
   readonly sizeBytes: number;
 }

@@ -256,6 +256,143 @@ test("very large text renders plain (no highlight) but still shows a gutter", as
   );
 });
 
+function presentationFile(
+  relativePath: string,
+  slides: { title: string; text: string }[],
+): WorkspaceFileContentView {
+  return {
+    relativePath,
+    kind: "presentation",
+    editable: false,
+    slides: slides.map((s, i) => ({ index: i + 1, title: s.title, text: s.text })),
+    truncated: false,
+    sizeBytes: 0,
+  } as WorkspaceFileContentView;
+}
+
+function spreadsheetFile(
+  relativePath: string,
+  sheets: { name: string; rows: string[][] }[],
+): WorkspaceFileContentView {
+  return {
+    relativePath,
+    kind: "spreadsheet",
+    editable: false,
+    sheets,
+    truncated: false,
+    sizeBytes: 0,
+  } as WorkspaceFileContentView;
+}
+
+test("pptx preview shows slide 1 of N and navigates with previous/next", async () => {
+  const { client } = makeClient({
+    "deck.pptx": presentationFile("deck.pptx", [
+      { title: "Intro", text: "Intro slide" },
+      { title: "Body", text: "Body slide" },
+    ]),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("deck.pptx");
+
+  const counter = () =>
+    container.querySelector<HTMLElement>(".workspace-companion-pane__deck-counter")?.textContent;
+  const slideText = () =>
+    container.querySelector<HTMLElement>(".workspace-companion-pane__slide-text")?.textContent;
+  const prev = () =>
+    container.querySelectorAll<HTMLButtonElement>(".workspace-companion-pane__deck-btn")[0]!;
+  const next = () =>
+    container.querySelectorAll<HTMLButtonElement>(".workspace-companion-pane__deck-btn")[1]!;
+
+  assert.equal(counter(), "Slide 1 / 2");
+  assert.equal(slideText(), "Intro slide");
+  assert.equal(prev().disabled, true, "prev disabled on the first slide");
+
+  next().click();
+  assert.equal(counter(), "Slide 2 / 2");
+  assert.equal(slideText(), "Body slide");
+  assert.equal(next().disabled, true, "next disabled on the last slide");
+
+  prev().click();
+  assert.equal(counter(), "Slide 1 / 2", "prev returns to the first slide");
+});
+
+test("pptx with no slides shows a clear empty state", async () => {
+  const { client } = makeClient({ "empty.pptx": presentationFile("empty.pptx", []) });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("empty.pptx");
+  const msg = container.querySelector<HTMLElement>(".workspace-companion-pane__message");
+  assert.match(msg?.textContent ?? "", /không có slide/iu);
+});
+
+test("xlsx multi-sheet renders a selector and switching changes the grid without a reload", async () => {
+  const { client, reads } = makeClient({
+    "book.xlsx": spreadsheetFile("book.xlsx", [
+      { name: "Alpha", rows: [["a1"]] },
+      { name: "Beta", rows: [["b1"]] },
+    ]),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("book.xlsx");
+
+  const tabs = container.querySelectorAll<HTMLButtonElement>(
+    ".workspace-companion-pane__sheet-tab",
+  );
+  assert.equal(tabs.length, 2, "one tab per visible sheet");
+  const firstCell = () =>
+    container.querySelector<HTMLInputElement>(".workspace-companion-pane__grid-input")?.value;
+  assert.equal(firstCell(), "a1", "opens the first sheet by default");
+
+  tabs[1]!.click();
+  assert.equal(firstCell(), "b1", "switching tab renders the second sheet");
+  assert.deepEqual(reads, ["book.xlsx"], "switching sheets does not re-read/reload the file");
+});
+
+test("single-sheet xlsx does not render a redundant sheet selector", async () => {
+  const { client } = makeClient({
+    "one.xlsx": spreadsheetFile("one.xlsx", [{ name: "Only", rows: [["x"]] }]),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("one.xlsx");
+  assert.equal(
+    container.querySelector(".workspace-companion-pane__sheet-tab"),
+    null,
+    "no tab row for a single sheet",
+  );
+  assert.ok(container.querySelector(".workspace-companion-pane__grid"), "grid still renders");
+});
+
+test("opening a new workbook resets the active sheet to the first", async () => {
+  const { client } = makeClient({
+    "a.xlsx": spreadsheetFile("a.xlsx", [
+      { name: "A1", rows: [["a1"]] },
+      { name: "A2", rows: [["a2"]] },
+    ]),
+    "b.xlsx": spreadsheetFile("b.xlsx", [
+      { name: "B1", rows: [["b1"]] },
+      { name: "B2", rows: [["b2"]] },
+    ]),
+  });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("a.xlsx");
+  container.querySelectorAll<HTMLButtonElement>(".workspace-companion-pane__sheet-tab")[1]!.click();
+  assert.equal(
+    container.querySelector<HTMLInputElement>(".workspace-companion-pane__grid-input")?.value,
+    "a2",
+    "switched to the second sheet of workbook A",
+  );
+  await handle.open("b.xlsx");
+  assert.equal(
+    container.querySelector<HTMLInputElement>(".workspace-companion-pane__grid-input")?.value,
+    "b1",
+    "workbook B opens back on its first sheet",
+  );
+});
+
 test("showDeleted clears the open file, shows a deleted state, and blocks Save recreate", async () => {
   const { client } = makeClient({ "a.txt": textFile("a.txt", "disk v1") });
   const container = document.createElement("div");

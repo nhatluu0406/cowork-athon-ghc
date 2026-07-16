@@ -2674,6 +2674,116 @@ button {
   min-height: 480px;
 }
 
+/*
+ * Multi-sheet spreadsheet: a compact tab row above the grid. The wrapper is a flex column so the
+ * grid keeps filling the remaining height (the shared `__grid` min-height:100% still applies).
+ */
+.workspace-companion-pane__sheet-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-height: 100%;
+}
+.workspace-companion-pane__sheet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex: 0 0 auto;
+}
+.workspace-companion-pane__sheet-tab {
+  flex: 0 0 auto;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.workspace-companion-pane__sheet-tab:hover {
+  background: var(--cghc-surface-muted);
+}
+.workspace-companion-pane__sheet-tab--active {
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  border-color: var(--cghc-border-strong, var(--cghc-border-subtle));
+  font-weight: 600;
+}
+
+/*
+ * Read-only PowerPoint (.pptx) text preview: a nav row (prev / "Slide X / Y" / next) above a
+ * single slide stage. Slide content keeps document colours; only the chrome follows the theme.
+ */
+.workspace-companion-pane__deck {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 100%;
+}
+.workspace-companion-pane__deck-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.workspace-companion-pane__deck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 30px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  cursor: pointer;
+}
+.workspace-companion-pane__deck-btn:hover:not(:disabled) {
+  background: var(--cghc-surface-muted);
+}
+.workspace-companion-pane__deck-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.workspace-companion-pane__deck-counter {
+  font-size: 13px;
+  color: var(--cghc-text-secondary);
+  min-width: 96px;
+  text-align: center;
+}
+.workspace-companion-pane__slide {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+}
+.workspace-companion-pane__slide-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--cghc-text-primary);
+}
+.workspace-companion-pane__slide-empty {
+  margin: 0;
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+}
+
 .workspace-companion-pane__editor {
   padding: 18px 20px;
   font-size: 14px;
