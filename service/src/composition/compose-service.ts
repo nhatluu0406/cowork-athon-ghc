@@ -25,8 +25,11 @@ import {
   createSettingsRouter,
   createRedactingLogger,
   createFileSink,
+  createTelemetryStore,
+  recordEventTelemetry,
   openSettingsStore,
   type RedactingLogger,
+  type TelemetryStore,
   type SettingsFs,
   type SettingsModelPort,
 } from "../diagnostics/index.js";
@@ -170,11 +173,17 @@ export async function createCoworkService(
     scrubber,
     ...(logDir !== undefined ? { sink: createFileSink({ dir: logDir }).sink } : {}),
   });
+  // Local aggregate telemetry (Wave 6). Assigned once the SQLite database + persisted setting are
+  // available (below); referenced early here so the error counter can ride the redaction seam.
+  let telemetry: TelemetryStore | undefined;
+
   // Route the boundary error-redaction seam through the logger so redacted errors are persisted
-  // locally (still returned to callers for renderer display, unchanged).
+  // locally (still returned to callers for renderer display, unchanged), and count an aggregate
+  // error (no content — just a tally, and only when telemetry is enabled).
   const redactError = (message: string): string => {
     const scrubbed = sanitizeErrorMessage(scrubber.scrub(message));
     logger.error(scrubbed);
+    telemetry?.increment("errors");
     return scrubbed;
   };
 
@@ -337,10 +346,25 @@ export async function createCoworkService(
   // `updateGeneral` so toggling "Ghi log chi tiết" in Settings takes effect immediately without a
   // relaunch. (Telemetry enable is wired into this same seam in the telemetry slice.)
   logger.setVerbose(settingsStore.general().verboseLogging === true);
+
+  // Local aggregate telemetry: only when a SQLite database is open (the counters table lives there,
+  // migration id 3). Collection is gated by the persisted `telemetryEnabled` setting; disabled →
+  // increment is a no-op. Count one app launch on boot (when enabled).
+  if (sqliteDatabase !== undefined) {
+    telemetry = createTelemetryStore({
+      db: sqliteDatabase,
+      enabled: settingsStore.general().telemetryEnabled === true,
+      now,
+    });
+    telemetry.increment("app_launches");
+  }
+
   const baseUpdateGeneral = settingsStore.updateGeneral.bind(settingsStore);
   settingsStore.updateGeneral = async (patch) => {
     const next = await baseUpdateGeneral(patch);
+    // Toggles take effect immediately (no relaunch): verbose logging + telemetry collection.
     logger.setVerbose(next.verboseLogging === true);
+    telemetry?.setEnabled(next.telemetryEnabled === true);
     return next;
   };
 
@@ -353,7 +377,13 @@ export async function createCoworkService(
     redactError,
   });
   const streamHub = createSessionStreamHub({
-    apply: (sessionId, event) => sessionService.apply(sessionId, event),
+    apply: (sessionId, event) => {
+      // Aggregate-only telemetry from the ALREADY-NORMALIZED EV stream (never raw frames): terminal
+      // state → turn completed/failed, file_mutation → created/modified/deleted. Structural facts
+      // only; no path/content is inspected. No-op unless telemetry is enabled.
+      if (telemetry !== undefined) recordEventTelemetry(telemetry, event);
+      return sessionService.apply(sessionId, event);
+    },
     view: (sessionId) => sessionService.view(sessionId),
     redactError,
   });
@@ -373,6 +403,16 @@ export async function createCoworkService(
     timeoutMs: options.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS,
     now,
   });
+  // Aggregate telemetry: count each FRESH permission decision once (the user's allow/deny). Uses the
+  // decision the caller supplied; no request path/tool detail is recorded.
+  const basePermissionResolve = permissionGate.resolve.bind(permissionGate);
+  permissionGate.resolve = async (input) => {
+    const outcome = await basePermissionResolve(input);
+    if (telemetry !== undefined && outcome.status === "resolved") {
+      telemetry.increment(input.decision === "allow" ? "permission_approved" : "permission_denied");
+    }
+    return outcome;
+  };
 
   // --- Runtime-extension layer (CGHC-026): the MCP lifecycle (RE2) gets the Phase 1
   // reachability-probe adapter — never a full MCP protocol client yet (see
@@ -550,6 +590,7 @@ export async function createCoworkService(
   const deps: CoworkServiceDeps = {
     scrubber,
     logger,
+    ...(telemetry !== undefined ? { telemetry } : {}),
     credentialService,
     providerPort,
     modelConfig,

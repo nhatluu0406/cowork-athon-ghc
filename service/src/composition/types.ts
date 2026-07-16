@@ -12,7 +12,7 @@ import type { RunningService } from "../start.js";
 import type { BoundaryRouter } from "../boundary/contract.js";
 import type { CredentialStore } from "../credential/index.js";
 import type { CredentialService } from "../credential/index.js";
-import type { RedactingLogger, SecretScrubber } from "../diagnostics/index.js";
+import type { RedactingLogger, SecretScrubber, TelemetryStore } from "../diagnostics/index.js";
 import type { SettingsFs, SettingsStore } from "../diagnostics/index.js";
 import type {
   DnsResolver,
@@ -139,6 +139,8 @@ export interface CoworkServiceDeps {
   readonly scrubber: SecretScrubber;
   /** The local structured logger (redacting; file sink under data/logs when packaged). */
   readonly logger: RedactingLogger;
+  /** Local aggregate telemetry (present only when a SQLite database is open). */
+  readonly telemetry?: TelemetryStore;
   readonly credentialService: CredentialService;
   readonly providerPort: ProviderPort;
   readonly modelConfig: ModelConfigService;

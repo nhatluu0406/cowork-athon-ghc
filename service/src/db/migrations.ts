@@ -138,6 +138,20 @@ CREATE INDEX IF NOT EXISTS idx_conversation_attachments_conversation_id ON conve
 CREATE INDEX IF NOT EXISTS idx_file_review_refs_conversation_id ON file_review_refs(conversation_id);
 `,
   },
+  {
+    // Wave 6 local-only telemetry: bounded AGGREGATE counters only (name -> integer). Never any
+    // prompt/message/document content, filename, workspace path, model output, or raw runtime event
+    // — the writable key space is a fixed allowlist enforced in the telemetry store.
+    id: 3,
+    name: "local_telemetry_counters",
+    sql: `
+CREATE TABLE IF NOT EXISTS telemetry_counters (
+  name TEXT PRIMARY KEY,
+  value INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+`,
+  },
 ];
 
 export function appliedMigrationIds(db: SqliteDatabase): readonly number[] {
