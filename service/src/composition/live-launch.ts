@@ -45,6 +45,7 @@ import {
   createSsrfPolicy,
   type DnsResolver,
   readE2eMockLlmBaseUrl,
+  readDevLoopbackHttpEscape,
 } from "../provider/index.js";
 import {
   OpencodeSupervisor,
@@ -246,10 +247,15 @@ async function resolveProvider(
 
   // SSRF-validate the base URL at the execution boundary (reuse the outbound provider policy). A
   // private/loopback/http target is refused with a typed SsrfBlockedError before any spawn.
+  // `readDevLoopbackHttpEscape` is resolved once here (this function's own composition root,
+  // called by the shell BEFORE `startLiveCoworkService`/`createCoworkService` runs) from process
+  // env only — never from a request/caller-supplied field. Unset ⇒ byte-for-byte unchanged.
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  const devLoopbackHttpEscape = readDevLoopbackHttpEscape();
   const policy = createSsrfPolicy({
     resolver: dnsResolver ?? defaultDnsResolver(),
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(devLoopbackHttpEscape ? { loopbackEscape: true } : {}),
   });
   await policy.assertAllowed(baseUrl);
 

@@ -33,6 +33,8 @@ import {
   createProviderRouter,
   createSsrfPolicy,
   readE2eMockLlmBaseUrl,
+  readDevLoopbackHttpEscape,
+  DEV_LOOPBACK_HTTP_WARNING,
   SsrfBlockedError,
 } from "../provider/index.js";
 import {
@@ -155,15 +157,27 @@ export async function createCoworkService(
 
   const dnsResolver = options.dnsResolver ?? defaultDnsResolver();
   const e2eMockLlmBaseUrl = readE2eMockLlmBaseUrl();
+  // Developer-only loopback-http override (never gated by the release hard-assert — see
+  // ../provider/dev-loopback-http.js). Resolved ONCE here (process env, the composition root)
+  // and threaded to every `createSsrfPolicy` construction site below; never re-read from env in
+  // a scattered spot, and NEVER sourced from a request body (router.ts keeps ignoring such a
+  // field). Unset ⇒ `false` ⇒ every site below is byte-for-byte identical to before this change.
+  const devLoopbackHttpEscape = readDevLoopbackHttpEscape();
+  if (devLoopbackHttpEscape) {
+    // The banner IS the required WARN + local boot-diagnostic/audit event (bootDiagnostic is the
+    // existing redacted, non-secret audit sink for this composition root) — no parallel log path.
+    bootDiagnostic(DEV_LOOPBACK_HTTP_WARNING);
+  }
   const ssrf = createSsrfPolicy({
     resolver: dnsResolver,
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(devLoopbackHttpEscape ? { loopbackEscape: true } : {}),
   });
 
   // --- Provider port: real HTTP probe connector for onboarding test-connection (CGHC-011). ---
   const httpBundle =
     options.connector === undefined
-      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver)
+      ? createHttpConnectorBundle(credentialService, baseSettingsStore, dnsResolver, devLoopbackHttpEscape)
       : undefined;
   const providerPort =
     options.connector !== undefined
@@ -199,6 +213,7 @@ export async function createCoworkService(
     dnsResolver,
     now,
     ...(e2eMockLlmBaseUrl !== undefined ? { e2eMockLlmBaseUrl } : {}),
+    ...(devLoopbackHttpEscape ? { loopbackEscape: true } : {}),
   });
 
   // The router must see a store that does BOTH: (1) SSRF-guards a base_url before persistence,
