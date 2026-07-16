@@ -33,7 +33,12 @@ export const RENDERER_CSP = [
   // real XSS lever), and `object-src 'none'` is unchanged. CSS-based exfiltration is further
   // constrained because `connect-src`/`img-src`/`font-src` still forbid arbitrary remote origins.
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data:",
+  // `blob:` is required for workspace image previews: the local high-fidelity PPTX engine decodes a
+  // deck's EMBEDDED images (ppt/media/*) from the in-memory ZIP into same-origin `blob:` object URLs
+  // and renders them as <img>/SVG <image>. These are our own bytes, read through WorkspaceGuard —
+  // not a remote origin — and `blob:` is not a script vector, so it does not weaken `script-src`.
+  // Without it the header (authoritative over the index.html meta) silently blocks slide images.
+  "img-src 'self' data: blob:",
   "font-src 'self'",
   "connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
   "object-src 'none'",

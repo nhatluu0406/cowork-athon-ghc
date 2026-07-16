@@ -51,6 +51,11 @@ test("RENDERER_CSP sets the required restrictive directives", () => {
   assert.equal(csp.get("frame-ancestors"), "'none'");
   assert.equal(csp.get("form-action"), "'none'");
   assert.equal(csp.get("frame-src"), "blob:");
+  // `img-src` must allow `blob:` so the local PPTX engine can render a deck's embedded images
+  // (decoded to same-origin blob: object URLs). Guards against a silent regression that would blank
+  // slide images while text/shapes still render.
+  assert.match(csp.get("img-src") ?? "", /\bblob:/, "img-src must allow blob: for workspace image previews");
+  assert.match(csp.get("img-src") ?? "", /'self'/, "img-src must keep 'self'");
 });
 
 test("RENDERER_CSP connect-src is loopback-only — not '*' and no public origin", () => {
