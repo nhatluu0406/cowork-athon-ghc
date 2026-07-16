@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-16"
+updated_at: "2026-07-17"
 ---
 
 # Demo acceptance
@@ -38,6 +38,15 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 - [x] Code files (.py/.css/.cpp/.js/.ts/…) open with syntax highlight + line numbers; "Sửa" edits then Lưu.
 - [x] PDF renders in packaged app (Chromium PDFium; default no-toolbar + fit-to-width; PO-observed 2026-07-16).
 - [ ] Image/DOCX/XLSX safe preview states are clear.
+- [ ] **PPTX high-fidelity preview (packaged, PO observation required — the renderer is new):**
+  - [ ] A deck with text + image + shape renders as an actual slide (layout/colours/image visible),
+        not a text list.
+  - [ ] A deck with a table + chart renders the table and the chart.
+  - [ ] A multi-slide deck: prev/next navigates and "Slide X / Y" tracks the current slide.
+  - [ ] A malformed/encrypted `.pptx` shows a clear unsupported state (no crash); `.ppt` unsupported.
+  - [ ] No viewer-originated remote network traffic while previewing.
+- [ ] **XLSX multi-sheet (packaged):** one sheet, many sheets, long sheet name, empty sheet,
+      malformed workbook — selector switches sheets without reloading the Workspace.
 - [x] Agent file update refreshes current file without overwriting dirty edits (keep-mine / reload-from-disk).
 - [x] Verified delete of the open file clears the preview and cannot recreate it.
 - Note: verified delete VIA THE AGENT is blocked upstream — the pinned OpenCode build exposes no

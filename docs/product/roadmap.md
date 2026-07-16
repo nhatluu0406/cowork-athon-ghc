@@ -64,10 +64,14 @@ updated_at: "2026-07-17"
 - [x] Explicit current-file context in companion chat.
 - [x] Verified-delete of the open file clears the preview and blocks accidental recreate.
 - [x] Code-file viewing: syntax highlight (highlight.js) + line numbers, read-only with an edit toggle.
-- [x] Office preview (bounded follow-up): read-only `.pptx` slide preview (text-first, prev/next
-      navigation, parsed locally in-memory via JSZip; `.ppt` legacy unsupported) and multi-sheet
-      `.xlsx` navigation (visible-sheet tabs, hidden sheets filtered, read-only). No Office editor,
-      no cloud/LibreOffice conversion.
+- [x] Office preview (bounded follow-up): read-only multi-sheet `.xlsx` navigation (visible-sheet
+      tabs, hidden sheets filtered, read-only).
+- [~] Office preview — high-fidelity `.pptx` (code complete; packaged PO visual acceptance pending):
+      read-only slide rendering (text/images/shapes/tables/charts/theme as HTML/SVG) via a local,
+      CSP-safe engine (`@aiden0z/pptx-renderer`, Apache-2.0), prev/next + "Slide X / Y", fit-to-panel,
+      degrades to a text-first fallback on failure. `.ppt` legacy unsupported; animation/macro/OLE/
+      media/EMF not rendered; malformed/encrypted/>8 MiB → unsupported. No Office editor, no
+      cloud/LibreOffice conversion, no full fidelity.
 
 ## WAVE 5 — Inspector Phase 1
 
