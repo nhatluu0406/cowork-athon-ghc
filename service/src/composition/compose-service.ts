@@ -57,6 +57,7 @@ import {
 } from "../permission/index.js";
 import { ToolPermissionProxy } from "../files/index.js";
 import { createExtensionRegistry } from "../extensions/index.js";
+import { createMcpRouter, createProcessMcpAdapter, loadMcpServersFromStore } from "../mcp/index.js";
 import { createSessionService, createSessionRouter, SessionRequestError } from "../session/index.js";
 import {
   createConversationStore,
@@ -103,6 +104,7 @@ import {
   createProviderVerificationRepository,
   createSecretsRepository,
   createSettingsRepository,
+  createSqliteMcpStore,
   createSqliteSettingsFs,
   createVaultCredentialStore,
   createVaultKeyRepository,
@@ -111,6 +113,7 @@ import {
   openSqliteDatabase,
   runMigrations,
   type LocalAuthService,
+  type McpStore,
   type SqliteDatabase,
   type VaultCredentialStore,
 } from "../db/index.js";
@@ -324,10 +327,27 @@ export async function createCoworkService(
     now,
   });
 
-  // --- Runtime-extension layer (CGHC-026): honest not-attached skill/MCP seams, the composed
-  // redactor for RE5 diagnostics, and the SAME SSRF policy the provider port uses for URL MCP
-  // endpoints. No router is mounted (Tier 2 / CGHC-028 attaches live execution + a UI).
-  const extensions = createExtensionRegistry({ now, redact: redactError, ssrf });
+  // --- Runtime-extension layer (CGHC-026): the MCP lifecycle (RE2) gets the Phase 1
+  // reachability-probe adapter — never a full MCP protocol client yet (see
+  // `createProcessMcpAdapter`); skill EXECUTION stays honest not-attached (that seam is the
+  // deprecated Tier 1 exploratory registry — product Skills are `skillCatalog` below). The
+  // composed redactor covers RE5 diagnostics; the SAME SSRF policy the provider port uses guards
+  // a URL MCP endpoint.
+  const extensions = createExtensionRegistry({
+    now,
+    redact: redactError,
+    ssrf,
+    mcpAdapter: createProcessMcpAdapter({ ssrf }),
+  });
+
+  // --- MCP Phase 1 persistence (Wave 2B): when SQLite is open, persisted servers (non-secret
+  // config only; a header secret lives in the ONE credential store, referenced by
+  // `mcp_secret_refs`) are replayed into the registry on boot, and the router is mounted below.
+  let mcpStore: McpStore | undefined;
+  if (sqliteDatabase !== undefined) {
+    mcpStore = createSqliteMcpStore(sqliteDatabase);
+    await loadMcpServersFromStore(extensions.mcp, mcpStore);
+  }
 
   const modelPort: SettingsModelPort = {
     clearSessionModel: (sessionId) => modelConfig.clearSessionModel(sessionId),
@@ -455,6 +475,9 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(mcpStore !== undefined
+      ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
+      : []),
     ...(ms365Router !== undefined ? [ms365Router] : []),
   ];
 
@@ -472,6 +495,7 @@ export async function createCoworkService(
     sessionService,
     streamHub,
     extensions,
+    ...(mcpStore !== undefined ? { mcpStore } : {}),
     conversationStore,
     skillCatalog,
     redactError,

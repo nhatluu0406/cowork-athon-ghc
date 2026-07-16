@@ -441,6 +441,45 @@ test("read-only mode denies a mutation request without opening the modal", async
   assert.equal(container.querySelector(".permission-backdrop"), null);
 });
 
+test("pause/resume silences the poll interval across a live restart gap", async () => {
+  const fake = makeFake();
+  const container = host();
+  let intervals = 0;
+  let clears = 0;
+  const timer = {
+    setInterval: (handler: () => void, _ms: number) => {
+      intervals += 1;
+      return setInterval(handler, 10_000);
+    },
+    clearInterval: (handle: unknown) => {
+      clears += 1;
+      clearInterval(handle as ReturnType<typeof setInterval>);
+    },
+  };
+  const ctrl = createPermissionController({
+    client: fake.client,
+    container,
+    timer,
+    pollIntervalMs: 50,
+  });
+
+  ctrl.start();
+  await flush();
+  assert.equal(intervals, 1, "start arms one interval");
+  const listsBeforePause = fake.listCount();
+
+  ctrl.pause();
+  assert.equal(clears, 1, "pause clears the interval");
+  await flush();
+  assert.equal(fake.listCount(), listsBeforePause, "no polls while paused");
+
+  ctrl.resume();
+  await flush();
+  assert.ok(fake.listCount() > listsBeforePause, "resume refreshes once");
+  assert.equal(intervals, 2, "resume arms a new interval");
+  ctrl.stop();
+});
+
 test("transport poll failures show a note, then clear it once polling recovers", async () => {
   const fake = makeFake();
   const container = host();

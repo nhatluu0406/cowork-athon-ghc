@@ -126,7 +126,14 @@ export class OpencodeSupervisor implements RuntimeHealth {
       const forbidden = spec.providerConfig
         ? injections.find((i) => i.envVar === spec.providerConfig?.envVar)?.value
         : undefined;
-      writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden);
+      const skillsConfig =
+        spec.skillsPaths !== undefined || spec.skillAllow !== undefined
+          ? {
+              ...(spec.skillsPaths !== undefined ? { skillsPaths: spec.skillsPaths } : {}),
+              ...(spec.skillAllow !== undefined ? { skillAllow: spec.skillAllow } : {}),
+            }
+          : undefined;
+      writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden, skillsConfig);
 
       const child = this.spawner.spawn(launch.command, launch.args, {
         cwd: launch.cwd,
