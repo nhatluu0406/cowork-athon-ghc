@@ -30,9 +30,15 @@ const SID = "ses_capture_demo";
 
 /** A tiny live-shaped SSE byte stream (raw `data:` frames) used ONLY to test the recorder. */
 async function* fakeSseStream(): AsyncIterable<string> {
+  // A real stream announces the assistant message (role) before its text deltas; the mapper's
+  // assistant-only token gate depends on it.
+  yield `data: ${JSON.stringify({
+    type: "message.updated",
+    properties: { sessionID: SID, info: { id: "msg1", role: "assistant" } },
+  })}\n\n`;
   yield `event: message\ndata: ${JSON.stringify({
     type: "message.part.delta",
-    properties: { sessionID: SID, delta: "Hi" },
+    properties: { sessionID: SID, messageID: "msg1", field: "text", delta: "Hi" },
   })}\n\n`;
   // A frame for ANOTHER session must be filtered out by the recorder's sessionFilter.
   yield `data: ${JSON.stringify({
@@ -91,10 +97,11 @@ test("recorder decodes a live-shaped SSE stream + filters foreign-session frames
     sessionFilter: SID,
     now: () => "2026-07-11T00:00:00.000Z",
   });
-  // 2 kept (delta + our idle); the foreign-session idle is dropped.
-  assert.equal(file.frames.length, 2);
-  assert.equal(file.frames[0]?.raw.type, "message.part.delta");
-  assert.equal(file.frames[1]?.raw.type, "session.idle");
+  // 3 kept (message.updated + delta + our idle); the foreign-session idle is dropped.
+  assert.equal(file.frames.length, 3);
+  assert.equal(file.frames[0]?.raw.type, "message.updated");
+  assert.equal(file.frames[1]?.raw.type, "message.part.delta");
+  assert.equal(file.frames[2]?.raw.type, "session.idle");
 });
 
 test("replay of recorded frames flows through the REAL mapper + reducer", async () => {

@@ -71,7 +71,8 @@ test("a completed write tool part → EV3 tool_call + EV4 file_mutation", () => 
   assert.equal(call.callId, "call-write");
   assert.equal(call.toolName, "write");
   assert.equal(call.status, "completed");
-  assert.equal(call.summary, "Write src/a.ts");
+  // Summary prefers the concrete file path (the tool name is shown separately in the trace).
+  assert.equal(call.summary, "src/a.ts");
   const mut = out[1] as Extract<EvEvent, { kind: "file_mutation" }>;
   assert.equal(mut.kind, "file_mutation");
   assert.equal(mut.operation, "create");
