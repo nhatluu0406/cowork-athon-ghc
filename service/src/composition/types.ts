@@ -22,7 +22,12 @@ import type {
 } from "../provider/index.js";
 import type { WorkspaceFsProbe, RecentExistenceProbe, RecentWorkspaces } from "../workspace/index.js";
 import type { WorkspaceGuard } from "../workspace/index.js";
-import type { PermissionGate, RuntimeReplyPort, InMemoryAuditSink } from "../permission/index.js";
+import type {
+  PermissionGate,
+  RuntimeReplyPort,
+  InMemoryAuditSink,
+  BranchPermissionBindings,
+} from "../permission/index.js";
 import type { ToolPermissionProxy } from "../files/index.js";
 import type { SessionService, RuntimeHealth, SessionStore, SendPrompt } from "../session/index.js";
 import type { ConversationStore } from "../conversation/index.js";
@@ -31,6 +36,8 @@ import type { ExtensionRegistry } from "../extensions/index.js";
 import type { SkillCatalog, SkillRoot } from "../skills/index.js";
 import type { AgentCatalog } from "../agents/index.js";
 import type { TaskStore } from "../tasks/index.js";
+import type { BranchRunner, DispatchRunRegistry } from "../dispatchers/index.js";
+import type { WorkflowDraftGenerator } from "../tasks/index.js";
 import type { McpStore } from "../db/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
@@ -38,6 +45,11 @@ import type { LocalAuthService, SqliteDatabase } from "../db/index.js";
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
+  /**
+   * Sink for redacted, non-secret boot diagnostics (e.g. a persisted endpoint skipped by the
+   * SSRF policy). The shell can wire this into the lifecycle log. Default: `console.warn`.
+   */
+  readonly onBootDiagnostic?: (line: string) => void;
   /**
    * Absolute path to the service-owned SQLite database (ADR 0007).
    * When set, settings + encrypted secrets live in SQLite and local app lock is required.
@@ -126,6 +138,18 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * RuntimeNotAttachedError so the message route honestly reports `runtime_not_attached`.
    */
   readonly sendPrompt?: SendPrompt;
+  /**
+   * Per-branch dispatch execution (fan-out, Task 5.2). Default: an honest not-attached runner —
+   * a branch errors truthfully without a live child. The live composition injects the real
+   * session-backed runner.
+   */
+  readonly branchRunner?: BranchRunner;
+  /**
+   * Workflow-from-prompt generator (Task 4.3). Default: an honest not-attached seam — a draft
+   * request rejects rather than fabricating a TaskDefinition. The live composition (Tier 2) may
+   * inject a real generator; tests inject a fake (no live LLM call in this repo's test suite).
+   */
+  readonly workflowDraftGenerator?: WorkflowDraftGenerator;
 
   /**
    * Extra token-guarded routers mounted after the built-ins (e.g. the flag-gated `/v1/remote`
@@ -150,6 +174,13 @@ export interface CoworkServiceDeps {
   readonly recentWorkspaces: RecentWorkspaces;
   readonly permissionGate: PermissionGate;
   readonly permissionAudit: InMemoryAuditSink;
+  /**
+   * D1 fix (ADR 0011 Open item): session→preset bindings a dispatch branch registers before its
+   * first prompt, read by {@link buildToolPermissionProxy}'s proxy to auto-deny a tool the
+   * branch's own agent preset forbids. The SAME instance is threaded into the live branch runner
+   * (`composition/compose-live.ts`) so one registry — not two — decides for both sides.
+   */
+  readonly branchPermissionBindings: BranchPermissionBindings;
   readonly sessionService: SessionService;
   readonly streamHub: SessionStreamHub;
   /** Local app lock + in-memory vault master key (absent when no SQLite database). */
@@ -164,6 +195,8 @@ export interface CoworkServiceDeps {
   readonly agentCatalog: AgentCatalog;
   /** Persisted TaskDefinition store (agent-harness-plan.md Task 4.1). */
   readonly taskStore: TaskStore;
+  /** Live dispatch runs — loop-runner over fan-out groups (Task 5.2 wiring). */
+  readonly dispatchRuns: DispatchRunRegistry;
   /**
    * The runtime-extension layer (CGHC-026): skill registry (RE1), MCP lifecycle (RE2), workflow
    * templates (RE4) over ONE extension-state source of truth with RE5 failure isolation. Wired

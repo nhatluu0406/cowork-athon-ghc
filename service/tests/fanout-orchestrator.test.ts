@@ -10,7 +10,14 @@ import {
 } from "../src/dispatchers/fanout.js";
 
 const AGENTS: Record<string, AgentDefinition> = {
-  researcher: { id: "researcher", name: "Researcher", source: "built_in", systemPrompt: "research", skillIds: [], permissionPreset: {} },
+  researcher: {
+    id: "researcher",
+    name: "Researcher",
+    source: "built_in",
+    systemPrompt: "research",
+    skillIds: [],
+    permissionPreset: { edit: "deny" },
+  },
   reviewer: { id: "reviewer", name: "Reviewer", source: "built_in", systemPrompt: "review", skillIds: [], permissionPreset: {} },
 };
 const resolve = (id: string) => AGENTS[id];
@@ -34,6 +41,14 @@ test("planBranches resolves agents and injects per-branch focus", () => {
   assert.match(plans[0]!.prompt, /review the change/);
   assert.match(plans[0]!.prompt, /Trọng tâm nhánh này: context/);
   assert.equal(plans[1]!.agentName, "Reviewer");
+});
+
+test("planBranches carries the agent's permissionPreset onto the branch plan", () => {
+  const plans = planBranches(fanTask(), resolve);
+  // researcher declares { edit: "deny" } — the plan must carry it so the runtime can enforce it.
+  assert.deepEqual(plans[0]!.preset, { edit: "deny" });
+  // reviewer here declares {} — an empty preset still flows through (no narrowing to apply).
+  assert.deepEqual(plans[1]!.preset, {});
 });
 
 test("planBranches rejects an unknown agent", () => {

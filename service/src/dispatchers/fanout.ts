@@ -16,7 +16,12 @@
  * honest visibility hold.
  */
 
-import { effectiveConcurrency, type AgentDefinition, type TaskDefinition } from "@cowork-ghc/contracts";
+import {
+  effectiveConcurrency,
+  type AgentDefinition,
+  type PermissionPreset,
+  type TaskDefinition,
+} from "@cowork-ghc/contracts";
 
 /** A planned branch: which agent runs, and the exact prompt it receives. */
 export interface BranchPlan {
@@ -25,6 +30,13 @@ export interface BranchPlan {
   readonly agentName: string;
   readonly systemPrompt: string;
   readonly prompt: string;
+  /**
+   * The agent's (narrowing-only, catalog-validated) tool-permission preset. Carried onto the
+   * plan so the live branch runner can bind it to the branch's child session BEFORE the first
+   * prompt — the runtime enforcement point (`ToolPermissionProxy`) reads it from that binding,
+   * never from this plan directly (D1 fix — see agent-harness-plan.md ADR 0011 Open items).
+   */
+  readonly preset: PermissionPreset;
 }
 
 export type BranchStatus = "pending" | "running" | "completed" | "errored" | "cancelled";
@@ -36,6 +48,8 @@ export interface BranchView {
   readonly agentName: string;
   status: BranchStatus;
   summary?: string;
+  /** Workspace-relative paths this branch claims to have produced/mutated (evidence, not proof). */
+  mutatedPaths?: readonly string[];
 }
 
 /** The result a {@link BranchRunner} returns for one branch. */
@@ -43,6 +57,8 @@ export interface BranchRunResult {
   readonly status: "completed" | "errored";
   /** Non-secret one-line summary of the branch outcome. */
   readonly summary?: string;
+  /** Workspace-relative paths this branch claims to have produced/mutated (a completed claim). */
+  readonly mutatedPaths?: readonly string[];
 }
 
 /** Injected per-branch runner. Must honor `signal` (cancel) and never throw for a normal error. */
@@ -107,6 +123,7 @@ export function planBranches(
       agentName: agent.name,
       systemPrompt: agent.systemPrompt,
       prompt: `${task.goal}${focus}`,
+      preset: agent.permissionPreset,
     };
   });
 }
@@ -156,6 +173,7 @@ export function createFanOutOrchestrator(options: FanOutOrchestratorOptions) {
         }
         view.status = result.status;
         if (result.summary !== undefined) view.summary = result.summary;
+        if (result.mutatedPaths !== undefined) view.mutatedPaths = result.mutatedPaths;
       } catch {
         // A runner that throws is an error branch — never a silent success.
         view.status = cancelled ? "cancelled" : "errored";

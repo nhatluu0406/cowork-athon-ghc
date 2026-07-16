@@ -22,8 +22,10 @@
  */
 
 import type { PermissionReply, SessionId, TestResult } from "@cowork-ghc/contracts";
+import type { BranchRunner, BranchRunResult } from "../dispatchers/index.js";
 import type { RuntimeReplyPort } from "../permission/index.js";
 import type { ProviderConnector, StreamHandle } from "../provider/index.js";
+import type { WorkflowDraftGenerator } from "../tasks/index.js";
 import type {
   CreateSessionInput,
   RuntimeHealth,
@@ -105,6 +107,30 @@ export function notAttachedSendPrompt(): SendPrompt {
     send: (_sessionId: SessionId, _text: string): Promise<void> =>
       Promise.reject(new RuntimeNotAttachedError("session.sendPrompt")),
   };
+}
+
+/**
+ * Honest default {@link BranchRunner} (dispatch fan-out, Task 5.2): with no live child a branch
+ * can only report an honest error — the run registry shows the branch as `errored` with this
+ * summary, never a fabricated completed.
+ */
+export function notAttachedBranchRunner(): BranchRunner {
+  return async (): Promise<BranchRunResult> => ({
+    status: "errored",
+    summary: 'OpenCode runtime is not attached; dispatch branches need the live supervisor.',
+  });
+}
+
+/**
+ * Honest default {@link WorkflowDraftGenerator} (Task 4.3): no live LLM call is wired at Tier 1,
+ * so a draft request REJECTS with the typed {@link RuntimeNotAttachedError} rather than fabricating
+ * a TaskDefinition. `createWorkflowBuilder` surfaces this as an honest `{ ok: false, error }` — no
+ * path ever reaches the task store from an unattached generator. Wiring a REAL generator (e.g. a
+ * one-shot child-session prompt through the live supervisor) is a Tier 2 / CGHC-028 concern, same
+ * as `sendPrompt`/`branchRunner` above.
+ */
+export function notAttachedWorkflowDraftGenerator(): WorkflowDraftGenerator {
+  return (): Promise<never> => Promise.reject(new RuntimeNotAttachedError("tasks.draftFromPrompt"));
 }
 
 /** Honest default {@link ProviderConnector}: an unreachable probe (no runtime), no-op cancel. */

@@ -2853,6 +2853,93 @@ body {
 .remote-device__meta { opacity: 0.6; font-size: 12px; }
 .remote-note { font-size: 13px; opacity: 0.75; margin: 6px 0 0; }
 
+/* Dispatch board on the Dispatch surface: real task catalog + live fan-out runs. Sits in its
+   own card between the honest "awaiting D1" placeholder and the remote quick-access. */
+.integration-dispatch {
+  width: min(620px, 100%);
+  margin-top: 18px;
+  padding: 24px 30px 28px;
+  border: 1px solid var(--line-warm);
+  border-radius: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.integration-dispatch__title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.integration-dispatch__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.dispatch-section { margin-bottom: 12px; }
+.dispatch-section__label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+.dispatch-note { font-size: 13px; opacity: 0.75; margin: 6px 0 0; }
+.dispatch-task,
+.dispatch-run {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line-warm);
+}
+.dispatch-task__head,
+.dispatch-run__head { display: flex; align-items: center; gap: 8px; }
+.dispatch-task__name,
+.dispatch-run__name { font-weight: 600; color: var(--text-strong); }
+.dispatch-task__badge {
+  font-size: 11px;
+  padding: 1px 8px;
+  border: 1px solid var(--line-warm);
+  border-radius: 999px;
+  opacity: 0.75;
+}
+.dispatch-task__meta,
+.dispatch-run__meta { font-size: 12px; opacity: 0.65; margin: 4px 0 6px; word-break: break-word; }
+.dispatch-task__actions { display: flex; align-items: center; gap: 10px; }
+.dispatch-task__note { font-size: 12px; color: #b6524c; }
+.dispatch-btn {
+  border: 1px solid var(--line-warm);
+  border-radius: 10px;
+  padding: 6px 14px;
+  background: var(--surface);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.dispatch-btn:disabled { opacity: 0.5; cursor: default; }
+.dispatch-btn--danger { border-color: #b6524c; color: #b6524c; margin-top: 8px; }
+.dispatch-run__status {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-warm);
+}
+.dispatch-run__status--running { color: #8a6d1a; border-color: #8a6d1a; }
+.dispatch-run__status--completed { color: #3d7a4a; border-color: #3d7a4a; }
+.dispatch-run__status--partial,
+.dispatch-run__status--exhausted { color: #8a6d1a; border-color: #8a6d1a; }
+.dispatch-run__status--errored { color: #b6524c; border-color: #b6524c; }
+.dispatch-run__status--cancelled { opacity: 0.6; }
+.dispatch-run__verified { font-size: 11px; color: #3d7a4a; }
+.dispatch-branch {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 12px;
+  padding: 3px 0 3px 12px;
+}
+.dispatch-branch__agent { font-weight: 600; }
+.dispatch-branch__status { opacity: 0.7; }
+.dispatch-branch__summary { opacity: 0.6; word-break: break-word; }
 /* Local app lock (ADR 0007) ? minimal gate, token-styled */
 .app-lock {
   position: fixed;

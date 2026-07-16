@@ -82,6 +82,29 @@ test("the SSRF escape is unreachable from the body: a smuggled loopbackEscape is
   );
 });
 
+test("the DEV loopback-http override is unreachable from the body: a smuggled dev flag is ignored", async () => {
+  const router = prodRouter();
+  const route = router.routes.find((r) => r.method === "POST" && r.path === PROVIDER_ENDPOINT_PATH);
+  assert.ok(route);
+  // A caller tries to smuggle the developer-only env override via the request body. The router
+  // only ever reads `id`/`baseUrl` from the body (see `parseEndpointBody`) — the override is
+  // sourced ONLY from process env at the composition root, never from a request.
+  await assert.rejects(
+    () =>
+      route.handler(
+        ctx("POST", PROVIDER_ENDPOINT_PATH, {
+          id: CUSTOM_OPENAI_COMPAT_ID,
+          baseUrl: "http://localhost.evil/v1", // resolves to 127.0.0.1, plain http
+          loopbackEscape: true, // ignored — not a real field
+          devAllowLoopbackHttp: true, // ignored — not a real field
+          COWORK_GHC_DEV_ALLOW_LOOPBACK_HTTP: "1", // ignored — env-only, never a body field
+        }),
+      ),
+    (err: unknown) =>
+      err instanceof ProviderRequestError && /SSRF policy: scheme_not_https/.test(err.message),
+  );
+});
+
 test("a malformed endpoint body is rejected with a generic error", async () => {
   const router = prodRouter();
   const route = router.routes.find((r) => r.method === "POST" && r.path === PROVIDER_ENDPOINT_PATH);

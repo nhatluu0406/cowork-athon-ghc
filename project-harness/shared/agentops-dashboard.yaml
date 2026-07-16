@@ -1,0 +1,14 @@
+# Agent-performance metrics (NOT app monitoring). Reviewed weekly while the backlog is active.
+metrics_per_role:
+  - task_completion_rate      # % of assigned units finished without escalation
+  - human_override_rate       # % of output the user rejected/rewrote
+  - revert_rate               # % of committed slices later reverted
+  - eval_pass_rate            # % passing the unit's gate (code/security/ux review) first try
+  - cost_per_task_tokens
+  - escalation_rate
+  - drift_flag                # eval_pass_rate trending down over last N units
+
+alerting:
+  - if human_override_rate > 30% for 2 consecutive weeks -> review that role's scope/skills
+    in .claude/agents/*.md (likely under-specified role, not a model issue)
+  - if revert_rate > 10% -> drop that role to L1 (draft-only) until root cause found
