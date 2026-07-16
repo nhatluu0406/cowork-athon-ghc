@@ -47,6 +47,8 @@ import {
 import { startEvStream, type EvStreamHandle } from "./ev-stream-client.js";
 import { mountProviderProfilesPanel } from "./provider-profiles-panel.js";
 import { createPermissionController } from "./permission-controller.js";
+import { openRemotePanel } from "./remote-panel.js";
+import { createDefaultRegistry } from "./commands/registry.js";
 import {
   createServiceClient,
   ServiceClientError,
@@ -968,7 +970,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface);
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
   }
 
   if (isCoworkSurface) {
@@ -2069,6 +2071,7 @@ function createShell(root: HTMLElement): AppDom {
 
 export function mountCoworkApp(root: HTMLElement): void {
   const dom = createShell(root);
+  const registry = createDefaultRegistry();
   const state: AppState = {
     client: null,
     bootstrap: null,
@@ -2536,6 +2539,43 @@ export function mountCoworkApp(root: HTMLElement): void {
   };
 
   dom.sendButton.addEventListener("click", () => {
+    const composerText = textFromComposer(dom.composerInput).trim();
+    if (composerText.startsWith("/")) {
+      if (state.client !== null) {
+        const ctx = {
+          client: state.client,
+          conv: state.conv,
+          activeSessionId: state.conv.state.runtimeSessionId,
+          arguments: [],
+          dom,
+          state,
+          handlers,
+          appendAssistantMessage: (text: string) => {
+            appendMessage(dom, "assistant", text);
+          },
+          clearChatUI: () => {
+            clearTranscript(dom);
+          },
+          refreshUI: () => {
+            renderState(dom, state, handlers);
+          },
+        };
+        setComposerText(dom.composerInput, "");
+        saveComposerDraft(state, dom);
+        void registry.dispatch(composerText, ctx).then(async (dispatchRes) => {
+          if (dispatchRes.handled && typeof dispatchRes.result === "string") {
+            setComposerText(dom.composerInput, dispatchRes.result);
+            await sendPrompt(state, dom, readiness, handlers);
+          } else {
+            renderState(dom, state, handlers);
+          }
+        }).catch((error) => {
+          appendMessage(dom, "assistant", safeError(error));
+          renderState(dom, state, handlers);
+        });
+      }
+      return;
+    }
     void sendPrompt(state, dom, readiness, handlers).catch((error) => {
       const preflight = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
       if (!preflight.canSend) {
