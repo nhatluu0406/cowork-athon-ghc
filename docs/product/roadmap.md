@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-15"
+updated_at: "2026-07-16"
 ---
 
 # Roadmap V2 — basic-first, one wave at a time
@@ -55,11 +55,15 @@ updated_at: "2026-07-15"
 
 ## WAVE 4 — Workspace PDF and live refresh
 
-- [ ] Packaged PDF preview.
-- [ ] Auto-refresh tree after verified mutation.
-- [ ] Auto-open created/modified file when safe.
-- [ ] Dirty-edit conflict UX.
-- [ ] Explicit current-file context in companion chat.
+- [x] Packaged PDF preview. (Chromium PDFium; default no-toolbar + fit-to-width. Needed:
+      `plugins:true`, `style-src 'unsafe-inline'`, and exempting `chrome-extension://` from the
+      CSP header stamp so the built-in viewer keeps its own policy.)
+- [x] Auto-refresh tree after verified mutation.
+- [x] Auto-open created/modified file when safe (≤1 file per turn; never outside-workspace/secret/unsupported/over a dirty buffer).
+- [x] Dirty-edit conflict UX (keep-mine + persistent overwrite warning / reload-from-disk warns of edit loss).
+- [x] Explicit current-file context in companion chat.
+- [x] Verified-delete of the open file clears the preview and blocks accidental recreate.
+- [x] Code-file viewing: syntax highlight (highlight.js) + line numbers, read-only with an edit toggle.
 
 ## WAVE 5 — Inspector Phase 1
 
