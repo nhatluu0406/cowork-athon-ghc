@@ -24,10 +24,12 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
   root.dataset["view"] = "skills-mcp";
   root.hidden = true;
 
+  // Header carries the title + tabs on one row (same visual language as the Knowledge screen).
   const header = el("header", "skills-mcp-header");
-  header.append(el("h1", "skills-mcp-header__title", "Skill & MCP"));
+  const headText = el("div", "skills-mcp-header__text");
+  headText.append(el("h1", "skills-mcp-header__title", "Skill & MCP"));
   const summary = el("span", "skills-mcp-header__summary");
-  header.append(summary);
+  headText.append(summary);
 
   const tabs = el("div", "skills-mcp-tabs");
   tabs.setAttribute("role", "tablist");
@@ -46,6 +48,7 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
   mcpTab.setAttribute("role", "tab");
   mcpTab.setAttribute("aria-selected", "false");
   tabs.append(skillsTab, mcpTab);
+  header.append(headText, tabs);
 
   const body = el("div", "skills-mcp-body");
   const skillsBody = el("section", "skills-mcp-body__panel skills-mcp-body__panel--skills");
@@ -55,7 +58,7 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
   mcpBody.setAttribute("aria-label", "Quản lý MCP");
   body.append(skillsBody, mcpBody);
 
-  root.append(header, tabs, body);
+  root.append(header, body);
 
   return { root, summary, skillsTab, mcpTab, skillsBody, mcpBody };
 }
