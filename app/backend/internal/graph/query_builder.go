@@ -12,6 +12,6 @@ type QueryBuilder struct {
 	driver neo4j.DriverWithContext
 }
 
-func NewQueryBuilder(driver neo4j.DriverWithContext) *QueryBuilder {
-	return &QueryBuilder{driver: driver}
+func NewQueryBuilder(db *sql.DB, driver neo4j.DriverWithContext) *QueryBuilder {
+	return &QueryBuilder{db: db, driver: driver}
 }

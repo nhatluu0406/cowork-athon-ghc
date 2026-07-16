@@ -36,6 +36,10 @@ func HandleGraphNodes(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFi
 		// means "don't filter by allowed file IDs" (useful for users with no
 		// permission_cache entries, e.g. during initial system setup). An explicit
 		// empty slice []int{} means "user has no access to anything".
+		
+		if allowedFileIDs == nil {
+			allowedFileIDs = []int{}
+		}
 
 		label := r.URL.Query().Get("label")
 		limit := parseLimit(r, 100)
