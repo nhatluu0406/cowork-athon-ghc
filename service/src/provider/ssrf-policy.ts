@@ -85,6 +85,23 @@ export interface SsrfPolicy {
   assertAllowed(rawUrl: string): Promise<ConnectTarget>;
 }
 
+/**
+ * Order validated addresses for an IP-pinned "Happy-Eyeballs-lite" dial: the resolver's first
+ * choice, then the first address of a DIFFERENT family. This lets a dual-stack host whose
+ * IPv6 has no working egress (a common Windows/office case) fall back to IPv4 instead of being
+ * stuck on a dead pinned address. Bounded to at most two attempts so dial latency stays
+ * bounded, and EVERY returned address is one the SSRF policy already validated — the F2
+ * socket-pin guarantee is unchanged (we still only ever dial validated IPs).
+ */
+export function orderConnectCandidates(
+  resolved: readonly ResolvedAddress[],
+): readonly ResolvedAddress[] {
+  const first = resolved[0];
+  if (first === undefined) return [];
+  const diffFamily = resolved.find((a) => a.family !== first.family);
+  return diffFamily === undefined ? [first] : [first, diffFamily];
+}
+
 function parseUrl(rawUrl: string): URL | null {
   try {
     return new URL(rawUrl);

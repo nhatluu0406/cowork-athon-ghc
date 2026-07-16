@@ -294,3 +294,34 @@ test("custom endpoint: auth probe then model probe — invalid model maps to mod
   assert.equal(result.error?.kind, "model_invalid");
   assert.equal(dialer.calls.length, 2, "models list then chat completion");
 });
+
+// ---- 6. Dual-stack IP-pinned Happy-Eyeballs fallback --------------------------------
+
+test("dual-stack: a dead IPv6 pin falls back to the validated IPv4 (still IP-pinned)", async () => {
+  const logs: string[] = [];
+  const credentials = createCredentialService({ store: createMemoryStore(), log: (l) => logs.push(l) });
+  const ref = await credentials.store({ providerId: "openai", secret: "sk-openai-DO-NOT-LEAK-abc123def456" });
+  const ssrf = createSsrfPolicy({
+    resolver: async () => [
+      { address: "2606:4700:10::ac42:aa78", family: 6 as const }, // dead IPv6
+      { address: "93.184.216.34", family: 4 as const }, // working IPv4
+    ],
+  });
+  const dialer = fakeDialer((req) => {
+    if (req.family === 6) throw new ProbeTimeoutError(10_000);
+    return echoPinned(200)(req);
+  });
+  const connector = createHttpConnector({
+    ssrf,
+    credentials,
+    credentialRefFor: () => ref,
+    dialer,
+    envSpecFor: () => providerEnvSpec("openai"),
+  });
+  const port = createProviderPort({ ssrf, connector });
+  const result = await port.testConnection("openai");
+  assert.equal(result.ok, true);
+  assert.equal(dialer.calls.length, 2, "IPv6 attempt then IPv4 fallback");
+  assert.equal(dialer.calls[0]!.family, 6);
+  assert.equal(dialer.calls[1]!.family, 4);
+});
