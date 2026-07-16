@@ -167,6 +167,8 @@ interface AppState {
   finalizingTurn: boolean;
   finalizedRuntimeSessions: Set<string>;
   turnTiming: TurnTimingTracker;
+  /** Wall-clock start (ms) of the current turn, for the per-turn runtime metric (issue #4). */
+  turnStartedAtMs: number | null;
   currentFileActionIntent: FileActionIntent | null;
   fileVerificationTasks: Set<Promise<void>>;
   pendingAttachments: PendingAttachment[];
@@ -1094,6 +1096,49 @@ function updateAssistantBubble(state: AppState, text: string): void {
   }
 }
 
+/** Human-readable turn duration ("820ms" / "2.3s"). */
+function formatTurnDuration(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
+ * Render the per-turn runtime + token metrics footer under the assistant answer (issue #4).
+ * Non-secret counts only. No-op when neither a runtime nor any token count is available.
+ */
+function renderTurnMetrics(state: AppState, view: SessionView): void {
+  const row = state.activeAssistant;
+  if (row === null) return;
+  const parts: string[] = [];
+  if (state.turnStartedAtMs !== null) {
+    parts.push(`⏱ ${formatTurnDuration(Date.now() - state.turnStartedAtMs)}`);
+  }
+  const m = view.metrics;
+  if (m !== undefined) {
+    if (typeof m.tokensTotal === "number") {
+      const io = [
+        typeof m.tokensInput === "number" ? `${m.tokensInput.toLocaleString("vi-VN")}↑` : null,
+        typeof m.tokensOutput === "number" ? `${m.tokensOutput.toLocaleString("vi-VN")}↓` : null,
+      ]
+        .filter((x): x is string => x !== null)
+        .join(" ");
+      parts.push(`${m.tokensTotal.toLocaleString("vi-VN")} tokens${io.length > 0 ? ` (${io})` : ""}`);
+    }
+    if (typeof m.costUsd === "number" && m.costUsd > 0) {
+      parts.push(`$${m.costUsd.toFixed(4)}`);
+    }
+  }
+  if (parts.length === 0) return;
+  const host = row.querySelector<HTMLElement>(".msg__body") ?? row;
+  let footer = host.querySelector<HTMLElement>(".turn-metrics");
+  if (footer === null) {
+    footer = document.createElement("p");
+    footer.className = "turn-metrics";
+    host.append(footer);
+  }
+  footer.textContent = parts.join(" · ");
+}
+
 /** Keep the processing indicator under the live assistant label when the bubble is still empty. */
 function syncProcessingIndicator(dom: AppDom, state: AppState): void {
   const show = shouldShowProcessing({
@@ -1275,6 +1320,7 @@ async function finalizeConversationTurn(
   state.assistantText = resolved.text;
   const displayText = sanitizeAssistantForDisplay(resolved.text);
   updateAssistantBubble(state, displayText);
+  renderTurnMetrics(state, view);
   setClaudePanelStreaming(dom.codeView.panel, state.assistantText, true);
   state.activityLive = false;
   state.turnTiming.mark("FINAL_RESPONSE");
@@ -1914,6 +1960,7 @@ async function sendPrompt(
     state.turnTiming.mark("RUNTIME_READY", runtimeSessionId);
 
     resetLiveActivity(state);
+    state.turnStartedAtMs = Date.now();
     state.currentFileActionIntent = detectFileActionIntent(prompt);
     state.fileVerificationTasks.clear();
     await state.conv.recordUserMessage(
@@ -2099,6 +2146,7 @@ export function mountCoworkApp(root: HTMLElement): void {
         TURN_PERF_DEMO_ENABLED || state.settings?.general.verboseLogging === true,
       log: (line) => console.info(line),
     }),
+    turnStartedAtMs: null,
     currentFileActionIntent: null,
     fileVerificationTasks: new Set(),
     pendingAttachments: [],

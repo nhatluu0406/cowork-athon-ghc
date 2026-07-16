@@ -34,6 +34,7 @@ const EV_KINDS: ReadonlySet<string> = new Set<EvEventKind>([
   "file_mutation",
   "token",
   "progress",
+  "metrics",
   "error",
   "terminal",
 ]);

@@ -1601,6 +1601,14 @@ button:disabled {
   color: var(--danger);
 }
 
+/* Per-turn runtime + token metrics footer under the assistant answer (issue #4). */
+.turn-metrics {
+  margin: 6px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Composer model switcher popup (item 9). */
 .provider-menu {
   position: fixed;
