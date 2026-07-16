@@ -1,12 +1,12 @@
 @echo off
 setlocal EnableExtensions
 rem Cowork GHC - build-llm-svc.bat : Compile the Rust LLM service (llm-svc.exe).
-rem Requires Rust / cargo on PATH with MSVC toolchain. Outputs to app\llm-svc\target\x86_64-pc-windows-msvc\release\llm-svc.exe.
+rem Requires Rust / cargo on PATH. Outputs to app\llm-svc\target\release\llm-svc.exe.
 rem Resolve project root from this script's own location.
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 title Cowork GHC - build-llm-svc
 set "LLM_SVC_DIR=%ROOT%\app\llm-svc"
-set "OUT=%LLM_SVC_DIR%\target\x86_64-pc-windows-msvc\release\llm-svc.exe"
+set "OUT=%LLM_SVC_DIR%\target\release\llm-svc.exe"
 
 where cargo >nul 2>nul
 if errorlevel 1 (
@@ -43,8 +43,7 @@ if not errorlevel 1 (
 )
 
 cd /d "%LLM_SVC_DIR%"
-rem Force MSVC toolchain for ort-sys compatibility (no prebuilt binaries for GNU)
-cargo build --release --bin llm-svc --target x86_64-pc-windows-msvc
+cargo build --release --bin llm-svc
 if errorlevel 1 (
   echo [build-llm-svc] FAILED.
   exit /b %ERRORLEVEL%
