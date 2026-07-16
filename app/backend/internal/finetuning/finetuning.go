@@ -1,17 +1,5 @@
 package finetuning
 
-import "database/sql"
-
-// Versioning tracks fine-tuned model versions.
-type Versioning struct {
-	db *sql.DB
-}
-
-func NewVersioning(db *sql.DB) *Versioning { return &Versioning{db: db} }
-
-// ABTestManager runs A/B experiments between model versions.
-type ABTestManager struct {
-	versioning *Versioning
-}
-
-func NewABTestManager(v *Versioning) *ABTestManager { return &ABTestManager{versioning: v} }
+// This file is intentionally empty. Type definitions and constructors are in:
+// - versioning.go: Versioning type and methods
+// - ab.go: ABTestManager type and methods
