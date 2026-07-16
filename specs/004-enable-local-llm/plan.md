@@ -1,159 +1,113 @@
-# Implementation Plan: Enable Local LLM with Cloud Fallback
+# Implementation Plan: [FEATURE]
 
-**Branch**: `004-enable-local-llm` | **Date**: 2026-07-17 | **Spec**: [specs/004-enable-local-llm/spec.md](./spec.md)
+**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 
-**Input**: Feature specification from `/specs/004-enable-local-llm/spec.md`
+**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
----
+**Note**: This template is filled in by the `/speckit-plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
 
 ## Summary
 
-Thêm khả năng dùng local LLM thay vì cloud API trong RAD Knowledge Gateway. Go backend đã route toàn bộ LLM calls qua `llm-svc` (gRPC) — `llm-svc` đã có khả năng chạy model local. Feature này thêm:
-1. **Settings API** (`/api/llm/settings`) để bật/tắt local LLM và chọn model
-2. **FallbackRouter** — wrapper quanh `SvcAdapter` tự động fallback sang cloud khi local fails/timeout
-3. **WebSocket notification** khi fallback xảy ra (SC-004: trong 1 giây)
-4. **Persistence** qua PostgreSQL `llm_settings` table
-
-Không thêm inference engine mới; không scan filesystem trực tiếp — đó là trách nhiệm của `llm-svc`.
-
----
+[Extract from feature spec: primary requirement + technical approach from research]
 
 ## Technical Context
 
-**Language/Version**: Go 1.22
+<!--
+  ACTION REQUIRED: Replace the content in this section with the technical details
+  for the project. The structure here is presented in advisory capacity to guide
+  the iteration process.
+-->
 
-**Primary Dependencies**: Tất cả đã có trong `go.mod`:
-- `github.com/neo4j/neo4j-go-driver/v5` (không liên quan)
-- `github.com/lib/pq` — PostgreSQL
-- `google.golang.org/grpc` — gRPC client cho llm-svc
-- Existing `internal/llmsvc`, `internal/embedding`, `internal/websocket`
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
 
-Không thêm dependency mới.
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
 
-**Storage**: PostgreSQL — 2 bảng mới: `llm_settings` (key-value) + `llm_fallback_events` (audit log)
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 
-**Testing**: `go test ./internal/llmconfig/...`; mock `SvcAdapter` cho unit tests; test DB cho `SettingsStore`
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
 
-**Target Platform**: Linux (same as backend)
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
 
-**Project Type**: Backend service extension — Settings API + transparent middleware (FallbackRouter)
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
 
-**Performance Goals**:
-- SC-001: Xử lý prompt cục bộ trong 10 giây kể từ khi model loaded (do llm-svc handle)
-- SC-002: Fallback sang cloud trong 5 giây khi local fails (controlled by `local_model_timeout_s`)
-- SC-004: Fallback notification qua WebSocket trong 1 giây
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
 
-**Constraints**:
-- `FallbackRouter` không được block API thread — timeout via `context.WithTimeout`
-- Settings đọc từ DB per-request hoặc cached với TTL ≤ 5s; không dùng global mutable state
-- Model name không phải model path — không có filesystem access trong Go backend
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
 
-**Scale/Scope**: Global setting (không phải per-user); MVP cho 1 local model tại một thời điểm
-
----
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
-| Nguyên tắc | Trạng thái | Ghi chú |
-|-----------|-----------|---------|
-| I. Accuracy Over Speed | ✅ PASS | Fallback đảm bảo response luôn được trả về; local dùng khi validated |
-| II. Semantic Knowledge > Raw Text | ✅ PASS | Infrastructure feature; không thay đổi retrieval pipeline semantics |
-| III. Test-First Deterministic Verification | ✅ PASS | Unit tests cho FallbackRouter với mock adapter; settings store tests |
-| IV. Hybrid Retrieval Architecture | ✅ PASS | Local model là runtime choice trong cùng pipeline |
-| V. Source-of-Truth Hierarchy & Traceability | ✅ PASS | `llm_settings` là single source of truth; `llm_fallback_events` là audit trail |
+*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
----
+[Gates determined based on constitution file]
 
 ## Project Structure
 
-### Documentation (feature này)
+### Documentation (this feature)
 
 ```text
-specs/004-enable-local-llm/
-├── plan.md              ← file này
-├── spec.md              ← đã có
-├── research.md          ← Phase 0 output (đã tạo)
-├── data-model.md        ← Phase 1 output (đã tạo)
-├── quickstart.md        ← Phase 1 output (đã tạo)
-├── contracts/
-│   └── api.md           ← Phase 1 output (đã tạo)
-├── checklists/
-│   └── requirements.md  ← đã có
-└── tasks.md             ← Phase 2 output (chưa tạo)
+specs/[###-feature]/
+├── plan.md              # This file (/speckit-plan command output)
+├── research.md          # Phase 0 output (/speckit-plan command)
+├── data-model.md        # Phase 1 output (/speckit-plan command)
+├── quickstart.md        # Phase 1 output (/speckit-plan command)
+├── contracts/           # Phase 1 output (/speckit-plan command)
+└── tasks.md             # Phase 2 output (/speckit-tasks command - NOT created by /speckit-plan)
 ```
 
-### Source Code
+### Source Code (repository root)
+<!--
+  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
+-->
 
 ```text
-app/backend/
-├── migrations/
-│   └── 004_local_llm.sql              -- NEW: llm_settings + llm_fallback_events
-│
-├── internal/
-│   ├── llmconfig/                     -- NEW PACKAGE
-│   │   ├── settings.go                -- LLMSettings, SettingsStore CRUD
-│   │   ├── fallback.go                -- FallbackEvent, FallbackStore, FallbackRouter
-│   │   └── handler.go                 -- HTTP handlers: GET/PUT /api/llm/settings, GET /api/llm/models
-│   │
-│   ├── api/
-│   │   └── handlers_knowledge.go      -- UPDATE: add llm_info to query response
-│   │
-│   └── retrieval/
-│       └── stages.go                  -- NO CHANGE: FallbackRouter satisfies existing interfaces
-│
-└── cmd/
-    └── main.go                        -- UPDATE: wire FallbackRouter; register /api/llm/ routes
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
+src/
+├── models/
+├── services/
+├── cli/
+└── lib/
 
 tests/
-├── unit/
-│   └── llmconfig/
-│       ├── settings_test.go           -- SettingsStore unit tests
-│       └── fallback_test.go           -- FallbackRouter with mock SvcAdapter
-└── integration/
-    └── llmconfig/
-        └── settings_api_test.go       -- API integration tests
+├── contract/
+├── integration/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: Single Go backend project. New package `internal/llmconfig/` with 3 files (<250 lines each). `FallbackRouter` transparently replaces `SvcAdapter` at the `retrieval.EmbeddingRuntime` / `retrieval.LLMClient` injection points in `cmd/main.go` — no interface changes.
-
----
-
-## Phase 0: Research ✅ DONE
-
-Xem **[research.md](./research.md)**:
-- Go backend không cần inference engine — `llm-svc` đã handle
-- `llm-svc.ListModels` RPC trả về `IsLocal bool` — đủ để liệt kê local models
-- Fallback via `context.WithTimeout` + retry với cloud model name
-- Settings persist trong `llm_settings` key-value table
-
----
-
-## Phase 1: Design & Contracts ✅ DONE
-
-Xem:
-- **[data-model.md](./data-model.md)** — `llm_settings`, `llm_fallback_events`, Go types
-- **[contracts/api.md](./contracts/api.md)** — `/api/llm/settings`, `/api/llm/models`, WebSocket event
-- **[quickstart.md](./quickstart.md)** — thứ tự implementation, test strategy
-
----
-
-## Phase 2: Implementation (READY TO START)
-
-**Phase A** — Migrations + SettingsStore + FallbackStore (nền tảng)
-
-**Phase B** — FallbackRouter (core logic, unit tested với mock)
-
-**Phase C** — HTTP handlers + wiring vào main.go + extend knowledge query response
-
-**Phase D** — Integration tests + WebSocket notification
-
----
+**Structure Decision**: [Document the selected structure and reference the real
+directories captured above]
 
 ## Complexity Tracking
 
-Không có violation. Ghi nhận trade-off:
+> **Fill ONLY if Constitution Check has violations that must be justified**
 
-| Trade-off | Lý do | Phương án đơn giản hơn đã loại vì |
-|-----------|-------|----------------------------------|
-| Thêm `FallbackRouter` wrapper | Encapsulate fallback logic, tránh scatter if/else trong mọi handler | Inline if/else trong mỗi handler = duplicated code + hard to test |
-| `llm_settings` key-value table | Flexible cho tương lai (thêm key mới không cần migration) | Typed settings table = schema migration cho mỗi key mới |
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|-----------|------------|-------------------------------------|
+| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

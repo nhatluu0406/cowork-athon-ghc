@@ -51,6 +51,7 @@ NEO4J_STARTED=0
 EXIT_CODE=0
 
 log()  { echo "[system-test] $*"; }
+
 fail() { echo "[system-test] FAIL: $*" >&2; }
 
 require_cmd() {
