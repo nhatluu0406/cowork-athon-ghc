@@ -75,7 +75,7 @@ export function mountSkillsSettingsPanel(
   status.setAttribute("role", "status");
   layout.append(list, editor);
   root.replaceChildren(
-    el("h2", "skills-settings__title", "Kỹ năng"),
+    el("h2", "skills-settings__title", "Skill"),
     el(
       "p",
       "skills-settings__intro",

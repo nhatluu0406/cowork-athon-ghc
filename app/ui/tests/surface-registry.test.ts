@@ -55,7 +55,7 @@ test("skills-mcp surface sits directly below Cowork in the rail", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.equal(visible[0]?.id, "cowork");
   assert.equal(visible[1]?.id, "skills-mcp");
-  assert.equal(visible[1]?.label, "Kỹ năng & MCP");
+  assert.equal(visible[1]?.label, "Skill & MCP");
   assert.equal(visible[1]?.icon, "skills");
 });
 
