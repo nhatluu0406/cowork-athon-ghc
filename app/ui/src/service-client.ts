@@ -18,6 +18,7 @@ import {
   type BoundaryErrorCode,
   type CredentialRef,
   type HealthData,
+  type ModelDiscoveryResult,
   type ModelRef,
   type ProviderDescriptor,
   type ResponseEnvelope,
@@ -454,6 +455,12 @@ export interface ServiceClient {
   storeProfileCredential(profileId: string, secret: string): Promise<SettingsView>;
   removeProfileCredential(profileId: string): Promise<SettingsView>;
   testProfileConnection(profileId: string): Promise<TestResult>;
+  /**
+   * Best-effort model discovery for a profile draft. `baseUrl` optionally overrides the saved
+   * endpoint (an in-form edit). Never blocks configuration: on any failure the result carries
+   * `ok: false` and the caller keeps manual model-id entry.
+   */
+  discoverProfileModels(profileId: string, baseUrl?: string): Promise<ModelDiscoveryResult>;
   /** Patch general settings; returns the updated settings view. */
   updateGeneral(patch: Partial<GeneralSettingsView>): Promise<SettingsView>;
   /**
@@ -767,6 +774,16 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         await call<{ result: TestResult }>(
           `/v1/provider-profiles/${encodeURIComponent(profileId)}/test-connection`,
           { method: "POST", body: JSON.stringify({}) },
+        )
+      ).result,
+    discoverProfileModels: async (profileId, baseUrl) =>
+      (
+        await call<{ result: ModelDiscoveryResult }>(
+          `/v1/provider-profiles/${encodeURIComponent(profileId)}/discover-models`,
+          {
+            method: "POST",
+            body: JSON.stringify(baseUrl !== undefined ? { baseUrl } : {}),
+          },
         )
       ).result,
     updateGeneral: async (patch) =>

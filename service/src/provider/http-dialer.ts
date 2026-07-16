@@ -35,6 +35,16 @@ export interface HttpProbeRequest {
   readonly method?: "GET" | "POST";
   /** Optional request body (POST probes). */
   readonly body?: string;
+  /**
+   * Capture the response body as UTF-8 text (model discovery reads `data[].id`). When false
+   * (the default) the body is drained unread — the connection probe reads only status/headers.
+   */
+  readonly readBody?: boolean;
+  /**
+   * Hard cap on a captured body (bytes). Exceeding it aborts the read and returns no body
+   * (the caller treats a missing body as malformed). Ignored unless `readBody` is true.
+   */
+  readonly maxBodyBytes?: number;
 }
 
 /** A probe response. Carries the status, headers, and the IP the socket ACTUALLY used. */
@@ -44,6 +54,11 @@ export interface HttpProbeResponse {
   readonly headers: Readonly<Record<string, string>>;
   /** `socket.remoteAddress` — the exact IP the socket connected to (F2 assertion input). */
   readonly dialedIp: string;
+  /**
+   * The response body as UTF-8 text, present only when the request set `readBody`. Absent when
+   * the body was drained unread, or when it exceeded `maxBodyBytes` (treated as malformed).
+   */
+  readonly bodyText?: string;
 }
 
 /** The injected dial seam. Production uses {@link createHttpsDialer}; tests inject a fake. */
@@ -56,6 +71,9 @@ export class ProbeTimeoutError extends Error {
     this.name = "ProbeTimeoutError";
   }
 }
+
+/** Default cap on a captured response body (512 KiB) — a model list is far smaller. */
+const DEFAULT_MAX_BODY_BYTES = 512 * 1024;
 
 /** Strip an IPv4-mapped IPv6 prefix so a dialed IP compares equal to the validated literal. */
 function normalizeIp(address: string): string {
@@ -110,8 +128,37 @@ export function createHttpsDialer(): HttpDialer {
         },
         (res) => {
           const dialedIp = normalizeIp(res.socket.remoteAddress ?? "");
-          res.resume(); // drain the body — the probe reads only status + headers
-          resolve({ status: res.statusCode ?? 0, headers: lowerCaseHeaders(res.headers), dialedIp });
+          const status = res.statusCode ?? 0;
+          const headers = lowerCaseHeaders(res.headers);
+          if (req.readBody !== true) {
+            res.resume(); // drain the body — the probe reads only status + headers
+            resolve({ status, headers, dialedIp });
+            return;
+          }
+          // Bounded body capture (model discovery). Abort past the cap; the caller treats a
+          // missing body as malformed rather than buffering an unbounded response.
+          const cap = req.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
+          const chunks: Buffer[] = [];
+          let total = 0;
+          let overflowed = false;
+          res.on("data", (chunk: Buffer) => {
+            if (overflowed) return;
+            total += chunk.length;
+            if (total > cap) {
+              overflowed = true;
+              res.destroy();
+              return;
+            }
+            chunks.push(chunk);
+          });
+          res.on("end", () => {
+            resolve(
+              overflowed
+                ? { status, headers, dialedIp }
+                : { status, headers, dialedIp, bodyText: Buffer.concat(chunks).toString("utf8") },
+            );
+          });
+          res.on("error", () => resolve({ status, headers, dialedIp }));
         },
       );
       request.on("timeout", () => request.destroy(new ProbeTimeoutError(req.timeoutMs)));
