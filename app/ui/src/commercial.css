@@ -1551,15 +1551,6 @@ button {
     transform: translateY(0);
   }
 }
-  max-width: min(420px, calc(100vw - 36px));
-  margin: 0;
-  padding: 11px 14px;
-  border: 1px solid var(--cghc-border);
-  border-radius: 12px;
-  background: var(--cghc-surface-elevated);
-  color: var(--cghc-text-secondary);
-  box-shadow: var(--cghc-shadow-md);
-}
 
 /* ───────────────────────────── tooltip/motion ───────────────────────────── */
 
