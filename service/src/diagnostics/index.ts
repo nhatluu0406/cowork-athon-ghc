@@ -31,6 +31,13 @@ export {
 } from "./redacting-logger.js";
 
 export {
+  createFileSink,
+  type FileSink,
+  type FileSinkOptions,
+  type LogFileSystem,
+} from "./log-file-sink.js";
+
+export {
   scrubExecutionMetadata,
   exportExecutionMetadataJson,
   type ExecutionMetadata,
