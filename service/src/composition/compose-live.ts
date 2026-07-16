@@ -62,6 +62,8 @@ import {
   readDiscordConfig,
   type DiscordAdapter,
 } from "../remote-gateway/discord/index.js";
+import { createLiveBranchRunner } from "../dispatchers/index.js";
+import { RuntimeNotAttachedError } from "./tier2-seams.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -195,6 +197,43 @@ export async function startLiveCoworkService(
         ]
       : [];
 
+  // Real dispatch branch runner (Task 5.2 wiring): one fan-out branch = one REAL child session
+  // through the SAME session service, prompt seam, and permission gate as the desktop UI. The
+  // deps are late-bound: a branch can only run after the service below is assembled, so the
+  // closure reading `liveDeps` is safe — and errors honestly if ever hit earlier.
+  let liveDeps: CoworkServiceDeps | null = null;
+  const requireDeps = (): CoworkServiceDeps => {
+    if (liveDeps === null) throw new RuntimeNotAttachedError("dispatch.branch");
+    return liveDeps;
+  };
+  const branchRunner = createLiveBranchRunner({
+    createSession: async ({ title }) => {
+      const meta = await requireDeps().sessionService.create({ workspaceId, title });
+      return { id: meta.id };
+    },
+    sendPrompt: (sessionId, text) => sendPrompt.send(sessionId, text),
+    terminal: (sessionId) => {
+      const view = requireDeps().sessionService.view(sessionId);
+      if (view === undefined) return undefined;
+      if (view.terminal === null) return null;
+      return { state: view.terminal };
+    },
+    cancelSession: (sessionId) => requireDeps().sessionService.cancel(sessionId),
+    // D1 fix: bind/release through the SAME `branchPermissionBindings` registry the
+    // `buildToolPermissionProxy` factory reads (compose-service.ts) — one registry, not two.
+    bindPreset: (sessionId, preset) => requireDeps().branchPermissionBindings.bind(sessionId, preset),
+    releasePreset: (sessionId) => requireDeps().branchPermissionBindings.release(sessionId),
+    // Real disk-evidence source for the retry_until_verified hook: the session's authoritative
+    // view records every EV `file_mutation` (create/edit/delete/move); dedupe the paths so the
+    // hook checks each mutated file once. The hook itself re-confirms on disk — this is only the
+    // CLAIM of what to check, never trusted as proof by itself.
+    fileMutationPaths: (sessionId) => {
+      const view = requireDeps().sessionService.view(sessionId);
+      if (view === undefined) return [];
+      return [...new Set(view.fileMutations.map((m) => m.path))];
+    },
+  });
+
   // Assemble Tier 1 with the LIVE seams filled (not the not-attached defaults).
   const composed = await createCoworkService({
     ...(options.service ?? {}),
@@ -205,7 +244,9 @@ export async function startLiveCoworkService(
     runtimeReply,
     connector,
     sendPrompt,
+    branchRunner,
   });
+  liveDeps = composed.deps;
 
   const workspaceGrant = grantWorkspace({ rootPath: workspaceId });
   const permissionProxy = composed.deps.buildToolPermissionProxy(createWorkspaceGuard(workspaceGrant));

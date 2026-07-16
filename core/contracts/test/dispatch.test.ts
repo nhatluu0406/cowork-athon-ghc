@@ -73,6 +73,36 @@ test("agent definition rejects a preset that loosens the policy", () => {
   }
 });
 
+test("agent definition rejects an unenforceable preset key even though it 'narrows' (D1 finding 2)", () => {
+  // "*" is the most natural way a user would try to say "this agent must not act at all" — it
+  // passes isNarrowingPreset (an unknown key defaults its base rank to "ask", so "deny" always
+  // narrows) but the boundary never actually looks up "*"; only "edit"/"bash" are enforced.
+  const wildcard = validateAgentDefinition(
+    { id: "locked", name: "Locked", systemPrompt: "x", skillIds: [], permissionPreset: { "*": "deny" } },
+    BASE_POLICY,
+  );
+  assert.equal(wildcard.ok, false);
+  if (!wildcard.ok) {
+    assert.match(wildcard.error, /unenforceable/);
+    // The error names the keys that ARE actually enforceable, so the fix is discoverable.
+    assert.match(wildcard.error, /edit/);
+    assert.match(wildcard.error, /bash/);
+  }
+
+  const deleteKey = validateAgentDefinition(
+    { id: "locked2", name: "Locked2", systemPrompt: "x", skillIds: [], permissionPreset: { delete: "deny" } },
+    BASE_POLICY,
+  );
+  assert.equal(deleteKey.ok, false);
+
+  // The enforceable keys still validate fine.
+  const ok = validateAgentDefinition(
+    { id: "fine", name: "Fine", systemPrompt: "x", skillIds: [], permissionPreset: { edit: "deny", bash: "deny" } },
+    BASE_POLICY,
+  );
+  assert.equal(ok.ok, true);
+});
+
 test("task requires an agent or a branch and validates references", () => {
   const known = new Set(["impl", "review"]);
   const noTarget = validateTaskDefinition(

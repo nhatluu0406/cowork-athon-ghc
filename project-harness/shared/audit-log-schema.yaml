@@ -1,0 +1,13 @@
+# One record per agent tool call (pattern-agnostic; see _shared-governance).
+# Local only — never include secrets or file contents; redact paths under user profile.
+fields:
+  timestamp: ISO8601
+  agent_role: string          # e.g. "runtime-llm-engineer"
+  agent_identity: string      # unique per role — reviewer never shares identity with implementer
+  action: string              # matches an action type in governance.yaml
+  authorization_level: L0-L5
+  target: string              # file path / endpoint / resource (redacted)
+  approved_by: string|null    # human identity for L4-L5, else null
+  result: success|failure|rolled_back
+  cost_tokens: integer
+  parent_task_id: string      # unit id from orchestrator.yaml fan_out
