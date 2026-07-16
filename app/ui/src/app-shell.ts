@@ -2221,10 +2221,10 @@ export function mountCoworkApp(root: HTMLElement): void {
   let skillsEnabledCount = 0;
   let mcpEnabledCount = 0;
   const updateSkillsMcpChip = (): void => {
-    dom.skillsButton.textContent = `${skillsEnabledCount} Kỹ năng · ${mcpEnabledCount} MCP`;
+    dom.skillsButton.textContent = `${skillsEnabledCount} Skill · ${mcpEnabledCount} MCP`;
     dom.skillsButton.setAttribute(
       "aria-label",
-      `Mở Kỹ năng & MCP — ${skillsEnabledCount} Kỹ năng, ${mcpEnabledCount} MCP đang bật`,
+      `Mở Skill & MCP — ${skillsEnabledCount} Skill, ${mcpEnabledCount} MCP đang bật`,
     );
   };
   const dynamicClient = createDynamicClient(state);

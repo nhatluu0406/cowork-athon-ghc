@@ -16,6 +16,9 @@ import type { McpAdapter, McpConnectionResult, McpServerConfig } from "../extens
 
 const DEFAULT_PATHEXT = [".EXE", ".CMD", ".BAT", ".COM"];
 
+/** Hard bound on the reachability HEAD probe so an unresponsive endpoint cannot hang it. */
+const PROBE_TIMEOUT_MS = 5_000;
+
 /** Best-effort local command lookup: absolute path existence, else a `PATH`/`PATHEXT` scan. */
 function defaultCommandExists(command: string): boolean {
   const head = command.trim().split(/\s+/u)[0] ?? "";
@@ -69,8 +72,10 @@ export function createProcessMcpAdapter(options: ProcessMcpAdapterOptions): McpA
       } catch {
         return { status: "unavailable", detail: "Endpoint refused by the SSRF policy." };
       }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
       try {
-        const res = await fetchImpl(config.url, { method: "HEAD" });
+        const res = await fetchImpl(config.url, { method: "HEAD", signal: controller.signal });
         return res.status < 500
           ? {
               status: "connected",
@@ -78,7 +83,9 @@ export function createProcessMcpAdapter(options: ProcessMcpAdapterOptions): McpA
             }
           : { status: "unavailable", detail: `Endpoint responded HTTP ${res.status}.` };
       } catch {
-        return { status: "unavailable", detail: "HEAD request to the endpoint failed." };
+        return { status: "unavailable", detail: "HEAD request to the endpoint failed or timed out." };
+      } finally {
+        clearTimeout(timer);
       }
     }
     return { status: "unavailable", detail: "No transport configured." };

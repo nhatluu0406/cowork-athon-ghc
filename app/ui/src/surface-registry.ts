@@ -48,7 +48,7 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
   },
   {
     id: "skills-mcp",
-    label: "Kỹ năng & MCP",
+    label: "Skill & MCP",
     icon: "skills",
     featureFlag: "core.skills_mcp",
     requiredCapability: "skills_mcp_hub",

@@ -25,7 +25,7 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
   root.hidden = true;
 
   const header = el("header", "skills-mcp-header");
-  header.append(el("h1", "skills-mcp-header__title", "Kỹ năng & MCP"));
+  header.append(el("h1", "skills-mcp-header__title", "Skill & MCP"));
   const summary = el("span", "skills-mcp-header__summary");
   header.append(summary);
 
@@ -34,7 +34,7 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
   const skillsTab = el(
     "button",
     "skills-mcp-tabs__btn skills-mcp-tabs__btn--active",
-    "Kỹ năng",
+    "Skill",
   ) as HTMLButtonElement;
   skillsTab.type = "button";
   skillsTab.dataset["skillsMcpTab"] = "skills";
@@ -49,7 +49,7 @@ export function createSkillsMcpView(): SkillsMcpViewDom {
 
   const body = el("div", "skills-mcp-body");
   const skillsBody = el("section", "skills-mcp-body__panel skills-mcp-body__panel--skills");
-  skillsBody.setAttribute("aria-label", "Quản lý Kỹ năng");
+  skillsBody.setAttribute("aria-label", "Quản lý Skill");
   const mcpBody = el("section", "skills-mcp-body__panel skills-mcp-body__panel--mcp");
   mcpBody.hidden = true;
   mcpBody.setAttribute("aria-label", "Quản lý MCP");
