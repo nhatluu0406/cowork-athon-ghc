@@ -96,10 +96,17 @@ export function renderIntegrationSurface(
     );
   }
 
-  mount.append(card);
+  // D1 fan-out is INTEGRATED (ADR 0011): the Dispatch surface's real content is the local
+  // dispatch board (task catalog + live fan-out runs) plus the phone quick-access — NOT the
+  // "awaiting integration" placeholder that still fits the genuinely-empty surfaces (D2/D3/D4,
+  // code). The board queries `/v1/tasks` + `/v1/dispatch` on the local service and needs no
+  // remote; the quick-access renders its own honest "remote chưa bật" note when the gateway is
+  // off, so nothing here pretends to be connectable when it is not.
   if (surface.id === "dispatch" && remoteClient != null) {
     appendDispatchBoard(mount, remoteClient);
     appendRemoteQuickAccess(mount, remoteClient);
+  } else {
+    mount.append(card);
   }
   container.append(mount);
 }
