@@ -10,6 +10,13 @@
  *   - webSecurity: true          → same-origin + CSP enforced (never disabled)
  *   - allowRunningInsecureContent: false
  *   - experimentalFeatures: false
+ *   - plugins: true              → enables Chromium's built-in PDF viewer (PDFium) so a
+ *                                  workspace `.pdf` renders in the `blob:` iframe. Without it
+ *                                  the packaged window (which never runs a full browser's PDF
+ *                                  plugin) shows a blank/download-only iframe. This does NOT
+ *                                  re-enable NPAPI (long removed); PDFium is the only "plugin"
+ *                                  and it runs fine under `sandbox: true`. The `frame-src blob:`
+ *                                  CSP still confines the viewer to blob-sourced documents.
  */
 
 import type { WebPreferences } from "electron";
@@ -26,5 +33,7 @@ export function buildMainWindowWebPreferences(preloadPath: string): WebPreferenc
     webSecurity: true,
     allowRunningInsecureContent: false,
     experimentalFeatures: false,
+    // Chromium's built-in PDF viewer is a "plugin"; enable it so PDF preview works packaged.
+    plugins: true,
   };
 }
