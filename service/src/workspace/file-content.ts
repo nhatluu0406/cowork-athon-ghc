@@ -7,6 +7,7 @@ import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
+import { isTextFilePath } from "@cowork-ghc/contracts";
 import { createWorkspaceGuard } from "./guard.js";
 import { validateWorkspaceSelection, nodeFsProbe } from "./validate.js";
 
@@ -47,8 +48,9 @@ export interface WorkspaceFileWriteInput {
 }
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const TEXT_EXTENSIONS = new Set([".txt", ".md"]);
 const SPREADSHEET_EXTENSIONS = new Set([".xlsx"]);
+// Which files are treated as editable text/code is shared with the renderer via
+// `isTextFilePath` (@cowork-ghc/contracts) so the two never drift.
 
 function mimeForImage(ext: string): string {
   switch (ext.toLowerCase()) {
@@ -112,7 +114,7 @@ export async function readWorkspaceFileContent(
     return { relativePath, kind: "missing", editable: false, truncated: false, sizeBytes: 0 };
   }
 
-  if (TEXT_EXTENSIONS.has(ext)) {
+  if (isTextFilePath(relativePath)) {
     const buf = await readFile(realPath);
     const truncated = buf.length > TEXT_EDIT_MAX_BYTES;
     const slice = truncated ? buf.subarray(0, TEXT_EDIT_MAX_BYTES) : buf;
@@ -207,10 +209,12 @@ export async function writeWorkspaceFileContent(
   relativePath: string,
   input: WorkspaceFileWriteInput,
 ): Promise<{ readonly relativePath: string; readonly sizeBytes: number }> {
-  const { realPath, ext } = await resolveFile(workspaceRoot, relativePath);
+  const { realPath } = await resolveFile(workspaceRoot, relativePath);
 
   if (input.kind === "text") {
-    if (!TEXT_EXTENSIONS.has(ext)) throw new Error("Loại tệp này không hỗ trợ chỉnh sửa văn bản.");
+    if (!isTextFilePath(relativePath)) {
+      throw new Error("Loại tệp này không hỗ trợ chỉnh sửa văn bản.");
+    }
     const content = input.content ?? "";
     if (Buffer.byteLength(content, "utf8") > TEXT_EDIT_MAX_BYTES) {
       throw new Error("Nội dung vượt giới hạn 512 KiB.");

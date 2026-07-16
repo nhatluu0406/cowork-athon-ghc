@@ -16,6 +16,15 @@ test("detectWorkspaceFileRole maps supported extensions", () => {
   assert.equal(detectWorkspaceFileRole("app.exe"), "unsupported");
 });
 
+test("detectWorkspaceFileRole treats code files as editable text", () => {
+  for (const p of ["main.py", "styles.css", "engine.cpp", "app.ts", "config.json"]) {
+    assert.equal(detectWorkspaceFileRole(p), "text", `${p} should be text`);
+  }
+  // Secret extensions must stay unsupported (never previewed as text).
+  assert.equal(detectWorkspaceFileRole("server.pem"), "unsupported");
+  assert.equal(detectWorkspaceFileRole("id.key"), "unsupported");
+});
+
 test("isSecretLikeWorkspacePath flags credential-bearing paths", () => {
   assert.equal(isSecretLikeWorkspacePath(".env"), true);
   assert.equal(isSecretLikeWorkspacePath("config/.env.production"), true);

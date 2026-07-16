@@ -2689,6 +2689,152 @@ button {
   line-height: 1.65;
 }
 
+/* Edit toggle (read-only code/text -> editable textarea). */
+.workspace-companion-pane__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  cursor: pointer;
+}
+.workspace-companion-pane__edit:hover {
+  background: var(--cghc-surface-muted);
+}
+
+/*
+ * Read-only code/text preview: a line-number gutter + syntax-highlighted code. Unlike the PDF
+ * iframe this never needs a pixel floor — the text content gives it intrinsic height — so
+ * `min-height: 100%` (fill when the pane has height, content-height otherwise) is safe. The
+ * gutter is `position: sticky` so it stays put during horizontal scroll of long lines, and both
+ * columns share one scroll box so vertical scroll keeps line numbers aligned with their lines.
+ */
+.workspace-companion-pane__code {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+  font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.workspace-companion-pane__code-gutter {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  padding: 12px 10px;
+  text-align: right;
+  white-space: pre;
+  color: var(--cghc-text-muted);
+  background: var(--cghc-surface-muted);
+  border-right: 1px solid var(--cghc-border-subtle);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-companion-pane__code-pre {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 12px 16px;
+  white-space: pre; /* no wrap: each source line stays on one visual line, aligned to the gutter */
+  color: var(--cghc-text-primary);
+}
+.workspace-companion-pane__code-content {
+  font: inherit;
+  background: transparent;
+}
+
+/* Syntax-highlight palette (highlight.js token classes), mapped to a GitHub-like light theme. */
+.workspace-companion-pane__code-content .hljs-comment,
+.workspace-companion-pane__code-content .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.workspace-companion-pane__code-content .hljs-keyword,
+.workspace-companion-pane__code-content .hljs-selector-tag,
+.workspace-companion-pane__code-content .hljs-subst,
+.workspace-companion-pane__code-content .hljs-type {
+  color: #d73a49;
+}
+.workspace-companion-pane__code-content .hljs-number,
+.workspace-companion-pane__code-content .hljs-literal,
+.workspace-companion-pane__code-content .hljs-variable,
+.workspace-companion-pane__code-content .hljs-template-variable,
+.workspace-companion-pane__code-content .hljs-attr {
+  color: #005cc5;
+}
+.workspace-companion-pane__code-content .hljs-string,
+.workspace-companion-pane__code-content .hljs-doctag {
+  color: #032f62;
+}
+.workspace-companion-pane__code-content .hljs-title,
+.workspace-companion-pane__code-content .hljs-section,
+.workspace-companion-pane__code-content .hljs-selector-id {
+  color: #6f42c1;
+}
+.workspace-companion-pane__code-content .hljs-tag,
+.workspace-companion-pane__code-content .hljs-name,
+.workspace-companion-pane__code-content .hljs-attribute {
+  color: #22863a;
+}
+.workspace-companion-pane__code-content .hljs-built_in,
+.workspace-companion-pane__code-content .hljs-symbol,
+.workspace-companion-pane__code-content .hljs-meta {
+  color: #e36209;
+}
+.workspace-companion-pane__code-content .hljs-emphasis {
+  font-style: italic;
+}
+.workspace-companion-pane__code-content .hljs-strong {
+  font-weight: 600;
+}
+
+/* Dark-theme syntax palette (GitHub-dark-like). */
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-comment,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-quote {
+  color: #8b949e;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-keyword,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-selector-tag,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-subst,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-type {
+  color: #ff7b72;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-number,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-literal,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-variable,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-template-variable,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-attr {
+  color: #79c0ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-string,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-doctag {
+  color: #a5d6ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-title,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-section,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-selector-id {
+  color: #d2a8ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-tag,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-name,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-attribute {
+  color: #7ee787;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-built_in,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-symbol,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-meta {
+  color: #ffa657;
+}
+
 .workspace-companion-pane__empty {
   display: grid;
   place-items: center;
