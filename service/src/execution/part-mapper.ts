@@ -154,11 +154,20 @@ export function mapStepMetrics(
   const total = readNumber(tokens, "total");
   const reasoning = readNumber(tokens, "reasoning");
   const cost = readNumber(partRaw, "cost");
+  // OpenCode reports prompt-cache usage as a nested `{ read, write }`; sum to one non-secret count.
+  const cacheRec = asRecord(tokens["cache"]);
+  const cacheRead = readNumber(cacheRec, "read");
+  const cacheWrite = readNumber(cacheRec, "write");
+  const cache =
+    cacheRead !== undefined || cacheWrite !== undefined
+      ? (cacheRead ?? 0) + (cacheWrite ?? 0)
+      : undefined;
   const metrics: TurnMetrics = {
     ...(input !== undefined ? { tokensInput: input } : {}),
     ...(output !== undefined ? { tokensOutput: output } : {}),
     ...(total !== undefined ? { tokensTotal: total } : {}),
     ...(reasoning !== undefined ? { tokensReasoning: reasoning } : {}),
+    ...(cache !== undefined ? { tokensCache: cache } : {}),
     ...(cost !== undefined ? { costUsd: cost } : {}),
   };
   if (Object.keys(metrics).length === 0) return [];
