@@ -8,6 +8,7 @@
  */
 
 import type { ModelRef } from "./refs.js";
+import { ENFORCEABLE_PRESET_KEYS } from "./permission-preset-keys.js";
 
 /** Source of a definition: shipped read-only vs user-authored. Mirrors the Skills model. */
 export type DefinitionSource = "built_in" | "user_local";
@@ -184,6 +185,20 @@ export function validateAgentDefinition(
   const preset = rec["permissionPreset"];
   if (typeof preset !== "object" || preset === null || Array.isArray(preset)) {
     return { ok: false, error: "agent.permissionPreset must be an object." };
+  }
+  // D1 fix, follow-up finding 2: a key the runtime boundary never actually consults (e.g. "*" or
+  // "delete") would otherwise pass isNarrowingPreset (an unrecognized key defaults its base rank
+  // to "ask", so "deny" always "narrows") and validate as a lockdown that silently does nothing.
+  // Reject it here, loudly, naming the keys that ARE enforceable — same set the proxy reads.
+  const unenforceable = Object.keys(preset).filter((key) => !ENFORCEABLE_PRESET_KEYS.has(key));
+  if (unenforceable.length > 0) {
+    const enforceable = [...ENFORCEABLE_PRESET_KEYS].map((k) => `"${k}"`).join(", ");
+    return {
+      ok: false,
+      error:
+        `agent.permissionPreset has unenforceable key(s) ${unenforceable.map((k) => `"${k}"`).join(", ")}; ` +
+        `only ${enforceable} are enforced at the boundary.`,
+    };
   }
   if (!isNarrowingPreset(preset as PermissionPreset, basePolicy)) {
     return { ok: false, error: "agent.permissionPreset may only narrow the live policy, never loosen it." };
