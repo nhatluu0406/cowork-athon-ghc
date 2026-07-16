@@ -94,7 +94,7 @@ test("installCsp merges the CSP header without clobbering other headers", () => 
 
   let result: { responseHeaders?: Record<string, unknown> } | undefined;
   captured(
-    { responseHeaders: { "X-Existing": ["keep-me"] } },
+    { url: "app://cowork/index.html", responseHeaders: { "X-Existing": ["keep-me"] } },
     (r) => {
       result = r as typeof result;
     },
@@ -102,4 +102,42 @@ test("installCsp merges the CSP header without clobbering other headers", () => 
 
   assert.deepEqual(result?.responseHeaders?.["Content-Security-Policy"], [RENDERER_CSP]);
   assert.deepEqual(result?.responseHeaders?.["X-Existing"], ["keep-me"]);
+});
+
+test("installCsp does NOT override the built-in PDF viewer's chrome-extension CSP", () => {
+  let captured: ((details: unknown, cb: (r: unknown) => void) => void) | undefined;
+  const fakeSession = {
+    webRequest: {
+      onHeadersReceived(cb: (details: unknown, callback: (r: unknown) => void) => void) {
+        captured = cb;
+      },
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  installCsp(fakeSession as any);
+  assert.ok(captured);
+
+  // A chrome-extension:// response (Chromium's PDFium viewer) keeps its own CSP untouched.
+  let extResult: { responseHeaders?: Record<string, unknown> } | undefined;
+  captured(
+    {
+      url: "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+      responseHeaders: { "Content-Security-Policy": ["extension-own-policy"] },
+    },
+    (r) => {
+      extResult = r as typeof extResult;
+    },
+  );
+  assert.deepEqual(
+    extResult?.responseHeaders?.["Content-Security-Policy"],
+    ["extension-own-policy"],
+    "the PDF viewer extension CSP must be left as-is",
+  );
+
+  // An app:// response still gets the renderer CSP stamped.
+  let appResult: { responseHeaders?: Record<string, unknown> } | undefined;
+  captured({ url: "app://cowork/index.html", responseHeaders: {} }, (r) => {
+    appResult = r as typeof appResult;
+  });
+  assert.deepEqual(appResult?.responseHeaders?.["Content-Security-Policy"], [RENDERER_CSP]);
 });

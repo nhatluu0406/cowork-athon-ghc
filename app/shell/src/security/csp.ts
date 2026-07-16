@@ -51,6 +51,15 @@ export const RENDERER_CSP = [
  */
 export function installCsp(target: Session): void {
   target.webRequest.onHeadersReceived((details, callback) => {
+    // Chromium's BUILT-IN PDF viewer (PDFium) is served from a `chrome-extension://` origin and
+    // ships its own (Google-authored) CSP. Stamping the renderer policy over it breaks the viewer
+    // — its own scripts/resources are refused and the PDF renders as a blank grey box. We never
+    // load third-party extensions, so leaving `chrome-extension://` responses untouched is safe;
+    // every piece of OUR content (app://, http loopback, etc.) still receives RENDERER_CSP.
+    if (details.url.startsWith("chrome-extension://")) {
+      callback({ responseHeaders: details.responseHeaders ?? {} });
+      return;
+    }
     callback({
       responseHeaders: {
         ...details.responseHeaders,
