@@ -38,8 +38,10 @@ import type { AgentCatalog } from "../agents/index.js";
 import type { TaskStore } from "../tasks/index.js";
 import type { BranchRunner, DispatchRunRegistry } from "../dispatchers/index.js";
 import type { WorkflowDraftGenerator } from "../tasks/index.js";
+import type { McpStore } from "../db/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
+import type { LocalAuthService, SqliteDatabase } from "../db/index.js";
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
@@ -48,7 +50,18 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * SSRF policy). The shell can wire this into the lifecycle log. Default: `console.warn`.
    */
   readonly onBootDiagnostic?: (line: string) => void;
-  /** Persistence seam for the settings store. Default: node fs at {@link settingsFilePath}. */
+  /**
+   * Absolute path to the service-owned SQLite database (ADR 0007).
+   * When set, settings + encrypted secrets live in SQLite and local app lock is required.
+   * Default for the packaged shell: `<userData>/cowork-ghc.db`.
+   */
+  readonly dbPath?: string;
+  /**
+   * Optional pre-opened SQLite database (tests inject `:memory:`). Takes precedence over
+   * {@link dbPath} when both are present. Caller retains close responsibility when injecting.
+   */
+  readonly sqliteDatabase?: SqliteDatabase;
+  /** Persistence seam for the settings store. Default: node fs or SQLite when {@link dbPath} is set. */
   readonly settingsFs?: SettingsFs;
   /** Settings file path when {@link settingsFs} is not supplied. Default: `.runtime/settings.json`. */
   readonly settingsFilePath?: string;
@@ -69,8 +82,26 @@ export interface CoworkServiceOptions extends ServiceOptions {
   readonly taskStoreFs?: SettingsFs;
   /** User-tasks file path when {@link taskStoreFs} is not supplied. Default: `.runtime/tasks.json`. */
   readonly taskStoreFilePath?: string;
-  /** The ONE credential store. Default: the OS keyring adapter (tests inject the memory store). */
+  /**
+   * The ONE credential store. Default: encrypted SQLite vault when a database is open;
+   * otherwise tests inject the memory store. Legacy keyring is used only as a migration source.
+   */
   readonly credentialStore?: CredentialStore;
+  /**
+   * Legacy credential source for one-time keyring → vault migration after unlock.
+   * Tests inject a memory store; production opens keyring when still present.
+   */
+  readonly legacyCredentialStore?: CredentialStore;
+  /**
+   * Auto-unlock the local vault at composition (shell main only). Never log or persist.
+   * Used to restore unlock across settings-only → live service restart in the same process.
+   */
+  readonly autoUnlock?: { readonly username: string; readonly password: string };
+  /**
+   * Called after a successful setup/unlock with the plaintext password (shell main only).
+   * Used to re-unlock after live restart. Never log or persist to disk.
+   */
+  readonly rememberUnlock?: (username: string, password: string) => void;
   /** Workspace validation fs probe. Default: the real `node:fs` probe. */
   readonly workspaceFsProbe?: WorkspaceFsProbe;
   /** Recent-workspace existence probe. Default: the real `node:fs` probe. */
@@ -143,6 +174,10 @@ export interface CoworkServiceDeps {
   readonly branchPermissionBindings: BranchPermissionBindings;
   readonly sessionService: SessionService;
   readonly streamHub: SessionStreamHub;
+  /** Local app lock + in-memory vault master key (absent when no SQLite database). */
+  readonly localAuth?: LocalAuthService;
+  /** Open SQLite handle when {@link CoworkServiceOptions.dbPath} / sqliteDatabase is used. */
+  readonly sqliteDatabase?: SqliteDatabase;
   /** File-backed conversation index (session management slice). */
   readonly conversationStore: ConversationStore;
   /** Service-owned local Skill discovery, validation, enabled state, and snapshots. */
@@ -160,6 +195,12 @@ export interface CoworkServiceDeps {
    * CGHC-028); no HTTP router is mounted for this POC.
    */
   readonly extensions: ExtensionRegistry;
+  /**
+   * MCP Phase 1 SQLite persistence (Wave 2B). Present only when a database is open; the router
+   * is mounted alongside it. Absent (in-memory settings, no `dbPath`), MCP is registry-only —
+   * no relaunch persistence and no HTTP router.
+   */
+  readonly mcpStore?: McpStore;
   /** The composed VALUE-scrub-then-shape-sanitize redactor fed into every EV mapper. */
   readonly redactError: (message: string) => string;
   /**

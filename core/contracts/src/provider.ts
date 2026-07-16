@@ -83,6 +83,20 @@ export interface ProviderError {
   readonly recovery: string;
 }
 
+/**
+ * Result of a best-effort provider model discovery probe (Wave 3). Discovery is never
+ * required to configure a provider: on any failure `ok` is false with a mapped, non-secret
+ * {@link ProviderError}, and the UI falls back to manual model-id entry. On success `models`
+ * is the sorted, de-duplicated list of model ids returned by the OpenAI-compatible endpoint.
+ */
+export interface ModelDiscoveryResult {
+  readonly ok: boolean;
+  /** Present when `ok` is true — sorted, de-duplicated model ids (may be empty). */
+  readonly models?: readonly string[];
+  /** Present when `ok` is false — a mapped, non-secret discovery error. */
+  readonly error?: ProviderError;
+}
+
 /** A credential binding: provider id + the handle used to resolve the secret late. */
 export interface ProviderCredentialBinding {
   readonly providerId: ProviderId;

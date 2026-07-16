@@ -22,6 +22,8 @@
  * injects the key into the child ENV at launch; both paths read the ONE credential store.
  */
 
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import type { RuntimeProcessIdentity } from "@cowork-ghc/runtime";
 import type { WorkspaceId } from "@cowork-ghc/contracts";
 import type { SecretScrubber } from "../diagnostics/index.js";
@@ -39,6 +41,7 @@ import {
 } from "../runtime/index.js";
 import { createCoworkService } from "./compose-service.js";
 import type { CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
+import type { SkillRoot } from "../skills/index.js";
 import { createWorkspaceGuard, grantWorkspace } from "../workspace/index.js";
 import { createPermissionBridge } from "../runtime/permission-bridge.js";
 import { normalizeOpencodeFramePaths } from "../runtime/opencode-frame-paths.js";
@@ -82,6 +85,11 @@ export interface LiveCoworkServiceOptions {
   readonly workspaceId: WorkspaceId;
   /** Tier 1 bind options + seams (settingsFs, credentialStore, dnsResolver, …). */
   readonly service?: CoworkServiceOptions;
+  /**
+   * Bind the live supervisor injection path to the composed credential service (ADR 0007 vault).
+   * Called after `createCoworkService` and before `supervisor.start`.
+   */
+  readonly attachCredentialService?: (service: CoworkServiceDeps["credentialService"]) => void;
   /** Optional loopback bearer token if the child is configured with auth (default: none). */
   readonly authToken?: string;
   /** Per-request HTTP bound for the adapters (default 15s). */
@@ -114,6 +122,33 @@ export interface LiveCoworkService {
   readonly remote?: RemoteGateway;
   /** Stop the loopback socket THEN the supervised child (ONE owner). Idempotent-friendly. */
   stop(): Promise<void>;
+}
+
+/**
+ * Add OpenCode's native Skills launch to a {@link SupervisorStartSpec} when the composed
+ * catalog has at least one Skill root that actually exists on disk. Absolute, existing roots
+ * only — a missing/relative root is silently skipped (the product Skill catalog already owns
+ * discovery/validation; this only tells OpenCode where to natively re-scan the same content) and
+ * `skillAllow` mirrors the catalog's enabled ids so OpenCode cannot invoke a Skill Cowork GHC has
+ * not enabled. When no root resolves, the start spec is returned unchanged (baseline `opencode.json`
+ * keeps the blanket `skill: allow` policy — no product Skill is enabled to allowlist yet).
+ */
+function withNativeSkillsLaunch(
+  startSpec: SupervisorStartSpec,
+  skillRoots: readonly SkillRoot[] | undefined,
+  deps: CoworkServiceDeps,
+): SupervisorStartSpec {
+  const skillsPaths = (skillRoots ?? [])
+    .map((root) => resolve(root.path))
+    .filter((absolute) => existsSync(absolute));
+  if (skillsPaths.length === 0) return startSpec;
+
+  const skillAllow = deps.skillCatalog
+    .list()
+    .filter((skill) => skill.status === "enabled")
+    .map((skill) => skill.id);
+
+  return { ...startSpec, skillsPaths, skillAllow };
 }
 
 export async function startLiveCoworkService(
@@ -245,7 +280,9 @@ export async function startLiveCoworkService(
 
   // Bring up the child (real health round-trip), seed the scrubber, open the socket, THEN start
   // the `/event` pump (the child is ready, so `/event` is reachable).
-  const identity = await supervisor.start(startSpec);
+  options.attachCredentialService?.(composed.deps.credentialService);
+  const liveStartSpec = withNativeSkillsLaunch(startSpec, options.service?.skillRoots, composed.deps);
+  const identity = await supervisor.start(liveStartSpec);
   try {
     if (options.seedScrubber !== undefined) {
       await options.seedScrubber(composed.deps.scrubber, composed.deps);

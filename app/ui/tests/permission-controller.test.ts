@@ -34,6 +34,9 @@ interface Fake {
   setOutcome(outcome: PermissionDecisionResponse): void;
   /** Make the next `decidePermission` calls throw with this message (recovery/L2 tests). */
   failDecision(message: string): void;
+  /** Make subsequent `listPendingPermissions` calls throw until cleared. */
+  failList(message: string): void;
+  clearListFailure(): void;
   /** How many times `listPendingPermissions` was called (polling lifecycle/L3 tests). */
   listCount(): number;
   readonly client: {
@@ -47,6 +50,7 @@ function makeFake(): Fake {
   let pending: readonly PendingPermissionView[] = [];
   let listCalls = 0;
   let decisionError: Error | null = null;
+  let listError: Error | null = null;
   let outcome: PermissionDecisionResponse = {
     status: "resolved",
     decision: "deny",
@@ -57,10 +61,13 @@ function makeFake(): Fake {
     setPending: (list) => (pending = list),
     setOutcome: (o) => (outcome = o),
     failDecision: (message) => (decisionError = new Error(message)),
+    failList: (message) => (listError = new Error(message)),
+    clearListFailure: () => (listError = null),
     listCount: () => listCalls,
     client: {
       listPendingPermissions: async () => {
         listCalls += 1;
+        if (listError) throw listError;
         return pending;
       },
       decidePermission: async (input) => {
@@ -432,4 +439,62 @@ test("read-only mode denies a mutation request without opening the modal", async
   await flush();
   assert.deepEqual(decisions, [{ requestId: "req-42", decision: "deny" }]);
   assert.equal(container.querySelector(".permission-backdrop"), null);
+});
+
+test("pause/resume silences the poll interval across a live restart gap", async () => {
+  const fake = makeFake();
+  const container = host();
+  let intervals = 0;
+  let clears = 0;
+  const timer = {
+    setInterval: (handler: () => void, _ms: number) => {
+      intervals += 1;
+      return setInterval(handler, 10_000);
+    },
+    clearInterval: (handle: unknown) => {
+      clears += 1;
+      clearInterval(handle as ReturnType<typeof setInterval>);
+    },
+  };
+  const ctrl = createPermissionController({
+    client: fake.client,
+    container,
+    timer,
+    pollIntervalMs: 50,
+  });
+
+  ctrl.start();
+  await flush();
+  assert.equal(intervals, 1, "start arms one interval");
+  const listsBeforePause = fake.listCount();
+
+  ctrl.pause();
+  assert.equal(clears, 1, "pause clears the interval");
+  await flush();
+  assert.equal(fake.listCount(), listsBeforePause, "no polls while paused");
+
+  ctrl.resume();
+  await flush();
+  assert.ok(fake.listCount() > listsBeforePause, "resume refreshes once");
+  assert.equal(intervals, 2, "resume arms a new interval");
+  ctrl.stop();
+});
+
+test("transport poll failures show a note, then clear it once polling recovers", async () => {
+  const fake = makeFake();
+  const container = host();
+  const ctrl = createPermissionController({ client: fake.client, container });
+
+  fake.failList("ECONNREFUSED");
+  await ctrl.refresh();
+  await ctrl.refresh();
+  await ctrl.refresh();
+  const note = container.querySelector<HTMLElement>(".permission-note");
+  assert.equal(note?.hidden, false, "note visible after 3 consecutive poll failures");
+  assert.match(note?.textContent ?? "", /Không tải được yêu cầu quyền/u);
+
+  fake.clearListFailure();
+  await ctrl.refresh();
+  assert.equal(note?.hidden, true, "transport note clears after a successful poll");
+  assert.equal(note?.textContent ?? "", "");
 });

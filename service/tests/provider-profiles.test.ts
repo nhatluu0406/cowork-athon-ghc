@@ -26,6 +26,14 @@ const PUBLIC_RESOLVER = async (): Promise<readonly ResolvedAddress[]> => [
   { address: "93.184.216.34", family: 4 },
 ];
 
+/** A complete, non-secret discovery error for router stubs (discovery is exercised elsewhere). */
+const DISCOVERY_STUB_ERROR = {
+  kind: "unavailable",
+  message: "unused",
+  retryable: false,
+  recovery: "",
+} as const;
+
 async function openTestStore() {
   const backing = { data: "" as string | undefined };
   const fs = {
@@ -186,6 +194,7 @@ test("profile delete route enforces last and active profile rules before credent
       testProfile: async () => ({ ok: false, error: { kind: "unavailable", message: "unused" } }),
       lastResultFor: () => undefined,
     },
+    discovery: { discoverForProfile: async () => ({ ok: false, error: DISCOVERY_STUB_ERROR }) },
     runtimeBridge: { syncActiveProfile: async () => { syncCount += 1; } },
     bindCredentialRef: async () => {},
     removeCredential: async (_profileId, account) => {
@@ -300,6 +309,7 @@ test("profile test route maps SSRF/base URL policy failure to failed TestResult,
   service.mount(createProviderProfileRouter({
     profiles,
     tester,
+    discovery: { discoverForProfile: async () => ({ ok: false, error: DISCOVERY_STUB_ERROR }) },
     runtimeBridge: { syncActiveProfile: async () => {} },
     bindCredentialRef: async () => {},
     removeCredential: async () => {},

@@ -89,18 +89,22 @@ test("post-terminal mutating frames are dropped, not appended (defense in depth)
   // A late file_mutation / tool_call / token / error after ANY terminal must not mutate the
   // view — every direct reduceEv consumer (session registry, streaming, permission) inherits
   // this, so the UI can never show a mutation that "happened" after the run finished.
+  // The turn produced its answer BEFORE terminal, so the documented late-empty-token carve-out
+  // (a token allowed only while text is still empty) does not apply — every post-terminal
+  // mutating frame, token included, must be dropped.
   const view = foldEv(SID, [
-    { ...base(1), kind: "terminal", state: "completed" },
-    { ...base(2), kind: "file_mutation", operation: "create", path: "late.ts" },
-    { ...base(3), kind: "tool_call", callId: "c9", toolName: "write", status: "running" },
-    { ...base(4), kind: "token", delta: "late" },
-    { ...base(5), kind: "error", message: "late error" },
+    { ...base(1), kind: "token", delta: "answer" },
+    { ...base(2), kind: "terminal", state: "completed" },
+    { ...base(3), kind: "file_mutation", operation: "create", path: "late.ts" },
+    { ...base(4), kind: "tool_call", callId: "c9", toolName: "write", status: "running" },
+    { ...base(5), kind: "token", delta: "late" },
+    { ...base(6), kind: "error", message: "late error" },
   ]);
   assert.equal(view.terminal, "completed");
   assert.equal(view.status, "completed");
   assert.equal(view.fileMutations.length, 0, "no post-terminal file mutation");
   assert.equal(view.toolCalls.length, 0, "no post-terminal tool call");
-  assert.equal(view.text, "", "no post-terminal token text");
+  assert.equal(view.text, "answer", "no post-terminal token text appended");
   assert.equal(view.error, null, "no post-terminal error surfaced");
 });
 

@@ -55,9 +55,9 @@ export interface StreamCoordinator {
   readonly isTerminated: () => boolean;
 }
 
-const DEFAULT_WINDOW_MS = 40;
-const DEFAULT_MAX_BATCH_TOKENS = 48;
-const DEFAULT_TERMINAL_GRACE_MS = 120;
+const DEFAULT_WINDOW_MS = 16;
+const DEFAULT_MAX_BATCH_TOKENS = 24;
+const DEFAULT_TERMINAL_GRACE_MS = 60;
 
 interface PendingTokens {
   sessionId: EvEvent["sessionId"];

@@ -38,7 +38,7 @@ export function normalizeStartedAt(value) {
 
 function defaultPwshRunner(script) {
   return execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', script],
-    { encoding: 'utf8', windowsHide: true, timeout: 20000 });
+    { encoding: 'utf8', windowsHide: true, timeout: 8000 });
 }
 
 // Return true when PowerShell/CIM is usable on this host (else identity queries degrade).

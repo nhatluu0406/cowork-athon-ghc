@@ -4,49 +4,32 @@ status: "active"
 updated_at: "2026-07-16"
 ---
 
-# Trạng thái hiện tại
+# Trạng thái hiện tại — Wave 2 OpenCode + Kỹ năng & MCP
 
-Baseline source được vá từ snapshot `310524c`. Tài liệu canonical: [docs/README.md](../README.md).
+Cowork GHC desktop POC. Wave 0A/0B (local vault + conversation SQLite) đã land. Wave 2: OpenCode pin 1.18.1 + hub `Kỹ năng & MCP`.
 
-## Capability inventory
+## Current truth
 
-| Năng lực | Trạng thái | Ghi chú trung thực |
+| Capability | Status | Note |
 |---|---|---|
-| Startup | **BASIC WORKS** | Mở New Chat sạch; lifecycle scripts hiện hữu. |
-| Provider profiles | **PARTIAL** | DeepSeek preset + custom OpenAI-compatible profiles; packaged switching giữa hai endpoint thật vẫn cần xác nhận. |
-| Credentials | **BASIC WORKS** | Windows keyring theo profile; không persist raw key trong profile JSON. |
-| Workspace navigator | **PARTIAL** | Duyệt file và mở preview cơ bản. |
-| Workspace editing | **PARTIAL** | `.txt`/`.md` nhỏ có thể sửa; file text bị truncate là read-only; XLSX chuyển read-only để tránh mất dữ liệu. |
-| Image / PDF / DOCX preview | **PARTIAL** | Image dùng data URL; PDF dùng blob frame theo CSP; DOCX render plain text. Cần packaged PO check. |
-| Chat / streaming | **BASIC WORKS** | OpenCode runtime + conversation persistence. |
-| File create / modify bằng Agent | **BLOCKED — PACKAGED CHECK REQUIRED** | Source đã thêm action contract, permission tool mapping và false-success guard; chưa được xác nhận trên packaged Windows app. |
-| Permissions | **BLOCKED — PACKAGED CHECK REQUIRED** | Bridge nay ưu tiên `permission.asked.properties.tool`; UI poll nhanh hơn và báo lỗi transport. Golden path create→Allow và modify→Deny phải chạy thật. |
-| File Work Review | **PARTIAL** | Create/modify review có nền tảng; delete chưa tin cậy. |
-| Attachments | **PARTIAL** | Text attachments bounded; image/PDF attachment vào prompt chưa có. |
-| Skills | **BASIC WORKS** | User Skill CRUD + enable/disable; built-in read-only. |
-| UI readiness | **PARTIAL / COMMERCIAL FAIL** | Shell dùng được nhưng chưa đạt chuẩn demo thương mại; dark mode thật chưa có. |
-| D1–D4 | **NOT IMPLEMENTED** | Chỉ có integration surfaces/mount points; backend teams chưa merge. |
-| Full RC | **DEFERRED** | Chưa chạy release-candidate đầy đủ. |
+| Cowork chat | WORKS | Progressive streaming; live attach gated. Skills are OpenCode native on-demand (no full prompt injection). |
+| Workspace | PARTIAL | Text editing works; PDF/live refresh remain. |
+| Provider profiles | WORKS — BASIC | Verified fingerprint + status bar. |
+| Local database | WORKS | Settings/credentials/conversations/MCP config in SQLite vault. |
+| Local app authentication | WORKS | Unlock + encrypted vault master key. |
+| Conversations | WORKS — SQLite | Wave 0B. |
+| Skills | WORKS — Hub | Rail `Kỹ năng & MCP` below Cowork; removed from Settings/composer selectors. Catalog is the one Skill system; extension Skill registry deprecated. |
+| MCP | WORKS — Phase 1 | Persistent SQLite + vault header secrets; router mounted; stdio or URL (SSRF); no OAuth; reachability adapter (toolCount 0). |
+| OpenCode | PINNED 1.18.1 | Server-contract matrix PASS; fallback 1.17.20 also PASS. |
+| MS365 | SOURCE PRESENT | Vault tokens after unlock. |
+| Inspector | PARTIAL | Phase 1 planned. |
+| Logging/telemetry | PARTIAL | Toggles exist; full contract pending. |
 
-## P0 recovery patch trong source này
+## Security direction
 
-- Product action contract bắt buộc model dùng file tool và không được báo thành công khi tool chưa thành công.
-- Permission bridge giữ đúng tool thật (`write` → `file_create`) thay vì làm mất thông tin qua permission group.
-- File-action response được đánh dấu **chưa xác minh** nếu không có review/disk evidence cùng runtime turn.
-- Truncated text và XLSX được chuyển sang read-only để tránh ghi đè phá dữ liệu.
-- DOCX không còn chèn HTML chưa sanitize; render plain text.
-- Workspace giữ thay đổi chưa lưu khi Agent refresh.
-
-## Exit criterion trước khi tiếp tục UI commercial pass
-
-```text
-request create file
-→ Permission hiển thị
-→ Allow once
-→ file tồn tại đúng workspace, đúng nội dung
-→ File Work Review có bằng chứng
-→ assistant chỉ báo verified success sau mutation
-```
+- No plaintext API/MS365/MCP secret in SQLite.
+- MCP header secrets use vault accounts `mcp:<id>:header` only.
+- Renderer never accesses database or secret bytes.
 
 ---
 

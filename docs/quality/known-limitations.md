@@ -1,46 +1,34 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-13"
+updated_at: "2026-07-16"
 ---
 
 # Known limitations
 
-## P0 — cần xác nhận packaged
+Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/forensic về runtime nằm ở
+[architecture/opencode-runtime-notes](../architecture/opencode-runtime-notes.md).
 
-- Golden path file create/permission chưa được chạy trên Windows packaged app sau recovery patch.
-- OpenCode vẫn có thể không chọn tool trong một số prompt; Cowork nay phải hiển thị trạng thái **chưa xác minh**, không được coi prose là mutation thành công.
-- Permission hiện dùng polling 500 ms; chưa có push notification trực tiếp từ event stream tới renderer.
-
-## Workspace Companion
-
-- Chỉ `.txt` và `.md` nhỏ được edit.
-- File text vượt 512 KiB hiển thị truncated và read-only.
-- XLSX chỉ preview read-only. Direct save bị vô hiệu hóa vì implementation cũ có thể mất formula, format, merged cells và sheet khác.
-- DOCX render plain text; chưa có Office-grade layout/editing.
-- PDF iframe blob cần packaged verification theo CSP.
-- Image/PDF/DOCX/XLSX preview giới hạn 8 MiB.
-- Khi editor dirty và Agent update file, UI giữ edit hiện tại và chỉ báo conflict; chưa có merge UI.
-
-## Agent / Permission / File Review
-
-- File Work Review delete chưa tin cậy trên OpenCode v1.17.11.
-- `file_mutation` là candidate runtime event; user-facing verified success dựa thêm trên File Work Review snapshot cùng runtime turn.
-- Command policy nâng cao, allow-for-session, directory rule và enterprise policy chưa có.
-
-## Provider
-
-- Phase hiện tại hỗ trợ DeepSeek preset và custom OpenAI-compatible profiles, không phải universal native provider layer.
-- Switching active profile trên running OpenCode child cần packaged proof với hai endpoint thật.
-- D4 routing/failover/key pool/cost routing chưa merge.
-
-## UI
-
-- Commercial visual readiness hiện **FAIL/PARTIAL**, chưa có PO sign-off.
-- Dark mode setting chưa phải dark theme hoàn chỉnh.
-- Component system, tooltip, transcript, Settings, Inspector và Workspace cần một pass đồng bộ sau khi P0 golden path PASS.
-
-## Release
-
-- Full L9/RC chưa hoàn tất.
-- Routine verification không được dựa vào live LLM determinism; cần focused deterministic seams + một manual packaged smoke.
+- **OpenCode pin `v1.18.1`** (Wave 2 server-contract matrix PASS; fallback `1.17.20` cũng PASS).
+  Nâng pin là thay đổi gated — không upgrade trên main trước khi contract matrix pass.
+- **Xoá file không đáng tin:** build agent của pin không expose tool `delete`/`patch`/`apply_patch`,
+  nên turn "xoá file" có thể tuyên bố thành công sai. Không bật `bash` để lách. Không phải blocker
+  demo. Chi tiết + đường nâng cấp: opencode-runtime-notes.
+- **OpenCode `question` tool bị deny tạm thời:** chưa có UI trả lời interrupt; câu hỏi làm rõ đi qua
+  turn chat thường. Question interrupt UI deferred.
+- **Model discovery ("Dò model"):** best-effort, không bao giờ chặn lưu; luôn giữ nhập Model ID thủ
+  công. Metrics/token/cost chỉ hiển thị khi runtime báo số thật (không suy ra cost); chưa persist qua
+  reopen hội thoại.
+- **Workspace:** PDF preview + live refresh chưa có (Wave 4).
+- **Inspector Phase 1** (plan/activity/file review) còn PARTIAL; diagnostics/logging PARTIAL (Wave 5–6).
+- **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
+  (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
+- **Web / Next.js** vẫn deferred.
+- **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
+  workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)
+  làm instruction/system prompt. Hệ quả quan sát được (2026-07-16): một `AGENTS.md` ở thư mục cha
+  đã âm thầm đổi danh tính agent từ "Cowork GHC" thành một persona khác cho mọi workspace con.
+  Đây là hành vi của OpenCode, không phải file-mutation, nên không vi phạm ranh giới ghi file —
+  nhưng instruction ngoài workspace có thể đổi hành vi/danh tính agent mà người dùng không biết.
+  Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
+  cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.

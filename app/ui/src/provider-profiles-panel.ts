@@ -28,6 +28,7 @@ export interface ProviderProfilesPanelDeps {
     | "storeProfileCredential"
     | "removeProfileCredential"
     | "testProfileConnection"
+    | "discoverProfileModels"
   >;
   readonly onSettingsUpdated?: (view: SettingsView) => void;
   readonly onConnectionTestResult?: (profileId: string, ok: boolean) => void;
@@ -56,6 +57,28 @@ function userFacingProviderError(error?: { message?: string } | string): string 
   return "Kiểm tra kết nối thất bại.";
 }
 
+/** Human-readable local time for a verification timestamp (never the raw ISO string). */
+function formatWhen(iso?: string): string {
+  if (iso === undefined) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatVerifiedStatus(profile?: ProviderProfileView): string {
+  if (profile === undefined) return "Chưa kiểm tra.";
+  if (!profile.verificationCurrent || profile.lastVerifiedOk === undefined) return "Chưa kiểm tra.";
+  const when = formatWhen(profile.lastVerifiedAt);
+  const suffix = when.length > 0 ? ` lúc ${when}` : "";
+  return profile.lastVerifiedOk ? `Đã kiểm tra${suffix}` : `Kiểm tra thất bại${suffix}`;
+}
+
 const ONLY_PROFILE_DELETE_MESSAGE = "Bạn cần tạo một profile khác trước khi xóa profile này.";
 const ACTIVE_PROFILE_DELETE_MESSAGE = "Hãy đặt một profile khác làm active trước khi xóa profile này.";
 
@@ -78,7 +101,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const listHeading = el("div", "provider-profiles__list-heading");
   listHeading.append(
     el("h3", "provider-profiles__list-title", "Kết nối đã lưu"),
-    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong Windows keyring."),
+    el("p", "provider-profiles__list-copy", "Mỗi kết nối có endpoint, model và khoá API riêng trong kho mật mã cục bộ."),
   );
   const addBtn = el("button", "provider-profiles__add provider-profiles__add--primary", "Thêm kết nối") as HTMLButtonElement;
   addBtn.type = "button";
@@ -110,6 +133,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   backBtn.type = "button";
   backBtn.dataset["tooltip"] = "Quay lại danh sách";
   backBtn.setAttribute("aria-label", "Quay lại danh sách");
+  backBtn.removeAttribute("title");
   backBtn.append(icon("arrow-left", "Quay lại"), el("span", "provider-profiles__back-label", "Danh sách"));
 
   const nameLabel = el("label", "llm-field", "Tên hiển thị");
@@ -125,7 +149,22 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const modelCustomLabel = el("label", "llm-field", "Model ID");
   const modelCustomInput = document.createElement("input");
   modelCustomInput.className = "provider-profiles__model-custom";
-  modelCustomLabel.append(modelCustomInput);
+  modelCustomInput.placeholder = "Nhập Model ID thủ công hoặc dò từ endpoint";
+  // A datalist turns the free-text input into a searchable combobox while ALWAYS retaining
+  // manual entry (the user can type any id the discovered list does not contain).
+  const modelDatalist = document.createElement("datalist");
+  modelDatalist.id = "provider-profiles-model-options";
+  modelCustomInput.setAttribute("list", modelDatalist.id);
+  const discoverBtn = el("button", "provider-profiles__discover", "Dò model") as HTMLButtonElement;
+  discoverBtn.type = "button";
+  const discoverStatus = el("p", "provider-profiles__discover-status");
+  discoverStatus.setAttribute("role", "status");
+  discoverStatus.setAttribute("aria-live", "polite");
+  // Model ID is a combobox: a free-text input (manual entry always works) with an inline
+  // "Dò model" adornment that fills the datalist with ids fetched from the endpoint.
+  const modelRow = el("div", "provider-profiles__model-row");
+  modelRow.append(modelCustomInput, discoverBtn);
+  modelCustomLabel.append(modelRow, modelDatalist, discoverStatus);
 
   const baseUrlLabel = el("label", "llm-field", "Base URL");
   const baseUrlInput = document.createElement("input");
@@ -144,21 +183,39 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   const testStatus = el("p", "provider-profiles__test-status");
   const deleteStatus = el("p", "provider-profiles__delete-status");
 
-  const saveBtn = el("button", "llm-save-credential", "Lưu") as HTMLButtonElement;
-  saveBtn.type = "button";
-  const saveCredBtn = el("button", "llm-save-credential", "Lưu khoá API") as HTMLButtonElement;
-  saveCredBtn.type = "button";
-  const deleteCredBtn = el("button", "llm-delete-credential", "Xoá khoá API") as HTMLButtonElement;
-  deleteCredBtn.type = "button";
-  const testBtn = el("button", "llm-test-connection", "Kiểm tra kết nối") as HTMLButtonElement;
-  testBtn.type = "button";
-  const setActiveBtn = el("button", "provider-profiles__set-active", "Đặt làm mặc định") as HTMLButtonElement;
-  setActiveBtn.type = "button";
-  const deleteBtn = el("button", "provider-profiles__delete", "Xoá hồ sơ") as HTMLButtonElement;
-  deleteBtn.type = "button";
+  // Primary save actions, both shown inline (no collapsed overflow menu).
+  const saveOnlyBtn = el("button", "provider-profiles__secondary", "Lưu") as HTMLButtonElement;
+  saveOnlyBtn.type = "button";
+  saveOnlyBtn.dataset["tooltip"] = "Lưu, không kiểm tra kết nối";
+  const saveAndTestBtn = el("button", "llm-save-credential provider-profiles__primary", "Lưu & kiểm tra") as HTMLButtonElement;
+  saveAndTestBtn.type = "button";
 
-  const actions = el("div", "llm-actions");
-  actions.append(backBtn, saveBtn, saveCredBtn, deleteCredBtn, testBtn, setActiveBtn, deleteBtn);
+  const actions = el("div", "llm-actions provider-profiles__actions");
+  actions.append(backBtn, saveOnlyBtn, saveAndTestBtn);
+
+  // Secondary utility actions — visible inline (edit mode only), not buried in a menu.
+  const setActiveBtn = el("button", "provider-profiles__utility-btn", "Đặt làm mặc định") as HTMLButtonElement;
+  setActiveBtn.type = "button";
+  const deleteCredBtn = el("button", "provider-profiles__utility-btn", "Xoá khoá API") as HTMLButtonElement;
+  deleteCredBtn.type = "button";
+  const utility = el("div", "provider-profiles__utility");
+  utility.append(setActiveBtn, deleteCredBtn);
+
+  // Danger zone: destructive delete kept visually distinct (red) + gated by a confirm so it
+  // is hard to trigger by accident.
+  const deleteBtn = el("button", "provider-profiles__danger", "Xoá hồ sơ") as HTMLButtonElement;
+  deleteBtn.type = "button";
+  const dangerZone = el("div", "provider-profiles__danger-zone");
+  const dangerCopy = el(
+    "p",
+    "provider-profiles__danger-copy",
+    "Xoá vĩnh viễn hồ sơ và khoá API kèm theo. Không thể hoàn tác.",
+  );
+  dangerZone.append(dangerCopy, deleteBtn, deleteStatus);
+
+  const statusRow = el("div", "provider-profiles__status-row");
+  statusRow.append(credStatus, testStatus);
+
   formView.append(
     formTitle,
     nameLabel,
@@ -166,10 +223,10 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     modelCustomLabel,
     baseUrlLabel,
     credLabel,
-    credStatus,
-    testStatus,
-    deleteStatus,
+    statusRow,
     actions,
+    utility,
+    dangerZone,
   );
 
   root.append(title, intro, status, listView, formView);
@@ -179,7 +236,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   let profiles: readonly ProviderProfileView[] = [];
   let editingId: string | null = null;
   let addingType: ProviderProfileType | null = null;
-  const testState = new Map<string, "unknown" | "ok" | "failed" | "testing">();
+  let busy = false;
 
   const setStatus = (text: string, kind: "idle" | "ok" | "err" = "idle"): void => {
     status.textContent = text;
@@ -189,6 +246,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
 
   const currentProfile = (): ProviderProfileView | undefined =>
     editingId === null ? undefined : profiles.find((p) => p.id === editingId);
+
+  const selectedModelId = (): string =>
+    (addingType ?? currentProfile()?.providerType) === "deepseek"
+      ? modelSelect.value
+      : modelCustomInput.value.trim();
 
   const fillModelOptions = (providerType: ProviderProfileType, selected?: string): void => {
     modelSelect.replaceChildren();
@@ -209,6 +271,28 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     }
   };
 
+  const fillDiscoveredModels = (models: readonly string[]): void => {
+    modelDatalist.replaceChildren();
+    for (const id of models) {
+      const opt = document.createElement("option");
+      opt.value = id;
+      modelDatalist.append(opt);
+    }
+  };
+
+  // Discovery needs a persisted profile (id) with a stored credential; a brand-new draft must
+  // be saved once first. Manual entry is always available regardless.
+  const updateDiscoverAvailability = (): void => {
+    const profile = currentProfile();
+    const providerType = addingType ?? profile?.providerType;
+    if (providerType === "deepseek") return; // deepseek uses a fixed model select
+    const canDiscover = editingId !== null && profile?.credentialConfigured === true && !busy;
+    discoverBtn.disabled = !canDiscover;
+    discoverBtn.dataset["tooltip"] = canDiscover
+      ? "Lấy danh sách model từ endpoint"
+      : "Lưu hồ sơ và khoá API trước, rồi dò model";
+  };
+
   const showList = (): void => {
     panel = "list";
     editingId = null;
@@ -221,6 +305,10 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     panel = mode;
     listView.hidden = true;
     formView.hidden = false;
+    fillDiscoveredModels([]);
+    discoverStatus.textContent = "";
+    // Never carry a previously-typed API key into another profile / re-opened form (item 1).
+    credInput.value = "";
     if (mode === "edit" && profile !== undefined) {
       editingId = profile.id;
       addingType = null;
@@ -229,9 +317,13 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       baseUrlInput.value = profile.baseUrl;
       fillModelOptions(profile.providerType, profile.modelId);
       baseUrlLabel.hidden = profile.providerType === "deepseek";
-      credStatus.textContent = profile.credentialConfigured ? "Đã cấu hình" : "Chưa cấu hình";
+      credStatus.textContent = profile.credentialConfigured
+        ? "Khoá API: đã cấu hình"
+        : "Khoá API: chưa cấu hình";
       deleteCredBtn.disabled = !profile.credentialConfigured;
+      utility.hidden = false;
       setActiveBtn.hidden = profile.isActive;
+      dangerZone.hidden = false;
       deleteBtn.hidden = false;
       deleteBtn.disabled = profiles.length <= 1 || profile.isActive;
       deleteStatus.textContent =
@@ -240,15 +332,8 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
           : profile.isActive
             ? ACTIVE_PROFILE_DELETE_MESSAGE
             : "";
-      const ts = testState.get(profile.id) ?? "unknown";
-      testStatus.textContent =
-        ts === "testing"
-          ? "Đang kiểm tra…"
-          : ts === "ok"
-            ? "Kết nối thành công."
-            : ts === "failed"
-              ? "Kết nối thất bại."
-              : "Chưa kiểm tra.";
+      testStatus.textContent = formatVerifiedStatus(profile);
+      updateDiscoverAvailability();
     } else {
       editingId = null;
       addingType = type ?? "custom-openai-compat";
@@ -257,13 +342,16 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       baseUrlInput.value = addingType === "deepseek" ? "https://api.deepseek.com/v1" : "";
       fillModelOptions(addingType);
       baseUrlLabel.hidden = addingType === "deepseek";
-      credStatus.textContent = "Chưa cấu hình";
+      credStatus.textContent = "Khoá API: chưa cấu hình";
       deleteCredBtn.disabled = true;
+      utility.hidden = true;
       setActiveBtn.hidden = true;
+      dangerZone.hidden = true;
       deleteBtn.hidden = true;
       deleteBtn.disabled = true;
       deleteStatus.textContent = "";
       testStatus.textContent = "Chưa kiểm tra.";
+      updateDiscoverAvailability();
     }
   };
 
@@ -287,15 +375,22 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
         const badge = el("span", "provider-profiles__active-badge", "Mặc định");
         name.append(badge);
       }
+      const verifiedLabel =
+        profile.verificationCurrent && profile.lastVerifiedOk === true
+          ? "Đã kiểm tra"
+          : profile.verificationCurrent && profile.lastVerifiedOk === false
+            ? "Kiểm tra thất bại"
+            : "Chưa kiểm tra";
       const meta = el(
         "span",
         "provider-profiles__item-meta",
-        `${profile.modelId} · ${profile.credentialConfigured ? "Đã cấu hình" : "Chưa cấu hình"}`,
+        `${profile.modelId} · ${profile.credentialConfigured ? "Đã cấu hình" : "Chưa cấu hình"} · ${verifiedLabel}`,
       );
       head.append(name, meta);
       const editButton = el("button", "provider-profiles__edit") as HTMLButtonElement;
       editButton.type = "button";
       editButton.dataset["tooltip"] = "Sửa kết nối";
+      editButton.removeAttribute("title");
       editButton.setAttribute("aria-label", `Sửa kết nối ${profile.displayName}`);
       editButton.append(icon("pencil", "Sửa"));
       editButton.addEventListener("click", () => showForm("edit", profile));
@@ -311,6 +406,104 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     deps.onSettingsUpdated?.(view);
     renderList();
     return view;
+  };
+
+  const saveProfileFields = async (options: { readonly runTest: boolean }): Promise<void> => {
+    if (busy) return;
+    const providerType = addingType ?? currentProfile()?.providerType;
+    const modelId = selectedModelId();
+    // Friendly client-side validation instead of surfacing a raw store error (item 2).
+    if (nameInput.value.trim().length === 0) {
+      setStatus("Nhập tên hiển thị cho kết nối.", "err");
+      nameInput.focus();
+      return;
+    }
+    if (providerType !== "deepseek" && baseUrlInput.value.trim().length === 0) {
+      setStatus("Nhập Base URL của endpoint.", "err");
+      baseUrlInput.focus();
+      return;
+    }
+    if (modelId.length === 0) {
+      setStatus("Nhập Model ID (hoặc bấm Dò model để chọn) trước khi lưu.", "err");
+      if (providerType === "deepseek") modelSelect.focus();
+      else modelCustomInput.focus();
+      return;
+    }
+    busy = true;
+    try {
+      let profileId = editingId;
+
+      if (panel === "add" && addingType !== null) {
+        setStatus("Đang lưu…");
+        const created = await deps.client.createProviderProfile({
+          displayName: nameInput.value.trim(),
+          providerType: addingType,
+          baseUrl: baseUrlInput.value.trim(),
+          modelId,
+          ...(addingType === "deepseek" ? { presetId: "deepseek" } : {}),
+        });
+        profileId = created.id;
+        editingId = created.id;
+      } else if (editingId !== null) {
+        setStatus("Đang lưu…");
+        await deps.client.updateProviderProfile(editingId, {
+          displayName: nameInput.value.trim(),
+          baseUrl: baseUrlInput.value.trim(),
+          modelId,
+        });
+      } else {
+        setStatus("Không xác định được hồ sơ.", "err");
+        return;
+      }
+
+      const secret = credInput.value;
+      if (secret.trim().length > 0 && profileId !== null) {
+        setStatus("Đang lưu khoá API…");
+        const view = await deps.client.storeProfileCredential(profileId, secret);
+        credInput.value = "";
+        deps.onSettingsUpdated?.(view);
+        profiles = view.providerProfiles ?? profiles;
+      } else {
+        await refresh();
+      }
+
+      if (options.runTest && profileId !== null) {
+        testStatus.textContent = "Đang kiểm tra…";
+        setStatus("Đang kiểm tra kết nối…");
+        try {
+          const result: TestResult = await deps.client.testProfileConnection(profileId);
+          await refresh();
+          const updated = profiles.find((p) => p.id === profileId);
+          if (updated !== undefined) showForm("edit", updated);
+          else showList();
+          testStatus.textContent = result.ok
+            ? formatVerifiedStatus(updated)
+            : userFacingProviderError(result.error);
+          setStatus(
+            result.ok ? "Đã lưu và xác minh kết nối." : userFacingProviderError(result.error),
+            result.ok ? "ok" : "err",
+          );
+          deps.onConnectionTestResult?.(profileId, result.ok);
+        } catch (error) {
+          await refresh();
+          const updated = profiles.find((p) => p.id === profileId);
+          if (updated !== undefined) showForm("edit", updated);
+          testStatus.textContent = "Kết nối thất bại.";
+          setStatus(error instanceof Error ? error.message : "Kiểm tra thất bại.", "err");
+          deps.onConnectionTestResult?.(profileId, false);
+        }
+        return;
+      }
+
+      const updated = profiles.find((p) => p.id === profileId);
+      if (updated !== undefined) showForm("edit", updated);
+      else showList();
+      setStatus("Đã lưu hồ sơ.", "ok");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Không lưu được.", "err");
+    } finally {
+      busy = false;
+    }
   };
 
   backBtn.addEventListener("click", () => {
@@ -334,66 +527,44 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     showForm("add", undefined, "custom-openai-compat");
   });
 
-  saveBtn.addEventListener("click", () => {
+  discoverBtn.addEventListener("click", () => {
+    if (busy || editingId === null) return;
+    const profileId = editingId;
+    busy = true;
+    updateDiscoverAvailability();
+    discoverStatus.textContent = "Đang dò model…";
     void (async () => {
-      setStatus("Đang lưu…");
       try {
-        const modelId =
-          (addingType ?? currentProfile()?.providerType) === "deepseek"
-            ? modelSelect.value
-            : modelCustomInput.value.trim();
-        if (panel === "add" && addingType !== null) {
-          await deps.client.createProviderProfile({
-            displayName: nameInput.value.trim(),
-            providerType: addingType,
-            baseUrl: baseUrlInput.value.trim(),
-            modelId,
-            ...(addingType === "deepseek" ? { presetId: "deepseek" } : {}),
-          });
-          await refresh();
-          showList();
-          setStatus("Đã tạo hồ sơ.", "ok");
-        } else if (editingId !== null) {
-          await deps.client.updateProviderProfile(editingId, {
-            displayName: nameInput.value.trim(),
-            baseUrl: baseUrlInput.value.trim(),
-            modelId,
-          });
-          const view = await refresh();
-          const updated = view.providerProfiles?.find((p) => p.id === editingId);
-          if (updated !== undefined) showForm("edit", updated);
-          setStatus("Đã lưu hồ sơ.", "ok");
+        const baseUrl = baseUrlInput.value.trim();
+        const result = await deps.client.discoverProfileModels(
+          profileId,
+          baseUrl.length > 0 ? baseUrl : undefined,
+        );
+        if (result.ok && result.models !== undefined) {
+          fillDiscoveredModels(result.models);
+          discoverStatus.textContent =
+            result.models.length > 0
+              ? `Tìm thấy ${result.models.length} model. Chọn hoặc nhập thủ công.`
+              : "Không có model nào. Nhập Model ID thủ công.";
+        } else {
+          fillDiscoveredModels([]);
+          discoverStatus.textContent = userFacingProviderError(result.error);
         }
       } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Không lưu được.", "err");
+        fillDiscoveredModels([]);
+        discoverStatus.textContent = error instanceof Error ? error.message : "Dò model thất bại.";
+      } finally {
+        busy = false;
+        updateDiscoverAvailability();
       }
     })();
   });
 
-  saveCredBtn.addEventListener("click", () => {
-    if (editingId === null) {
-      setStatus("Lưu hồ sơ trước khi thêm khoá API.", "err");
-      return;
-    }
-    const secret = credInput.value;
-    if (secret.trim().length === 0) {
-      setStatus("Nhập khoá API trước khi lưu.", "err");
-      return;
-    }
-    void (async () => {
-      setStatus("Đang lưu khoá API…");
-      try {
-        const view = await deps.client.storeProfileCredential(editingId!, secret);
-        credInput.value = "";
-        deps.onSettingsUpdated?.(view);
-        profiles = view.providerProfiles ?? profiles;
-        const updated = profiles.find((p) => p.id === editingId);
-        if (updated !== undefined) showForm("edit", updated);
-        setStatus("Đã lưu khoá API.", "ok");
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : "Không lưu được khoá.", "err");
-      }
-    })();
+  saveAndTestBtn.addEventListener("click", () => {
+    void saveProfileFields({ runTest: true });
+  });
+  saveOnlyBtn.addEventListener("click", () => {
+    void saveProfileFields({ runTest: false });
   });
 
   deleteCredBtn.addEventListener("click", () => {
@@ -409,27 +580,6 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
         setStatus("Đã xoá khoá API.");
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "Không xoá được khoá.", "err");
-      }
-    })();
-  });
-
-  testBtn.addEventListener("click", () => {
-    if (editingId === null) return;
-    void (async () => {
-      testState.set(editingId!, "testing");
-      testStatus.textContent = "Đang kiểm tra…";
-      setStatus("Đang kiểm tra kết nối…");
-      try {
-        const result: TestResult = await deps.client.testProfileConnection(editingId!);
-        testState.set(editingId!, result.ok ? "ok" : "failed");
-        testStatus.textContent = result.ok ? "Kết nối thành công." : userFacingProviderError(result.error);
-        setStatus(result.ok ? "Kết nối thành công." : userFacingProviderError(result.error), result.ok ? "ok" : "err");
-        deps.onConnectionTestResult?.(editingId!, result.ok);
-      } catch (error) {
-        testState.set(editingId!, "failed");
-        testStatus.textContent = "Kết nối thất bại.";
-        setStatus(error instanceof Error ? error.message : "Kiểm tra thất bại.", "err");
-        deps.onConnectionTestResult?.(editingId!, false);
       }
     })();
   });

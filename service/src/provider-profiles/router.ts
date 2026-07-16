@@ -5,6 +5,7 @@
 import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/contract.js";
 import { BadRequestError } from "../server/http-util.js";
 import type { ProviderConnectionTester } from "./provider-connection-tester.js";
+import type { ProfileModelDiscovery } from "./provider-model-discovery.js";
 import type { ProfileRuntimeBridge } from "./profile-runtime-bridge.js";
 import type { ProviderProfileStore } from "./provider-profile-store.js";
 import { assertValidProfileId } from "./profile-id.js";
@@ -15,6 +16,7 @@ export const PROVIDER_PROFILE_ITEM_PATH = "/v1/provider-profiles/{id}";
 export const PROVIDER_PROFILE_ACTIVE_PATH = "/v1/provider-profiles/active";
 export const PROVIDER_PROFILE_TEST_PATH = "/v1/provider-profiles/{id}/test-connection";
 export const PROVIDER_PROFILE_CREDENTIAL_PATH = "/v1/provider-profiles/{id}/credential";
+export const PROVIDER_PROFILE_DISCOVER_PATH = "/v1/provider-profiles/{id}/discover-models";
 
 export class ProviderProfileRequestError extends BadRequestError {
   constructor(message: string) {
@@ -77,6 +79,7 @@ function validateDeleteProfile(input: ProviderProfileStore, id: string): void {
 export function createProviderProfileRouter(input: {
   readonly profiles: ProviderProfileStore;
   readonly tester: ProviderConnectionTester;
+  readonly discovery: ProfileModelDiscovery;
   readonly runtimeBridge: ProfileRuntimeBridge;
   readonly bindCredentialRef: (profileId: string, ref: { store: "os"; account: string }) => Promise<void>;
   readonly removeCredential: (profileId: string, account: string) => Promise<void>;
@@ -155,14 +158,33 @@ export function createProviderProfileRouter(input: {
           const profile = input.profiles.get(id);
           if (profile === undefined) throw new ProviderProfileRequestError("Profile not found.");
           const result = await input.tester.testProfile(profile);
+          await input.profiles.recordConnectionVerification(id, result.ok);
           return {
             status: 200,
             data: {
               profileId: id,
               result,
               state: input.tester.lastResultFor(id) ?? null,
+              profile: input.profiles.listViews().find((p) => p.id === id) ?? null,
             },
           };
+        },
+      },
+      {
+        method: "POST",
+        path: PROVIDER_PROFILE_DISCOVER_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult> => {
+          const id = requireId(ctx.params);
+          const profile = input.profiles.get(id);
+          if (profile === undefined) throw new ProviderProfileRequestError("Profile not found.");
+          // Optional in-form (not-yet-saved) base URL override; discovery stays best-effort.
+          const rec = asRecord(ctx.body);
+          const override = typeof rec["baseUrl"] === "string" ? rec["baseUrl"] : undefined;
+          const result = await input.discovery.discoverForProfile(
+            profile,
+            override !== undefined ? { baseUrlOverride: override } : {},
+          );
+          return { status: 200, data: { profileId: id, result } };
         },
       },
       {

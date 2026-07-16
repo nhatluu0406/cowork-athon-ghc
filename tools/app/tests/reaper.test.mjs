@@ -180,7 +180,7 @@ test('real spawned child: capture, identity-verify, reap via real taskkill /PID 
   const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore', windowsHide: true });
   try {
     await sleep(500); // let CIM see the process
-    const { record } = capturePidRecord(root, { role: 'agent-runtime', pid: child.pid, port: 51901, host: '127.0.0.1', runtimeVersion: 'v1.17.11' });
+    const { record } = capturePidRecord(root, { role: 'agent-runtime', pid: child.pid, port: 51901, host: '127.0.0.1', runtimeVersion: 'v1.18.1' });
     assert.equal(verifyRecord(record), 'match', 'the live child must identity-match its captured record');
 
     const { killed, pruned, failed } = reapRecords(root); // real verify + real taskkill
