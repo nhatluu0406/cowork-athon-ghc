@@ -128,6 +128,20 @@ còn thiếu của dispatch:
   cho verification không cần LLM thật.
 - **Chưa làm trong scope dispatch**: full-suite test sweep; đo cost/token của fan-out thật.
 
+## Dev skip: dùng loopback `http` LLM endpoint — 2026-07-16 (`36d780a`, ADR 0012)
+
+| Item | Status |
+|---|---|
+| Vấn đề | SSRF policy chặn `http://127.0.0.1:8080` (private-gpt gateway) / Ollama `http://localhost:11434` với `scheme_not_https` — chặn trực tiếp live dispatch (Checkpoint 5). |
+| Giải pháp | Env opt-in `COWORK_GHC_DEV_ALLOW_LOOPBACK_HTTP=1` bật knob `loopbackEscape` sẵn có ở cả 4 chỗ dựng `createSsrfPolicy`. **OFF mặc định** (byte-for-byte khi tắt). Chỉ nới **loopback http** — private/link-local/cloud-metadata/public-http vẫn bị chặn. Env-only (router bỏ qua field body). KHÔNG qua release hard-assert (nếu qua sẽ làm app từ chối khởi động). Banner WARN qua `bootDiagnostic` khi active. |
+| Cách dùng | Set `COWORK_GHC_DEV_ALLOW_LOOPBACK_HTTP=1` trước khi chạy service, rồi cấu hình custom OpenAI-compatible provider với `base_url = http://127.0.0.1:8080/v1`. |
+| Security review | Độc lập, **PASS không HIGH** — thử phá classification bằng `0x7f.0.0.1`/`2130706433`/`127.1`/`[::1]`/userinfo/subdomain/`%2f`; WHATWG URL normalize về loopback thật trước classify, không parser-differential. |
+| Residual risk (dev-only) | Khi bật, service POST kèm `Authorization` bearer (key provider) tới đúng loopback port dev cấu hình — trỏ nhầm port ⇒ local service khác nhận key. Chấp nhận cho dev-only, off mặc định, không kích hoạt được từ model/renderer. |
+| Verified | tsc exit 0; **64/64** test (4 suite dev-loopback + provider-ssrf/e2e-mock-llm/provider-router/compose-seed-ssrf/compose-live-wiring/remote-wiring). |
+
+> **Checkpoint 5 hết bị chặn bởi provider** nếu dev dùng skip này (hoặc endpoint https, hoặc mock LLM
+> env). Vẫn cần release-verifier chạy packaged golden path để đóng Checkpoint 5.
+
 ## D1 compliance + security review 6.3 — 2026-07-16 (`fe79ff8`, `f3c01b1`, `0da7509`, `7a1cbdc`)
 
 | Item | Status |
