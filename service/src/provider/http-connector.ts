@@ -28,6 +28,7 @@
 import type { CredentialRef, ModelRef, ProviderId, TestResult } from "@cowork-ghc/contracts";
 import type { ProviderEnvSpec, ProviderKeyInjection } from "@cowork-ghc/runtime";
 import type { ConnectTarget, SsrfPolicy } from "./ssrf-policy.js";
+import { orderConnectCandidates } from "./ssrf-policy.js";
 import type { ProviderConnector, StreamHandle } from "./provider-port.js";
 import { providerEnvSpec, isCustomEndpoint } from "./descriptors.js";
 import { mapProviderError, type ProviderErrorContext } from "./error-map.js";
@@ -121,33 +122,42 @@ export function createHttpConnector(options: HttpConnectorOptions): ProviderConn
     probeContext?: ProviderErrorContext,
     dialOptions?: DialOptions,
   ): Promise<TestResult> {
-    const pin = target.resolved[0];
-    if (pin === undefined) throw new Error("No validated address to dial.");
+    // IP-pinned Happy-Eyeballs: try the resolver's first address, then a DIFFERENT family, so a
+    // dual-stack host with a dead IPv6 route falls back to IPv4. Only a THROWN (transport/timeout)
+    // failure triggers fallback — an HTTP status is a real answer, never a fallback trigger. Every
+    // candidate is an SSRF-validated address, so the F2 socket-pin guarantee is unchanged.
+    const candidates = orderConnectCandidates(target.resolved);
+    if (candidates.length === 0) throw new Error("No validated address to dial.");
 
-    let response: HttpProbeResponse;
-    try {
-      response = await dialer({
-        url,
-        ip: pin.address,
-        family: pin.family,
-        headers,
-        timeoutMs,
-        ...(dialOptions?.method !== undefined ? { method: dialOptions.method } : {}),
-        ...(dialOptions?.body !== undefined ? { body: dialOptions.body } : {}),
-      });
-    } catch (cause) {
-      return { ok: false, error: mapProviderError(cause, probeContext) };
-    }
+    let lastError: unknown;
+    for (const pin of candidates) {
+      let response: HttpProbeResponse;
+      try {
+        response = await dialer({
+          url,
+          ip: pin.address,
+          family: pin.family,
+          headers,
+          timeoutMs,
+          ...(dialOptions?.method !== undefined ? { method: dialOptions.method } : {}),
+          ...(dialOptions?.body !== undefined ? { body: dialOptions.body } : {}),
+        });
+      } catch (cause) {
+        lastError = cause;
+        continue;
+      }
 
-    const validated = target.resolved.some((a) => a.address === response.dialedIp);
-    if (response.dialedIp !== pin.address || !validated) {
-      throw new SocketPinViolationError(pin.address, response.dialedIp);
-    }
+      const validated = target.resolved.some((a) => a.address === response.dialedIp);
+      if (response.dialedIp !== pin.address || !validated) {
+        throw new SocketPinViolationError(pin.address, response.dialedIp);
+      }
 
-    if (isRedirect(response.status)) {
-      return followRedirect(url, headers, response, hops, probeContext, dialOptions);
+      if (isRedirect(response.status)) {
+        return followRedirect(url, headers, response, hops, probeContext, dialOptions);
+      }
+      return classifyStatus(response.status, probeContext);
     }
-    return classifyStatus(response.status, probeContext);
+    return { ok: false, error: mapProviderError(lastError, probeContext) };
   }
 
   /** F3: re-run the SSRF guard on the redirect target BEFORE following; bounded hops. */

@@ -25,6 +25,7 @@ import type {
 } from "@cowork-ghc/contracts";
 import type { ProviderEnvSpec } from "@cowork-ghc/runtime";
 import type { ConnectTarget, SsrfPolicy } from "./ssrf-policy.js";
+import { orderConnectCandidates } from "./ssrf-policy.js";
 import type { CredentialResolver } from "./http-connector.js";
 import { SocketPinViolationError } from "./http-connector.js";
 import { createHttpsDialer, type HttpDialer, type HttpProbeResponse } from "./http-dialer.js";
@@ -125,8 +126,10 @@ export function createModelDiscovery(options: ModelDiscoveryOptions): ModelDisco
       }
 
       const url = modelsUrl(connectTarget);
-      const pin = connectTarget.resolved[0];
-      if (pin === undefined) return { ok: false, error: DISCOVERY_UNSUPPORTED };
+      // IP-pinned Happy-Eyeballs: try the resolver's first address, then a DIFFERENT family, so a
+      // dual-stack host with a dead IPv6 route falls back to IPv4. Every candidate is SSRF-validated.
+      const candidates = orderConnectCandidates(connectTarget.resolved);
+      if (candidates.length === 0) return { ok: false, error: DISCOVERY_UNSUPPORTED };
 
       const injection = await credentials.resolveInjection(target.credentialRef, target.envSpec);
       const headers = {
@@ -134,21 +137,30 @@ export function createModelDiscovery(options: ModelDiscoveryOptions): ModelDisco
         accept: "application/json",
       };
 
-      let response: HttpProbeResponse;
-      try {
-        response = await dialer({
-          url,
-          ip: pin.address,
-          family: pin.family,
-          headers,
-          timeoutMs,
-          method: "GET",
-          readBody: true,
-          maxBodyBytes,
-        });
-      } catch (cause) {
-        // Timeout / socket failure → mapped, non-secret error (still non-blocking).
-        return { ok: false, error: mapProviderError(cause) };
+      let response: HttpProbeResponse | undefined;
+      let pin = candidates[0]!;
+      let lastError: unknown;
+      for (const candidate of candidates) {
+        try {
+          response = await dialer({
+            url,
+            ip: candidate.address,
+            family: candidate.family,
+            headers,
+            timeoutMs,
+            method: "GET",
+            readBody: true,
+            maxBodyBytes,
+          });
+          pin = candidate;
+          break;
+        } catch (cause) {
+          lastError = cause;
+        }
+      }
+      if (response === undefined) {
+        // Timeout / socket failure on every candidate → mapped, non-secret error (non-blocking).
+        return { ok: false, error: mapProviderError(lastError) };
       }
 
       // F2: the socket MUST have used the exact validated IP (never trust re-resolution).
