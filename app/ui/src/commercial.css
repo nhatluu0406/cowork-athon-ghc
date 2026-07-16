@@ -3191,6 +3191,66 @@ button {
   transform: translateX(17px);
 }
 
+/* Diagnostics data panel (Wave 6): logging status + telemetry counters + export/clear actions. */
+.settings-diagnostics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cghc-border-subtle);
+}
+.settings-diagnostics-panel__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-diagnostics-panel__label {
+  font-size: 13px;
+  color: var(--cghc-text-secondary);
+  margin-right: auto;
+}
+.settings-diagnostics-panel__btn {
+  padding: 4px 12px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-diagnostics-panel__btn:hover {
+  background: var(--cghc-surface-muted);
+}
+.settings-diagnostics-panel__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cghc-text-secondary);
+}
+.settings-diagnostics-panel__counters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 16px;
+}
+.settings-diagnostics-panel__counter {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.settings-diagnostics-panel__counter-name {
+  color: var(--cghc-text-secondary);
+}
+.settings-diagnostics-panel__counter-value {
+  color: var(--cghc-text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .settings-status {
   position: fixed;
   right: 18px;
