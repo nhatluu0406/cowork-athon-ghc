@@ -73,6 +73,9 @@ func (r *Retriever) Query(ctx context.Context, req QueryRequest) (*QueryResponse
 	// This allows graph-only results to be returned while preserving permission
 	// scoping at the semantic search and final answer stages.
 
+	if len(allowedFiles) == 0 {
+		return &QueryResponse{Answer: "No access to documents", Intent: "permission_denied"}, nil
+	}
 	// Stage 1: Intent detection
 	intent := r.intentDetector.Detect(ctx, req.Query)
 
