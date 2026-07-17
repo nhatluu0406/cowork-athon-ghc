@@ -22,10 +22,10 @@
 
 **Purpose**: Migrations, go.mod dependencies, and new package skeleton.
 
-- [ ] T001 Add new Go dependencies to `app/backend/go.mod`: `github.com/ledongthuc/pdf`, `github.com/saintfish/chardet`, `golang.org/x/text` (check if `excelize` and `go-docx` already present)
-- [ ] T002 Create migration file `app/backend/migrations/005_local_import.sql` — tables `local_sources`, `import_jobs`, `local_files`; ALTER `chunks` ADD COLUMN `local_file_id UUID NULL REFERENCES local_files(id) ON DELETE CASCADE`; DROP NOT NULL on `chunks.file_id`; add CHECK constraint `chunks_source_xor`; indexes (see data-model.md §1)
-- [ ] T003 [P] Create package skeleton `app/backend/internal/localimport/` with empty files: `source.go`, `job.go`, `file.go`, `scanner.go`, `path.go`, `encoding.go`, `extractor.go`, `processor.go`, `dispatcher.go`, `neo4j.go`, `handler.go`
-- [ ] T004 [P] Create Neo4j constraint migration `app/backend/migrations/005_local_import_neo4j.cypher` — `LocalDocument` uniqueness constraint on `local_file_id`, `LocalSource` node schema (data-model.md §2)
+- [X] T001 Add new Go dependencies to `app/backend/go.mod`: `github.com/ledongthuc/pdf`, `github.com/saintfish/chardet`, `golang.org/x/text` (check if `excelize` and `go-docx` already present)
+- [X] T002 Create migration file `app/backend/migrations/005_local_import.sql` — tables `local_sources`, `import_jobs`, `local_files`; ALTER `chunks` ADD COLUMN `local_file_id UUID NULL REFERENCES local_files(id) ON DELETE CASCADE`; DROP NOT NULL on `chunks.file_id`; add CHECK constraint `chunks_source_xor`; indexes (see data-model.md §1)
+- [X] T003 [P] Create package skeleton `app/backend/internal/localimport/` with empty files: `source.go`, `job.go`, `file.go`, `scanner.go`, `path.go`, `encoding.go`, `extractor.go`, `processor.go`, `dispatcher.go`, `neo4j.go`, `handler.go`
+- [X] T004 [P] Create Neo4j constraint migration `app/backend/migrations/005_local_import_neo4j.cypher` — `LocalDocument` uniqueness constraint on `local_file_id`, `LocalSource` node schema (data-model.md §2)
 
 **Checkpoint**: `go mod tidy` passes; migration SQL is syntactically valid; package files compile (empty bodies)
 
@@ -167,9 +167,9 @@
 
 ### Implementation for Neo4j
 
-- [ ] T044 Implement `app/backend/internal/localimport/neo4j.go`: `LocalNeo4jClient` struct wrapping `neo4j.DriverWithContext`; `UpsertSource(ctx, source LocalSource) error` — MERGE `LocalSource {source_id}`; `UpsertDocument(ctx, f LocalFile, source LocalSource) error` — MERGE `LocalDocument {local_file_id}` SET properties; CREATE `(d)-[:PART_OF]->(s)` relationship; `DeleteDocument(ctx, localFileID string) error` — DETACH DELETE node
-- [ ] T045 Wire `LocalNeo4jClient` into `app/backend/internal/localimport/processor.go`: call `UpsertSource` once per job start; call `UpsertDocument` for each Added/Modified file after chunk storage; call `DeleteDocument` for each Deleted file; errors in neo4j are logged and skipped (non-fatal for MVP — text search still works)
-- [ ] T046 [P] Wire existing NLP entity extraction into processor: after extracting text for a file, call `nlp.Extractor.Extract(ctx, text)` to get entities; create `MENTIONS` relationships between `LocalDocument` and extracted `Entity` nodes in Neo4j
+- [X] T044 Implement `app/backend/internal/localimport/neo4j.go`: `LocalNeo4jClient` struct wrapping `neo4j.DriverWithContext`; `UpsertSource(ctx, source LocalSource) error` — MERGE `LocalSource {source_id}`; `UpsertDocument(ctx, f LocalFile, source LocalSource) error` — MERGE `LocalDocument {local_file_id}` SET properties; CREATE `(d)-[:PART_OF]->(s)` relationship; `DeleteDocument(ctx, localFileID string) error` — DETACH DELETE node
+- [X] T045 Wire `LocalNeo4jClient` into `app/backend/internal/localimport/processor.go`: call `UpsertSource` once per job start; call `UpsertDocument` for each Added/Modified file after chunk storage; call `DeleteDocument` for each Deleted file; errors in neo4j are logged and skipped (non-fatal for MVP — text search still works)
+- [X] T046 [P] Wire existing NLP entity extraction into processor: after extracting text for a file, call `nlp.Extractor.Extract(ctx, text)` to get entities; create `MENTIONS` relationships between `LocalDocument` and extracted `Entity` nodes in Neo4j
 
 **Checkpoint**: Neo4j query after integration test returns `LocalDocument` nodes. Graph expander in retrieval pipeline can traverse from local doc.
 
