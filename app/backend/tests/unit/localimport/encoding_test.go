@@ -48,7 +48,7 @@ func TestDetectEncoding_Latin1(t *testing.T) {
 	// Latin-1 encoded text: "café" (C3 A9 in UTF-8, but we use Latin-1)
 	data := []byte{0xE9}
 
-	charset, confidence, err := localimport.DetectEncoding(data)
+	charset, _, err := localimport.DetectEncoding(data)
 	require.NoError(t, err)
 	// chardet may not detect single character reliably, but should not error
 	assert.NotNil(t, charset)
@@ -83,7 +83,7 @@ func TestDetectEncoding_EmptyData(t *testing.T) {
 func TestDetectEncoding_SmallUTF8Sample(t *testing.T) {
 	data := []byte("Hello")
 
-	charset, confidence, err := localimport.DetectEncoding(data)
+	_, confidence, err := localimport.DetectEncoding(data)
 	require.NoError(t, err)
 	// Should detect as UTF-8 or similar
 	assert.Greater(t, confidence, 0.0)
@@ -186,7 +186,7 @@ func TestDetectEncoding_LargeData(t *testing.T) {
 		data[i] = byte(65 + (i % 26)) // A-Z repeating
 	}
 
-	charset, confidence, err := localimport.DetectEncoding(data)
+	_, confidence, err := localimport.DetectEncoding(data)
 	require.NoError(t, err)
 	// Large sample should be detected with high confidence
 	assert.Greater(t, confidence, 0.5)

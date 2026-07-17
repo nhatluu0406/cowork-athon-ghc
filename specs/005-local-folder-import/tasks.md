@@ -133,10 +133,10 @@
 
 ### Implementation for US5
 
-- [ ] T036 [US5] Extend `app/backend/internal/localimport/processor.go`: update `import_jobs.progress_pct` every 50 files via `ImportJobStore.UpdateProgress`; set `files_total` at scan completion before processing begins; set `started_at` when processing begins, `finished_at` when done
-- [ ] T037 [US5] Extend `app/backend/internal/localimport/job.go` `ImportJobStore`: add `UpdateProgress(ctx, id string, progress JobProgress) error` where `JobProgress` holds all counter fields; ensure progress update is a single SQL UPDATE (atomic)
-- [ ] T038 [P] [US5] Add error collection to processor: when a file fails with `EPERM` / parser error, append redacted path (`RedactPath(absPath, sourceRoot)`) to `import_jobs.error_messages` array; increment `files_skipped`; continue processing; cap stored errors at 100 entries
-- [ ] T039 [US5] Add `GET /api/local/jobs` query param support for `source_id` and `status` filters in `app/backend/internal/localimport/handler.go`; verify pagination `limit`/`offset` works correctly
+- [X] T036 [US5] Extend `app/backend/internal/localimport/processor.go`: update `import_jobs.progress_pct` every 50 files via `ImportJobStore.UpdateProgress`; set `files_total` at scan completion before processing begins; set `started_at` when processing begins, `finished_at` when done
+- [X] T037 [US5] Extend `app/backend/internal/localimport/job.go` `ImportJobStore`: add `UpdateProgress(ctx, id string, progress JobProgress) error` where `JobProgress` holds all counter fields; ensure progress update is a single SQL UPDATE (atomic)
+- [X] T038 [P] [US5] Add error collection to processor: when a file fails with `EPERM` / parser error, append redacted path (`RedactPath(absPath, sourceRoot)`) to `import_jobs.error_messages` array; increment `files_skipped`; continue processing; cap stored errors at 100 entries
+- [X] T039 [US5] Add `GET /api/local/jobs` query param support for `source_id` and `status` filters in `app/backend/internal/localimport/handler.go`; verify pagination `limit`/`offset` works correctly
 
 **Checkpoint**: `GET /api/local/jobs/{id}` shows `progress_pct > 0` for in-flight job; `error_messages` populated when permission-denied files exist.
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
@@ -180,7 +181,7 @@ func handleDeleteSource(deps *LocalImportDeps) http.HandlerFunc {
 		id := r.PathValue("id")
 
 		// Mark any running jobs as stale
-		jobs, err := deps.JobStore.List(r.Context(), &id)
+		jobs, err := deps.JobStore.List(r.Context(), &id, nil, nil, nil)
 		if err == nil {
 			for _, job := range jobs {
 				if job.Status == JobRunning {
@@ -266,7 +267,12 @@ func handleSyncSource(deps *LocalImportDeps) http.HandlerFunc {
 	}
 }
 
-// handleListJobs handles GET /api/local/jobs
+// handleListJobs handles GET /api/local/jobs with optional filters and pagination
+// Query parameters:
+//   - source_id: filter by source UUID
+//   - status: filter by job status (queued, running, completed, failed, stale)
+//   - limit: max results per page (default 50, max 1000)
+//   - offset: pagination offset (default 0)
 func handleListJobs(deps *LocalImportDeps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -274,13 +280,55 @@ func handleListJobs(deps *LocalImportDeps) http.HandlerFunc {
 			return
 		}
 
+		// Parse query parameters
 		sourceID := r.URL.Query().Get("source_id")
 		var sourceIDPtr *string
 		if sourceID != "" {
 			sourceIDPtr = &sourceID
 		}
 
-		jobs, err := deps.JobStore.List(r.Context(), sourceIDPtr)
+		status := r.URL.Query().Get("status")
+		var statusPtr *string
+		if status != "" {
+			// Validate status value
+			validStatuses := map[string]bool{
+				"queued":    true,
+				"running":   true,
+				"completed": true,
+				"failed":    true,
+				"stale":     true,
+			}
+			if !validStatuses[status] {
+				http.Error(w, fmt.Sprintf("invalid status: %q", status), http.StatusBadRequest)
+				return
+			}
+			statusPtr = &status
+		}
+
+		// Parse pagination parameters
+		var limitPtr, offsetPtr *int
+		if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+			limit, err := strconv.Atoi(limitStr)
+			if err != nil || limit <= 0 {
+				http.Error(w, "invalid limit: must be a positive integer", http.StatusBadRequest)
+				return
+			}
+			if limit > 1000 {
+				limit = 1000 // Cap at 1000
+			}
+			limitPtr = &limit
+		}
+
+		if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+			offset, err := strconv.Atoi(offsetStr)
+			if err != nil || offset < 0 {
+				http.Error(w, "invalid offset: must be a non-negative integer", http.StatusBadRequest)
+				return
+			}
+			offsetPtr = &offset
+		}
+
+		jobs, err := deps.JobStore.List(r.Context(), sourceIDPtr, statusPtr, limitPtr, offsetPtr)
 		if err != nil {
 			http.Error(w, "failed to list jobs: "+err.Error(), http.StatusInternalServerError)
 			return
