@@ -68,15 +68,23 @@ func (s *Scanner) Walk(ctx context.Context) (<-chan ScanEntry, <-chan error) {
 				}
 			}
 
-			// Check depth limit
+			// Get relative path for depth checking and entry building
 			rel, _ := filepath.Rel(s.Source.FolderPath, path)
 			depth := strings.Count(rel, string(filepath.Separator))
-			if depth >= s.Source.MaxDepth && d.IsDir() {
-				return filepath.SkipDir
-			}
 
-			// Skip directories; only process files
+			// Check if we should descend into subdirectories
 			if d.IsDir() {
+				// Skip if non-recursive and this is not the root directory
+				if !s.Source.Recursive && path != s.Source.FolderPath {
+					return filepath.SkipDir
+				}
+
+				// Skip if depth limit exceeded (depth is counted in separators, so >= MaxDepth-1 means too deep for next level)
+				if depth >= s.Source.MaxDepth-1 && path != s.Source.FolderPath {
+					return filepath.SkipDir
+				}
+
+				// Continue walking into subdirectory
 				return nil
 			}
 
