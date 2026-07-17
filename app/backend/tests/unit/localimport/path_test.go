@@ -255,3 +255,84 @@ func TestIsInsideRoot_WindowsStyleUNCPath(t *testing.T) {
 
 	assert.False(t, result)
 }
+
+// T047: Security tests for path validation
+func TestValidateSourcePath_NullByteRejected(t *testing.T) {
+	pathWithNull := "/tmp/test\x00/path"
+	result, err := localimport.ValidateSourcePath(pathWithNull)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.Contains(t, err.Error(), "null")
+}
+
+func TestValidateSourcePath_OnlySpacesRejected(t *testing.T) {
+	pathWithOnlySpaces := "   \t\n  "
+	result, err := localimport.ValidateSourcePath(pathWithOnlySpaces)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.Contains(t, err.Error(), "whitespace")
+}
+
+func TestValidateSourcePath_WindowsLongPathRejected(t *testing.T) {
+	// Windows extended-length path syntax: \\?\C:\Users\...
+	longPath := `\\?\C:\Users\TestUser\Documents`
+	result, err := localimport.ValidateSourcePath(longPath)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.Contains(t, err.Error(), "extended-length")
+}
+
+func TestValidateSourcePath_ProcPathRejected(t *testing.T) {
+	// Test /proc path (system directory) - may be rejected for being non-absolute on Windows
+	// or for being a system directory on Unix
+	procPath := "/proc/sys/kernel"
+	result, err := localimport.ValidateSourcePath(procPath)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	// Either rejected for being relative (Windows) or for being a system directory (Unix)
+	assert.True(t, err.Error() != "")
+}
+
+func TestValidateSourcePath_SysPathRejected(t *testing.T) {
+	// Test /sys path (system directory) - may be rejected for being non-absolute on Windows
+	// or for being a system directory on Unix
+	sysPath := "/sys/class/net"
+	result, err := localimport.ValidateSourcePath(sysPath)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.True(t, err.Error() != "")
+}
+
+func TestValidateSourcePath_ProcPathVariant(t *testing.T) {
+	// Test /proc path (system directory)
+	procPath := "/proc"
+	result, err := localimport.ValidateSourcePath(procPath)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.True(t, err.Error() != "")
+}
+
+func TestValidateSourcePath_SysPathVariant(t *testing.T) {
+	// Test /sys path (system directory)
+	sysPath := "/sys"
+	result, err := localimport.ValidateSourcePath(sysPath)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+	assert.True(t, err.Error() != "")
+}
+
+func TestValidateSourcePath_SafePathAccepted(t *testing.T) {
+	tmpDir := t.TempDir()
+	result, err := localimport.ValidateSourcePath(tmpDir)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, result)
+	assert.Equal(t, filepath.Clean(tmpDir), result)
+}

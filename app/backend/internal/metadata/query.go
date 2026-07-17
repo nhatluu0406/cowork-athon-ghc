@@ -126,6 +126,64 @@ func (cs *ChunkStore) Create(ctx context.Context, fileID int64, chunkIndex int, 
 	return id, nil
 }
 
+// T048: CreateBatch performs high-performance batch insertion of chunks.
+// For >500 chunks, uses a transaction for efficiency.
+// If batch fails, falls back to sequential single INSERTs.
+type ChunkData struct {
+	FileID      int64
+	ChunkIndex  int
+	Text        string
+	ContentHash string
+	HeadingPath string
+}
+
+func (cs *ChunkStore) CreateBatch(ctx context.Context, chunks []ChunkData) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	// For small batches, use individual inserts for simplicity
+	if len(chunks) < 500 {
+		for _, c := range chunks {
+			_, err := cs.Create(ctx, c.FileID, c.ChunkIndex, c.Text, c.ContentHash, c.HeadingPath)
+			if err != nil {
+				return fmt.Errorf("ChunkStore.CreateBatch (fallback): %w", err)
+			}
+		}
+		return nil
+	}
+
+	// For large batches, attempt batch insert via transaction
+	err := cs.db.WithTx(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx,
+			"INSERT INTO chunks (file_id, chunk_index, text, content_hash, heading_path) VALUES ($1, $2, $3, $4, $5)")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, c := range chunks {
+			if _, err := stmt.ExecContext(ctx, c.FileID, c.ChunkIndex, c.Text, c.ContentHash, c.HeadingPath); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		// Fallback: retry with individual inserts
+		for _, chunk := range chunks {
+			_, err := cs.Create(ctx, chunk.FileID, chunk.ChunkIndex, chunk.Text, chunk.ContentHash, chunk.HeadingPath)
+			if err != nil {
+				return fmt.Errorf("ChunkStore.CreateBatch (fallback single): %w", err)
+			}
+		}
+		return nil
+	}
+
+	return nil
+}
+
 func (cs *ChunkStore) GetByFileID(ctx context.Context, fileID int64) ([]map[string]interface{}, error) {
 	rows, err := cs.db.Query(ctx,
 		"SELECT id, chunk_index, text, content_hash, heading_path FROM chunks WHERE file_id = $1 ORDER BY chunk_index",
