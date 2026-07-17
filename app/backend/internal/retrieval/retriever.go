@@ -71,10 +71,11 @@ func (r *Retriever) Query(ctx context.Context, req QueryRequest) (*QueryResponse
 	// (but still allow graph-only results via entity recognition and graph expansion)
 	if len(allowedFiles) == 0 {
 		return &QueryResponse{
-			Intent:  "permission_denied",
-			Answer:  "",
-			Sources: []interface{}{},
-			Timing:  time.Since(start).String(),
+			Intent:    "permission_denied",
+			Answer:    "",
+			Sources:   []interface{}{},
+			Entities:  []interface{}{},
+			LatencyMs: int(time.Since(start).Milliseconds()),
 		}, nil
 	}
 
