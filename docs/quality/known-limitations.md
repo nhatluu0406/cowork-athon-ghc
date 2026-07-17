@@ -81,8 +81,10 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
       phê duyệt lệnh**; không chạy lệnh tự do từ model/file. Dò port là **heuristic** (đọc URL
       localhost từ output / dò `PORT`); framework in URL khác thường có thể không phát hiện được →
       `failed` trung thực, không giả "running". Không đảm bảo HMR/websocket; không proxy remote/CDN.
-    - **Đổi workspace / tắt app** dừng preview (graceful-then-`taskkill /T /F`, không orphan). Output
-      đã redact + giới hạn kích thước.
+    - **Đổi workspace / tắt app** dừng preview bằng **tree-kill trên cây còn sống**
+      (`taskkill /PID <pid> /T /F`) — không graceful-kill riêng `cmd.exe` trước (sẽ bỏ mồ côi
+      `pm→node→…`); **không orphan** (được test tiến trình thật kiểm chứng). Output đã redact +
+      giới hạn kích thước.
     - **Desktop app launch defer sang Slice 2**. Vẫn không terminal/PTY, Git client, debugger, LSP.
     PDF/Office/ảnh trong Code hiển thị chỉ đọc + "Xem trong Workspace" (không dựng lại viewer).
   - **Chỉ sửa được tệp văn bản/mã** (kind `text`); spreadsheet/tài liệu vẫn xem/sửa ở Workspace.

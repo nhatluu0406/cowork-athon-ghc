@@ -58,9 +58,13 @@ Preview.
   (không bao giờ là chuỗi tự do từ model/file). `cwd` bị **WorkspaceGuard** giới hạn (lexical +
   realpath). `env` là **allowlist curated** (không kế thừa provider/vault/MS365 secret; thêm
   `BROWSER=none`/`PORT`/`HOST`). Đầu ra được **redact** (secret scrubber + pattern) và **giới hạn
-  kích thước** (ring buffer). Phát hiện URL localhost từ output; timeout khởi động; dừng
-  graceful-then-**tree-force** (`taskkill /T /F`); dọn dẹp khi **đổi workspace** và **tắt service**.
-  Vì tiến trình là con của service, reaper `taskkill /T` sẵn có cũng thu dọn khi service bị hạ.
+  kích thước** (ring buffer). Phát hiện URL localhost từ output; timeout khởi động; dừng bằng
+  **tree-force ngay trên cây tiến trình còn sống** (`taskkill /PID <pid> /T /F`, định danh theo PID).
+  **Không** graceful-kill riêng con trực tiếp trước: con trực tiếp là `cmd.exe`, kill nó chỉ hạ
+  `cmd.exe` và **bỏ mồ côi** `pm → node → …`; tệ hơn, một khi `cmd.exe` biến mất thì liên kết cha–con
+  đứt nên tree-kill *sau đó* không còn tìm được cây (lỗi này được phát hiện bằng test tiến trình thật
+  ở acceptance Slice 1 và đã sửa). Dọn dẹp khi **đổi workspace** và **tắt service**. Vì tiến trình là
+  con của service, reaper `taskkill /T` sẵn có cũng thu dọn khi service bị hạ.
 - **Permission**: mỗi lần chạy lệnh dev-server đi qua một **PermissionGate riêng cho preview** (reply/
   session sink là no-op vì không có OpenCode runtime đợi trả lời; **dùng chung audit sink**). Lệnh chỉ
   chạy **bên trong `gate.proceed` sau khi có Allow**; Deny/timeout không bao giờ spawn.

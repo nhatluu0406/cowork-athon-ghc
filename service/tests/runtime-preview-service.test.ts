@@ -148,14 +148,16 @@ test("a spawn error (missing executable) fails cleanly", async () => {
   assert.ok(state.error && state.error.length > 0);
 });
 
-test("graceful stop does not force-kill; stubborn stop escalates to tree-kill", async () => {
-  const graceful = new FakePreviewChild(1, { gracefulOnKill: true });
-  const h1 = makeHarness({}, graceful);
+test("stop always terminates the whole tree (a bare direct-child kill would orphan on Windows)", async () => {
+  // The direct child is cmd.exe; a graceful kill() of it reaps only cmd.exe and orphans
+  // pm→node→… . So stop must go through the whole-tree kill for BOTH a well-behaved child that
+  // would exit on kill() and a stubborn one — never a bare direct-child kill.
+  const wellBehaved = new FakePreviewChild(1, { gracefulOnKill: true });
+  const h1 = makeHarness({}, wellBehaved);
   await approveLaunch(h1);
   h1.child.emitData("stdout", "Local: http://localhost:3000/\n");
   await h1.service.stop("user");
-  assert.equal(graceful.killCalls, 1);
-  assert.equal(graceful.killTreeCalls, 0);
+  assert.ok(wellBehaved.killTreeCalls >= 1, "well-behaved child is still tree-killed (no orphan)");
   assert.equal(h1.service.state().status, "stopped");
 
   const stubborn = new FakePreviewChild(2, { gracefulOnKill: false });
@@ -163,7 +165,7 @@ test("graceful stop does not force-kill; stubborn stop escalates to tree-kill", 
   await approveLaunch(h2);
   h2.child.emitData("stdout", "Local: http://localhost:3000/\n");
   await h2.service.stop("user");
-  assert.ok(stubborn.killTreeCalls >= 1, "escalates to tree-kill when graceful fails");
+  assert.ok(stubborn.killTreeCalls >= 1, "stubborn child tree-killed");
 });
 
 test("static preview needs no permission and reaches running", async () => {

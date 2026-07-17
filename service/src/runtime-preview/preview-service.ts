@@ -13,9 +13,10 @@
  *  - the cwd is confined to the active workspace via the WorkspaceGuard (realpath/symlink);
  *  - the child env is a curated allowlist (no provider/vault/MS365 secret inherited);
  *  - captured output is redacted + size-bounded;
- *  - stop uses graceful-then-force WHOLE-TREE termination so nothing is orphaned; the child is
- *    also a descendant of the service process, so the existing `taskkill /T` reaper covers a
- *    hard crash.
+ *  - stop performs a WHOLE-TREE termination of the still-live tree (`taskkill /T` by PID) so no
+ *    `pm → node → …` descendant is orphaned — a bare graceful kill of the `cmd.exe` wrapper would
+ *    leave them running. The child is also a descendant of the service process, so the existing
+ *    `taskkill /T` reaper covers a hard crash of the service itself.
  */
 
 import type {
@@ -227,17 +228,22 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
   }
 
   async function terminateChild(c: PreviewChild): Promise<void> {
-    // Register the exit wait BEFORE killing: a well-behaved child may exit synchronously on
-    // kill(), and we must not miss that and escalate to a needless tree-kill.
+    // Register the exit wait BEFORE terminating so a synchronous exit is never missed.
     const exited = waitForExit(c, gracefulStopMs);
+    // WHOLE-TREE termination is mandatory here. The direct child is `cmd.exe`; a graceful
+    // `kill()` of it terminates ONLY cmd.exe and orphans the `pm → node → …` descendants — and
+    // once cmd.exe is gone the parent links are broken, so a *later* tree-kill can no longer find
+    // them. So we kill the still-LIVE tree by PID up front (`taskkill /PID <pid> /T /F`, identity
+    // by PID only — never `/IM`). This is the product's no-orphan guarantee.
     try {
-      if (!c.killed) c.kill();
+      c.killTree();
     } catch {
       /* ignore */
     }
     if (!(await exited)) {
+      // Last resort if the tree somehow outlived the grace window: force the direct child too.
       try {
-        c.killTree();
+        c.kill();
       } catch {
         /* ignore */
       }
