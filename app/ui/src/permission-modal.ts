@@ -33,6 +33,7 @@ const ACTION_LABEL: Record<PermissionActionKind, string> = {
   file_move: "Di chuyển tệp",
   command_exec: "Chạy lệnh",
   ms365_write: "Tải lên SharePoint",
+  network_access: "Truy cập tri thức",
 };
 
 const ACTION_LEAD: Record<PermissionActionKind, string> = {
@@ -42,6 +43,7 @@ const ACTION_LEAD: Record<PermissionActionKind, string> = {
   file_move: "Cowork muốn di chuyển một tệp trong workspace của bạn.",
   command_exec: "Cowork muốn chạy một lệnh trong workspace của bạn.",
   ms365_write: "Cowork muốn ghi dữ liệu lên Microsoft 365 (SharePoint).",
+  network_access: "Cowork muốn truy cập hệ thống tri thức M365 để trả lời câu hỏi của bạn.",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(

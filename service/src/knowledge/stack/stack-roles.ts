@@ -10,8 +10,8 @@
  */
 
 import { join } from "node:path";
-import type { GenericStartSpec } from "../../runtime/generic-child-supervisor.js";
-import { httpOkProbe, tcpConnectProbe, type ReadinessProbe } from "../../runtime/generic-readiness.js";
+import type { GenericStartSpec } from "@cowork-ghc/runtime/generic-child-supervisor";
+import { httpOkProbe, tcpConnectProbe, type ReadinessProbe } from "@cowork-ghc/runtime/generic-readiness";
 
 export const M365KG_STACK_PPID_ROLE = "m365kg-stack-supervisor" as const;
 

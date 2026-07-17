@@ -28,6 +28,7 @@ const ALL_PERMISSION_ACTION_KINDS: readonly PermissionActionKind[] = [
   "file_move",
   "command_exec",
   "ms365_write",
+  "network_access",
 ];
 
 /**
@@ -45,6 +46,8 @@ export function presetKeyForActionKind(kind: PermissionActionKind): string {
       return "edit";
     case "command_exec":
       return "bash";
+    case "network_access":
+      return "network";
     default: {
       const exhaustive: never = kind;
       return exhaustive;
