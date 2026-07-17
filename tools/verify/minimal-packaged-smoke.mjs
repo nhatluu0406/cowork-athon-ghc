@@ -140,7 +140,7 @@ async function main() {
       /* ok */
     }
     await sleep(2000);
-    if (countProcesses("Cowork GHC.exe") > 0 || countProcesses("opencode.exe") > 0) {
+    if (countProcesses("coworkghc.exe") > 0 || countProcesses("opencode.exe") > 0) {
       success = false;
       throw new Error("orphan processes after minimal smoke");
     }

@@ -23,7 +23,7 @@ import { createMockLlmGateway } from "./mock-llm-gateway.mjs";
 import { pathToFileURL } from "node:url";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const EVIDENCE_ROOT = join(REPO, "reports", "file-work-review-completion");
 const CDP_PORT = 19235;
 const SECRET_FIXTURE = "VIOLET-FILE-REVIEW-428";
@@ -618,7 +618,7 @@ function launch(profile, workspace, tracePath, extra = {}) {
 async function stopAll(proc) {
   if (proc?.exitCode === null) proc.kill();
   await sleep(2_000);
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
     } catch {
@@ -629,7 +629,7 @@ async function stopAll(proc) {
 }
 
 function assertNoProcesses() {
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     const output = execSync(`tasklist /FI "IMAGENAME eq ${image}" /NH`, { encoding: "utf8" });
     if (output.toLowerCase().includes(image.toLowerCase())) throw new Error(`orphan ${image}`);
   }

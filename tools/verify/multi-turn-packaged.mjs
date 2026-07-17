@@ -18,7 +18,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19228;
 const TRACE = join(REPO, ".runtime", "multi-turn-packaged.trace");
 const MEMORY_CODE = "ORANGE-731";
@@ -130,7 +130,7 @@ function launch(extraEnv, profileDir) {
 async function stopAll(proc) {
   if (proc?.exitCode === null) proc.kill();
   await sleep(3000);
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
     } catch {
