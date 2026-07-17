@@ -73,7 +73,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 	entries, errChan := scanner.Walk(ctx)
 
 	progress := JobProgress{}
-	var filesToDelete []string
+	scannedRelPaths := make(map[string]bool)
 
 	// Process each scanned entry
 	for entry := range entries {
@@ -92,6 +92,9 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		default:
 		}
 
+		// Track scanned files for delta detection
+		scannedRelPaths[entry.RelPath] = true
+
 		// Classify file change state
 		delta, err := p.resolver.Classify(ctx, source.ID, entry)
 		if err != nil {
@@ -104,12 +107,6 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 
 		if delta.Action == DeltaUnchanged {
 			progress.FilesSkipped++
-			continue
-		}
-
-		if delta.Action == DeltaDeleted {
-			filesToDelete = append(filesToDelete, delta.Stored.ID)
-			progress.FilesDeleted++
 			continue
 		}
 
@@ -145,6 +142,13 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 
 		if extractResult.Encoding != "" {
 			localFile.Encoding = &extractResult.Encoding
+		}
+
+		// For modified files, delete old chunks first (T029)
+		if delta.Action == DeltaModified && delta.Stored != nil {
+			if err := p.deleteChunksByLocalFileID(ctx, delta.Stored.ID); err != nil {
+				p.logger.Error("failed to delete old chunks", "error", err, "file_id", delta.Stored.ID)
+			}
 		}
 
 		// Store local file first to get its ID
@@ -196,11 +200,9 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		}
 	}
 
-	// Delete files marked for deletion
-	for _, fileID := range filesToDelete {
-		if err := p.fileStore.Delete(ctx, fileID); err != nil {
-			p.logger.Error("file deletion failed", "error", err, "file_id", fileID)
-		}
+	// T028: Handle delta-deleted files (files in DB but not on disk)
+	if err := p.handleDeletedFiles(ctx, source.ID, scannedRelPaths, job.ID, &progress); err != nil {
+		p.logger.Error("failed to handle deleted files", "error", err)
 	}
 
 	// Update final stats
@@ -209,17 +211,48 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		p.logger.Error("final progress update failed", "error", err)
 	}
 
-	// Update source stats
-	if err := p.jobStore.UpdateProgress(ctx, job.ID, progress); err != nil {
-		p.logger.Error("stats update failed", "error", err)
-	}
-
 	// Mark job as completed
 	if err := p.jobStore.UpdateStatus(ctx, job.ID, JobCompleted); err != nil {
 		return err
 	}
 
 	p.logger.Info("import completed", "job_id", job.ID, "files_added", progress.FilesAdded, "files_modified", progress.FilesModified, "files_deleted", progress.FilesDeleted)
+	return nil
+}
+
+// deleteChunksByLocalFileID deletes all chunks associated with a local file (T029).
+func (p *Processor) deleteChunksByLocalFileID(ctx context.Context, localFileID string) error {
+	return p.chunkStore.DeleteByLocalFileID(ctx, localFileID)
+}
+
+// handleDeletedFiles detects files in DB but not on disk and marks them as deleted (T028).
+func (p *Processor) handleDeletedFiles(ctx context.Context, sourceID string, scannedRelPaths map[string]bool, jobID string, progress *JobProgress) error {
+	// Get all files from DB for this source
+	dbFiles, err := p.fileStore.ListBySource(ctx, sourceID)
+	if err != nil {
+		return fmt.Errorf("failed to list files from DB: %w", err)
+	}
+
+	// Find files that were in DB but not in current scan
+	for _, dbFile := range dbFiles {
+		if !scannedRelPaths[dbFile.RelPath] {
+			// File was deleted from filesystem
+			// Delete its chunks first
+			if err := p.deleteChunksByLocalFileID(ctx, dbFile.ID); err != nil {
+				p.logger.Error("failed to delete chunks for deleted file", "error", err, "file_id", dbFile.ID)
+			}
+
+			// Delete the local file record
+			if err := p.fileStore.Delete(ctx, dbFile.ID); err != nil {
+				p.logger.Error("failed to delete local file record", "error", err, "file_id", dbFile.ID)
+				continue
+			}
+
+			progress.FilesDeleted++
+			p.logger.Info("file marked as deleted", "file_id", dbFile.ID, "rel_path", dbFile.RelPath)
+		}
+	}
+
 	return nil
 }
 

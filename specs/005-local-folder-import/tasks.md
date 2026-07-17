@@ -83,9 +83,9 @@
 
 ### Implementation for US2
 
-- [ ] T025 [US2] Extend `app/backend/internal/localimport/scanner.go` `Walk` method: apply `IncludeExt` / `ExcludeExt` filter per `ScanEntry`; normalise extensions to lowercase before comparison; log skipped file count to job metrics (`files_skipped++`); apply `MaxDepth` counter via WalkDir depth tracking
-- [ ] T026 [P] [US2] Write unit tests in `app/backend/tests/unit/localimport/scanner_test.go` (extend existing): `include_ext=[".pdf"]` → only PDF entries emitted; `exclude_ext=[".log"]` → `.log` files skipped; mixed case `.PDF` normalised and matched; very deep dir (>MaxDepth) → warning logged, entries up to depth included
-- [ ] T027 [US2] Verify and test `POST /api/local/sources` accepts `include_ext` and `exclude_ext` arrays and persists them to `local_sources` — add validation: each ext must start with `.`; add handler test in `app/backend/tests/unit/localimport/handler_test.go`
+- [X] T025 [US2] Extend `app/backend/internal/localimport/scanner.go` `Walk` method: apply `IncludeExt` / `ExcludeExt` filter per `ScanEntry`; normalise extensions to lowercase before comparison; log skipped file count to job metrics (`files_skipped++`); apply `MaxDepth` counter via WalkDir depth tracking
+- [X] T026 [P] [US2] Write unit tests in `app/backend/tests/unit/localimport/scanner_test.go` (extend existing): `include_ext=[".pdf"]` → only PDF entries emitted; `exclude_ext=[".log"]` → `.log` files skipped; mixed case `.PDF` normalised and matched; very deep dir (>MaxDepth) → warning logged, entries up to depth included
+- [X] T027 [US2] Verify and test `POST /api/local/sources` accepts `include_ext` and `exclude_ext` arrays and persists them to `local_sources` — add validation: each ext must start with `.`; add handler test in `app/backend/tests/unit/localimport/handler_test.go`
 
 **Checkpoint**: `go test ./internal/localimport/... -run TestScanner` passes including filter cases.
 
@@ -116,10 +116,10 @@
 
 ### Implementation for US4
 
-- [ ] T032 [US4] Extend `app/backend/internal/localimport/encoding.go`: handle MD files as UTF-8 text (same path as TXT); ensure `parsers.TextParser` returns full content for `.md` extension; verify heading preservation (headings remain as text, not stripped)
-- [ ] T033 [P] [US4] Write parser fixture tests `app/backend/tests/unit/localimport/extractor_test.go` (extend): create minimal fixture files (testdata/) for each format — PDF (ledongthuc), DOCX (go-docx), XLSX (excelize multi-sheet), TXT UTF-8, MD with headings; verify known phrases extracted; verify XLSX extracts from all sheets; verify MD headings in output
-- [ ] T034 [P] [US4] Add `app/backend/tests/unit/localimport/encoding_test.go`: UTF-8 BOM file, UTF-16 LE file, Latin-1 file, undetectable binary → `IsBinary=true`; verify all convertible files output valid UTF-8
-- [ ] T035 [US4] Extend integration test `app/backend/tests/integration/localimport/import_test.go`: add one fixture of each format; verify all 5 appear in query results with correct `source_type`
+- [X] T032 [US4] Extend `app/backend/internal/localimport/encoding.go`: handle MD files as UTF-8 text (same path as TXT); ensure `parsers.TextParser` returns full content for `.md` extension; verify heading preservation (headings remain as text, not stripped)
+- [X] T033 [P] [US4] Write parser fixture tests `app/backend/tests/unit/localimport/extractor_test.go` (extend): create minimal fixture files (testdata/) for each format — PDF (ledongthuc), DOCX (go-docx), XLSX (excelize multi-sheet), TXT UTF-8, MD with headings; verify known phrases extracted; verify XLSX extracts from all sheets; verify MD headings in output
+- [X] T034 [P] [US4] Add `app/backend/tests/unit/localimport/encoding_test.go`: UTF-8 BOM file, UTF-16 LE file, Latin-1 file, undetectable binary → `IsBinary=true`; verify all convertible files output valid UTF-8
+- [X] T035 [US4] Extend integration test `app/backend/tests/integration/localimport/import_test.go`: add one fixture of each format; verify all 5 appear in query results with correct `source_type`
 
 **Checkpoint**: All parser unit tests pass. Integration test with mixed formats passes.
 

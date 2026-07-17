@@ -154,6 +154,17 @@ func (cs *ChunkStore) GetByFileID(ctx context.Context, fileID int64) ([]map[stri
 	return chunks, nil
 }
 
+// DeleteByLocalFileID deletes all chunks for a local file (used for delta sync).
+func (cs *ChunkStore) DeleteByLocalFileID(ctx context.Context, localFileID string) error {
+	_, err := cs.db.Exec(ctx,
+		"DELETE FROM chunks WHERE local_file_id = $1",
+		localFileID)
+	if err != nil {
+		return fmt.Errorf("ChunkStore.DeleteByLocalFileID: %w", err)
+	}
+	return nil
+}
+
 // ConnectionStore handles m365_connections CRUD
 type ConnectionStore struct {
 	db *DB

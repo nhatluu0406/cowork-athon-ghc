@@ -2,7 +2,9 @@ package localimport
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 )
@@ -13,6 +15,21 @@ type LocalImportDeps struct {
 	JobStore    *ImportJobStore
 	Dispatcher  *Dispatcher
 	JWTAuth     *auth.JWTAuth
+}
+
+// ValidateExtensionArrays validates that all extensions in include/exclude lists start with "."
+func ValidateExtensionArrays(includeExt, excludeExt []string) error {
+	for _, ext := range includeExt {
+		if !strings.HasPrefix(ext, ".") {
+			return fmt.Errorf("include_ext: extension must start with '.', got: %q", ext)
+		}
+	}
+	for _, ext := range excludeExt {
+		if !strings.HasPrefix(ext, ".") {
+			return fmt.Errorf("exclude_ext: extension must start with '.', got: %q", ext)
+		}
+	}
+	return nil
 }
 
 // NewLocalImportHandler creates HTTP handlers for local import endpoints.
@@ -44,6 +61,12 @@ func handleCreateSource(deps *LocalImportDeps) http.HandlerFunc {
 		var req CreateSourceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Validate extensions
+		if err := ValidateExtensionArrays(req.IncludeExt, req.ExcludeExt); err != nil {
+			http.Error(w, "invalid extension array: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
@@ -126,6 +149,12 @@ func handlePatchSource(deps *LocalImportDeps) http.HandlerFunc {
 		var req PatchSourceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Validate extensions
+		if err := ValidateExtensionArrays(req.IncludeExt, req.ExcludeExt); err != nil {
+			http.Error(w, "invalid extension array: "+err.Error(), http.StatusBadRequest)
 			return
 		}
 
