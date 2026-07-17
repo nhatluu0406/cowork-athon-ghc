@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "description": "Canonical cleanup allowlist for clean.bat (via tools/app/cli.mjs clean). clean deletes ONLY paths in cleanable_categories, and never a path overlapping a 'preserve' entry.",
+  "categories": {
+    "generated": [
+      "node_modules",
+      "dist",
+      "build",
+      "out",
+      "coverage",
+      "test-results",
+      ".turbo",
+      ".vite",
+      ".next",
+      "src-tauri/target"
+    ],
+    "downloaded-library": [
+      ".tools",
+      ".cache"
+    ],
+    "runtime-temporary": [
+      ".runtime/pids",
+      ".runtime/logs",
+      ".runtime/temp",
+      ".runtime/state"
+    ],
+    "preserve": [
+      ".git",
+      "docs",
+      ".claude",
+      ".agents",
+      "CLAUDE.md",
+      "AGENTS.md",
+      "tools",
+      "scripts",
+      "skills-lock.json"
+    ],
+    "user-data": [],
+    "credential": [],
+    "external": []
+  },
+  "cleanable_categories": ["generated", "downloaded-library", "runtime-temporary"],
+  "notes": [
+    "user-data (sessions/history) and credentials are NEVER cleaned by clean.bat; demo-reset.bat handles opt-in demo state reset.",
+    "Package-manager caches outside the project (npm/pnpm global store) are external and out of scope."
+  ]
+}

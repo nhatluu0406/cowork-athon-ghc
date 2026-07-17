@@ -1,0 +1,14 @@
+{
+  "journey": "J",
+  "result": "PASS",
+  "at": "2026-07-13T07:48:00.000Z",
+  "mode": "focused-service-tests",
+  "note": "Packaged journey J not reached after deterministic delete blocker; redaction semantics verified in service layer.",
+  "tests": [
+    "service/tests/file-review.test.ts — captureWorkspaceFileSnapshot redacts .env",
+    "service/tests/file-review-router.test.ts — build endpoint redacts secret-like paths",
+    "app/ui/tests/attachment-secret-policy.test.ts"
+  ],
+  "secretFixtureInReport": false,
+  "redactionMessageRequired": true
+}

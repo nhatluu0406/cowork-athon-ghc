@@ -1,0 +1,38 @@
+# Authorization levels per action type (sdlc-suite _shared-governance baseline,
+# merged with the repo's hard rules from CLAUDE.md + .claude/rules/* — marked [repo]).
+authorization_levels:
+  L0_observe:
+    - read_file
+    - search_codebase
+    - summarize_diff
+  L1_draft:
+    - write_new_file
+    - propose_architecture_change    # ADR draft; PO accepts [repo]
+  L2_recommend:
+    - suggest_dependency_upgrade     # pin critical deps; ADR for key frameworks [repo]
+    - suggest_refactor_plan
+    - decompose_and_dispatch         # orchestrator (Fable 5) ceiling
+  L3_execute_bounded:
+    - run_tests
+    - create_test_case
+    - update_docs
+    - modify_file_in_own_scope       # only paths in the unit's scope (orchestrator.yaml)
+  L4_operate_workflow:
+    - run_verify_fast                # scripts\verify-fast.bat before commit [repo]
+    - commit_at_slice_boundary       # after gates pass [repo: meaningful product-slice boundaries]
+  L5_restricted:                     # explicit per-instance human approval, logged
+    - merge_to_main
+    - package_and_release
+    - modify_ci_cd_config
+    - delete_file
+    - force_push
+    - rotate_or_touch_secrets        # [repo] never commit .env/keys/tokens; one credential store
+    - relax_security_policy          # [repo] e.g. SSRF/loopback policy changes need ADR + security review
+    - modify_permission_enforcement  # [repo] execution-boundary permission logic
+    - network_exposure_change        # [repo] anything beyond loopback-only bind
+
+# Hard floors from the repo (override generic defaults):
+# - credential/security, runtime/process, release-critical packaged, large architecture
+#   changes REQUIRE independent review (security-reviewer / release-verifier) before merge.
+# - Reviewer must not have implemented what it reviews (separate agent identity).
+# - No agent role is assigned L5 by default; L5 always has a human gate.

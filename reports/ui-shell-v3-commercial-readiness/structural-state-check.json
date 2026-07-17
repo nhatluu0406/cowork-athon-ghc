@@ -1,0 +1,314 @@
+{
+  "generatedAt": "2026-07-14T00:08:59.110Z",
+  "gitHead": "173687a695568ca639c013e38fdf0ce948e91a8d",
+  "structural": [
+    {
+      "label": "provider-missing",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "provider-untested",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-ready-1920",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-ready-1366",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "long-conversation-title",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-narrow",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "rail-tooltip",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "settings-provider",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "settings"
+      ],
+      "settingsOpen": true,
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "settings-general",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "settings"
+      ],
+      "settingsOpen": true,
+      "sidebarVisible": false,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-inspector-open",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": true,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "cowork-inspector-closed",
+      "surface": "cowork",
+      "workMode": "cowork",
+      "activeViews": [
+        "cowork"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "workspace",
+      "surface": "cowork",
+      "workMode": "workspace",
+      "activeViews": [
+        "cowork",
+        "workspace"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "workspace-long-path",
+      "surface": "cowork",
+      "workMode": "workspace",
+      "activeViews": [
+        "cowork",
+        "workspace"
+      ],
+      "settingsOpen": false,
+      "sidebarVisible": true,
+      "inspectorVisible": false,
+      "shellRoots": 1,
+      "legacyTextButton": false,
+      "oldWorkspacePathCard": false,
+      "duplicateKnowledgeRail": false,
+      "horizontalOverflow": false,
+      "fauxWindowControls": 0,
+      "settingsButton": true,
+      "providerStatusButton": true,
+      "equalTabs": true,
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "microsoft-assistant",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "microsoft-connect",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "code-session",
+      "passed": true,
+      "errors": []
+    },
+    {
+      "label": "code-onboarding",
+      "passed": true,
+      "errors": []
+    }
+  ]
+}
