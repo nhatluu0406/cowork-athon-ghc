@@ -41,6 +41,12 @@ opencode/
 **/opencode.exe
 **/opencode-*/
 
+# --- Large vendor binaries (database/service distributions) ---
+vendor/*.zip
+vendor/**/*.zip
+vendor/postgresql-*/
+vendor/neo4j-*/
+
 # --- Runtime / process state (PID, port, temp, logs) ---
 .runtime/
 **/.runtime/
