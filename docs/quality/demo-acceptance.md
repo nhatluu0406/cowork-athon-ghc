@@ -100,6 +100,29 @@ packaged Windows app). Desktop app launch **không** thuộc slice này (Slice 2
   termination). Fixtures cho các bước PO ở trên: xem `po-fixtures/` (README kèm bảng ánh xạ).
   Các ô [ ] còn lại vẫn cần **PO quan sát trên packaged app** (render, dialog, Task Manager).
 
+## Code Slice 2 demo (desktop app launch — ADR 0015)
+
+Code/tests/`build:app`/`package:win` PASS; các ô dưới là **packaged PO observation** còn lại (chỉ
+tích trên packaged Windows app). Chạy app **Electron**; app mở **cửa sổ riêng** (không nhúng).
+
+- [ ] Preview mode có selector **Web / Ứng dụng**; chọn **Ứng dụng**.
+- [ ] Workspace là app Electron (có `electron` + script chạy) → pane hiện **Chạy** (và **Build** nếu
+      có script build); workspace không phải Electron → trạng thái unsupported rõ ràng.
+- [ ] **Build** (nếu có): Permission hiện đúng `npm run build` + cwd; Allow → build chạy, exit 0 →
+      "Đã dừng / Build thành công"; build fail → **Failed** trung thực.
+- [ ] **Chạy**: Permission hiện `npm run <script>` + cwd + loại hành động; Allow → app mở **cửa sổ
+      riêng**, trạng thái **Đang chạy** + elapsed; **Từ chối** → không tiến trình nào chạy.
+- [ ] **Dừng** → cửa sổ app đóng, không còn tiến trình con (Task Manager). **Khởi động lại** → app
+      cũ biến mất, app mới mở; bấm Chạy nhiều lần không tạo trùng.
+- [ ] **App crash / thoát** → trạng thái **Failed / Đã dừng** trung thực (không giả "running").
+- [ ] **Đổi workspace** khi app đang chạy → app bị dừng, pane reset.
+- [ ] **Đóng Cowork GHC** khi app đang chạy → **không còn tiến trình con** (tree-kill).
+- [ ] Output log hiển thị (đã redact); Web ↔ Ứng dụng tách biệt rõ; light/dark đúng.
+- [ ] Lệnh/đường dẫn độc hại, project không hợp lệ → bị từ chối / unsupported (không thực thi).
+- **Acceptance Slice 2 (tự động, đã chạy):** `runtime-app-real-process.test.ts` (Windows) dựng thật
+  `cmd→npm→node→cháu`: run đạt running với env curated + output redact + **stop không mồ côi**, build
+  exit 0 → stopped, crash → failed. Fixtures PO: `po-fixtures-app/` (README kèm bảng ánh xạ).
+
 ## Settings / Skills / Inspector
 
 - [ ] Provider actions are understandable without button clutter.

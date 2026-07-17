@@ -143,6 +143,36 @@ Trạng thái: focused UI + service tests + `npm run typecheck` + `npm run build
 Deferred (Slice 2): **Desktop app launch** (build/launch process riêng, status/output, stop/restart)
 — dùng lại runner + permission + tree-kill. Terminal/PTY, Git UI, debugger, LSP vẫn defer.
 
+## WAVE 9 — Code Slice 2: Desktop app launch (code/tests/build PASS — packaged PO obs pending; ADR 0015)
+
+Mở khoá phần **Desktop app launch** mà ADR 0013/0014 defer. **Tái dùng runner Slice 1** (không tạo
+process manager thứ hai): tách `terminateChildTree` dùng chung; `runtime-app/` là AppService mỏng
+trên cùng spawner/output-buffer/launch-policy/permission-gate/WorkspaceGuard.
+
+- [x] Contracts `runtime-app` (kind Electron; status stopped/building/starting/running/failed/
+      stopping; detect/state/output/start-input).
+- [x] `app-detector` trung thực: chỉ nhận **Electron** (dependency `electron` + script chạy);
+      malformed/no-script/không-Electron → `unsupported` kèm lý do.
+- [x] `app-service`: build|run state machine, readiness theo thời gian (running = tiến trình còn
+      sống qua cửa sổ readiness), launch **cửa sổ/tiến trình riêng** (không nhúng), stop/restart
+      **tree-kill không mồ côi**, dọn khi đổi workspace/tắt service; **permission bắt buộc** mỗi
+      Build/Run (chỉ chạy trong `proceed` sau Allow; Deny/timeout không spawn); cwd confined; env
+      curated không secret; output redact + bounded.
+- [x] Router `/v1/runtime-app/*` token-guarded + wiring compose-service/compose-live/types; telemetry
+      counters `app_*` (bảng generic, không migration).
+- [x] UI: selector **Web / Ứng dụng** (chỉ hiện ở Preview), pane app (Build/Run/Stop/Restart +
+      trạng thái + elapsed + Output drawer dùng chung), confirm Allow/Deny mỗi Build/Run; app-shell
+      wiring + reset khi đổi workspace.
+- [x] Tests: detector (7) + service lifecycle/permission/security (15) + **real-process** (3, dựng
+      thật cmd→npm→node→cháu: env curated, redaction, tree-kill không mồ côi, build/crash) + UI (6).
+
+Trạng thái: focused UI + service tests + `npm run typecheck` + `verify-fast` + `npm run build:app` +
+`npm run package:win` PASS; **không có test service/UI mới thất bại** (branch == baseline `main`).
+Còn lại **packaged PO observation** (xem `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
+
+Deferred: terminal/PTY, Git UI, debugger, LSP; app không phải Electron; mở "thư mục đầu ra"
+(chưa có safe shell contract).
+
 ## WAITING
 
 - [ ] D1 Dispatch integration.

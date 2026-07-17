@@ -85,8 +85,20 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
       (`taskkill /PID <pid> /T /F`) — không graceful-kill riêng `cmd.exe` trước (sẽ bỏ mồ côi
       `pm→node→…`); **không orphan** (được test tiến trình thật kiểm chứng). Output đã redact +
       giới hạn kích thước.
-    - **Desktop app launch defer sang Slice 2**. Vẫn không terminal/PTY, Git client, debugger, LSP.
     PDF/Office/ảnh trong Code hiển thị chỉ đọc + "Xem trong Workspace" (không dựng lại viewer).
+  - **Desktop app launch (Slice 2, ADR 0015)** đã có: **Build / Chạy / Dừng / Khởi động lại** một
+    ứng dụng **Electron** của workspace như **tiến trình/cửa sổ riêng** (selector **Web / Ứng dụng**).
+    Tái dùng nguyên runner Slice 1 (permission mỗi Build/Run, cwd confined, env curated không secret,
+    output redact/bounded, **tree-kill không mồ côi**). Giới hạn trung thực:
+    - **Chỉ Electron**: nhận app khi có dependency `electron` **và** script chạy (start/app/electron/
+      dev/serve). App Node trần / executable đóng gói **không** tự đoán → `unsupported` rõ ràng
+      (tránh chạy executable tuỳ ý). Chỉ chạy `<pm> run <script>` đã allowlist + **người dùng phê
+      duyệt**; không chạy lệnh tự do từ model/file.
+    - **`running` là heuristic**: tiến trình đã spawn còn sống qua cửa sổ readiness ngắn (không
+      introspect được cửa sổ app). App tự thoát ngay mã 0 → `stopped`; mã ≠ 0 / lỗi spawn → `failed`.
+      Không bao giờ giả "running".
+    - **Không nhúng** app vào Cowork (chạy cửa sổ riêng); **không** mở "thư mục đầu ra" (chưa có safe
+      shell contract). Vẫn không terminal/PTY, Git client, debugger, LSP.
   - **Chỉ sửa được tệp văn bản/mã** (kind `text`); spreadsheet/tài liệu vẫn xem/sửa ở Workspace.
   - **Đổi active workspace khi còn tab Code chưa lưu sẽ reset** (bỏ thay đổi chưa lưu) — giống
     companion Workspace hiện tại; hộp thoại xác nhận trước khi đổi workspace là việc sau (không nằm

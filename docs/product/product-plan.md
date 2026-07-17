@@ -48,8 +48,9 @@ Cowork GHC là desktop AI workspace local-first trên Windows: người dùng k�
 - [x] Rename product label "Claude Code" → "Code"; gỡ chip giả
 - [x] Slice 1 — UI redesign theo visual system Workspace (token/dark, bỏ hai tab, Explorer|Editor/Preview|Agent, Output drawer, composer Cowork)
 - [x] Slice 1 — Runtime web preview thật: static + dev-server (bounded runner, permission bắt buộc, tree-kill, WebContentsView hardened) — ADR 0014
+- [x] Slice 2 — Desktop app launch thật: chạy app **Electron** (Build/Run/Stop/Restart) như tiến trình/cửa sổ riêng (không nhúng), selector Web/Ứng dụng; **tái dùng runner Slice 1** (permission, env curated, tree-kill không mồ côi) — ADR 0015
 - [ ] Packaged PO observation (demo-acceptance) trước khi claim WORKS
-- Deferred: **desktop app launch (Slice 2)**, terminal, Git UI, debugger, LSP (no separate backend/session/runtime for Code)
+- Deferred: app không phải Electron, terminal, Git UI, debugger, LSP, mở thư mục output (no separate backend/session/runtime for Code)
 
 ### Providers
 
