@@ -161,7 +161,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		}
 
 		// For modified files, delete old chunks first (T029)
-		if delta.Action == DeltaModified && delta.Stored != nil {
+		if delta.Action == DeltaModified && delta.Stored != nil && p.chunkStore != nil {
 			if err := p.deleteChunksByLocalFileID(ctx, delta.Stored.ID); err != nil {
 				p.logger.Error("failed to delete old chunks", "error", err, "file_id", delta.Stored.ID)
 			}
@@ -200,7 +200,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		storedFile.ChunkCount = len(chunks)
 
 		// Store chunks using batch insert for performance (T048)
-		if len(chunks) > 0 {
+		if len(chunks) > 0 && p.chunkStore != nil {
 			chunkDataList := make([]metadata.ChunkData, len(chunks))
 			for i, chunk := range chunks {
 				chunkDataList[i] = metadata.ChunkData{

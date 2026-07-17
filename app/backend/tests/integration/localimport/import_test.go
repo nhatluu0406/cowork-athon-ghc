@@ -6,16 +6,20 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
+	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
 	"github.com/rad-system/m365-knowledge-graph/internal/parsers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/xuri/excelize/v2"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // setupIntegrationTestDB creates an in-memory SQLite database with all required tables.
@@ -160,6 +164,7 @@ func TestImport_BasicFlow(t *testing.T) {
 	mockEmbedder := &mockEmbeddingRuntime{}
 
 	// ChunkStore is not used in the processor for testing, so we pass nil
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := localimport.NewProcessor(
 		resolver,
 		extractor,
@@ -167,9 +172,11 @@ func TestImport_BasicFlow(t *testing.T) {
 		mockEmbedder,
 		fileStore,
 		sourceStore,
-		nil, // chunkStore (not used in processor)
+		nil, // chunkStore (skipped in test, not required for Neo4j verification)
 		jobStore,
-		nil, // logger can be nil for testing
+		nil, // neo4jClient (optional for testing)
+		nil, // nlpExtractor (optional for testing)
+		logger,
 	)
 
 	// Step 4: Run the processor
@@ -180,7 +187,7 @@ func TestImport_BasicFlow(t *testing.T) {
 	updatedJob, err := jobStore.Get(ctx, job.ID)
 	require.NoError(t, err)
 	assert.Equal(t, localimport.JobCompleted, updatedJob.Status)
-	assert.Equal(t, 100, updatedJob.Progress.ProgressPct)
+	assert.Equal(t, 100, updatedJob.ProgressPct)
 
 	// Step 6: Verify files were imported
 	files, err := fileStore.ListBySource(ctx, source.ID)
@@ -188,9 +195,9 @@ func TestImport_BasicFlow(t *testing.T) {
 	assert.Equal(t, 5, len(files), "should have imported 5 files")
 
 	// Step 7: Verify each file is marked as Added
-	assert.Greater(t, updatedJob.Progress.FilesAdded, 0, "should have added files")
-	assert.Equal(t, 0, updatedJob.Progress.FilesModified, "first import should have no modified files")
-	assert.Equal(t, 0, updatedJob.Progress.FilesDeleted, "first import should have no deleted files")
+	assert.Greater(t, updatedJob.FilesAdded, 0, "should have added files")
+	assert.Equal(t, 0, updatedJob.FilesModified, "first import should have no modified files")
+	assert.Equal(t, 0, updatedJob.FilesDeleted, "first import should have no deleted files")
 }
 
 // TestImport_DeltaSync tests re-import with modified, added, and deleted files.
@@ -224,9 +231,19 @@ func TestImport_DeltaSync(t *testing.T) {
 	resolver := localimport.NewDeltaResolver(fileStore)
 	extractor := localimport.NewExtractor()
 	chunker := parsers.NewChunker(512, 128)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := localimport.NewProcessor(
-		resolver, extractor, chunker,
-		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+		resolver,
+		extractor,
+		chunker,
+		&mockEmbeddingRuntime{},
+		fileStore,
+		sourceStore,
+		nil, // chunkStore
+		jobStore,
+		nil, // neo4jClient
+		nil, // nlpExtractor
+		logger,
 	)
 
 	// First import should add all 5 files
@@ -236,7 +253,7 @@ func TestImport_DeltaSync(t *testing.T) {
 
 	// Modify first import stats
 	job1Updated, _ := jobStore.Get(ctx, job1.ID)
-	assert.Equal(t, 5, job1Updated.Progress.FilesAdded)
+	assert.Equal(t, 5, job1Updated.FilesAdded)
 
 	// Wait a bit to ensure mtime difference
 	time.Sleep(100 * time.Millisecond)
@@ -255,21 +272,29 @@ func TestImport_DeltaSync(t *testing.T) {
 	// Second import (delta sync)
 	job2, _ := jobStore.Create(ctx, source.ID)
 
-	// Refresh scanner with updated source
-	source2, _ := sourceStore.Get(ctx, source.ID)
-	scanner2 := localimport.NewScanner(*source2)
+	// Refresh processor with resolver and extractor for second import
+	logger2 := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor2 := localimport.NewProcessor(
-		scanner2, resolver, extractor, chunker,
-		&mockEmbeddingRuntime{}, fileStore, &mockChunkStore{}, jobStore, nil,
+		resolver,
+		extractor,
+		chunker,
+		&mockEmbeddingRuntime{},
+		fileStore,
+		sourceStore,
+		nil, // chunkStore
+		jobStore,
+		nil, // neo4jClient
+		nil, // nlpExtractor
+		logger2,
 	)
 
 	processor2.Run(ctx, job2)
 
 	// Verify delta results
 	job2Updated, _ := jobStore.Get(ctx, job2.ID)
-	assert.Equal(t, 1, job2Updated.Progress.FilesAdded, "should have 1 added file")
-	assert.Equal(t, 2, job2Updated.Progress.FilesModified, "should have 2 modified files")
-	assert.Equal(t, 1, job2Updated.Progress.FilesDeleted, "should have 1 deleted file")
+	assert.Equal(t, 1, job2Updated.FilesAdded, "should have 1 added file")
+	assert.Equal(t, 2, job2Updated.FilesModified, "should have 2 modified files")
+	assert.Equal(t, 1, job2Updated.FilesDeleted, "should have 1 deleted file")
 
 	// Verify final file count
 	files2, _ := fileStore.ListBySource(ctx, source.ID)
@@ -309,9 +334,19 @@ func TestImport_WithSubdirectories(t *testing.T) {
 	resolver := localimport.NewDeltaResolver(fileStore)
 	extractor := localimport.NewExtractor()
 	chunker := parsers.NewChunker(512, 128)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := localimport.NewProcessor(
-		resolver, extractor, chunker,
-		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+		resolver,
+		extractor,
+		chunker,
+		&mockEmbeddingRuntime{},
+		fileStore,
+		sourceStore,
+		nil, // chunkStore
+		jobStore,
+		nil, // neo4jClient
+		nil, // nlpExtractor
+		logger,
 	)
 
 	processor.Run(ctx, job)
@@ -343,6 +378,14 @@ func (m *mockEmbeddingRuntime) Embed(ctx context.Context, texts []string) ([][]f
 }
 
 type mockChunkStore struct{}
+
+func (m *mockChunkStore) CreateBatch(ctx context.Context, chunks []metadata.ChunkData) error {
+	return nil
+}
+
+func (m *mockChunkStore) DeleteByLocalFileID(ctx context.Context, localFileID string) error {
+	return nil
+}
 
 func (m *mockChunkStore) InsertChunk(ctx context.Context, chunk interface{}) error {
 	return nil
@@ -518,9 +561,19 @@ func TestImport_AllFormats(t *testing.T) {
 	extractor := localimport.NewExtractor()
 	chunker := parsers.NewChunker(512, 128)
 
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := localimport.NewProcessor(
-		resolver, extractor, chunker,
-		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+		resolver,
+		extractor,
+		chunker,
+		&mockEmbeddingRuntime{},
+		fileStore,
+		sourceStore,
+		nil, // chunkStore
+		jobStore,
+		nil, // neo4jClient
+		nil, // nlpExtractor
+		logger,
 	)
 
 	err = processor.Run(ctx, job)
@@ -547,7 +600,7 @@ func TestImport_AllFormats(t *testing.T) {
 	updatedJob, err := jobStore.Get(ctx, job.ID)
 	require.NoError(t, err)
 	assert.Equal(t, localimport.JobCompleted, updatedJob.Status)
-	assert.Greater(t, updatedJob.Progress.FilesAdded, 0, "should have added files")
+	assert.Greater(t, updatedJob.FilesAdded, 0, "should have added files")
 }
 
 // TestImport_AllFormats_WithSourceType verifies source_type is set correctly for all formats.
@@ -582,9 +635,19 @@ func TestImport_AllFormats_WithSourceType(t *testing.T) {
 	extractor := localimport.NewExtractor()
 	chunker := parsers.NewChunker(512, 128)
 
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := localimport.NewProcessor(
-		resolver, extractor, chunker,
-		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+		resolver,
+		extractor,
+		chunker,
+		&mockEmbeddingRuntime{},
+		fileStore,
+		sourceStore,
+		nil, // chunkStore
+		jobStore,
+		nil, // neo4jClient
+		nil, // nlpExtractor
+		logger,
 	)
 
 	err = processor.Run(ctx, job)
@@ -608,7 +671,7 @@ func TestImport_AllFormats_WithSourceType(t *testing.T) {
 	updatedJob, err := jobStore.Get(ctx, job.ID)
 	require.NoError(t, err)
 	assert.Equal(t, localimport.JobCompleted, updatedJob.Status)
-	assert.Equal(t, 5, updatedJob.Progress.FilesAdded, "should have added all 5 files")
-	assert.Equal(t, 0, updatedJob.Progress.FilesModified, "no files should be modified on first import")
-	assert.Equal(t, 0, updatedJob.Progress.FilesDeleted, "no files should be deleted on first import")
+	assert.Equal(t, 5, updatedJob.FilesAdded, "should have added all 5 files")
+	assert.Equal(t, 0, updatedJob.FilesModified, "no files should be modified on first import")
+	assert.Equal(t, 0, updatedJob.FilesDeleted, "no files should be deleted on first import")
 }
