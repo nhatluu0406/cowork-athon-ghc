@@ -283,7 +283,8 @@ func TestPermissionCache_RefreshTimestamps(t *testing.T) {
 	// Read the old timestamp
 	var oldLastSync time.Time
 	err = db.QueryRowContext(ctx,
-		`SELECT last_sync_at FROM permission_cache WHERE user_id = $1 AND file_id = $2`).Scan(&oldLastSync)
+		`SELECT last_sync_at FROM permission_cache WHERE user_id = $1 AND file_id = $2`,
+		"user-1", fileID).Scan(&oldLastSync)
 	if err != nil {
 		t.Fatalf("query old timestamp: %v", err)
 	}
@@ -301,7 +302,8 @@ func TestPermissionCache_RefreshTimestamps(t *testing.T) {
 	// Verify timestamp was updated
 	var newLastSync time.Time
 	err = db.QueryRowContext(ctx,
-		`SELECT last_sync_at FROM permission_cache WHERE user_id = $1 AND file_id = $2`).Scan(&newLastSync)
+		`SELECT last_sync_at FROM permission_cache WHERE user_id = $1 AND file_id = $2`,
+		"user-1", fileID).Scan(&newLastSync)
 	if err != nil {
 		t.Fatalf("query new timestamp: %v", err)
 	}
