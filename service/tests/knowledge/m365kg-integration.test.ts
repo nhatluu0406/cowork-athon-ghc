@@ -32,6 +32,12 @@ const DEV_PASSWORD = process.env.M365KG_DEV_PASSWORD ?? "system-test-password";
 const NEO4J_PASSWORD = process.env.M365KG_NEO4J_PASSWORD ?? "m365kg_dev_password";
 const BACKEND_PID_FILE = process.env.M365KG_BACKEND_PID_FILE ?? "/tmp/m365kg-systest-backend.pid";
 
+const PG_HOST = process.env.M365KG_PG_HOST ?? "localhost";
+const PG_PORT = process.env.M365KG_PG_PORT ?? "5432";
+const PG_USER = process.env.M365KG_PG_USER ?? "m365kg";
+const PG_PASSWORD = process.env.M365KG_PG_PASSWORD ?? "m365kg_dev_password";
+const PG_DB = process.env.M365KG_PG_DB ?? "m365kg";
+
 const marker = `systest-${Date.now()}`;
 
 function runCypher(cypher: string): void {
@@ -43,6 +49,22 @@ function runCypher(cypher: string): void {
   if (result.status !== 0) {
     throw new Error(`cypher-shell failed (status ${result.status}): ${result.stderr}`);
   }
+}
+
+// Runs with `-t -A` (tuples-only, unaligned) so a single-column, single-row
+// query (e.g. `RETURNING id`) yields just the value on its own line — but
+// psql still emits a trailing command tag ("INSERT 0 1") on the next line
+// even in tuples-only mode, so only the first line is the actual result.
+function runPsql(sql: string): string {
+  const result = spawnSync(
+    "psql",
+    ["-h", PG_HOST, "-p", PG_PORT, "-U", PG_USER, "-d", PG_DB, "-t", "-A", "-c", sql],
+    { encoding: "utf-8", env: { ...process.env, PGPASSWORD: PG_PASSWORD } },
+  );
+  if (result.status !== 0) {
+    throw new Error(`psql failed (status ${result.status}): ${result.stderr}`);
+  }
+  return (result.stdout.split("\n")[0] ?? "").trim();
 }
 
 function readBackendPid(): number {
@@ -96,9 +118,27 @@ if (!RUN) {
   test("T3.2: real query -> real Neo4j-seeded citation appears; getGraph() returns real nodes", async () => {
     const personName = `${marker}-Alice`;
     const projectName = `${marker}-ProjectX`;
+
+    // Permission scoping is fail-closed (INVARIANT-1, handlers_graph.go): a
+    // node is only visible to a user if its source_file_id is in that user's
+    // permission_cache. Seed a real m365_files row + a permission_cache grant
+    // for DEV_USERNAME, then stamp the same file_id onto the Neo4j fixture —
+    // otherwise the (correct) deny-all-by-default behavior hides this test's
+    // own fixture, independent of whether Neo4j has the data.
+    const fileId = runPsql(
+      `INSERT INTO m365_files (source_type, source_id, file_name, last_modified) ` +
+        `VALUES ('systest', '${marker}', '${marker}.txt', now()) RETURNING id;`,
+    );
+    runPsql(
+      `INSERT INTO permission_cache (user_id, file_id, permission) ` +
+        `VALUES ('${DEV_USERNAME}', ${fileId}, 'read');`,
+    );
+
     runCypher(`
       MERGE (p:Person {displayName: "${personName}"})
+      SET p.source_file_id = ${fileId}
       MERGE (proj:Project {name: "${projectName}"})
+      SET proj.source_file_id = ${fileId}
       MERGE (p)-[:OWNS]->(proj)
     `);
     try {
@@ -125,6 +165,8 @@ if (!RUN) {
         MATCH (n) WHERE n.displayName = "${personName}" OR n.name = "${projectName}"
         DETACH DELETE n
       `);
+      runPsql(`DELETE FROM permission_cache WHERE user_id = '${DEV_USERNAME}' AND file_id = ${fileId};`);
+      runPsql(`DELETE FROM m365_files WHERE id = ${fileId};`);
     }
   });
 
