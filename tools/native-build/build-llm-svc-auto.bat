@@ -4,7 +4,7 @@ rem Cowork GHC - build-llm-svc-auto.bat : Compile Rust LLM service with automati
 rem This script automatically configures the MSVC environment before building.
 rem Requires: Rust/cargo on PATH, Visual Studio Build Tools 2026 installed.
 
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - build-llm-svc (auto setup)
 set "LLM_SVC_DIR=%ROOT%\app\llm-svc"
 set "OUT=%LLM_SVC_DIR%\target\x86_64-pc-windows-msvc\release\llm-svc.exe"

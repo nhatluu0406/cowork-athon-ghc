@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 rem Reset demo-safe local state without deleting source code or Windows keyring credentials.
 rem Clears: runtime temp, packaged app user profile under %APPDATA%\Cowork GHC (if present).
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - demo-reset
 
 echo [Cowork GHC] demo-reset: stopping tracked processes...

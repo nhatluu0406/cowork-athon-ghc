@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 rem Create a demo workspace with representative sample files for Workspace Companion.
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 set "DEMO=%ROOT%\demo-workspace"
 title Cowork GHC - demo-seed
 

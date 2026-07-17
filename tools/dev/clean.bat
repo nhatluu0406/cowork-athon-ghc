@@ -4,7 +4,7 @@ rem Cowork GHC - clean.bat : delete generated/downloaded data ONLY. Double-click
 rem Preserves source, docs, .git, .claude, .agents, credentials, and user workspace.
 rem See scripts\cleanup-manifest.json.
 rem Automated test mode: clean.bat --yes
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - clean
 
 where node >nul 2>nul
