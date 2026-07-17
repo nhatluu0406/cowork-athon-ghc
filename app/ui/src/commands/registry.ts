@@ -96,6 +96,19 @@ export function createDefaultRegistry(): CommandRegistry {
     type: "client_side",
     handler: async (ctx) => {
       const args = ctx.arguments;
+      try {
+        const status = await ctx.client.remoteStatus();
+        if (!status.enabled) {
+          ctx.appendAssistantMessage("Remote chưa bật. Khởi động lại với CGHC_REMOTE_ENABLED=1 (và CGHC_REMOTE_LAN=1 để dùng cùng Wi-Fi).");
+          ctx.refreshUI();
+          return;
+        }
+      } catch (err) {
+        ctx.appendAssistantMessage("Remote chưa bật. Khởi động lại với CGHC_REMOTE_ENABLED=1 (và CGHC_REMOTE_LAN=1 để dùng cùng Wi-Fi).");
+        ctx.refreshUI();
+        return;
+      }
+
       if (args[0]?.toLowerCase() === "off") {
         await ctx.client.remoteRevokeAll();
         ctx.appendAssistantMessage("✅ Đã tắt toàn bộ kênh remote và thu hồi tất cả các token thiết bị.");
