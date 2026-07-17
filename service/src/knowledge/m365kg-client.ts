@@ -297,7 +297,7 @@ export function createM365KgClient(options: KnowledgeSourceClientOptions): Knowl
         (result) => {
           if (result.status >= 200 && result.status < 300) {
             const body = result.body as { ok: boolean; message?: string };
-            return { ok: body.ok, message: body.message };
+            return { ok: body.ok, message: body.message ?? "" };
           }
           return { ok: false, message: `HTTP ${result.status}` };
         },
