@@ -91,6 +91,14 @@ packaged Windows app). Desktop app launch **không** thuộc slice này (Slice 2
 - [ ] Không điều hướng ra remote origin / không popup / không download từ trang preview.
 - [ ] Agent sửa code của dự án đang preview → làm mới/không mất dirty đúng như multi-file editor.
 - Note: nhúng bằng WebContentsView (giữ CSP renderer). Desktop app launch là Slice 2.
+- **Acceptance Slice 1 (tự động, đã chạy trên máy này):** test tiến trình **thật**
+  (`service/tests/runtime-preview-real-process.test.ts`, Windows-only) dựng thật
+  `cmd.exe → npm → node → cháu`, rồi kiểm chứng: đạt `running` với **env curated** (rớt provider/vault
+  secret, giữ PATH + steering), **redact** token/Authorization/URL-userinfo trong Output, **stop
+  không để mồ côi** (cả cây bị taskkill), và script crash → `failed`. Bộ test này **phát hiện một lỗi
+  mồ côi thật** (graceful-kill riêng `cmd.exe` bỏ mồ côi cây con) và lỗi đã được **sửa** (tree-first
+  termination). Fixtures cho các bước PO ở trên: xem `po-fixtures/` (README kèm bảng ánh xạ).
+  Các ô [ ] còn lại vẫn cần **PO quan sát trên packaged app** (render, dialog, Task Manager).
 
 ## Settings / Skills / Inspector
 
