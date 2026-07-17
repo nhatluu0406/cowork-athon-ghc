@@ -1,0 +1,2 @@
+- [nil vs []int{} permission-filter misdiagnosis pattern](pattern_nil_permission_filter.md) — fail-closed semantics, recurring misreading risk
+- [BUG-001 graph permission investigation](project_bug_001_graph_permission_investigation.md) — closed Not a Bug 2026-07-17; live uncommitted-fix risk flagged, re-verify HEAD before trusting this

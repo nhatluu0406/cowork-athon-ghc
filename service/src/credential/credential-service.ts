@@ -57,6 +57,13 @@ export interface CredentialService {
    * child spawn env. Throws {@link CredentialNotFoundError} when the handle is dangling.
    */
   resolveInjection(ref: CredentialRef, spec: ProviderEnvSpec): Promise<ProviderKeyInjection>;
+  /**
+   * Resolve a handle to its raw string value for in-process use (e.g., HTTP headers).
+   * Registers the value with the scrubber. Throws {@link CredentialNotFoundError} when
+   * the handle is dangling. Use this for non-spawn-env credentials; prefer {@link resolveInjection}
+   * for child-process credentials (it includes label context for the scrubber).
+   */
+  resolveValue(ref: CredentialRef): Promise<string>;
   /** True when the handle resolves to a stored entry (no value is exposed). */
   has(ref: CredentialRef): Promise<boolean>;
   /** Remove the stored key for a handle; `true` when one existed. */
@@ -106,6 +113,15 @@ export function createCredentialService(options: CredentialServiceOptions): Cred
 
     async has(ref: CredentialRef): Promise<boolean> {
       return (await store.get(ref.account)) !== null;
+    },
+
+    async resolveValue(ref: CredentialRef): Promise<string> {
+      const value = await store.get(ref.account);
+      if (value === null) throw new CredentialNotFoundError(ref.account);
+      // Register with the scrubber so any downstream sink (logs, errors, diagnostics) masks it.
+      scrubber.register(value);
+      audit(`credential_resolved account=${ref.account}`);
+      return value;
     },
 
     async remove(ref: CredentialRef): Promise<boolean> {
