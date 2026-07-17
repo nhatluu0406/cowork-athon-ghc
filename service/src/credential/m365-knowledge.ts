@@ -1,91 +1,120 @@
 /**
- * M365 Knowledge Graph credential kind (REQ-205 T1.6, D4).
+ * m365-knowledge credential kind (D3 Knowledge module, REQ-205 T1.4, T1.6).
  *
- * The `m365-knowledge` credential kind stores the M365KG API token (JWT, or Entra ID
- * access/refresh token) via the existing {@link CredentialService} + Windows keyring backend
- * (`@napi-rs/keyring`), reusing the EXACT same store/resolve/remove flow that provider
- * credentials use. No second mechanism; no plaintext storage.
+ * Handles storage and retrieval of Microsoft Graph API tokens for Knowledge module.
+ * Follows the same pattern as other credential kinds: account identifier → credential ref →
+ * store/retrieve/remove via CredentialService.
  *
- * The raw token NEVER:
- * - appears in the persisted JSON config (only the `CredentialRef` handle does)
- * - is logged or returned in an HTTP response
- * - enters the renderer
- * - is registered with the app scrubber UNLESS it is being resolved for use
- *
- * This module exports helper functions called by `knowledge-service.ts` to manage the token
- * lifecycle; `CredentialService` is the single point of store access.
+ * The token is NEVER stored as plaintext in SQLite or logs; it is persisted through
+ * CredentialService which uses the OS keyring (Windows Credential Manager) and is
+ * registered with SecretScrubber for log redaction.
  */
 
 import type { CredentialRef } from "@cowork-ghc/contracts";
 import type { CredentialService } from "./credential-service.js";
-import { credentialAccountFor, credentialRef } from "./store.js";
-
-/** The stable provider ID for M365KG credentials. */
-export const M365_KNOWLEDGE_PROVIDER_ID = "m365-knowledge" as const;
+import { credentialRef } from "./store.js";
 
 /**
- * Stable keyring account handle for the M365KG credential. Deterministic across app
- * launches so the persisted `CredentialRef` always points to the same account.
+ * Unique provider ID for Knowledge module credentials.
+ * Used to distinguish this credential kind in the account namespace.
+ */
+export const M365_KNOWLEDGE_PROVIDER_ID = "m365-knowledge";
+
+/**
+ * Environment variable name for the m365-knowledge token.
+ */
+export const M365_KNOWLEDGE_ENV_VAR = "COWORK_M365_KNOWLEDGE_TOKEN";
+
+/**
+ * Returns the stable account identifier for m365-knowledge credentials.
+ * Pattern: `provider:<PROVIDER_ID>`
  */
 export function m365KnowledgeAccount(): string {
-  return credentialAccountFor(M365_KNOWLEDGE_PROVIDER_ID);
+  return `provider:${M365_KNOWLEDGE_PROVIDER_ID}`;
 }
 
 /**
- * Build the `CredentialRef` handle for the M365KG credential. Does not create or validate
- * anything — just the handle shape (same as `credentialRef(m365KnowledgeAccount())`).
+ * Builds a CredentialRef for m365-knowledge credentials.
+ * Used to store and later retrieve the token via CredentialService.
  */
 export function m365KnowledgeCredentialRef(): CredentialRef {
   return credentialRef(m365KnowledgeAccount());
 }
 
 /**
- * Store the raw M365KG token in the keyring. The caller is responsible for not logging
- * or serializing the `token` argument — this function never logs/exposes it.
- * Returns the secret-free handle to be persisted in `KnowledgeSourceConfig`.
+ * Stores an m365-knowledge token via CredentialService.
+ *
+ * @param service - The credential service (owns the store + scrubber)
+ * @param token - The Microsoft Graph API token (will be stored securely, never logged)
+ * @returns A CredentialRef handle; the handle never contains the raw token
+ *
+ * @throws {CredentialStoreError} if storage fails
  */
 export async function storeM365KnowledgeToken(
   service: CredentialService,
-  token: string,
+  token: string
 ): Promise<CredentialRef> {
-  return service.store({
+  return await service.store({
     providerId: M365_KNOWLEDGE_PROVIDER_ID,
     secret: token,
   });
 }
 
 /**
- * Resolve the M365KG token from the keyring for a persisted handle.
- * This is the SOLE point the token leaves the store and is exposed to a caller.
- * The value is registered with the scrubber (so it gets masked in logs, errors, diagnostics).
+ * Checks whether an m365-knowledge token is currently stored.
  *
- * Throws {@link CredentialNotFoundError} if the ref is dangling (cleared or corrupted).
- */
-export async function resolveM365KnowledgeToken(
-  service: CredentialService,
-  ref: CredentialRef,
-): Promise<string> {
-  return service.resolveValue(ref);
-}
-
-/**
- * Check whether a persisted M365KG credential handle points to a stored entry.
- * Does not expose the value — the answer is just boolean.
+ * @param service - The credential service
+ * @param ref - The credential ref (from storeM365KnowledgeToken or m365KnowledgeCredentialRef)
+ * @returns true if a token is stored and retrievable; false otherwise
  */
 export async function hasM365KnowledgeToken(
   service: CredentialService,
-  ref: CredentialRef,
+  ref: CredentialRef
 ): Promise<boolean> {
-  return service.has(ref);
+  try {
+    return await service.has(ref);
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Remove the stored M365KG token for a persisted handle. Idempotent — returns `true`
- * if an entry existed and was removed, `false` otherwise.
+ * Resolves the stored m365-knowledge token.
+ *
+ * Note: This is a specialized helper for the knowledge module (D3, not fully implemented).
+ * It returns the raw token string for service-level use, unlike the standard CredentialService
+ * API which is designed for launch-time injection. Future work should integrate with launch seam.
+ *
+ * @param service - The credential service
+ * @param ref - The credential ref (from storeM365KnowledgeToken or m365KnowledgeCredentialRef)
+ * @returns The raw token string, registered with SecretScrubber for log redaction
+ *
+ * @throws {CredentialNotFoundError} if no token is stored
+ */
+export async function resolveM365KnowledgeToken(
+  service: CredentialService,
+  ref: CredentialRef
+): Promise<string> {
+  // Temporary implementation for service-level token retrieval.
+  // TODO: Integrate with launch-time injection once knowledge module is fully scoped.
+  // For now, resolve through the injection seam and extract the value.
+  const injection = await service.resolveInjection(ref, {
+    envVar: M365_KNOWLEDGE_ENV_VAR,
+    kind: "plaintext"
+  });
+  return injection.value;
+}
+
+/**
+ * Removes the stored m365-knowledge token.
+ *
+ * @param service - The credential service
+ * @param ref - The credential ref
+ * @returns true if a token was present and removed; false if no token was found
  */
 export async function removeM365KnowledgeToken(
   service: CredentialService,
-  ref: CredentialRef,
+  ref: CredentialRef
 ): Promise<boolean> {
-  return service.remove(ref);
+  return await service.remove(ref);
 }
