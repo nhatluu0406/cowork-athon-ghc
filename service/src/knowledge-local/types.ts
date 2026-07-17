@@ -95,3 +95,36 @@ export const KNOWLEDGE_GRAPH_MAX_NODES = 120;
 
 /** Default max search hits returned. */
 export const KNOWLEDGE_SEARCH_DEFAULT_LIMIT = 30;
+
+// ---- Client-facing DTOs (types-only; safe to import from the renderer) ---------------------
+
+/** Non-secret index status projection returned by the local-knowledge router. */
+export interface KnowledgeIndexView {
+  readonly status: KnowledgeIndexStatus;
+  readonly hasWorkspace: boolean;
+  readonly documentCount: number;
+  readonly chunkCount: number;
+  readonly nodeCount: number;
+  readonly edgeCount: number;
+  readonly lastIndexedAt: string | null;
+  readonly error: string | null;
+  /** Present only while a job is running, so the renderer can show real progress. */
+  readonly indexing: { readonly processed: number; readonly total: number | null } | null;
+}
+
+export interface KnowledgeGraphApiNode {
+  readonly id: string;
+  readonly label: string;
+  readonly kind: string;
+  readonly relativePath: string | null;
+}
+export interface KnowledgeGraphApiEdge {
+  readonly from: string;
+  readonly to: string;
+  readonly type: string;
+}
+export interface KnowledgeGraphApiResult {
+  readonly nodes: readonly KnowledgeGraphApiNode[];
+  readonly edges: readonly KnowledgeGraphApiEdge[];
+  readonly truncated: boolean;
+}
