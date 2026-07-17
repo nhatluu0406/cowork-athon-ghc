@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-15"
+updated_at: "2026-07-17"
 ---
 
 # Roadmap V2 — basic-first, one wave at a time
@@ -55,27 +55,42 @@ updated_at: "2026-07-15"
 
 ## WAVE 4 — Workspace PDF and live refresh
 
-- [ ] Packaged PDF preview.
-- [ ] Auto-refresh tree after verified mutation.
-- [ ] Auto-open created/modified file when safe.
-- [ ] Dirty-edit conflict UX.
-- [ ] Explicit current-file context in companion chat.
+- [x] Packaged PDF preview. (Chromium PDFium; default no-toolbar + fit-to-width. Needed:
+      `plugins:true`, `style-src 'unsafe-inline'`, and exempting `chrome-extension://` from the
+      CSP header stamp so the built-in viewer keeps its own policy.)
+- [x] Auto-refresh tree after verified mutation.
+- [x] Auto-open created/modified file when safe (≤1 file per turn; never outside-workspace/secret/unsupported/over a dirty buffer).
+- [x] Dirty-edit conflict UX (keep-mine + persistent overwrite warning / reload-from-disk warns of edit loss).
+- [x] Explicit current-file context in companion chat.
+- [x] Verified-delete of the open file clears the preview and blocks accidental recreate.
+- [x] Code-file viewing: syntax highlight (highlight.js) + line numbers, read-only with an edit toggle.
+- [x] Office preview (bounded follow-up): read-only multi-sheet `.xlsx` navigation (visible-sheet
+      tabs, hidden sheets filtered, read-only).
+- [x] Office preview — high-fidelity `.pptx` (packaged PO-observed 2026-07-17, incl. embedded images):
+      read-only slide rendering (text/images/shapes/tables/charts/theme as HTML/SVG) via a local,
+      CSP-safe engine (`@aiden0z/pptx-renderer`, Apache-2.0), prev/next + "Slide X / Y", fit-to-panel,
+      degrades to a text-first fallback on failure. `.ppt` legacy unsupported; animation/macro/OLE/
+      media/EMF not rendered; malformed/encrypted/>8 MiB → unsupported. No Office editor, no
+      cloud/LibreOffice conversion, no full fidelity.
 
-## WAVE 5 — Inspector Phase 1
+## WAVE 5 — Inspector Phase 1 (PO-observed 2026-07-17)
 
-- [ ] Kế hoạch.
-- [ ] Hoạt động.
-- [ ] Tệp / File Work Review.
-- [ ] No raw runtime payloads.
-- [ ] Clear loading/error/empty states.
+- [x] Kế hoạch. (Cowork-only pane; folded from normalized `plan` EV events.)
+- [x] Hoạt động. (Normalized EV timeline; token/SSE/raw frames never reach the renderer.)
+- [x] Tệp / File Work Review. (Reuses the one verified-mutation File Work Review engine.)
+- [x] No raw runtime payloads. (Server-side EV mapper/reducer; renderer sees folded shapes only.)
+- [x] Clear loading/error/empty states + persistence across reopen.
 
-## WAVE 6 — Logging and local telemetry
+## WAVE 6 — Logging and local telemetry (PO-observed 2026-07-17)
 
-- [ ] Detailed local structured logs with rotation/redaction.
-- [ ] Local-only aggregate telemetry.
-- [ ] Export/clear actions.
-- [ ] No network telemetry.
-- [ ] Diagnostics documentation and acceptance.
+- [x] Detailed local structured logs with rotation/redaction. (Rotating JSON-lines file sink under
+      `data/logs`; every record scrubbed before disk; "Ghi log chi tiết" drives service debug logs.)
+- [x] Local-only aggregate telemetry. (SQLite counters, migration id 3; fixed allowlist; toggle
+      gates collection; counts structural facts only — no content/paths/prompts/credentials.)
+- [x] Export/clear actions. (`/v1/diagnostics` + shell save-dialog IPC; redacted export bundle;
+      per-target clear with confirmation in Settings → Chẩn đoán.)
+- [x] No network telemetry. (No egress anywhere in the diagnostics modules.)
+- [x] Diagnostics documentation and acceptance.
 
 ## WAITING
 

@@ -22,20 +22,40 @@ function parseCsp(policy: string): Map<string, string> {
   return map;
 }
 
-test("RENDERER_CSP forbids unsafe-inline and unsafe-eval anywhere", () => {
-  assert.doesNotMatch(RENDERER_CSP, /unsafe-inline/);
+test("RENDERER_CSP never allows unsafe-eval, and unsafe-inline ONLY for style-src", () => {
+  // unsafe-eval is forbidden everywhere.
   assert.doesNotMatch(RENDERER_CSP, /unsafe-eval/);
+  const csp = parseCsp(RENDERER_CSP);
+  // The security-critical script directive stays strict — no inline scripts (the real XSS lever).
+  assert.equal(csp.get("script-src"), "'self'", "script-src must remain 'self' only");
+  assert.ok(
+    !(csp.get("script-src") ?? "").includes("unsafe-inline"),
+    "script-src must never allow unsafe-inline",
+  );
+  assert.ok(
+    !(csp.get("default-src") ?? "").includes("unsafe-inline"),
+    "default-src must never allow unsafe-inline",
+  );
+  // style-src is the ONLY place unsafe-inline is permitted — required by Chromium's built-in PDF
+  // viewer (PDFium) whose inline layout styles would otherwise be refused, blanking the preview.
+  assert.match(csp.get("style-src") ?? "", /unsafe-inline/, "style-src must allow unsafe-inline for PDFium");
 });
 
 test("RENDERER_CSP sets the required restrictive directives", () => {
   const csp = parseCsp(RENDERER_CSP);
   assert.equal(csp.get("default-src"), "'self'");
   assert.equal(csp.get("script-src"), "'self'");
+  assert.equal(csp.get("style-src"), "'self' 'unsafe-inline'");
   assert.equal(csp.get("object-src"), "'none'");
   assert.equal(csp.get("base-uri"), "'none'");
   assert.equal(csp.get("frame-ancestors"), "'none'");
   assert.equal(csp.get("form-action"), "'none'");
   assert.equal(csp.get("frame-src"), "blob:");
+  // `img-src` must allow `blob:` so the local PPTX engine can render a deck's embedded images
+  // (decoded to same-origin blob: object URLs). Guards against a silent regression that would blank
+  // slide images while text/shapes still render.
+  assert.match(csp.get("img-src") ?? "", /\bblob:/, "img-src must allow blob: for workspace image previews");
+  assert.match(csp.get("img-src") ?? "", /'self'/, "img-src must keep 'self'");
 });
 
 test("RENDERER_CSP connect-src is loopback-only — not '*' and no public origin", () => {
@@ -79,7 +99,7 @@ test("installCsp merges the CSP header without clobbering other headers", () => 
 
   let result: { responseHeaders?: Record<string, unknown> } | undefined;
   captured(
-    { responseHeaders: { "X-Existing": ["keep-me"] } },
+    { url: "app://cowork/index.html", responseHeaders: { "X-Existing": ["keep-me"] } },
     (r) => {
       result = r as typeof result;
     },
@@ -87,4 +107,42 @@ test("installCsp merges the CSP header without clobbering other headers", () => 
 
   assert.deepEqual(result?.responseHeaders?.["Content-Security-Policy"], [RENDERER_CSP]);
   assert.deepEqual(result?.responseHeaders?.["X-Existing"], ["keep-me"]);
+});
+
+test("installCsp does NOT override the built-in PDF viewer's chrome-extension CSP", () => {
+  let captured: ((details: unknown, cb: (r: unknown) => void) => void) | undefined;
+  const fakeSession = {
+    webRequest: {
+      onHeadersReceived(cb: (details: unknown, callback: (r: unknown) => void) => void) {
+        captured = cb;
+      },
+    },
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  installCsp(fakeSession as any);
+  assert.ok(captured);
+
+  // A chrome-extension:// response (Chromium's PDFium viewer) keeps its own CSP untouched.
+  let extResult: { responseHeaders?: Record<string, unknown> } | undefined;
+  captured(
+    {
+      url: "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.html",
+      responseHeaders: { "Content-Security-Policy": ["extension-own-policy"] },
+    },
+    (r) => {
+      extResult = r as typeof extResult;
+    },
+  );
+  assert.deepEqual(
+    extResult?.responseHeaders?.["Content-Security-Policy"],
+    ["extension-own-policy"],
+    "the PDF viewer extension CSP must be left as-is",
+  );
+
+  // An app:// response still gets the renderer CSP stamped.
+  let appResult: { responseHeaders?: Record<string, unknown> } | undefined;
+  captured({ url: "app://cowork/index.html", responseHeaders: {} }, (r) => {
+    appResult = r as typeof appResult;
+  });
+  assert.deepEqual(appResult?.responseHeaders?.["Content-Security-Policy"], [RENDERER_CSP]);
 });

@@ -12,7 +12,7 @@ import type { RunningService } from "../start.js";
 import type { BoundaryRouter } from "../boundary/contract.js";
 import type { CredentialStore } from "../credential/index.js";
 import type { CredentialService } from "../credential/index.js";
-import type { SecretScrubber } from "../diagnostics/index.js";
+import type { RedactingLogger, SecretScrubber, TelemetryStore } from "../diagnostics/index.js";
 import type { SettingsFs, SettingsStore } from "../diagnostics/index.js";
 import type {
   DnsResolver,
@@ -61,6 +61,11 @@ export interface CoworkServiceOptions extends ServiceOptions {
    * {@link dbPath} when both are present. Caller retains close responsibility when injecting.
    */
   readonly sqliteDatabase?: SqliteDatabase;
+  /**
+   * Directory for local structured log files (Wave 6). Default: `<dirname(dbPath)>/logs` when a
+   * database path is set; console-only otherwise. Tests inject a temp dir.
+   */
+  readonly logDir?: string;
   /** Persistence seam for the settings store. Default: node fs or SQLite when {@link dbPath} is set. */
   readonly settingsFs?: SettingsFs;
   /** Settings file path when {@link settingsFs} is not supplied. Default: `.runtime/settings.json`. */
@@ -156,6 +161,10 @@ export interface CoworkServiceOptions extends ServiceOptions {
 /** The wired singletons exposed for the shell, tests, and the Tier 2 live supervisor to attach. */
 export interface CoworkServiceDeps {
   readonly scrubber: SecretScrubber;
+  /** The local structured logger (redacting; file sink under data/logs when packaged). */
+  readonly logger: RedactingLogger;
+  /** Local aggregate telemetry (present only when a SQLite database is open). */
+  readonly telemetry?: TelemetryStore;
   readonly credentialService: CredentialService;
   readonly providerPort: ProviderPort;
   readonly modelConfig: ModelConfigService;

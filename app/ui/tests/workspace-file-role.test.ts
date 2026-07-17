@@ -13,7 +13,25 @@ test("detectWorkspaceFileRole maps supported extensions", () => {
   assert.equal(detectWorkspaceFileRole("scan.pdf"), "pdf");
   assert.equal(detectWorkspaceFileRole("brief.docx"), "docx");
   assert.equal(detectWorkspaceFileRole("budget.xlsx"), "spreadsheet");
+  assert.equal(detectWorkspaceFileRole("deck.pptx"), "presentation");
   assert.equal(detectWorkspaceFileRole("app.exe"), "unsupported");
+});
+
+test("only modern .pptx previews; legacy .ppt stays unsupported", () => {
+  assert.equal(detectWorkspaceFileRole("Report.PPTX"), "presentation");
+  assert.equal(detectWorkspaceFileRole("legacy.ppt"), "unsupported");
+  // .pptx is safe to auto-open; .ppt is not (unsupported role).
+  assert.equal(isAutoOpenSafe("slides/deck.pptx"), true);
+  assert.equal(isAutoOpenSafe("slides/legacy.ppt"), false);
+});
+
+test("detectWorkspaceFileRole treats code files as editable text", () => {
+  for (const p of ["main.py", "styles.css", "engine.cpp", "app.ts", "config.json"]) {
+    assert.equal(detectWorkspaceFileRole(p), "text", `${p} should be text`);
+  }
+  // Secret extensions must stay unsupported (never previewed as text).
+  assert.equal(detectWorkspaceFileRole("server.pem"), "unsupported");
+  assert.equal(detectWorkspaceFileRole("id.key"), "unsupported");
 });
 
 test("isSecretLikeWorkspacePath flags credential-bearing paths", () => {

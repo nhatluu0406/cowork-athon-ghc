@@ -3,12 +3,40 @@
  * typed preferences and sends narrow update requests.
  */
 
-import type { ServiceClient, SettingsView, ThemePreference } from "./service-client.js";
+import type {
+  DiagnosticsClearTarget,
+  DiagnosticsStatus,
+  ServiceClient,
+  SettingsView,
+  ThemePreference,
+} from "./service-client.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { getShellBridge } from "./bridge.js";
 
 export interface SettingsViewDeps {
-  readonly client: Pick<ServiceClient, "getSettings" | "updateGeneral">;
+  readonly client: Pick<
+    ServiceClient,
+    "getSettings" | "updateGeneral" | "getDiagnostics" | "clearDiagnostics" | "exportDiagnostics"
+  >;
+}
+
+/** Human labels for the aggregate telemetry counters shown in Settings. */
+const TELEMETRY_LABELS: Readonly<Record<string, string>> = {
+  app_launches: "Lượt mở ứng dụng",
+  chat_turns_completed: "Lượt chat hoàn tất",
+  chat_turns_failed: "Lượt chat thất bại",
+  permission_approved: "Quyền được duyệt",
+  permission_denied: "Quyền bị từ chối",
+  file_created: "Tệp được tạo",
+  file_modified: "Tệp được sửa",
+  file_deleted: "Tệp bị xoá",
+  errors: "Lỗi (đã ẩn nội dung)",
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -125,18 +153,27 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
       "Chẩn đoán",
       "Các tuỳ chọn hỗ trợ debug cục bộ. Không cần bật trong sử dụng thông thường.",
     );
+    const diagnosticsPanel = el("div", "settings-diagnostics-panel");
     diagnostics.body.append(
       switchRow(
         "Ghi log chi tiết",
-        "Ghi thêm dữ liệu kỹ thuật vào log cục bộ.",
+        "Ghi thêm dữ liệu kỹ thuật vào log cục bộ (đã ẩn khoá/secret). Lưu trong máy, không gửi ra ngoài.",
         view.general.verboseLogging,
-        (checked) => run("Đang lưu log", () => deps.client.updateGeneral({ verboseLogging: checked })),
+        async (checked) => {
+          await run("Đang lưu log", () => deps.client.updateGeneral({ verboseLogging: checked }));
+          void refreshDiagnostics(diagnosticsPanel);
+        },
       ),
       switchRow(
         "Telemetry cục bộ",
-        "Thu thập số liệu vận hành trên máy; không gửi ra ngoài.",
+        "Đếm số liệu vận hành dạng tổng hợp trên máy — chỉ lưu trên máy, không gửi ra ngoài.",
         view.general.telemetryEnabled,
-        (checked) => run("Đang lưu telemetry", () => deps.client.updateGeneral({ telemetryEnabled: checked })),
+        async (checked) => {
+          await run("Đang lưu telemetry", () =>
+            deps.client.updateGeneral({ telemetryEnabled: checked }),
+          );
+          void refreshDiagnostics(diagnosticsPanel);
+        },
       ),
       switchRow(
         "DevTools",
@@ -144,9 +181,118 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
         view.general.devtoolsEnabled,
         (checked) => run("Đang lưu DevTools", () => deps.client.updateGeneral({ devtoolsEnabled: checked })),
       ),
+      diagnosticsPanel,
     );
 
     generalBox.append(appearance.root, diagnostics.root);
+    void refreshDiagnostics(diagnosticsPanel);
+  }
+
+  async function refreshDiagnostics(panel: HTMLElement): Promise<void> {
+    let data: DiagnosticsStatus;
+    try {
+      data = await deps.client.getDiagnostics();
+    } catch {
+      panel.replaceChildren(
+        el("p", "settings-diagnostics-panel__note", "Chưa có dữ liệu chẩn đoán."),
+      );
+      return;
+    }
+    panel.replaceChildren();
+
+    // Logging status + clear.
+    const logRow = el("div", "settings-diagnostics-panel__row");
+    logRow.append(
+      el(
+        "span",
+        "settings-diagnostics-panel__label",
+        data.logging.toFile
+          ? `Log cục bộ: ${formatBytes(data.logging.sizeBytes)}`
+          : "Log: chỉ hiển thị ở console",
+      ),
+    );
+    if (data.logging.toFile) {
+      logRow.append(
+        actionButton("Xoá log", () => confirmClear("logs", "Xoá toàn bộ tệp log cục bộ?", panel)),
+      );
+    }
+    panel.append(logRow);
+
+    // Telemetry summary + export + clear.
+    const counters = Object.entries(data.telemetry.counters).filter(([, v]) => v > 0);
+    const telHead = el("div", "settings-diagnostics-panel__row");
+    telHead.append(
+      el(
+        "span",
+        "settings-diagnostics-panel__label",
+        data.telemetry.enabled ? "Telemetry: đang thu thập" : "Telemetry: đang tắt",
+      ),
+      actionButton("Xuất chẩn đoán", exportDiagnostics),
+      actionButton("Xoá số liệu", () =>
+        confirmClear("telemetry", "Xoá toàn bộ số liệu telemetry cục bộ?", panel),
+      ),
+    );
+    panel.append(telHead);
+
+    if (counters.length === 0) {
+      panel.append(
+        el(
+          "p",
+          "settings-diagnostics-panel__note",
+          data.telemetry.enabled ? "Chưa có số liệu." : "Bật telemetry để bắt đầu đếm.",
+        ),
+      );
+    } else {
+      const list = el("ul", "settings-diagnostics-panel__counters");
+      for (const [name, value] of counters) {
+        const item = el("li", "settings-diagnostics-panel__counter");
+        item.append(
+          el("span", "settings-diagnostics-panel__counter-name", TELEMETRY_LABELS[name] ?? name),
+          el("span", "settings-diagnostics-panel__counter-value", String(value)),
+        );
+        list.append(item);
+      }
+      panel.append(list);
+    }
+  }
+
+  function actionButton(label: string, onClick: () => void | Promise<void>): HTMLButtonElement {
+    const btn = el("button", "settings-diagnostics-panel__btn", label) as HTMLButtonElement;
+    btn.type = "button";
+    btn.addEventListener("click", () => void onClick());
+    return btn;
+  }
+
+  async function confirmClear(
+    target: DiagnosticsClearTarget,
+    message: string,
+    panel: HTMLElement,
+  ): Promise<void> {
+    if (typeof window.confirm === "function" && !window.confirm(message)) return;
+    setStatus("Đang xoá…");
+    try {
+      await deps.client.clearDiagnostics(target);
+      setStatus("Đã xoá");
+      window.setTimeout(() => setStatus(""), 1500);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Không xoá được.");
+    }
+    void refreshDiagnostics(panel);
+  }
+
+  async function exportDiagnostics(): Promise<void> {
+    setStatus("Đang xuất…");
+    try {
+      const blob = await deps.client.exportDiagnostics();
+      const saved = await getShellBridge().saveTextFile({
+        filename: blob.filename,
+        content: blob.json,
+      });
+      setStatus(saved.canceled ? "Đã huỷ xuất." : "Đã xuất chẩn đoán.");
+      window.setTimeout(() => setStatus(""), 1800);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Không xuất được.");
+    }
   }
 
   void (async () => {

@@ -34,6 +34,7 @@ export type ProductIconName =
   | "check"
   | "save"
   | "arrow-left"
+  | "arrow-right"
   | "more"
   | "activity"
   | "panel"
@@ -81,6 +82,7 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   check: ["M5 12l4 4L19 6"],
   save: ["M5 4h12l2 2v14H5V4Z", "M8 4v6h8V4M8 16h8"],
   "arrow-left": ["M19 12H5", "M11 6l-6 6 6 6"],
+  "arrow-right": ["M5 12h14", "M13 6l6 6-6 6"],
   more: ["M6 12h.01M12 12h.01M18 12h.01"],
   activity: ["M5 12h3l2-5 4 10 2-5h3"],
   panel: ["M4 5h16v14H4V5Z", "M14 5v14"],

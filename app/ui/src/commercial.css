@@ -1551,15 +1551,6 @@ button {
     transform: translateY(0);
   }
 }
-  max-width: min(420px, calc(100vw - 36px));
-  margin: 0;
-  padding: 11px 14px;
-  border: 1px solid var(--cghc-border);
-  border-radius: 12px;
-  background: var(--cghc-surface-elevated);
-  color: var(--cghc-text-secondary);
-  box-shadow: var(--cghc-shadow-md);
-}
 
 /* ───────────────────────────── tooltip/motion ───────────────────────────── */
 
@@ -2668,10 +2659,305 @@ button {
   box-shadow: none;
 }
 
+/*
+ * The PDF preview is an <iframe>, which (unlike the editor/image) has no intrinsic content
+ * height. The shared rule above sets `min-height: 100%`, but a percentage min-height only
+ * resolves when every ancestor up the pane has a definite height; if that chain is ever
+ * indefinite the iframe collapses to its ~150px default and the PDFium viewer renders blank.
+ * A pixel floor guarantees it is always tall enough to show the document, while `height: 100%`
+ * still lets it fill a taller pane. This must come AFTER the shared block to win the cascade
+ * (it also restores the intent of `shell-frame.css`'s `min-height: 480px`, which the shared
+ * `min-height: 100%` above otherwise overrides because commercial.css loads last).
+ */
+.workspace-companion-pane__pdf {
+  height: 100%;
+  min-height: 480px;
+}
+
+/*
+ * Multi-sheet spreadsheet: a compact tab row above the grid. The wrapper is a flex column so the
+ * grid keeps filling the remaining height (the shared `__grid` min-height:100% still applies).
+ */
+.workspace-companion-pane__sheet-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-height: 100%;
+}
+.workspace-companion-pane__sheet-tabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex: 0 0 auto;
+}
+.workspace-companion-pane__sheet-tab {
+  flex: 0 0 auto;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.workspace-companion-pane__sheet-tab:hover {
+  background: var(--cghc-surface-muted);
+}
+.workspace-companion-pane__sheet-tab--active {
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-primary);
+  border-color: var(--cghc-border-strong, var(--cghc-border-subtle));
+  font-weight: 600;
+}
+
+/*
+ * Read-only PowerPoint (.pptx) text preview: a nav row (prev / "Slide X / Y" / next) above a
+ * single slide stage. Slide content keeps document colours; only the chrome follows the theme.
+ */
+.workspace-companion-pane__deck {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-height: 100%;
+}
+.workspace-companion-pane__deck-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+.workspace-companion-pane__deck-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 30px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  cursor: pointer;
+}
+.workspace-companion-pane__deck-btn:hover:not(:disabled) {
+  background: var(--cghc-surface-muted);
+}
+.workspace-companion-pane__deck-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.workspace-companion-pane__deck-counter {
+  font-size: 13px;
+  color: var(--cghc-text-secondary);
+  min-width: 96px;
+  text-align: center;
+}
+.workspace-companion-pane__slide {
+  flex: 1 1 auto;
+  overflow: auto;
+  padding: 20px 22px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+}
+.workspace-companion-pane__slide-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--cghc-text-primary);
+}
+.workspace-companion-pane__slide-empty {
+  margin: 0;
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+}
+/* High-fidelity engine stage: the mounted slide keeps the document's own colours; the surrounding
+   chrome follows the app theme. The engine fits each slide to the mount width (fitMode:'contain'),
+   so we only need to center it and let tall slides scroll vertically — never horizontally. */
+.workspace-companion-pane__slide--hifi {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 14px;
+  overflow: auto;
+}
+.workspace-companion-pane__slide-mount {
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.workspace-companion-pane__slide-mount > * {
+  max-width: 100%;
+}
+.workspace-companion-pane__slide-loading {
+  margin: auto;
+  color: var(--cghc-text-secondary);
+  font-size: 13px;
+}
+
 .workspace-companion-pane__editor {
   padding: 18px 20px;
   font-size: 14px;
   line-height: 1.65;
+}
+
+/* Edit toggle (read-only code/text -> editable textarea). */
+.workspace-companion-pane__edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  cursor: pointer;
+}
+.workspace-companion-pane__edit:hover {
+  background: var(--cghc-surface-muted);
+}
+
+/*
+ * Read-only code/text preview: a line-number gutter + syntax-highlighted code. Unlike the PDF
+ * iframe this never needs a pixel floor — the text content gives it intrinsic height — so
+ * `min-height: 100%` (fill when the pane has height, content-height otherwise) is safe. The
+ * gutter is `position: sticky` so it stays put during horizontal scroll of long lines, and both
+ * columns share one scroll box so vertical scroll keeps line numbers aligned with their lines.
+ */
+.workspace-companion-pane__code {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 10px;
+  background: var(--cghc-surface-elevated);
+  font-family: ui-monospace, "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.workspace-companion-pane__code-gutter {
+  position: sticky;
+  left: 0;
+  flex: 0 0 auto;
+  padding: 12px 10px;
+  text-align: right;
+  white-space: pre;
+  color: var(--cghc-text-muted);
+  background: var(--cghc-surface-muted);
+  border-right: 1px solid var(--cghc-border-subtle);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.workspace-companion-pane__code-pre {
+  flex: 1 1 auto;
+  margin: 0;
+  padding: 12px 16px;
+  white-space: pre; /* no wrap: each source line stays on one visual line, aligned to the gutter */
+  color: var(--cghc-text-primary);
+}
+.workspace-companion-pane__code-content {
+  font: inherit;
+  background: transparent;
+}
+
+/* Syntax-highlight palette (highlight.js token classes), mapped to a GitHub-like light theme. */
+.workspace-companion-pane__code-content .hljs-comment,
+.workspace-companion-pane__code-content .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.workspace-companion-pane__code-content .hljs-keyword,
+.workspace-companion-pane__code-content .hljs-selector-tag,
+.workspace-companion-pane__code-content .hljs-subst,
+.workspace-companion-pane__code-content .hljs-type {
+  color: #d73a49;
+}
+.workspace-companion-pane__code-content .hljs-number,
+.workspace-companion-pane__code-content .hljs-literal,
+.workspace-companion-pane__code-content .hljs-variable,
+.workspace-companion-pane__code-content .hljs-template-variable,
+.workspace-companion-pane__code-content .hljs-attr {
+  color: #005cc5;
+}
+.workspace-companion-pane__code-content .hljs-string,
+.workspace-companion-pane__code-content .hljs-doctag {
+  color: #032f62;
+}
+.workspace-companion-pane__code-content .hljs-title,
+.workspace-companion-pane__code-content .hljs-section,
+.workspace-companion-pane__code-content .hljs-selector-id {
+  color: #6f42c1;
+}
+.workspace-companion-pane__code-content .hljs-tag,
+.workspace-companion-pane__code-content .hljs-name,
+.workspace-companion-pane__code-content .hljs-attribute {
+  color: #22863a;
+}
+.workspace-companion-pane__code-content .hljs-built_in,
+.workspace-companion-pane__code-content .hljs-symbol,
+.workspace-companion-pane__code-content .hljs-meta {
+  color: #e36209;
+}
+.workspace-companion-pane__code-content .hljs-emphasis {
+  font-style: italic;
+}
+.workspace-companion-pane__code-content .hljs-strong {
+  font-weight: 600;
+}
+
+/* Dark-theme syntax palette (GitHub-dark-like). */
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-comment,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-quote {
+  color: #8b949e;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-keyword,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-selector-tag,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-subst,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-type {
+  color: #ff7b72;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-number,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-literal,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-variable,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-template-variable,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-attr {
+  color: #79c0ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-string,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-doctag {
+  color: #a5d6ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-title,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-section,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-selector-id {
+  color: #d2a8ff;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-tag,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-name,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-attribute {
+  color: #7ee787;
+}
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-built_in,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-symbol,
+:root[data-theme="dark"] .workspace-companion-pane__code-content .hljs-meta {
+  color: #ffa657;
 }
 
 .workspace-companion-pane__empty {
@@ -2903,6 +3189,66 @@ button {
 
 .settings-switch-row__input:checked + .settings-switch-row__visual::after {
   transform: translateX(17px);
+}
+
+/* Diagnostics data panel (Wave 6): logging status + telemetry counters + export/clear actions. */
+.settings-diagnostics-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--cghc-border-subtle);
+}
+.settings-diagnostics-panel__row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.settings-diagnostics-panel__label {
+  font-size: 13px;
+  color: var(--cghc-text-secondary);
+  margin-right: auto;
+}
+.settings-diagnostics-panel__btn {
+  padding: 4px 12px;
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 8px;
+  background: var(--cghc-surface-solid);
+  color: var(--cghc-text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+.settings-diagnostics-panel__btn:hover {
+  background: var(--cghc-surface-muted);
+}
+.settings-diagnostics-panel__note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--cghc-text-secondary);
+}
+.settings-diagnostics-panel__counters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 4px 16px;
+}
+.settings-diagnostics-panel__counter {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  padding: 2px 0;
+}
+.settings-diagnostics-panel__counter-name {
+  color: var(--cghc-text-secondary);
+}
+.settings-diagnostics-panel__counter-value {
+  color: var(--cghc-text-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-status {

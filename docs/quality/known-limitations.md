@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-16"
+updated_at: "2026-07-17"
 ---
 
 # Known limitations
@@ -19,8 +19,51 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
 - **Model discovery ("Dò model"):** best-effort, không bao giờ chặn lưu; luôn giữ nhập Model ID thủ
   công. Metrics/token/cost chỉ hiển thị khi runtime báo số thật (không suy ra cost); chưa persist qua
   reopen hội thoại.
-- **Workspace:** PDF preview + live refresh chưa có (Wave 4).
-- **Inspector Phase 1** (plan/activity/file review) còn PARTIAL; diagnostics/logging PARTIAL (Wave 5–6).
+- **Workspace (Wave 4 đã land, còn giới hạn):** PDF preview packaged + live refresh đã hoạt động
+  (PO quan sát 2026-07-16). Phạm vi/giới hạn còn lại:
+  - **PDF** dùng viewer built-in của Chromium (PDFium), mặc định ẩn toolbar + fit-to-width. Cần
+    `plugins:true`, `style-src 'unsafe-inline'` (chỉ style; `script-src` vẫn strict) và **miễn
+    `chrome-extension://` khỏi CSP header stamp** để viewer giữ policy riêng. **Không đảm bảo mọi
+    PDF**: file **malformed / bảo vệ mật khẩu / dạng chưa hỗ trợ** chưa kiểm chứng, có thể không mở.
+    PDF > 8 MiB bị coi là `unsupported` (không preview).
+  - **Auto-open** tối đa **1 safe file mỗi turn**; không auto-open file ngoài workspace/secret/
+    unsupported hoặc khi buffer đang có sửa chưa lưu.
+  - **Dirty edits** được bảo vệ bằng conflict banner (giữ bản đang sửa + cảnh báo ghi đè bền vững;
+    "Tải lại từ đĩa" nói rõ sẽ bỏ thay đổi chưa lưu). Không có editor Office đầy đủ.
+  - **Verified-delete** của file đang mở clear preview + chặn recreate — chỉ khi delete đã verified
+    (xem giới hạn "xoá file" ở trên: Agent thực tế **không** tạo được verified-delete do runtime pin
+    thiếu tool `delete`).
+  - **Code files** (.py/.css/.cpp/.js/.ts/.json…) xem read-only có syntax highlight (highlight.js)
+    kèm số dòng; bấm "Sửa" để chỉnh rồi Lưu. Text **cắt ở 512 KiB** (khoá sửa phần vượt); highlight
+    **bỏ qua khi nội dung > 256 KiB** (vẫn hiện plain + số dòng) để giữ mượt. Chỉ nhận theo đuôi
+    file/basename đã allowlist; **secret** (`.env*`, `.pem`, `.key`) cố ý loại trừ khỏi preview text.
+  - **Office preview (read-only, local-only):**
+    - **XLSX đa sheet:** đọc toàn bộ workbook, hiện tab chọn sheet (mặc định sheet đầu), đổi sheet
+      không reload Workspace; **sheet hidden/very-hidden bị lọc** không hiện. Vẫn **chỉ xem** —
+      chỉnh sửa XLSX bị vô hiệu hoá để không mất công thức/định dạng/merged cell/chart/metadata.
+    - **PPTX** xem trước **high-fidelity, chỉ đọc**: dựng từng slide (chữ theo vị trí/kích thước/
+      màu tương đối, **ảnh, shape/fill/border, bảng, biểu đồ, nền/theme cơ bản**) thành HTML/SVG bằng
+      engine cục bộ `@aiden0z/pptx-renderer` (Apache-2.0). Điều hướng trước/sau + "Slide X / Y",
+      fit-to-panel. Chạy **hoàn toàn cục bộ** dưới CSP `script-src 'self'` (không eval trên nhánh chạy
+      thực; engine self-contained, JSZip + ECharts đóng gói sẵn): không upload cloud, không URL remote,
+      không LibreOffice/server, không chạy macro/OLE/active content. **Không hiển thị đúng 100%** như
+      Microsoft PowerPoint. **Chưa hỗ trợ:** animation/transition, phát media (video/audio), macro/OLE
+      nhúng, và ảnh EMF (pdf.js fallback tắt để không cần `worker-src blob:` trong CSP). Giới hạn ZIP
+      (RECOMMENDED_ZIP_LIMITS) để chặn DoS; lỗi runtime của engine sẽ **degrade về xem text từng slide**.
+      Ảnh nhúng cần `img-src ... blob:` trong CSP (engine tạo blob URL cùng-origin từ ppt/media/*);
+      `script-src` vẫn strict. *(PO quan sát packaged 2026-07-17: slide + ảnh + bảng/biểu đồ hiển thị.)*
+    - **`.ppt` legacy** (OLE nhị phân) **không hỗ trợ** — hiện trạng thái unsupported.
+    - **Malformed / mã hoá mật khẩu / vượt 8 MiB** ở mọi loại Office → trạng thái unsupported rõ
+      ràng, không crash renderer. Không có **editor Office** đầy đủ.
+- **Inspector Phase 1** (Wave 5, PO-observed 2026-07-17): Cowork-only pane Kế hoạch/Hoạt động/Tệp từ
+  EV events đã chuẩn hoá (không lộ SSE/token/tool payload thô), tái dùng File Work Review. Token/cost
+  metrics vẫn **live-only, chưa persist qua reopen** (giới hạn cũ).
+- **Logging/telemetry cục bộ** (Wave 6, PO-observed 2026-07-17): log JSON-lines xoay vòng trong
+  `data/logs` (đã ẩn secret trước khi ghi); telemetry **chỉ đếm tổng hợp trên máy**, không network,
+  gated bởi toggle. **Bộ đếm telemetry là danh sách cố định** (launches, chat turn completed/failed,
+  permission approved/denied, file created/modified/deleted, errors); các bộ đếm khác (provider
+  connect, preview kind) là mở rộng tương lai (bảng đếm là name→value dạng generic, không cần migration
+  mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
 - **Web / Next.js** vẫn deferred.

@@ -11,9 +11,11 @@
     "test": "node --import tsx --test \"tests/**/*.test.ts\""
   },
   "dependencies": {
+    "@aiden0z/pptx-renderer": "^1.2.4",
     "@cowork-ghc/contracts": "*",
     "@cowork-ghc/service": "*",
-    "@fontsource/be-vietnam-pro": "^5.2.8"
+    "@fontsource/be-vietnam-pro": "^5.2.8",
+    "highlight.js": "^11.11.1"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "20.10.6",

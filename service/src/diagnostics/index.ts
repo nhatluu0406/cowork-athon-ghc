@@ -31,6 +31,35 @@ export {
 } from "./redacting-logger.js";
 
 export {
+  createFileSink,
+  type FileSink,
+  type FileSinkOptions,
+  type LogFileSystem,
+} from "./log-file-sink.js";
+
+export {
+  createTelemetryStore,
+  recordEventTelemetry,
+  TELEMETRY_COUNTERS,
+  type TelemetryStore,
+  type TelemetryStoreOptions,
+  type TelemetrySnapshot,
+  type TelemetryCounter,
+} from "./telemetry-store.js";
+
+export {
+  createDiagnosticsRouter,
+  DIAGNOSTICS_PATH,
+  DIAGNOSTICS_CLEAR_PATH,
+  DIAGNOSTICS_EXPORT_PATH,
+  type DiagnosticsRouterDeps,
+  type DiagnosticsStatusView,
+  type DiagnosticsExportView,
+  type DiagnosticsClearTarget,
+  type LoggingStatusView,
+} from "./diagnostics-router.js";
+
+export {
   scrubExecutionMetadata,
   exportExecutionMetadataJson,
   type ExecutionMetadata,

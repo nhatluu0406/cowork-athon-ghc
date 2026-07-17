@@ -1,22 +1,28 @@
 /** Maps workspace-relative paths to companion preview roles. */
 
+import { isTextFilePath } from "@cowork-ghc/contracts";
+
 export type WorkspaceFileRole =
   | "text"
   | "image"
   | "pdf"
   | "docx"
   | "spreadsheet"
+  | "presentation"
   | "unsupported";
 
 export function detectWorkspaceFileRole(relativePath: string): WorkspaceFileRole {
   const ext = relativePath.includes(".")
     ? relativePath.slice(relativePath.lastIndexOf(".")).toLowerCase()
     : "";
-  if (ext === ".txt" || ext === ".md") return "text";
   if (ext === ".png" || ext === ".jpg" || ext === ".jpeg" || ext === ".webp") return "image";
   if (ext === ".pdf") return "pdf";
   if (ext === ".docx") return "docx";
   if (ext === ".xlsx") return "spreadsheet";
+  // Only the modern OOXML `.pptx` is previewable; legacy binary `.ppt` stays unsupported.
+  if (ext === ".pptx") return "presentation";
+  // Text/code (incl. .txt/.md and code files) — shared with the service via isTextFilePath.
+  if (isTextFilePath(relativePath)) return "text";
   return "unsupported";
 }
 

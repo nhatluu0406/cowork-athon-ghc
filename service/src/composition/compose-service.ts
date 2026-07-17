@@ -11,6 +11,7 @@
  * defaults (see `tier2-seams.ts`); the live supervisor (CGHC-028) injects real ones.
  */
 
+import { dirname, join } from "node:path";
 import { sanitizeErrorMessage } from "../execution/index.js";
 import { startService, type RunningService } from "../start.js";
 import {
@@ -22,7 +23,14 @@ import { createKeyringStore, createMemoryStore } from "../credential/index.js";
 import {
   createNodeSettingsFs,
   createSettingsRouter,
+  createRedactingLogger,
+  createFileSink,
+  createTelemetryStore,
+  recordEventTelemetry,
+  createDiagnosticsRouter,
   openSettingsStore,
+  type RedactingLogger,
+  type TelemetryStore,
   type SettingsFs,
   type SettingsModelPort,
 } from "../diagnostics/index.js";
@@ -169,7 +177,34 @@ export async function createCoworkService(
   // learns a credential VALUE when it is stored (router POST) or resolved at launch, so
   // value-based redaction is ACTIVE for every credential that passes through the credential layer.
   const scrubber = createSecretScrubber();
-  const redactError = (message: string): string => sanitizeErrorMessage(scrubber.scrub(message));
+
+  // --- Local structured logging (Wave 6). A bounded, rotating, JSON-lines file sink under
+  // `data/logs` (derived from dbPath so the service never imports the shell path resolver — the
+  // import-direction rule). The logger scrubs every message/field through the SAME scrubber before
+  // the sink, so no secret can reach disk. Verbose (debug) is applied from settings once loaded and
+  // updated live when the toggle changes; error/warn/info always emit. Console-only when there is no
+  // dbPath (unit tests) or when a file sink cannot be created.
+  const logDir =
+    options.logDir ??
+    (options.dbPath !== undefined ? join(dirname(options.dbPath), "logs") : undefined);
+  const fileSink = logDir !== undefined ? createFileSink({ dir: logDir }) : undefined;
+  const logger: RedactingLogger = createRedactingLogger({
+    scrubber,
+    ...(fileSink !== undefined ? { sink: fileSink.sink } : {}),
+  });
+  // Local aggregate telemetry (Wave 6). Assigned once the SQLite database + persisted setting are
+  // available (below); referenced early here so the error counter can ride the redaction seam.
+  let telemetry: TelemetryStore | undefined;
+
+  // Route the boundary error-redaction seam through the logger so redacted errors are persisted
+  // locally (still returned to callers for renderer display, unchanged), and count an aggregate
+  // error (no content — just a tally, and only when telemetry is enabled).
+  const redactError = (message: string): string => {
+    const scrubbed = sanitizeErrorMessage(scrubber.scrub(message));
+    logger.error(scrubbed);
+    telemetry?.increment("errors");
+    return scrubbed;
+  };
 
   // --- Local SQLite vault (ADR 0007) when dbPath / sqliteDatabase is provided. ---
   let sqliteDatabase: SqliteDatabase | undefined = options.sqliteDatabase;
@@ -347,6 +382,32 @@ export async function createCoworkService(
     modelConfig,
   );
 
+  // Detailed (verbose/debug) logging is a user setting. Apply it now and keep it live: intercept
+  // `updateGeneral` so toggling "Ghi log chi tiết" in Settings takes effect immediately without a
+  // relaunch. (Telemetry enable is wired into this same seam in the telemetry slice.)
+  logger.setVerbose(settingsStore.general().verboseLogging === true);
+
+  // Local aggregate telemetry: only when a SQLite database is open (the counters table lives there,
+  // migration id 3). Collection is gated by the persisted `telemetryEnabled` setting; disabled →
+  // increment is a no-op. Count one app launch on boot (when enabled).
+  if (sqliteDatabase !== undefined) {
+    telemetry = createTelemetryStore({
+      db: sqliteDatabase,
+      enabled: settingsStore.general().telemetryEnabled === true,
+      now,
+    });
+    telemetry.increment("app_launches");
+  }
+
+  const baseUpdateGeneral = settingsStore.updateGeneral.bind(settingsStore);
+  settingsStore.updateGeneral = async (patch) => {
+    const next = await baseUpdateGeneral(patch);
+    // Toggles take effect immediately (no relaunch): verbose logging + telemetry collection.
+    logger.setVerbose(next.verboseLogging === true);
+    telemetry?.setEnabled(next.telemetryEnabled === true);
+    return next;
+  };
+
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
   const sessionService = createSessionService({
     store: options.sessionStore ?? notAttachedSessionStore(),
@@ -356,7 +417,13 @@ export async function createCoworkService(
     redactError,
   });
   const streamHub = createSessionStreamHub({
-    apply: (sessionId, event) => sessionService.apply(sessionId, event),
+    apply: (sessionId, event) => {
+      // Aggregate-only telemetry from the ALREADY-NORMALIZED EV stream (never raw frames): terminal
+      // state → turn completed/failed, file_mutation → created/modified/deleted. Structural facts
+      // only; no path/content is inspected. No-op unless telemetry is enabled.
+      if (telemetry !== undefined) recordEventTelemetry(telemetry, event);
+      return sessionService.apply(sessionId, event);
+    },
     view: (sessionId) => sessionService.view(sessionId),
     redactError,
   });
@@ -376,6 +443,16 @@ export async function createCoworkService(
     timeoutMs: options.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS,
     now,
   });
+  // Aggregate telemetry: count each FRESH permission decision once (the user's allow/deny). Uses the
+  // decision the caller supplied; no request path/tool detail is recorded.
+  const basePermissionResolve = permissionGate.resolve.bind(permissionGate);
+  permissionGate.resolve = async (input) => {
+    const outcome = await basePermissionResolve(input);
+    if (telemetry !== undefined && outcome.status === "resolved") {
+      telemetry.increment(input.decision === "allow" ? "permission_approved" : "permission_denied");
+    }
+    return outcome;
+  };
 
   // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
   // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
@@ -576,6 +653,13 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    createDiagnosticsRouter({
+      logger,
+      ...(fileSink !== undefined ? { fileSink } : {}),
+      ...(telemetry !== undefined ? { telemetry } : {}),
+      scrubber,
+      now,
+    }),
     ...(mcpStore !== undefined
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
@@ -583,8 +667,12 @@ export async function createCoworkService(
     ...(options.extraRouters ?? []),
   ];
 
+  logger.info("service composed", { logging: logDir !== undefined ? "file" : "console" });
+
   const deps: CoworkServiceDeps = {
     scrubber,
+    logger,
+    ...(telemetry !== undefined ? { telemetry } : {}),
     credentialService,
     providerPort,
     modelConfig,

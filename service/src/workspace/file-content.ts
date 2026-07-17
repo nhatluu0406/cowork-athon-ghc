@@ -7,7 +7,9 @@ import { readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import mammoth from "mammoth";
 import * as XLSX from "xlsx";
+import { isTextFilePath } from "@cowork-ghc/contracts";
 import { createWorkspaceGuard } from "./guard.js";
+import { parsePptxSlides, type PptxSlideView } from "./pptx.js";
 import { validateWorkspaceSelection, nodeFsProbe } from "./validate.js";
 
 const TEXT_EDIT_MAX_BYTES = 512 * 1024;
@@ -19,6 +21,7 @@ export type WorkspaceFileContentKind =
   | "pdf"
   | "docx"
   | "spreadsheet"
+  | "presentation"
   | "missing"
   | "unsupported";
 
@@ -26,6 +29,8 @@ export interface SpreadsheetSheetView {
   readonly name: string;
   readonly rows: readonly (readonly string[])[];
 }
+
+export type { PptxSlideView } from "./pptx.js";
 
 export interface WorkspaceFileContentResult {
   readonly relativePath: string;
@@ -36,6 +41,7 @@ export interface WorkspaceFileContentResult {
   readonly html?: string;
   readonly dataBase64?: string;
   readonly sheets?: readonly SpreadsheetSheetView[];
+  readonly slides?: readonly PptxSlideView[];
   readonly truncated: boolean;
   readonly sizeBytes: number;
 }
@@ -47,8 +53,10 @@ export interface WorkspaceFileWriteInput {
 }
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
-const TEXT_EXTENSIONS = new Set([".txt", ".md"]);
 const SPREADSHEET_EXTENSIONS = new Set([".xlsx"]);
+const PRESENTATION_EXTENSIONS = new Set([".pptx"]);
+// Which files are treated as editable text/code is shared with the renderer via
+// `isTextFilePath` (@cowork-ghc/contracts) so the two never drift.
 
 function mimeForImage(ext: string): string {
   switch (ext.toLowerCase()) {
@@ -112,7 +120,7 @@ export async function readWorkspaceFileContent(
     return { relativePath, kind: "missing", editable: false, truncated: false, sizeBytes: 0 };
   }
 
-  if (TEXT_EXTENSIONS.has(ext)) {
+  if (isTextFilePath(relativePath)) {
     const buf = await readFile(realPath);
     const truncated = buf.length > TEXT_EDIT_MAX_BYTES;
     const slice = truncated ? buf.subarray(0, TEXT_EDIT_MAX_BYTES) : buf;
@@ -183,17 +191,53 @@ export async function readWorkspaceFileContent(
     }
     const buf = await readFile(realPath);
     const workbook = XLSX.read(buf, { type: "buffer" });
-    const sheets: SpreadsheetSheetView[] = workbook.SheetNames.map((name) => {
+    // `workbook.Workbook.Sheets[i].Hidden`: 0 = visible, 1 = hidden, 2 = very hidden. Aligned by
+    // index with `SheetNames`. Skip non-visible sheets so a hidden sheet is never surfaced.
+    const meta = workbook.Workbook?.Sheets;
+    const sheets: SpreadsheetSheetView[] = [];
+    workbook.SheetNames.forEach((name, i) => {
+      if ((meta?.[i]?.Hidden ?? 0) !== 0) return;
       const sheet = workbook.Sheets[name];
-      if (sheet === undefined) return { name, rows: [] as string[][] };
+      if (sheet === undefined) {
+        sheets.push({ name, rows: [] as string[][] });
+        return;
+      }
       const rows = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: "" }) as string[][];
-      return { name, rows };
+      sheets.push({ name, rows });
     });
     return {
       relativePath,
       kind: "spreadsheet",
       editable: false,
       sheets,
+      truncated: false,
+      sizeBytes,
+    };
+  }
+
+  if (PRESENTATION_EXTENSIONS.has(ext)) {
+    if (sizeBytes > BINARY_PREVIEW_MAX_BYTES) {
+      return { relativePath, kind: "unsupported", editable: false, truncated: true, sizeBytes };
+    }
+    const buf = await readFile(realPath);
+    let slides: PptxSlideView[];
+    try {
+      slides = await parsePptxSlides(buf);
+    } catch {
+      // Malformed or encrypted (an encrypted .pptx is an OLE compound file, not a ZIP): surface a
+      // clear unsupported state rather than crashing the read. The text parser doubles as a
+      // structural gate — if it cannot even read the ZIP, the high-fidelity renderer would fail too.
+      return { relativePath, kind: "unsupported", editable: false, truncated: false, sizeBytes };
+    }
+    return {
+      relativePath,
+      kind: "presentation",
+      editable: false,
+      // `slides` (text-first) stays as a lightweight fallback/diagnostics view and slide count.
+      // `dataBase64` ships the raw .pptx bytes (bounded by BINARY_PREVIEW_MAX_BYTES above) so the
+      // renderer can drive the local high-fidelity viewer — same in-contract binary path as pdf/image.
+      slides,
+      dataBase64: buf.toString("base64"),
       truncated: false,
       sizeBytes,
     };
@@ -207,10 +251,12 @@ export async function writeWorkspaceFileContent(
   relativePath: string,
   input: WorkspaceFileWriteInput,
 ): Promise<{ readonly relativePath: string; readonly sizeBytes: number }> {
-  const { realPath, ext } = await resolveFile(workspaceRoot, relativePath);
+  const { realPath } = await resolveFile(workspaceRoot, relativePath);
 
   if (input.kind === "text") {
-    if (!TEXT_EXTENSIONS.has(ext)) throw new Error("Loại tệp này không hỗ trợ chỉnh sửa văn bản.");
+    if (!isTextFilePath(relativePath)) {
+      throw new Error("Loại tệp này không hỗ trợ chỉnh sửa văn bản.");
+    }
     const content = input.content ?? "";
     if (Buffer.byteLength(content, "utf8") > TEXT_EDIT_MAX_BYTES) {
       throw new Error("Nội dung vượt giới hạn 512 KiB.");
