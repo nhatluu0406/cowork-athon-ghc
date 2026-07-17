@@ -23,6 +23,9 @@ out/
 *.tsbuildinfo
 .vite/
 **/.vite/
+target/
+**/target/
+app/llm-svc/target/
 
 # --- Electron packaging / release artifacts (large binaries) ---
 dist-app/
