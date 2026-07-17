@@ -1,0 +1,92 @@
+# models.yaml: Configuration for models served by llm-svc
+#
+# Format:
+#   - name: model identifier
+#     kind: embedding | reranker | generative
+#     format: onnx | gguf | safetensors | cloud
+#     path: local path (empty for cloud models) — for format: onnx, this MUST be
+#       a DIRECTORY containing both `model.onnx` and `tokenizer.json` (standard
+#       HuggingFace export layout), not a path to the .onnx file directly. See
+#       src/models/onnx.rs's module doc comment (T160) for the exact convention.
+#     dims: embedding dimensionality (0 for non-embedding models)
+#     version: model version
+#     is_default: true if this is the default for its kind
+#
+# Reranking note (T160): the Rerank RPC's local path currently reuses the
+# default `kind: embedding` model (bi-encoder cosine similarity between query
+# and document embeddings — see cloud_proxy::cosine_similarity's doc comment
+# for why), not a dedicated `kind: reranker` cross-encoder model. The
+# `bge-reranker-base` entry below is a real cross-encoder reranker format but
+# is not yet wired to anything — implementing a cross-encoder ONNX forward
+# pass (different input/output shape than the embedding path) is future work,
+# not part of this pass.
+
+models:
+  # Default embedding model (used by Go backend via Embed RPC)
+  - name: text-embedding-3-small
+    kind: embedding
+    format: cloud
+    path: ""
+    dims: 1536
+    version: "1.0"
+    is_default: true
+
+  # Optional: local embedding model (ONNX format, real inference — T160).
+  # Uncomment and point `path` at a directory containing model.onnx +
+  # tokenizer.json (e.g. downloaded from a HuggingFace ONNX export like
+  # sentence-transformers/all-MiniLM-L6-v2) to enable local embedding/rerank.
+  # - name: e5-small-v2
+  #   kind: embedding
+  #   format: onnx
+  #   path: /models/e5-small-v2/
+  #   dims: 384
+  #   version: "1.0"
+  #   is_default: false
+
+  # Reranker model entry (format/kind are real; NOT yet wired to a
+  # cross-encoder ONNX forward pass — see the Reranking note above).
+  - name: bge-reranker-base
+    kind: reranker
+    format: onnx
+    path: /models/bge-reranker-base/
+    dims: 0
+    version: "1.0"
+    is_default: true
+
+  # Local safetensors generative model (T162)
+  # Real model: Qwen2.5-3B with sharded safetensors weights
+  - name: qwen2.5-3b-safetensors
+    kind: generative
+    format: safetensors
+    path: /mnt/data-disk/Data/ONNXModel/translate-tool/models/qwen2.5-3B/
+    dims: 0
+    version: "1.0"
+    is_default: false
+
+  # Local GGUF generative model (T161) — real implementation
+  # Pure-Rust inference via llama-gguf v0.14 crate (compatible with llama.cpp)
+  # No cmake required — pure Rust compilation with full GGUF support
+  # Expected directory structure:
+  #   model_dir/
+  #     ├── model.gguf              # Quantized weights (required)
+  #     ├── tokenizer.json          # HuggingFace tokenizer (optional)
+  #     └── tokenizer.model         # SentencePiece tokenizer (optional)
+  # Supported formats: Q4, Q5, Q8 quantizations, 7B–70B models
+  # CPU inference: 5–20 tokens/sec (model and quantization dependent)
+  # To enable: uncomment below and point path at a GGUF model directory
+  # - name: mistral-7b-instruct-gguf
+  #   kind: generative
+  #   format: gguf
+  #   path: /models/mistral-7b-instruct/
+  #   dims: 0
+  #   version: "1.0"
+  #   is_default: false
+
+  # Cloud-based generation model (proxy in llm-svc)
+  - name: gpt-4o-mini
+    kind: generative
+    format: cloud
+    path: ""
+    dims: 0
+    version: "1.0"
+    is_default: true
