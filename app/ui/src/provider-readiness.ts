@@ -269,6 +269,55 @@ export function providerStatus(
   };
 }
 
+export type ReadinessTone = "ok" | "warn" | "danger";
+
+export interface OverallReadiness {
+  readonly label: string;
+  readonly detail: string;
+  readonly tone: ReadinessTone;
+}
+
+/**
+ * Single honest top-level readiness signal for the shared status bar.
+ *
+ * Aggregates the three blocking dependencies a newcomer cares about — local service up,
+ * a workspace chosen, a provider configured — so the chip NEVER reads "Sẵn sàng" while any
+ * required dependency is missing (ui-ux-audit F4). The per-axis Workspace/Provider chips still
+ * spell out the specific gap; this chip is the roll-up.
+ */
+export function overallReadiness(input: {
+  readonly serviceOk: boolean;
+  readonly serviceLabel: string;
+  readonly activeWorkspace: string | null;
+  readonly settings: SettingsView | null;
+  readonly connectionTestState: ConnectionTestState;
+}): OverallReadiness {
+  const serviceText = input.serviceLabel
+    .replace(/^Local service:\s*/i, "")
+    .replace(/^Service\s*·\s*/i, "");
+  if (!input.serviceOk) {
+    // Local service down / starting — keep the existing (danger) treatment; provider/workspace
+    // are moot until the core is up.
+    return { label: serviceText, detail: "Local service chưa sẵn sàng.", tone: "danger" };
+  }
+  if (input.activeWorkspace === null) {
+    return {
+      label: "Cần chọn workspace",
+      detail: "Chọn một workspace để bắt đầu làm việc.",
+      tone: "warn",
+    };
+  }
+  const provider = providerStatus(input.settings, input.connectionTestState);
+  if (!provider.ok) {
+    return { label: "Cần cấu hình provider", detail: provider.detail, tone: "warn" };
+  }
+  return {
+    label: "Sẵn sàng",
+    detail: "Local service, workspace và provider đã sẵn sàng.",
+    tone: "ok",
+  };
+}
+
 export function runtimeReadinessKind(phase: RuntimePhase): ReadinessKind {
   switch (phase) {
     case "starting":

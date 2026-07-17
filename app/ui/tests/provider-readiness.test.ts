@@ -11,6 +11,7 @@ import {
   buildReadinessInput,
   isBaseUrlLocallyValid,
   localServiceStatus,
+  overallReadiness,
   providerModelLabel,
   providerStatus,
   shouldShowContinuationBanner,
@@ -239,6 +240,59 @@ test("shouldShowContinuationBanner stays off for completed history", () => {
     ),
     false,
   );
+});
+
+test("overallReadiness stays danger while the local service is down", () => {
+  const copy = overallReadiness({
+    serviceOk: false,
+    serviceLabel: "Local service: Không khả dụng",
+    activeWorkspace: "C:\\ws",
+    settings: baseSettings(),
+    connectionTestState: "ok",
+  });
+  assert.equal(copy.tone, "danger");
+  assert.equal(copy.label, "Không khả dụng");
+});
+
+test("overallReadiness never reads Sẵn sàng without a workspace", () => {
+  const copy = overallReadiness({
+    serviceOk: true,
+    serviceLabel: "Local service: Sẵn sàng",
+    activeWorkspace: null,
+    settings: baseSettings(),
+    connectionTestState: "ok",
+  });
+  assert.equal(copy.tone, "warn");
+  assert.match(copy.label, /workspace/i);
+});
+
+test("overallReadiness never reads Sẵn sàng while the provider is unconfigured (F4)", () => {
+  const noCred: SettingsView = {
+    ...baseSettings(),
+    providers: [{ providerId: "custom-openai-compat", hasCredential: false }],
+  };
+  const copy = overallReadiness({
+    serviceOk: true,
+    serviceLabel: "Local service: Sẵn sàng",
+    activeWorkspace: "C:\\ws",
+    settings: noCred,
+    connectionTestState: "unknown",
+  });
+  assert.equal(copy.tone, "warn");
+  assert.match(copy.label, /provider/i);
+  assert.notEqual(copy.label, "Sẵn sàng");
+});
+
+test("overallReadiness reads Sẵn sàng only when service, workspace and provider are all ready", () => {
+  const copy = overallReadiness({
+    serviceOk: true,
+    serviceLabel: "Local service: Sẵn sàng",
+    activeWorkspace: "C:\\ws",
+    settings: baseSettings(),
+    connectionTestState: "ok",
+  });
+  assert.equal(copy.tone, "ok");
+  assert.equal(copy.label, "Sẵn sàng");
 });
 
 test("isBaseUrlLocallyValid rejects garbage", () => {
