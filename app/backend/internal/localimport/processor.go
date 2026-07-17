@@ -14,39 +14,39 @@ import (
 
 // Processor orchestrates the import pipeline for a job.
 type Processor struct {
-	scanner    *Scanner
-	resolver   *DeltaResolver
-	extractor  *Extractor
-	chunker    *parsers.Chunker
-	embedder   retrieval.EmbeddingRuntime
-	fileStore  *LocalFileStore
-	chunkStore *metadata.ChunkStore
-	jobStore   *ImportJobStore
-	logger     *slog.Logger
+	resolver    *DeltaResolver
+	extractor   *Extractor
+	chunker     *parsers.Chunker
+	embedder    retrieval.EmbeddingRuntime
+	fileStore   *LocalFileStore
+	sourceStore *LocalSourceStore
+	chunkStore  *metadata.ChunkStore
+	jobStore    *ImportJobStore
+	logger      *slog.Logger
 }
 
 // NewProcessor creates a new Processor.
 func NewProcessor(
-	scanner *Scanner,
 	resolver *DeltaResolver,
 	extractor *Extractor,
 	chunker *parsers.Chunker,
 	embedder retrieval.EmbeddingRuntime,
 	fileStore *LocalFileStore,
+	sourceStore *LocalSourceStore,
 	chunkStore *metadata.ChunkStore,
 	jobStore *ImportJobStore,
 	logger *slog.Logger,
 ) *Processor {
 	return &Processor{
-		scanner:    scanner,
-		resolver:   resolver,
-		extractor:  extractor,
-		chunker:    chunker,
-		embedder:   embedder,
-		fileStore:  fileStore,
-		chunkStore: chunkStore,
-		jobStore:   jobStore,
-		logger:     logger,
+		resolver:    resolver,
+		extractor:   extractor,
+		chunker:     chunker,
+		embedder:    embedder,
+		fileStore:   fileStore,
+		sourceStore: sourceStore,
+		chunkStore:  chunkStore,
+		jobStore:    jobStore,
+		logger:      logger,
 	}
 }
 
@@ -57,8 +57,20 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		return err
 	}
 
+	// Get the source for this job
+	source, err := p.sourceStore.Get(ctx, job.SourceID)
+	if err != nil {
+		return fmt.Errorf("failed to get source: %w", err)
+	}
+	if source == nil {
+		return fmt.Errorf("source not found: %s", job.SourceID)
+	}
+
+	// Create a scanner for this source
+	scanner := NewScanner(*source)
+
 	// Scan the source directory
-	entries, errChan := p.scanner.Walk(ctx)
+	entries, errChan := scanner.Walk(ctx)
 
 	progress := JobProgress{}
 	var filesToDelete []string
@@ -70,8 +82,8 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 			return ctx.Err()
 		case err := <-errChan:
 			if err != nil {
-				p.logger.Error("scan error", "error", err, "source", p.scanner.Source.ID)
-				if err := p.jobStore.AppendError(ctx, job.ID, fmt.Sprintf("scan: %s", RedactPath(entry.RelPath, p.scanner.Source.FolderPath))); err != nil {
+				p.logger.Error("scan error", "error", err, "source", source.ID)
+				if err := p.jobStore.AppendError(ctx, job.ID, fmt.Sprintf("scan: %s", RedactPath(entry.RelPath, source.FolderPath))); err != nil {
 					p.logger.Error("failed to log error", "error", err)
 				}
 				progress.FilesSkipped++
@@ -81,7 +93,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		}
 
 		// Classify file change state
-		delta, err := p.resolver.Classify(ctx, p.scanner.Source.ID, entry)
+		delta, err := p.resolver.Classify(ctx, source.ID, entry)
 		if err != nil {
 			p.logger.Error("delta classification failed", "error", err, "file", entry.RelPath)
 			progress.FilesSkipped++
@@ -102,11 +114,11 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		}
 
 		// Extract text from file
-		absPath := filepath.Join(p.scanner.Source.FolderPath, entry.RelPath)
+		absPath := filepath.Join(source.FolderPath, entry.RelPath)
 		extractResult, err := p.extractor.Extract(ctx, absPath)
 		if err != nil {
-			p.logger.Error("extraction error", "error", err, "file", RedactPath(absPath, p.scanner.Source.FolderPath))
-			if err := p.jobStore.AppendError(ctx, job.ID, RedactPath(absPath, p.scanner.Source.FolderPath)); err != nil {
+			p.logger.Error("extraction error", "error", err, "file", RedactPath(absPath, source.FolderPath))
+			if err := p.jobStore.AppendError(ctx, job.ID, RedactPath(absPath, source.FolderPath)); err != nil {
 				p.logger.Error("failed to log error", "error", err)
 			}
 			progress.FilesSkipped++
@@ -119,7 +131,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 
 		// Build LocalFile record
 		localFile := LocalFile{
-			SourceID:    p.scanner.Source.ID,
+			SourceID:    source.ID,
 			RelPath:     entry.RelPath,
 			FileName:    entry.FileName,
 			FileSize:    entry.Size,
@@ -143,7 +155,7 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		}
 
 		// Re-fetch the file to get its ID
-		storedFile, err := p.fileStore.GetByRelPath(ctx, p.scanner.Source.ID, entry.RelPath)
+		storedFile, err := p.fileStore.GetByRelPath(ctx, source.ID, entry.RelPath)
 		if err != nil {
 			p.logger.Error("file retrieval failed", "error", err, "file", entry.RelPath)
 			progress.FilesSkipped++

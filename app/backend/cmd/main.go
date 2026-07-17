@@ -21,7 +21,9 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/embedding"
 	"github.com/rad-system/m365-knowledge-graph/internal/feedback"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
+	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
 	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
+	"github.com/rad-system/m365-knowledge-graph/internal/parsers"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 	"github.com/rad-system/m365-knowledge-graph/internal/scheduler"
 	"github.com/rad-system/m365-knowledge-graph/internal/websocket"
@@ -214,11 +216,50 @@ func main() {
 	})
 	permissionExtractor := connectors.NewPermissionExtractor(db.Conn(), graphClient)
 
+	// T022: Initialize local import components (Phase 3)
+	localSourceStore := localimport.NewLocalSourceStore(db.Conn())
+	localJobStore := localimport.NewImportJobStore(db.Conn())
+	localFileStore := localimport.NewLocalFileStore(db.Conn())
+
+	// Create extractor and chunker for local import
+	localExtractor := localimport.NewExtractor()
+	localChunker := parsers.NewChunker(512, 128)
+
+	// Create local file scanner and delta resolver
+	localDeltaResolver := localimport.NewDeltaResolver(localFileStore)
+
+	// Create processor for import jobs
+	localChunkStore := metadata.NewChunkStore(db)
+	localProcessor := localimport.NewProcessor(
+		localDeltaResolver,
+		localExtractor,
+		localChunker,
+		embedRuntime,
+		localFileStore,
+		localSourceStore,
+		localChunkStore,
+		localJobStore,
+		logger,
+	)
+
+	// Create dispatcher with worker pool
+	localDispatcher := localimport.NewDispatcher(localProcessor, localJobStore, logger)
+	localDispatcher.MarkStaleJobs(context.Background())
+	go localDispatcher.Start(context.Background())
+
+	// Create local import handler dependencies
+	localImportDeps := &localimport.LocalImportDeps{
+		SourceStore: localSourceStore,
+		JobStore:    localJobStore,
+		Dispatcher:  localDispatcher,
+		JWTAuth:     jwtAuth,
+	}
+
 	// T114: Initialize router and register all handler groups
 	router := api.NewRouter()
 	registerRoutes(router, hub, feedbackStore, feedbackAnalyzer, retriever,
 		entraAuth, jwtAuth, cfg.OAuthRedirectURI, cfg.DevLoginUsername, cfg.DevLoginPassword,
-		queryBuilder, db.Conn(), permissionFilter, m365Deps)
+		queryBuilder, db.Conn(), permissionFilter, m365Deps, localImportDeps)
 
 	// T115: Start background scheduler jobs
 	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())

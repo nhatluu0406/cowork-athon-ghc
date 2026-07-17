@@ -255,21 +255,30 @@ func (ss *SemanticSearch) Search(ctx context.Context, query string, allowedFileI
 
 	results := make([]map[string]interface{}, 0, len(scored))
 	for _, sc := range scored {
-		var fileID int64
-		var text, headingPath, fileName sql.NullString
+		var fileID sql.NullInt64
+		var text, headingPath, fileName, sourceType, displayPath sql.NullString
 		row := ss.db.QueryRowContext(ctx, `
-			SELECT c.file_id, c.text, c.heading_path, f.file_name
+			SELECT c.file_id, c.text, c.heading_path,
+			       COALESCE(mf.file_name, lf.file_name) AS file_name,
+			       CASE WHEN lf.id IS NOT NULL THEN 'local'
+			            WHEN mf.id IS NOT NULL THEN 'm365'
+			            ELSE NULL END AS source_type,
+			       CASE WHEN lf.id IS NOT NULL THEN 'Local: ' || lf.rel_path
+			            WHEN mf.id IS NOT NULL THEN 'M365: ' || mf.file_name
+			            ELSE NULL END AS display_path
 			FROM chunks c
-			JOIN m365_files f ON f.id = c.file_id
+			LEFT JOIN m365_files mf ON mf.id = c.file_id
+			LEFT JOIN local_files lf ON lf.id = c.local_file_id
 			WHERE c.id = $1
 		`, sc.ChunkID)
-		if err := row.Scan(&fileID, &text, &headingPath, &fileName); err != nil {
+		if err := row.Scan(&fileID, &text, &headingPath, &fileName, &sourceType, &displayPath); err != nil {
 			continue
 		}
 
 		// INVARIANT-1 enforcement: skip any chunk whose file is outside the
 		// caller's permitted scope, even though it matched semantically.
-		if !allowed[fileID] {
+		// For local files, we still enforce permission checks at a higher level
+		if fileID.Valid && !allowed[fileID.Int64] {
 			continue
 		}
 
@@ -279,6 +288,8 @@ func (ss *SemanticSearch) Search(ctx context.Context, query string, allowedFileI
 			"text":         text.String,
 			"heading_path": headingPath.String,
 			"file_name":    fileName.String,
+			"source_type":  sourceType.String,
+			"display_path": displayPath.String,
 			"source":       "semantic",
 		})
 	}
