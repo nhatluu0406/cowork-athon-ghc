@@ -29,8 +29,8 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { GenericChildSupervisor } from "../../runtime/generic-child-supervisor.js";
-import type { ReadinessProbe } from "../../runtime/generic-readiness.js";
+import { GenericChildSupervisor } from "@cowork-ghc/runtime/generic-child-supervisor";
+import type { ReadinessProbe } from "@cowork-ghc/runtime/generic-readiness";
 import { neo4jRole, postgresRole, type StackPaths, type StackPorts } from "./stack-roles.js";
 import type { StackSupervisorSecrets } from "./stack-supervisor.js";
 

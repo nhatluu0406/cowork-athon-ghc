@@ -12,8 +12,8 @@
 
 import net from "node:net";
 import type { RuntimeProcessIdentity } from "@cowork-ghc/runtime";
-import { GenericChildSupervisor, type GenericChildSupervisorOptions } from "../../runtime/generic-child-supervisor.js";
-import { GenericChildAlreadyStartedError } from "../../runtime/generic-supervisor-errors.js";
+import { GenericChildSupervisor, type GenericChildSupervisorOptions } from "@cowork-ghc/runtime/generic-child-supervisor";
+import { GenericChildAlreadyStartedError } from "@cowork-ghc/runtime/generic-supervisor-errors";
 import { backendRole, llmSvcRole, neo4jRole, postgresRole, type StackPaths, type StackPorts } from "./stack-roles.js";
 
 const STACK_ROLE = "m365kg-stack" as const;
