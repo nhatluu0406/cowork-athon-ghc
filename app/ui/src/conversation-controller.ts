@@ -159,6 +159,7 @@ export function createConversationManager(
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       messageCount: record.messageCount,
+      surface: record.surface,
       ...(record.providerId !== undefined ? { providerId: record.providerId } : {}),
       ...(record.modelId !== undefined ? { modelId: record.modelId } : {}),
       ...(record.parentId !== undefined ? { parentId: record.parentId } : {}),
@@ -182,6 +183,7 @@ export function createConversationManager(
       try {
         const list = await (await client()).listConversations(
           state.searchQuery.length > 0 ? state.searchQuery : undefined,
+          "cowork",
         );
         state.summaries = list;
       } catch (error) {

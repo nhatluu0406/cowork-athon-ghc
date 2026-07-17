@@ -95,6 +95,21 @@ test("env-map redaction is whole-value scoped (documents the M3 boundary)", () =
   assert.equal(envMapContainsNoSecret({ CMDLINE: `serve --key ${secret}` }, [secret]), true);
 });
 
+test("buildLaunchSpec folds extraSecretValues into secretValues for redaction", () => {
+  const spec = buildLaunchSpec({
+    binPath: "C:\\opencode\\opencode.exe",
+    cwd: "C:\\ws",
+    port: 51888,
+    dataHome: "C:\\rt\\data",
+    configDir: "C:\\rt\\config",
+    baseEnv: { PATH: "C:\\Windows", CGHC_MS365_TOKEN: "tok_abcdef0123456789abcdef0123456789" },
+    extraSecretValues: ["tok_abcdef0123456789abcdef0123456789"],
+  });
+  assert.ok(spec.secretValues.includes("tok_abcdef0123456789abcdef0123456789"));
+  const redacted = redactedEnvSnapshot(spec);
+  assert.equal(redacted["CGHC_MS365_TOKEN"], "<redacted>");
+});
+
 function structuredInputs() {
   return {
     binPath: "opencode",

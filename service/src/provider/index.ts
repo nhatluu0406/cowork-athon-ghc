@@ -36,6 +36,7 @@ export {
   createSsrfPolicy,
   orderConnectCandidates,
   SsrfBlockedError,
+  isPrivateProviderAllowed,
   type SsrfPolicy,
   type SsrfPolicyOptions,
   type SsrfDecision,

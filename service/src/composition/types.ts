@@ -10,6 +10,8 @@
 import type { ServiceOptions } from "../server/http-service.js";
 import type { RunningService } from "../start.js";
 import type { BoundaryRouter } from "../boundary/contract.js";
+import type { PreviewService } from "../runtime-preview/index.js";
+import type { AppService } from "../runtime-app/index.js";
 import type { CredentialStore } from "../credential/index.js";
 import type { CredentialService } from "../credential/index.js";
 import type { RedactingLogger, SecretScrubber, TelemetryStore } from "../diagnostics/index.js";
@@ -174,6 +176,16 @@ export interface CoworkServiceDeps {
   readonly recentWorkspaces: RecentWorkspaces;
   readonly permissionGate: PermissionGate;
   readonly permissionAudit: InMemoryAuditSink;
+  /**
+   * The single owner of the one runtime preview process (Code surface web preview). Torn down
+   * on workspace change (via the settings router) and on service shutdown (compose-live).
+   */
+  readonly previewService: PreviewService;
+  /**
+   * The single owner of the one desktop-app runtime (Code surface Slice 2). Reuses the preview
+   * runner primitives; torn down on workspace change (settings router) and shutdown (compose-live).
+   */
+  readonly appService: AppService;
   /**
    * D1 fix (ADR 0011 Open item): session→preset bindings a dispatch branch registers before its
    * first prompt, read by {@link buildToolPermissionProxy}'s proxy to auto-deny a tool the

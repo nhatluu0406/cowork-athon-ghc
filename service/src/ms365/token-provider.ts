@@ -1,10 +1,14 @@
 /**
  * TokenProvider seam. Two adapters (manual paste here; device code in a later module) satisfy
- * the SAME interface so the connector is auth-source agnostic. The manual token is held in
- * memory for the session AND persisted via the credential store so a relaunch can retry it;
- * a stale token surfaces as a Graph 401, which the connector maps to needs_reconnect.
+ * the SAME interface so the connector is auth-source agnostic.
+ *
+ * The manual token is held IN MEMORY for the session only — it is deliberately NOT persisted to
+ * the OS credential store. A real Microsoft Graph access token is a JWT of ~2–5 KB, which exceeds
+ * the Windows Credential Manager blob limit (~2560 bytes); persisting it there fails the write.
+ * Manual tokens are short-lived (~1h) and relaunch-reuse is out of scope, so keeping the token in
+ * memory (never on disk, never in the renderer/logs) is both correct and simpler. A stale/expired
+ * token surfaces as a Graph 401, which the connector maps to needs_reconnect.
  */
-import type { CredentialService } from "../credential/index.js";
 
 export type AuthSource = "manual_token" | "device_code";
 
@@ -15,20 +19,16 @@ export interface TokenProvider {
   clear(): Promise<void>;
 }
 
-const MS365_ACCOUNT = "ms365";
-
 export interface ManualTokenDeps {
-  readonly credentials: CredentialService;
+  /** Optional account label; unused for storage (in-memory only) but kept for symmetry/telemetry. */
   readonly account?: string;
 }
 
-export function createManualTokenProvider(deps: ManualTokenDeps): {
+export function createManualTokenProvider(_deps: ManualTokenDeps = {}): {
   provider: TokenProvider;
   connect(accessToken: string): Promise<void>;
 } {
-  const providerId = deps.account ?? MS365_ACCOUNT;
   let token: string | null = null;
-  let ref = null as Awaited<ReturnType<CredentialService["store"]>> | null;
 
   const provider: TokenProvider = {
     source: "manual_token",
@@ -40,9 +40,7 @@ export function createManualTokenProvider(deps: ManualTokenDeps): {
       return token !== null;
     },
     async clear() {
-      if (ref !== null) await deps.credentials.remove(ref);
       token = null;
-      ref = null;
     },
   };
 
@@ -52,8 +50,8 @@ export function createManualTokenProvider(deps: ManualTokenDeps): {
       if (typeof accessToken !== "string" || accessToken.trim().length === 0) {
         throw new Error("Access token must be a non-empty string.");
       }
+      // In-memory only — no OS credential store write (Windows CredWrite blob-size limit).
       token = accessToken.trim();
-      ref = await deps.credentials.store({ providerId, secret: token });
     },
   };
 }

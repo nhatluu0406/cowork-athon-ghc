@@ -5,7 +5,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { AttachmentMetadata, ConversationMessage } from "../src/service-client.js";
-import { COWORK_SYSTEM_PROMPT, planDispatchPrompt } from "../src/dispatch-plan.js";
+import {
+  COWORK_SYSTEM_PROMPT,
+  MS365_ORCHESTRATION_POLICY,
+  planDispatchPrompt,
+} from "../src/dispatch-plan.js";
 import type { AttachmentSnapshot } from "../src/attachment-context.js";
 import { DISPATCH_MAX_CHARS } from "../src/attachment-limits.js";
 
@@ -128,5 +132,51 @@ test("plan failure lists omitted attachments and includes no dispatch metadata",
   if (!plan.ok) {
     assert.ok(plan.entries.some((e) => e.status === "omitted_by_budget"));
     assert.equal(plan.includedMetadata?.length ?? 0, 0);
+  }
+});
+
+test("MS365 policy block absent by default and when not connected", () => {
+  const plan = planDispatchPrompt([], [], "xin chào");
+  assert.equal(plan.ok, true);
+  assert.ok(plan.ok && !plan.text.includes("MS365 ORCHESTRATION"));
+  const explicit = planDispatchPrompt([], [], "xin chào", undefined, [], false);
+  assert.ok(explicit.ok && !explicit.text.includes("MS365 ORCHESTRATION"));
+});
+
+test("MS365 policy block present right after the action policy when connected", () => {
+  // ms365Connected is the 7th arg (workspaceContext is the 6th); pass it in the right slot.
+  const plan = planDispatchPrompt([], [], "xin chào", undefined, [], undefined, true);
+  assert.equal(plan.ok, true);
+  if (!plan.ok) return;
+  assert.ok(plan.text.includes(MS365_ORCHESTRATION_POLICY));
+  const actionIdx = plan.text.indexOf(COWORK_SYSTEM_PROMPT);
+  const ms365Idx = plan.text.indexOf(MS365_ORCHESTRATION_POLICY);
+  assert.ok(actionIdx >= 0 && ms365Idx > actionIdx);
+});
+
+test("MS365 policy block contains the five orchestration rules", () => {
+  for (const marker of [
+    "hỏi lại user",          // rule 1: ask-if-ambiguous via chat
+    "kế hoạch",              // rule 2: announce the step plan
+    "etag",                  // rule 3: read-before-edit
+    "planner_create_tasks",  // rule 4: batch tool
+    "manual_mode",           // rule 4: fallback per-item on manual mode
+    "thành công",            // rule 5: never fake success
+  ]) {
+    assert.ok(
+      MS365_ORCHESTRATION_POLICY.toLowerCase().includes(marker.toLowerCase()),
+      `policy must mention: ${marker}`,
+    );
+  }
+});
+
+test("MS365 policy block is budget-accounted (attachments path)", () => {
+  // Với maxChars nhỏ, block bật lên phải tính vào fixedChars → fail-fast thay vì tràn budget.
+  const tight = COWORK_SYSTEM_PROMPT.length + MS365_ORCHESTRATION_POLICY.length + 250;
+  const plan = planDispatchPrompt([], [], "yêu cầu", tight, [], undefined, true);
+  if (plan.ok) {
+    assert.ok(plan.text.length <= tight);
+  } else {
+    assert.ok(plan.message.length > 0);
   }
 });

@@ -19,7 +19,8 @@ import type { PermissionGate } from "../src/permission/index.js";
 import { createFakeTime, recordingDenialSink, recordingReplyPort } from "./permission-fakes.js";
 import type { RouteContext } from "../src/boundary/contract.js";
 import type { Ms365Connector } from "../src/ms365/ms365-connector.js";
-import { createMs365Router, MS365_CONNECT_PATH, MS365_TOOL_CALL_PATH, MS365_VIEW_PATH } from "../src/ms365/index.js";
+import { createMs365Router, MS365_CONNECT_PATH, MS365_TOOL_CALL_PATH, MS365_VIEW_PATH, MS365_DISCONNECT_PATH } from "../src/ms365/index.js";
+import { createMs365SessionScope } from "../src/ms365/ms365-session-scope.js";
 
 function gateFixture(): PermissionGate {
   const time = createFakeTime();
@@ -63,7 +64,7 @@ function errorKind(res: ToolResult): string {
 
 test("read tool runs directly when connected", async () => {
   const res = await handleToolCall(
-    { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t" },
+    { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: () => true },
     { name: "sharepoint_search", args: { query: "x" }, sessionId: "s", requestId: "r1" },
   );
   assert.equal(res.ok, true);
@@ -71,7 +72,7 @@ test("read tool runs directly when connected", async () => {
 
 test("not connected → not_connected error, no throw", async () => {
   const res = await handleToolCall(
-    { sharepoint: recordingSharePoint(), connectionState: () => "disconnected", gate: gateFixture(), now: () => "t" },
+    { sharepoint: recordingSharePoint(), connectionState: () => "disconnected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: () => true },
     { name: "sharepoint_search", args: { query: "x" }, sessionId: "s", requestId: "r2" },
   );
   assert.equal(errorKind(res), "not_connected");
@@ -81,7 +82,19 @@ test("upload without an Allow is blocked (proceed not_allowed → denied), uploa
   const gate = gateFixture();
   const sp = recordingSharePoint();
   const res = await handleToolCall(
-    { sharepoint: sp, connectionState: () => "connected", gate, now: () => "t" },
+    {
+      sharepoint: sp,
+      connectionState: () => "connected",
+      gate,
+      now: () => "t",
+      writeMode: () => "manual" as const,
+      sessionAllowed: () => true,
+      // Real gate never resolved for this requestId → awaitGateDecision's first poll already
+      // finds it out of `pending()` (never submitted-and-left-pending across a real tick), so
+      // an instant wait keeps this test synchronous instead of paying the real 1s fail-closed
+      // timeout window.
+      wait: () => Promise.resolve(),
+    },
     {
       name: "sharepoint_upload_file",
       args: { siteId: "S", relativeLocalPath: "n.txt", targetName: "n.txt" },
@@ -96,7 +109,7 @@ test("upload without an Allow is blocked (proceed not_allowed → denied), uploa
 
 test("invalid args → invalid_input (missing query)", async () => {
   const res = await handleToolCall(
-    { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t" },
+    { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: () => true },
     { name: "sharepoint_search", args: {}, sessionId: "s", requestId: "r4" },
   );
   assert.equal(errorKind(res), "invalid_input");
@@ -105,7 +118,7 @@ test("invalid args → invalid_input (missing query)", async () => {
 test("invalid args → invalid_input (upload missing targetName)", async () => {
   const sp = recordingSharePoint();
   const res = await handleToolCall(
-    { sharepoint: sp, connectionState: () => "connected", gate: gateFixture(), now: () => "t" },
+    { sharepoint: sp, connectionState: () => "connected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: () => true },
     {
       name: "sharepoint_upload_file",
       args: { siteId: "S", relativeLocalPath: "n.txt" },
@@ -131,15 +144,39 @@ function fakeConnector(overrides?: Partial<Ms365Connector>): Ms365Connector {
     graph: () => ({ json: async () => ({}) as never, bytes: async () => new Uint8Array() }),
     source: () => "manual_token",
     lastError: () => null,
+    beginDeviceCode: async () => ({ userCode: "x", verificationUri: "u", expiresInSec: 900 }),
+    pollDeviceCode: async () => "pending",
+    deviceConfigured: () => false,
+    grantedScopes: () => [],
     ...overrides,
   };
 }
 
+function fakeSiteScope() {
+  return {
+    listJoinedSites: async () => [],
+    setSiteEnabled: async () => {},
+    enabledSiteIds: () => [],
+    isEnabled: () => true,
+  };
+}
+
+function fakeWriteMode() {
+  return { mode: () => "manual" as const, setMode: async () => {} };
+}
+
+function fakeSessionScope() {
+  return createMs365SessionScope();
+}
+
 function router(overrides?: Partial<Ms365Connector>) {
   return createMs365Router({
-    tools: { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t" },
+    tools: { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: () => true },
     connector: fakeConnector(overrides),
     scopes: ["Sites.Read.All"],
+    siteScope: fakeSiteScope(),
+    writeMode: fakeWriteMode(),
+    sessionScope: fakeSessionScope(),
   });
 }
 
@@ -214,4 +251,25 @@ test("POST tool-call with a valid read call dispatches through handleToolCall", 
   assert.equal(result.status, 200);
   const data = result.data as ToolResult;
   assert.equal(data.ok, true);
+});
+
+test("disconnect revokes ALL sessions in the scope", async () => {
+  const scope = createMs365SessionScope();
+  scope.allow("s1");
+  scope.allow("s2");
+  let connectorDisconnected = false;
+  const r = createMs365Router({
+    tools: { sharepoint: recordingSharePoint(), connectionState: () => "connected", gate: gateFixture(), now: () => "t", writeMode: () => "manual" as const, sessionAllowed: (id) => scope.isAllowed(id) },
+    connector: fakeConnector({ disconnect: async () => { connectorDisconnected = true; } }),
+    scopes: ["Sites.Read.All"],
+    siteScope: fakeSiteScope(),
+    writeMode: fakeWriteMode(),
+    sessionScope: scope,
+  });
+  const route = r.routes.find((route) => route.method === "POST" && "path" in route && route.path === MS365_DISCONNECT_PATH);
+  assert.ok(route && "handler" in route);
+  await route.handler(ctx("POST", MS365_DISCONNECT_PATH));
+  assert.equal(scope.isAllowed("s1"), false, "s1 revoked on disconnect");
+  assert.equal(scope.isAllowed("s2"), false, "s2 revoked on disconnect");
+  assert.equal(connectorDisconnected, true, "connector.disconnect still called");
 });

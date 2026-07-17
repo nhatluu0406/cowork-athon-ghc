@@ -161,3 +161,25 @@ the port + delegation to the runtime; the gateway is boundary-only and **not bui
 - Confirm PR7 retry bounds/backoff parameters (L5 tunes values).
 - Confirm the EV event model boundary (ADR 0001 §3) vs the raw runtime SSE for `streamChat`
   (see the design doc §5 EV event / client-state contract, load-bearing for L5).
+
+## Post-freeze amendment (2026-07-15): explicit private-network opt-in for provider endpoints
+
+Does not reopen the frozen L4 decision above — it adds one narrowly-scoped, default-OFF escape
+hatch on top of it, approved by the product owner in response to a real deployment blocker (a
+corporate network's split-horizon DNS resolves a configured provider hostname to an RFC-1918
+address, which the L4 policy correctly refuses by default).
+
+- New env-gated flag `CGHC_SSRF_ALLOW_PRIVATE_PROVIDER` (`isPrivateProviderAllowed`,
+  `service/src/provider/ssrf-policy.ts`) — OFF unless exactly `"1"`/`"true"`.
+- `SsrfPolicyOptions.allowPrivateNetwork` relaxes **only** the `private` (RFC-1918) IP class.
+  `loopback` (still gated by the existing test-mode escape), `link_local`, and `cloud_metadata`
+  stay blocked unconditionally; the `https` requirement is unchanged.
+- **Scope: provider endpoints only.** The composition root (`compose-service.ts`) builds a
+  second, provider-scoped `SsrfPolicy` instance that reads this flag and wires it into
+  `createProviderPort` / `createHttpConnectorBundle`, `provider-connection-tester.ts`, and
+  `live-launch.ts`'s custom-base-URL validation. The MS365 Graph client, the device-code auth
+  provider, and the extension/MCP registry keep the original strict policy instance — this flag
+  never reaches them.
+- See `docs/product/current-status.md` §"SSRF boot-lockout hardening +
+  `CGHC_SSRF_ALLOW_PRIVATE_PROVIDER` opt-in (2026-07-15)" for the accompanying boot-resilience
+  fixes and verification evidence.

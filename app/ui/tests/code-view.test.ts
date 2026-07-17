@@ -1,13 +1,11 @@
 import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createClaudeCodeView, renderClaudeCodeSurface } from "../src/ui-shell/code/code-view.js";
+import { createClaudeCodeView, renderClaudeCodeSurface, setCodeMode, setRuntimeMode } from "../src/ui-shell/code/code-view.js";
 
 const EMPTY_INPUT = {
   workspaceName: "cowork-athon-ghc",
   reviews: [],
-  openFiles: [],
-  activeKey: null,
   sessionTitle: null,
   messages: [],
   phase: "idle",
@@ -15,37 +13,75 @@ const EMPTY_INPUT = {
   composerDisabledReason: null,
 } as const;
 
-const NOOP = {
-  onSelectTab: () => undefined,
-  onCloseTab: () => undefined,
-  onOpenReview: () => undefined,
-  onLoadFile: () => undefined,
-};
+const NOOP = { onOpenReview: () => undefined };
 
-test("session layout has 3 columns and repo chip", () => {
+test("layout has explorer, editor host, preview host and Agent panel with repo chip", () => {
   const dom = createClaudeCodeView({ onSendPrompt: () => undefined });
   renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
   assert.equal(dom.repoChip.textContent, "cowork-athon-ghc");
-  assert.ok(dom.sessionBody.querySelector(".code-explorer"));
-  assert.ok(dom.sessionBody.querySelector(".code-editor"));
-  assert.ok(dom.sessionBody.querySelector(".cc-panel"));
+  assert.ok(dom.root.querySelector(".code-explorer"));
+  assert.ok(dom.root.querySelector(".code-editor-host"));
+  assert.ok(dom.root.querySelector(".code-preview-host"));
+  assert.ok(dom.root.querySelector(".cc-panel"));
 });
 
-test("segmented switches to onboarding and back via start button", () => {
+test("surface title and logo say Code, never Claude Code", () => {
   const dom = createClaudeCodeView({ onSendPrompt: () => undefined });
   renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
-  const tabs = dom.root.querySelectorAll<HTMLButtonElement>(".cc-segmented__item");
-  tabs[1]?.click();
-  assert.equal(dom.codeTab, "onboarding");
-  assert.equal(dom.sessionBody.hidden, true);
-  dom.onboardingBody.querySelector<HTMLButtonElement>(".cc-onboarding__start")?.click();
-  assert.equal(dom.codeTab, "session");
-  assert.equal(dom.sessionBody.hidden, false);
+  assert.equal(dom.root.querySelector(".cc-surface__title")?.textContent, "Code");
+  assert.doesNotMatch(dom.root.textContent ?? "", /Claude Code/);
 });
 
-test("explorer collapse toggles a class on the surface", () => {
+test("no legacy two-tab (Phiên làm việc / Cách hoạt động) or fake chips remain", () => {
   const dom = createClaudeCodeView({ onSendPrompt: () => undefined });
   renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
+  const text = dom.root.textContent ?? "";
+  assert.doesNotMatch(text, /Cách hoạt động/);
+  assert.equal(dom.root.querySelector(".cc-segmented"), null);
+  assert.equal(dom.root.querySelector(".cc-onboarding"), null);
+});
+
+test("Code/Preview mode toggle shows the preview host and fires onModeChange", () => {
+  const modes: string[] = [];
+  const dom = createClaudeCodeView({ onSendPrompt: () => undefined, onModeChange: (m) => modes.push(m) });
+  renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
+  assert.equal(dom.editorHost.hidden, false);
+  assert.equal(dom.previewPaneHost.hidden, true);
+  setCodeMode(dom, "preview");
+  assert.equal(dom.mode, "preview");
+  assert.equal(dom.editorHost.hidden, true);
+  assert.equal(dom.previewPaneHost.hidden, false);
+  setCodeMode(dom, "code");
+  assert.equal(dom.mode, "code");
+  assert.deepEqual(modes, ["preview", "code"]);
+});
+
+test("Web/App runtime segmented is hidden in Code mode, shown in Preview, and toggles panes", () => {
+  const runtimeModes: string[] = [];
+  const dom = createClaudeCodeView({ onSendPrompt: () => undefined, onRuntimeModeChange: (m) => runtimeModes.push(m) });
+  renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
+  // Hidden in Code mode; app host present but hidden.
+  assert.equal(dom.runtimeSegmented.hidden, true);
+  assert.ok(dom.root.querySelector(".code-app-host"));
+  assert.equal(dom.appPaneHost.hidden, true);
+  // Entering Preview shows the Web/App control; Web is the default pane.
+  setCodeMode(dom, "preview");
+  assert.equal(dom.runtimeSegmented.hidden, false);
+  assert.equal(dom.previewPaneHost.hidden, false);
+  assert.equal(dom.appPaneHost.hidden, true);
+  // Switch to Ứng dụng → app pane shows, web pane hides.
+  setRuntimeMode(dom, "app");
+  assert.equal(dom.runtimeMode, "app");
+  assert.equal(dom.appPaneHost.hidden, false);
+  assert.equal(dom.previewPaneHost.hidden, true);
+  assert.deepEqual(runtimeModes, ["app"]);
+});
+
+test("panel toggle collapses the Agent panel; explorer collapse toggles a class", () => {
+  const dom = createClaudeCodeView({ onSendPrompt: () => undefined });
+  renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
+  dom.panelToggle.click();
+  assert.equal(dom.root.classList.contains("cc-surface--panel-collapsed"), true);
   dom.explorer.collapseButton.click();
   assert.equal(dom.root.classList.contains("cc-surface--explorer-collapsed"), true);
 });

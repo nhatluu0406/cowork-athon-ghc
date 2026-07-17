@@ -23,6 +23,16 @@ export const IpcChannel = {
   SetDevToolsEnabled: "cowork:set-devtools-enabled",
   /** Renderer asks the shell to save a text blob (diagnostics export) via a native save dialog. */
   SaveTextFile: "cowork:save-text-file",
+  /** Renderer asks the shell to load a loopback preview URL into the embedded surface. */
+  PreviewLoad: "cowork:preview-load",
+  /** Renderer syncs the embedded preview surface geometry/visibility to its Preview pane. */
+  PreviewSetBounds: "cowork:preview-set-bounds",
+  /** Renderer hides the embedded preview surface. */
+  PreviewHide: "cowork:preview-hide",
+  /** Renderer reloads the current preview page. */
+  PreviewReload: "cowork:preview-reload",
+  /** Renderer tears down the embedded preview surface. */
+  PreviewClose: "cowork:preview-close",
 } as const;
 
 /** Union of the allowed channel name literals. */
