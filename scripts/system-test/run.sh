@@ -232,6 +232,11 @@ log "running Cowork service M365KG integration tests (T3.1-T3.4)"
   M365KG_BACKEND_PID_FILE="$BACKEND_PID_FILE" \
   M365KG_BACKEND_BIN="$BACKEND_BIN" \
   M365KG_NEO4J_PASSWORD="$NEO4J_PASSWORD" \
+  M365KG_PG_HOST="localhost" \
+  M365KG_PG_PORT="$PG_PORT" \
+  M365KG_PG_USER="$PG_USER" \
+  M365KG_PG_PASSWORD="$PG_PASSWORD" \
+  M365KG_PG_DB="$PG_DB" \
   node --import tsx --test service/tests/knowledge/m365kg-integration.test.ts
 ) || EXIT_CODE=1
 
