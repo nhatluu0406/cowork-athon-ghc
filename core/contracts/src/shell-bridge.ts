@@ -74,6 +74,28 @@ export interface SaveTextFileResult {
 export type WindowTheme = "light" | "dark";
 
 /**
+ * Geometry (in renderer DIP, relative to the window content) for the embedded runtime-preview
+ * surface, plus whether it should be shown. The renderer measures its preview pane and syncs
+ * this whenever the layout changes or a modal/permission dialog needs the view hidden.
+ */
+export interface PreviewViewBounds {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+  /** Show the view only when the Preview pane is actually visible + unobstructed. */
+  readonly visible: boolean;
+}
+
+/** Result of asking the shell to load a URL into the embedded preview surface. */
+export interface PreviewLoadResult {
+  /** True when the URL was accepted (loopback http/https) and load was initiated. */
+  readonly ok: boolean;
+  /** Non-secret reason when rejected (e.g. a non-loopback URL). */
+  readonly error?: string;
+}
+
+/**
  * The complete renderer-visible bridge surface. Extended by later UI tasks ONLY with
  * additional explicit, typed native-capability methods — never a passthrough.
  */
@@ -102,6 +124,21 @@ export interface CoworkShellBridge {
    * dialog. The shell owns the dialog + the write; the renderer never chooses an arbitrary path.
    */
   readonly saveTextFile: (request: SaveTextFileRequest) => Promise<SaveTextFileResult>;
+  /**
+   * Load a LOOPBACK preview URL into a hardened, separately-governed embedded surface
+   * (a WebContentsView the shell owns — NOT an iframe, so the renderer CSP is untouched, and
+   * NOT a `<webview>`). Only `http(s)://127.0.0.1|localhost|[::1]` is accepted; the view denies
+   * off-loopback navigation, popups, downloads, and webview attach, and runs with no preload.
+   */
+  readonly previewLoad: (url: string) => Promise<PreviewLoadResult>;
+  /** Position/size/show the embedded preview surface over the renderer's Preview pane. */
+  readonly previewSetBounds: (bounds: PreviewViewBounds) => Promise<void>;
+  /** Hide the embedded preview surface (modal open / surface switch / drawer overlap). */
+  readonly previewHide: () => Promise<void>;
+  /** Reload the current preview page. */
+  readonly previewReload: () => Promise<void>;
+  /** Tear down the embedded preview surface entirely. */
+  readonly previewClose: () => Promise<void>;
 }
 
 /** Global key under which the preload exposes {@link CoworkShellBridge} on `window`. */

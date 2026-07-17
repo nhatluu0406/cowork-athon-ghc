@@ -13,6 +13,8 @@ import type {
   ConnectLiveResult,
   PickedWorkspaceFile,
   PickedWorkspaceFolder,
+  PreviewLoadResult,
+  PreviewViewBounds,
   RendererBootstrap,
   SaveTextFileRequest,
   SaveTextFileResult,
@@ -21,6 +23,7 @@ import type {
 
 import { IpcChannel } from "./channels.js";
 import type { ShellBootstrap } from "../bootstrap.js";
+import { createPreviewViewController, type PreviewViewController } from "../preview/preview-view.js";
 
 /** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
 let e2eAttachmentQueue: string[] | null = null;
@@ -55,6 +58,26 @@ function consumeE2eAttachmentPath(): string | undefined {
 export interface IpcHandlerDeps {
   readonly getBootstrap: () => ShellBootstrap;
   readonly restartService: () => Promise<void>;
+}
+
+/** Lazily-created embedded preview controller, one per owning window. */
+const previewControllers = new WeakMap<BrowserWindow, PreviewViewController>();
+
+function previewControllerFor(event: IpcMainInvokeEvent): PreviewViewController | null {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (owner === null) return null;
+  let controller = previewControllers.get(owner);
+  if (controller === undefined) {
+    controller = createPreviewViewController(owner);
+    previewControllers.set(owner, controller);
+    // The child view is destroyed with the window; drop our reference so a relaunch re-creates it.
+    owner.once("closed", () => previewControllers.delete(owner));
+  }
+  return controller;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
@@ -185,4 +208,47 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
       }
     },
   );
+
+  // --- Embedded runtime preview (WebContentsView, hardened) ---
+  ipcMain.handle(
+    IpcChannel.PreviewLoad,
+    (event: IpcMainInvokeEvent, url: unknown): PreviewLoadResult => {
+      if (typeof url !== "string") return { ok: false, error: "invalid_url" };
+      const controller = previewControllerFor(event);
+      if (controller === null) return { ok: false, error: "no_window" };
+      return controller.load(url);
+    },
+  );
+  ipcMain.handle(
+    IpcChannel.PreviewSetBounds,
+    (event: IpcMainInvokeEvent, bounds: unknown): void => {
+      const b = bounds as Partial<PreviewViewBounds> | null;
+      if (
+        b === null ||
+        typeof b !== "object" ||
+        !isFiniteNumber(b.x) ||
+        !isFiniteNumber(b.y) ||
+        !isFiniteNumber(b.width) ||
+        !isFiniteNumber(b.height)
+      ) {
+        return;
+      }
+      previewControllerFor(event)?.setBounds({
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        visible: b.visible === true,
+      });
+    },
+  );
+  ipcMain.handle(IpcChannel.PreviewHide, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.hide();
+  });
+  ipcMain.handle(IpcChannel.PreviewReload, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.reload();
+  });
+  ipcMain.handle(IpcChannel.PreviewClose, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.close();
+  });
 }

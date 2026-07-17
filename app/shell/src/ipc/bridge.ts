@@ -32,6 +32,11 @@ export function createShellBridge(ipc: BridgeIpc): CoworkShellBridge {
     setWindowTheme: (theme) => ipc.invoke(IpcChannel.SetWindowTheme, theme),
     setDevToolsEnabled: (enabled) => ipc.invoke(IpcChannel.SetDevToolsEnabled, enabled),
     saveTextFile: (request) => ipc.invoke(IpcChannel.SaveTextFile, request),
+    previewLoad: (url) => ipc.invoke(IpcChannel.PreviewLoad, url),
+    previewSetBounds: (bounds) => ipc.invoke(IpcChannel.PreviewSetBounds, bounds),
+    previewHide: () => ipc.invoke(IpcChannel.PreviewHide),
+    previewReload: () => ipc.invoke(IpcChannel.PreviewReload),
+    previewClose: () => ipc.invoke(IpcChannel.PreviewClose),
   };
 }
 
