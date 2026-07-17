@@ -5,6 +5,7 @@ package integration
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,6 +27,7 @@ func TestLLMConfigPostValidConfig(t *testing.T) {
 
 	// Generate valid JWT token
 	token, err := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, err := jwtAuth.GenerateToken("test-user@example.com")
 	if err != nil {
 		t.Fatalf("Failed to generate JWT: %v", err)
 	}
@@ -82,6 +84,7 @@ func TestLLMConfigPostInvalidProvider(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	reqBody := map[string]interface{}{
 		"provider": "invalid-provider",
@@ -163,6 +166,7 @@ func TestLLMConfigGetWithNoConfig(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	req := httptest.NewRequest("GET", "/api/llm/config/current", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -190,6 +194,7 @@ func TestLLMConfigUpsert(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	handler := api.HandleLLMConfig(db, jwtAuth)
 
@@ -252,6 +257,7 @@ func TestLLMConfigNLPModeValidation(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	testCases := []struct {
 		nlpMode  int
@@ -307,6 +313,7 @@ func TestLLMConfigAPIKeyEncryption(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	apiKey := "sk-very-secret-key-12345"
 
@@ -352,6 +359,7 @@ func TestLLMConfigAPIKeyNotReturnedInGET(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	// First, insert a config
 	postReqBody := map[string]interface{}{
@@ -404,6 +412,7 @@ func TestLLMConfigSSRFValidation(t *testing.T) {
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
+	token, _ := jwtAuth.GenerateToken("test-user@example.com")
 
 	maliciousURLs := []string{
 		"http://localhost:8080",           // HTTP not allowed
