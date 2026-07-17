@@ -64,6 +64,8 @@ function entityTypeLabel(entityType: KnowledgeCitation["entityType"]): string {
       return "Khách hàng";
     case "Department":
       return "Phòng ban";
+    default:
+      return entityType;
   }
 }
 

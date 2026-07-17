@@ -689,6 +689,14 @@ export interface ServiceClient {
     readonly username: string;
     readonly userId: string;
   }>;
+  /** Get the current knowledge source configuration status. */
+  getKnowledgeStatus(): Promise<import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView>;
+  /** Configure a knowledge source with baseUrl and token. */
+  configureKnowledgeSource(baseUrl: string, token: string): Promise<import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView>;
+  /** Test the knowledge source connection. */
+  testKnowledgeConnection(): Promise<TestResult>;
+  /** Disconnect from the knowledge source. */
+  disconnectKnowledgeSource(): Promise<import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -1194,5 +1202,28 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         "/v1/auth/unlock",
         { method: "POST", body: JSON.stringify({ username, password }) },
       ),
+
+    getKnowledgeStatus: async () =>
+      (await call<{ status: import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView }>(
+        "/v1/knowledge/status",
+      )).status,
+
+    configureKnowledgeSource: async (baseUrl, token) =>
+      (await call<{ status: import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView }>(
+        "/v1/knowledge/configure",
+        { method: "POST", body: JSON.stringify({ baseUrl, token }) },
+      )).status,
+
+    testKnowledgeConnection: async () =>
+      (await call<{ result: TestResult }>("/v1/knowledge/test-connection", {
+        method: "POST",
+        body: "{}",
+      })).result,
+
+    disconnectKnowledgeSource: async () =>
+      (await call<{ status: import("@cowork-ghc/service/knowledge/types").KnowledgeStatusView }>(
+        "/v1/knowledge/connection",
+        { method: "DELETE" },
+      )).status,
   };
 }

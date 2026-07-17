@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Cowork GHC — Knowledge Graph cho Microsoft 365</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#111832; --panel:#151d3d; --accent:#5b8cff; --accent2:#38e2c4;
+    --text:#eef1fb; --muted:#9aa4c7; --danger:#ff6b6b; --warn:#ffb84d; --ok:#38e2c4;
+    --card:#1a2347; --border:#28315a;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif;
+    background: radial-gradient(1200px 800px at 80% -10%, #1b2554 0%, var(--bg) 55%);
+    color:var(--text); overflow:hidden;
+  }
+  #deck{ position:relative; width:100vw; height:100vh; }
+  .slide{
+    position:absolute; inset:0; display:none; flex-direction:column;
+    padding: 6vh 8vw; overflow-y:auto;
+  }
+  .slide.active{ display:flex; animation: fadeIn .45s ease; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:translateY(0);} }
+
+  .kicker{ color:var(--accent2); letter-spacing:3px; font-size:13px; font-weight:700; text-transform:uppercase; margin-bottom:14px;}
+  h1{ font-size:clamp(30px,4.2vw,58px); margin:0 0 14px; line-height:1.1; font-weight:800;}
+  h2{ font-size:clamp(24px,3vw,38px); margin:0 0 22px; font-weight:800; }
+  p.lead{ font-size:clamp(16px,1.5vw,22px); color:var(--muted); max-width:900px; line-height:1.55;}
+  .grid{ display:grid; gap:18px; margin-top:20px; }
+  .grid.cols-2{ grid-template-columns:1fr 1fr; }
+  .grid.cols-3{ grid-template-columns:repeat(3,1fr); }
+  .grid.cols-4{ grid-template-columns:repeat(4,1fr); }
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px 22px;
+  }
+  .card h3{ margin:0 0 8px; font-size:18px; color:var(--accent2); }
+  .card p{ margin:0; color:var(--muted); font-size:14.5px; line-height:1.5; }
+  .badge{ display:inline-block; padding:3px 10px; border-radius:20px; font-size:12px; font-weight:700; margin-right:6px;}
+  .badge.ok{ background:rgba(56,226,196,.15); color:var(--ok); border:1px solid rgba(56,226,196,.4);}
+  .badge.warn{ background:rgba(255,184,77,.15); color:var(--warn); border:1px solid rgba(255,184,77,.4);}
+  .badge.danger{ background:rgba(255,107,107,.15); color:var(--danger); border:1px solid rgba(255,107,107,.4);}
+
+  .flow{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:24px;}
+  .flow .step{ background:var(--card); border:1px solid var(--border); border-radius:10px; padding:14px 16px; font-size:14px; min-width:150px; text-align:center;}
+  .flow .arrow{ color:var(--accent); font-size:20px; }
+
+  .metric{ text-align:center; }
+  .metric .num{ font-size:clamp(24px,2.6vw,40px); font-weight:800; color:var(--accent2); }
+  .metric .lbl{ font-size:13px; color:var(--muted); margin-top:4px; }
+
+  table{ width:100%; border-collapse:collapse; margin-top:18px; font-size:14.5px;}
+  th,td{ text-align:left; padding:10px 14px; border-bottom:1px solid var(--border);}
+  th{ color:var(--accent2); font-size:13px; text-transform:uppercase; letter-spacing:1px;}
+  td{ color:var(--muted); }
+  td.hl{ color:var(--text); font-weight:600; }
+
+  .footer-brand{ margin-top:auto; padding-top:20px; color:var(--muted); font-size:13px; display:flex; justify-content:space-between; align-items:center;}
+
+  #progress{ position:fixed; top:0; left:0; height:4px; background:linear-gradient(90deg,var(--accent),var(--accent2)); z-index:50; transition:width .4s ease;}
+  #nav{ position:fixed; bottom:22px; right:32px; display:flex; gap:10px; z-index:50; align-items:center;}
+  #nav button{
+    background:var(--panel); border:1px solid var(--border); color:var(--text); width:42px; height:42px;
+    border-radius:50%; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center;
+  }
+  #nav button:hover{ background:var(--accent); border-color:var(--accent); }
+  #counter{ color:var(--muted); font-size:13px; min-width:50px; text-align:center;}
+  .dots{ position:fixed; bottom:22px; left:32px; display:flex; gap:6px; z-index:50;}
+  .dots span{ width:8px; height:8px; border-radius:50%; background:var(--border); cursor:pointer;}
+  .dots span.active{ background:var(--accent2); }
+
+  ul.list{ margin:0; padding-left:20px; color:var(--muted); }
+  ul.list li{ margin-bottom:8px; line-height:1.5; }
+  ul.list li b{ color:var(--text); }
+
+  .titleslide{ justify-content:center; align-items:flex-start; }
+  .titleslide .logo{ font-size:14px; letter-spacing:4px; color:var(--accent); text-transform:uppercase; margin-bottom:30px; border:1px solid var(--border); padding:6px 14px; border-radius:20px;}
+</style>
+</head>
+<body>
+
+<div id="progress"></div>
+<div id="deck">
+
+  <!-- Slide 1: Title -->
+  <section class="slide titleslide active">
+    <div class="logo">Cowork GHC · Cuộc thi Cowork Tools</div>
+    <h1>Knowledge Graph cho Microsoft 365<br>Tìm đúng thông tin, ngay trong Cowork</h1>
+    <p class="lead">Biến SharePoint, Teams và Microsoft Graph thành một nguồn tri thức có thể hỏi-đáp bằng ngôn ngữ tự nhiên — có trích dẫn nguồn, tôn trọng quyền truy cập, và xử lý local-first.</p>
+    <div class="footer-brand">
+      <span>Trình bày cho Ban Giám Khảo</span>
+      <span>DungPD4 · 17/07/2026</span>
+    </div>
+  </section>
+
+  <!-- Slide 2: Problem -->
+  <section class="slide">
+    <div class="kicker">Vấn đề</div>
+    <h2>Tri thức tổ chức đang nằm rải rác và "câm lặng"</h2>
+    <p class="lead">Dữ liệu thật tồn tại trong SharePoint, OneDrive, Teams — nhưng không ai truy vấn được nó bằng câu hỏi tự nhiên, có kèm bằng chứng.</p>
+    <div class="grid cols-3">
+      <div class="card">
+        <h3>❓ "Ai đang phụ trách dự án X?"</h3>
+        <p>Câu trả lời nằm rải rác trong email, chat Teams, tài liệu — không ai tổng hợp được nhanh.</p>
+      </div>
+      <div class="card">
+        <h3>📄 "SOW mới nhất ở đâu?"</h3>
+        <p>Hàng chục phiên bản tài liệu trên SharePoint, tìm kiếm từ khóa thường không ra đúng bản.</p>
+      </div>
+      <div class="card">
+        <h3>🧠 "Ai biết công nghệ Y?"</h3>
+        <p>Không có cách nào truy vấn quan hệ người – dự án – công nghệ một cách có cấu trúc.</p>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:26px;">Agent chat hiện tại của Cowork chỉ trả lời dựa trên file người dùng tự đính kèm — chưa hề "grounded" vào dữ liệu M365 thật của tổ chức.</p>
+  </section>
+
+  <!-- Slide 3: Pitch / Solution -->
+  <section class="slide">
+    <div class="kicker">Giải pháp</div>
+    <h2>Một tool tri thức, gắn thẳng vào Cowork</h2>
+    <p class="lead">Kết hợp <b style="color:var(--text)">tìm kiếm ngữ nghĩa (vector)</b> với <b style="color:var(--text)">đồ thị tri thức (Neo4j)</b> trên dữ liệu SharePoint + OneDrive + Teams, đưa thẳng vào Agent qua một tool call permission-aware.</p>
+    <div class="grid cols-2" style="margin-top:30px;">
+      <div class="card">
+        <h3>🔎 Hybrid Search</h3>
+        <p>Không chỉ tìm theo từ khóa hay vector đơn thuần — mở rộng theo quan hệ đồ thị (người, dự án, tài liệu, công nghệ) rồi rerank kết quả.</p>
+      </div>
+      <div class="card">
+        <h3>🔐 Permission-aware</h3>
+        <p>Lọc quyền truy cập là bước đầu tiên trong pipeline — người dùng chỉ thấy dữ liệu họ vốn có quyền xem trên M365.</p>
+      </div>
+      <div class="card">
+        <h3>🖥️ Local-first</h3>
+        <p>Dịch vụ LLM nội bộ (llm-svc, Rust) có thể chạy hoàn toàn offline, chỉ cần CPU, ≤8GB RAM — giảm phụ thuộc cloud.</p>
+      </div>
+      <div class="card">
+        <h3>💬 Trả lời có trích dẫn</h3>
+        <p>Câu trả lời tự nhiên kèm nguồn gốc (tài liệu, tin nhắn, người) — không phải "hộp đen".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 4: Architecture flow -->
+  <section class="slide">
+    <div class="kicker">Kiến trúc</div>
+    <h2>Luồng dữ liệu: từ M365 đến câu trả lời</h2>
+    <div class="flow">
+      <div class="step">1. Kết nối Microsoft Graph API<br><small style="color:var(--muted)">SharePoint · OneDrive · Teams</small></div>
+      <div class="arrow">→</div>
+      <div class="step">2. Delta Sync định kỳ<br><small style="color:var(--muted)">~5 phút / lần</small></div>
+      <div class="arrow">→</div>
+      <div class="step">3. Parse & Chunk<br><small style="color:var(--muted)">docx · xlsx · pptx · pdf</small></div>
+      <div class="arrow">→</div>
+      <div class="step">4. Trích xuất Entity + Embedding<br><small style="color:var(--muted)">llm-svc (Rust) → Neo4j + PostgreSQL</small></div>
+    </div>
+    <div class="flow" style="margin-top:10px;">
+      <div class="step">5. Truy vấn người dùng</div>
+      <div class="arrow">→</div>
+      <div class="step">Pipeline 8 bước<br><small style="color:var(--muted)">Lọc quyền → Intent → NER → Graph+Vector → Rerank → Context → Trả lời</small></div>
+      <div class="arrow">→</div>
+      <div class="step">6. Tool <code>m365_knowledge_search</code></div>
+      <div class="arrow">→</div>
+      <div class="step">Hiển thị trong Cowork<br><small style="color:var(--muted)">Knowledge Panel</small></div>
+    </div>
+    <p class="lead" style="margin-top:30px;">Ngăn xếp: Electron renderer → preload → service (Node/TS) → backend Go (Knowledge Graph) → llm-svc Rust (gRPC) → Neo4j / PostgreSQL.</p>
+  </section>
+
+  <!-- Slide 5: Differentiators -->
+  <section class="slide">
+    <div class="kicker">Điểm khác biệt</div>
+    <h2>Vì sao không chỉ là "thêm một vector search"</h2>
+    <table>
+      <tr><th>Cách tiếp cận thông thường</th><th>Cowork GHC Knowledge Graph</th></tr>
+      <tr><td>Chỉ vector similarity search</td><td class="hl">Vector search + graph traversal (1–2 hop) + rerank đa tiêu chí</td></tr>
+      <tr><td>Một nguồn dữ liệu duy nhất</td><td class="hl">Đa nguồn thật: SharePoint + OneDrive + Teams qua Graph API</td></tr>
+      <tr><td>Bỏ qua quyền truy cập</td><td class="hl">Lọc quyền là Stage 0 của pipeline, đồng bộ permission_cache từ Graph</td></tr>
+      <tr><td>Luôn cần cloud LLM</td><td class="hl">llm-svc hỗ trợ 3 chế độ: cloud_only / hybrid / local_only (offline hoàn toàn)</td></tr>
+      <tr><td>Trả lời không rõ nguồn</td><td class="hl">Context packing 12K token + trích dẫn nguồn trong câu trả lời</td></tr>
+    </table>
+  </section>
+
+  <!-- Slide 6: Metrics -->
+  <section class="slide">
+    <div class="kicker">Thông số kỹ thuật</div>
+    <h2>Con số cụ thể (quy mô POC)</h2>
+    <div class="grid cols-4">
+      <div class="card metric"><div class="num">~50</div><div class="lbl">Người dùng POC</div></div>
+      <div class="card metric"><div class="num">~10K</div><div class="lbl">Tài liệu SharePoint/OneDrive</div></div>
+      <div class="card metric"><div class="num">~500K</div><div class="lbl">Tin nhắn Teams</div></div>
+      <div class="card metric"><div class="num">5 phút</div><div class="lbl">Chu kỳ delta sync</div></div>
+      <div class="card metric"><div class="num">12K</div><div class="lbl">Token ngữ cảnh / câu trả lời</div></div>
+      <div class="card metric"><div class="num">≤30s</div><div class="lbl">Độ trễ mục tiêu (p95)</div></div>
+      <div class="card metric"><div class="num">7 / 8</div><div class="lbl">Loại Node / Relationship trong Neo4j</div></div>
+      <div class="card metric"><div class="num">≤8GB</div><div class="lbl">RAM cho local model (CPU-only)</div></div>
+    </div>
+    <p class="lead" style="margin-top:26px;">Embedding: <b style="color:var(--text)">text-embedding-3-small</b> (1536 chiều) · Sinh câu trả lời: <b style="color:var(--text)">qwen3-8b-q4</b> (local GGUF) hoặc cloud · Reranker: <b style="color:var(--text)">bge-reranker-base</b>.</p>
+  </section>
+
+  <!-- Slide 7: Status honesty -->
+  <section class="slide">
+    <div class="kicker">Trạng thái triển khai</div>
+    <h2>Minh bạch: đã làm gì, còn gì đang dang dở</h2>
+    <div class="grid cols-2">
+      <div class="card">
+        <h3><span class="badge ok">Đã có</span> Backend Knowledge Graph (REQ-204)</h3>
+        <p>Spec, plan, contracts đầy đủ. Test riêng: 43/43 Go, 43/43 Rust, Playwright pass. Connectors, graph builder, retrieval pipeline, embedding runtime đã code.</p>
+      </div>
+      <div class="card">
+        <h3><span class="badge warn">Đang chờ</span> Tích hợp vào Cowork (REQ-205)</h3>
+        <p>Spec ở trạng thái Draft, chờ Product Owner quyết định 2 vấn đề kiến trúc trước khi merge chính thức.</p>
+      </div>
+      <div class="card">
+        <h3><span class="badge warn">Còn stub</span> Một số phần thực thi</h3>
+        <p><code>DeltaSyncCoordinator</code> chưa ghi file/chunk thật vào DB (mới đếm); <code>GraphBuilder.Publish()</code> chưa cập nhật graph epoch thật; local model inference (ONNX/GGUF) mới là scaffolding.</p>
+      </div>
+      <div class="card">
+        <h3><span class="badge danger">Chưa bật</span> M365 connector</h3>
+        <p>Foundation đã implement, nhưng nằm sau feature flag <code>CGHC_MS365_ENABLED</code>, mặc định OFF — chưa merge-ready cho production.</p>
+      </div>
+    </div>
+    <p class="lead" style="margin-top:24px;">Theo nguyên tắc dự án: không "fake" khả năng D1–D4 — mọi mount boundary được đánh dấu rõ ràng cho đến khi hợp nhất thật.</p>
+  </section>
+
+  <!-- Slide 8: Known gap -->
+  <section class="slide">
+    <div class="kicker">Rủi ro đã ghi nhận</div>
+    <h2>Khoảng hở kỹ thuật cần giải quyết tiếp</h2>
+    <ul class="list" style="font-size:17px; margin-top:10px;">
+      <li><b>Graph Expansion chưa lọc quyền:</b> bước mở rộng đồ thị (BFS 1–2 hop) hiện chưa bị giới hạn theo permission_cache như bước lọc ban đầu — cần vá trước khi đưa vào production.</li>
+      <li><b>Delta sync mới ở mức đếm:</b> coordinator chưa ghi nhận file/chunk thật vào metadata DB, cần hoàn thiện để đảm bảo dữ liệu đồng bộ chính xác.</li>
+      <li><b>Local inference chưa chạy thật:</b> phần load model ONNX/GGUF trong llm-svc mới là khung sườn (scaffolding), chưa production-ready.</li>
+      <li><b>Quyết định kiến trúc treo:</b> REQ-205 cần Product Owner chốt cách gọi tool <code>m365_knowledge_search</code> (server-to-server qua PermissionGate) trước khi tích hợp UI.</li>
+    </ul>
+  </section>
+
+  <!-- Slide 9: Roadmap -->
+  <section class="slide">
+    <div class="kicker">Lộ trình tiếp theo</div>
+    <h2>Từ POC đến sản phẩm trong Cowork</h2>
+    <div class="grid cols-3">
+      <div class="card">
+        <h3>Bước 1</h3>
+        <p>Chốt kiến trúc tích hợp REQ-205, vá lỗ hổng permission trong Graph Expansion, bật cờ M365 connector ở môi trường thử nghiệm.</p>
+      </div>
+      <div class="card">
+        <h3>Bước 2</h3>
+        <p>Hoàn thiện delta sync ghi thật + local model inference (ONNX/GGUF) để chạy được ở chế độ local_only offline.</p>
+      </div>
+      <div class="card">
+        <h3>Bước 3</h3>
+        <p>Đưa Knowledge Panel + tool <code>m365_knowledge_search</code> vào bản đóng gói (packaged Electron app), xác nhận bởi Product Owner trên happy path chính.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Slide 10: Closing -->
+  <section class="slide titleslide">
+    <div class="kicker">Kết luận</div>
+    <h1>Biến M365 thành tri thức hỏi-đáp được — an toàn, local-first, có bằng chứng.</h1>
+    <p class="lead">Cowork GHC Knowledge Graph không thay thế tìm kiếm SharePoint/Teams — nó biến dữ liệu rải rác thành câu trả lời trực tiếp, đúng người, đúng quyền, ngay trong luồng làm việc của Agent.</p>
+    <div class="footer-brand">
+      <span>Cảm ơn Ban Giám Khảo đã theo dõi</span>
+      <span>Cowork GHC · REQ-204 / REQ-205</span>
+    </div>
+  </section>
+
+</div>
+
+<div class="dots" id="dots"></div>
+<div id="nav">
+  <button id="prev">‹</button>
+  <span id="counter">1 / 10</span>
+  <button id="next">›</button>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let idx = 0;
+  const dotsWrap = document.getElementById('dots');
+  slides.forEach((_,i)=>{
+    const d = document.createElement('span');
+    d.addEventListener('click', ()=>go(i));
+    dotsWrap.appendChild(d);
+  });
+  const dots = dotsWrap.querySelectorAll('span');
+
+  function render(){
+    slides.forEach((s,i)=> s.classList.toggle('active', i===idx));
+    dots.forEach((d,i)=> d.classList.toggle('active', i===idx));
+    document.getElementById('counter').textContent = (idx+1)+' / '+total;
+    document.getElementById('progress').style.width = ((idx+1)/total*100)+'%';
+  }
+  function go(i){ idx = Math.max(0, Math.min(total-1, i)); render(); }
+
+  document.getElementById('next').addEventListener('click', ()=>go(idx+1));
+  document.getElementById('prev').addEventListener('click', ()=>go(idx-1));
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='ArrowRight' || e.key===' ') go(idx+1);
+    if(e.key==='ArrowLeft') go(idx-1);
+  });
+  render();
+</script>
+
+</body>
+</html>
