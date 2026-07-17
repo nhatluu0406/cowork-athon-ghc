@@ -9,6 +9,7 @@ import {
   assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
+  dispatchGateReason,
   isBaseUrlLocallyValid,
   localServiceStatus,
   overallReadiness,
@@ -293,6 +294,25 @@ test("overallReadiness reads Sẵn sàng only when service, workspace and provid
   });
   assert.equal(copy.tone, "ok");
   assert.equal(copy.label, "Sẵn sàng");
+});
+
+test("dispatchGateReason gives an honest reason per block and empty when runnable", () => {
+  assert.equal(dispatchGateReason(null), "");
+  assert.match(dispatchGateReason("workspace_missing"), /workspace/i);
+  assert.match(dispatchGateReason("credential_missing"), /provider/i);
+  assert.match(dispatchGateReason("provider_missing"), /provider/i);
+  assert.match(dispatchGateReason("local_service_unavailable"), /Local service/i);
+});
+
+test("a fresh unconfigured profile blocks dispatch runs with a provider reason (F3)", () => {
+  const noCred: SettingsView = {
+    ...baseSettings(),
+    providers: [{ providerId: "custom-openai-compat", hasCredential: false }],
+  };
+  const cfg = assessConfigPreflight(input({ settings: noCred }));
+  assert.equal(cfg.canSend, false);
+  const reason = dispatchGateReason(cfg.blockKind);
+  assert.match(reason, /provider/i);
 });
 
 test("isBaseUrlLocallyValid rejects garbage", () => {

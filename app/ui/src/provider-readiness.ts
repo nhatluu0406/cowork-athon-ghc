@@ -318,6 +318,28 @@ export function overallReadiness(input: {
   };
 }
 
+/**
+ * Human reason a dispatch fan-out cannot start yet, mapped from a config-preflight block kind to
+ * dispatch-flavoured copy (the preflight messages say "gửi"/send). Empty string means "no block".
+ */
+export function dispatchGateReason(blockKind: ReadinessKind | null): string {
+  switch (blockKind) {
+    case null:
+      return "";
+    case "local_service_unavailable":
+      return "Local service chưa sẵn sàng — đợi kết nối rồi chạy task.";
+    case "workspace_missing":
+      return "Chọn workspace trước khi chạy task dispatch.";
+    case "provider_missing":
+    case "model_missing":
+    case "credential_missing":
+    case "base_url_invalid":
+      return "Cấu hình provider trong Cài đặt trước khi chạy task dispatch.";
+    default:
+      return "Chưa đủ điều kiện để chạy task dispatch.";
+  }
+}
+
 export function runtimeReadinessKind(phase: RuntimePhase): ReadinessKind {
   switch (phase) {
     case "starting":

@@ -40,6 +40,7 @@ import {
   assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
+  dispatchGateReason,
   localServiceStatus,
   providerModelLabel,
   providerStatus,
@@ -362,8 +363,10 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   const copy = dom.emptyState.querySelector<HTMLElement>(".empty-state__copy");
   if (state.activeWorkspace === null) {
     if (title !== null) title.textContent = "Chọn workspace để bắt đầu";
-    if (copy !== null) copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
-    dom.emptyStateCta.hidden = true;
+    if (copy !== null) copy.textContent = "Chọn một workspace dùng chung cho mọi màn hình trước khi gửi yêu cầu đầu tiên.";
+    dom.emptyStateCta.textContent = "Chọn Workspace";
+    dom.emptyStateCta.dataset["action"] = "pick-workspace";
+    dom.emptyStateCta.hidden = false;
     return;
   }
   if (
@@ -374,6 +377,8 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   ) {
     if (title !== null) title.textContent = "Cấu hình provider để bắt đầu";
     if (copy !== null) copy.textContent = preflight.message;
+    dom.emptyStateCta.textContent = "Mở Settings";
+    dom.emptyStateCta.dataset["action"] = "open-settings";
     dom.emptyStateCta.hidden = false;
     return;
   }
@@ -1021,7 +1026,13 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
+    // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
+    // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
+    const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client, {
+      canRun: dispatchCfg.canSend,
+      reason: dispatchCfg.canSend ? "" : dispatchGateReason(dispatchCfg.blockKind),
+    });
   }
 
   if (isCoworkSurface) {
@@ -2624,6 +2635,8 @@ export function mountCoworkApp(root: HTMLElement): void {
                 renderState(dom, state, handlers);
               },
             });
+            // The Cowork empty-state primary action opens this same picker (no-workspace state).
+            dom.pickWorkspace = () => void workspacePicker?.choose();
             workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
