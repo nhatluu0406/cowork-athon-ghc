@@ -122,7 +122,7 @@ test("assertExtractionConfined: passes for files legitimately inside destDir", a
   rmSync(root, { recursive: true, force: true });
 });
 
-test("assertExtractionConfined: throws when a symlink escapes destDir (zip-slip defense)", async () => {
+test("assertExtractionConfined: throws when a symlink escapes destDir (zip-slip defense)", async (t) => {
   const root = tempRoot();
   const destDir = join(root, "extracted");
   const outsideDir = join(root, "outside");
@@ -130,7 +130,19 @@ test("assertExtractionConfined: throws when a symlink escapes destDir (zip-slip 
   mkdirSync(outsideDir, { recursive: true });
   writeFileSync(join(outsideDir, "secret.txt"), "should not be reachable from destDir");
   // Simulate a malicious zip entry that is a symlink pointing outside the extraction target.
-  symlinkSync(join(outsideDir, "secret.txt"), join(destDir, "escape-link.txt"));
+  // Creating a symlink on Windows needs elevated privilege / Developer Mode; skip (don't fail)
+  // when the environment forbids it — the confinement logic is still exercised where symlinks work.
+  try {
+    symlinkSync(join(outsideDir, "secret.txt"), join(destDir, "escape-link.txt"));
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EPERM" || code === "ENOENT") {
+      t.skip("symlink creation not permitted in this environment");
+      rmSync(root, { recursive: true, force: true });
+      return;
+    }
+    throw err;
+  }
 
   await assert.rejects(() => assertExtractionConfined(destDir), ExtractionEscapeError);
   rmSync(root, { recursive: true, force: true });

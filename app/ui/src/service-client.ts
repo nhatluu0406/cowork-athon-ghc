@@ -35,6 +35,7 @@ import {
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
+import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
 import {
   createPermissionClient,
   type DecidePermissionInput,
@@ -735,6 +736,15 @@ export interface ServiceClient {
     readonly username: string;
     readonly userId: string;
   }>;
+  /**
+   * Knowledge (M365 Knowledge-Graph) settings surface (REQ-205): read status, configure a source
+   * (the raw token crosses the boundary inbound only — every response is the secret-free
+   * {@link KnowledgeStatusView}), force a health re-check, and disconnect.
+   */
+  getKnowledgeStatus(): Promise<KnowledgeStatusView>;
+  configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
+  testKnowledgeConnection(): Promise<{ readonly ok: boolean }>;
+  disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -1294,5 +1304,24 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         "/v1/auth/unlock",
         { method: "POST", body: JSON.stringify({ username, password }) },
       ),
+
+    getKnowledgeStatus: () => call<KnowledgeStatusView>("/v1/knowledge/status"),
+    configureKnowledgeSource: (baseUrl, token) =>
+      call<KnowledgeStatusView>("/v1/knowledge/configure", {
+        method: "POST",
+        body: JSON.stringify({ baseUrl, token }),
+      }),
+    testKnowledgeConnection: async () => {
+      // The route returns the refreshed status; the settings panel re-reads it separately, so a
+      // simple ok/throw is the honest signal here (a failed re-check throws from `call`).
+      await call<KnowledgeStatusView>("/v1/knowledge/test-connection", { method: "POST" });
+      return { ok: true };
+    },
+    disconnectKnowledgeSource: async () => {
+      await call<{ readonly status: "not_configured" }>("/v1/knowledge/connection", {
+        method: "DELETE",
+      });
+      return { status: "not_configured", baseUrl: null, lastHealthCheckAt: null };
+    },
   };
 }

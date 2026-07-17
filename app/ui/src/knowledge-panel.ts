@@ -50,6 +50,23 @@ function outcomeLabel(outcome: KnowledgeToolInvocation["outcome"]): string {
   }
 }
 
+/**
+ * A user-facing, secret-free message for a non-answered outcome (FR-010). Returns `null` for the
+ * `answered` outcome (the answer/citations carry the meaning). Copy is Vietnamese-first (R5).
+ */
+function outcomeMessage(outcome: KnowledgeToolInvocation["outcome"]): string | null {
+  switch (outcome) {
+    case "answered":
+      return null;
+    case "unavailable":
+      return "Nguồn tri thức hiện không khả dụng. Vui lòng thử lại sau.";
+    case "timeout":
+      return "Yêu cầu tri thức đã hết thời gian chờ. Vui lòng thử lại.";
+    case "permission_denied":
+      return "Bạn đã từ chối quyền truy vấn nguồn tri thức.";
+  }
+}
+
 function entityTypeLabel(entityType: KnowledgeCitation["entityType"]): string {
   switch (entityType) {
     case "Person":
@@ -103,6 +120,11 @@ export function createKnowledgePanel(
   const answerElement = el("p", "knowledge-answer");
   answerContainer.append(answerElement);
 
+  // Non-answered outcomes (unavailable / timeout / permission_denied) surface an honest error
+  // message here (FR-010); hidden for the answered path.
+  const messageElement = el("div", "knowledge-message");
+  messageElement.hidden = true;
+
   const citationSection = el("div", "knowledge-citations-section");
   citationSection.append(el("div", "knowledge-citations-label", "Trích dẫn"));
   const citations = el("div", "knowledge-citations-list");
@@ -114,6 +136,7 @@ export function createKnowledgePanel(
 
   root.append(header);
   root.append(queryElement);
+  root.append(messageElement);
   root.append(answerContainer);
   root.append(citationSection);
 
@@ -127,9 +150,17 @@ export function createKnowledgePanel(
     const queryDiv = root.querySelector(".knowledge-query") as HTMLElement;
     queryDiv.textContent = inv.query;
 
-    // Render status
+    // Render status (with a machine-readable data-status for honest state detection — US-3/NFR-002)
     statusContainer.textContent = outcomeLabel(inv.outcome);
     statusContainer.className = `knowledge-status knowledge-status--${inv.outcome}`;
+    statusContainer.setAttribute("data-status", inv.outcome);
+
+    // Render an error message for non-answered outcomes (FR-010)
+    const message = outcomeMessage(inv.outcome);
+    if (message !== null) {
+      messageElement.textContent = message;
+      messageElement.hidden = false;
+    }
 
     // Render answer if present
     if (inv.answer !== null) {

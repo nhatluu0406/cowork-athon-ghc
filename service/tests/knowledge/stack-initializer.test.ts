@@ -136,7 +136,7 @@ test("initialize: creates a missing pgDataDir, runs initdb before starting postg
   const migrationCalls = psqlIndices.slice(1).map((i) => calls[i]!);
   const appliedFiles = migrationCalls.map((c) => c.args[c.args.length - 1]);
   assert.deepEqual(
-    appliedFiles.map((f) => f?.split("/").pop()),
+    appliedFiles.map((f) => f?.split(/[/\\]/).pop()),
     ["001_initial_schema.sql", "002_finetuning_schema.sql", "003_embedding_jobs_columns.sql"],
   );
 
