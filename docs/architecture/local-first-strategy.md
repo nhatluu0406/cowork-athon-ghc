@@ -97,6 +97,13 @@ exhibition reliability.
 | **4. Neo4j via Docker** | ✅ if image cached | ❌ user must run Docker | ❌ | ❌ GPLv3 | ✅ | ❌ violates "no container" |
 | **5. Neo4j Aura / cloud** | ❌ | ❌ account | — | — | ✅ | ❌ violates offline/no-account |
 
+> **Status (2026-07-18): Option 1 MVP landed** (code + tests + build; packaged PO observation
+> pending). Implemented in `service/src/knowledge-local/` (migration id:4, repository, indexer,
+> service) + `/v1/knowledge-local/*` router + the real Knowledge surface. **Keyword FTS5 search + a
+> deterministic node/edge graph (workspace→folder→file + Markdown links)** — no vector/embeddings and
+> no `llm-svc` dependency yet (LF-3 remains open; semantic recall is deferred, not faked). The Go
+> backend / Neo4j / Postgres provisioning (Options 3–5, LF-6/LF-7) stays dormant and optional.
+
 **Recommendation.**
 
 - **Exhibition target: Option 1** — implement Knowledge Base + a *useful* Knowledge Graph on the

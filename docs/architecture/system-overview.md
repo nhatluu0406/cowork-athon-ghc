@@ -19,6 +19,8 @@ Electron renderer
 
 SQLite at `<userData>/cowork-ghc.db` becomes the source of truth for local user, settings, provider profiles, encrypted secret records, conversations/messages, Skill state and MCP config.
 
+The same SQLite DB also backs the **local Knowledge Base + Knowledge Graph** (migration id:4, `service/src/knowledge-local/`): an FTS5 keyword index plus deterministic node/edge tables built by indexing the active workspace through the existing WorkspaceGuard-confined readers, exposed over the loopback `/v1/knowledge-local/*` router. It is fully local (no network, no embeddings) and workspace-scoped — distinct from the dormant external M365 Knowledge Graph REST client under `service/src/knowledge/`.
+
 Skill files and workspace files remain on filesystem. File Work Review binary/text snapshots remain filesystem artifacts with DB references.
 
 Local diagnostics (Wave 6) are local-only with no network egress: structured logs are rotating JSON-lines files under `data/logs` (every record scrubbed by the secret scrubber before it is written), and aggregate telemetry is a bounded name→value counter table in the same SQLite database (a fixed allowlist; the enable toggle gates collection). Export goes through the `/v1/diagnostics` router (a redacted JSON bundle) and the shell's save-dialog IPC — the renderer never chooses a write path.

@@ -115,6 +115,24 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
   cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
 
+## Local Knowledge Base/Graph MVP (D3 local, 2026-07-18) — giới hạn
+
+Đây là hệ Knowledge **local mới** (`service/src/knowledge-local` + `/v1/knowledge-local` + surface
+Knowledge thật), **tách biệt** với Go backend/M365KG bên dưới. Code+tests+build PASS; packaged PO
+observation còn pending. Giới hạn có chủ ý của MVP:
+
+- **Chỉ keyword FTS5 — không semantic/vector/embedding.** Không gọi LLM để index; `llm-svc` (LF-3)
+  chưa bundle. Không bịa "semantic similarity". Tìm kiếm là prefix AND trên token.
+- **Không trích text PDF.** PDF được Workspace hiển thị dạng bytes; indexer **không** đọc text PDF nên
+  PDF không vào chỉ mục (md/text/code/docx/xlsx/pptx thì có).
+- **Đồ thị chỉ deterministic:** workspace→folder→file (`contains`) + link Markdown đã resolve
+  (`links_to`). Không suy diễn quan hệ bằng LLM.
+- **Bounded:** mặc định ≤1500 file, ≤2 MiB/file, depth ≤12, ≤400 chunk/tài liệu; vượt thì bỏ qua
+  (skip đếm được). Mỗi lần sync **đọc lại** mọi file để hash (incremental chỉ tiết kiệm re-chunk/FTS,
+  không tiết kiệm I/O đọc); enumerate + read re-validate workspace mỗi thư mục/tệp (chi phí chấp nhận
+  được cho MVP).
+- **Không watch file real-time:** thay đổi trên đĩa cần bấm "Đồng bộ" lại.
+
 ## Tích hợp gần đây — giới hạn còn tồn (PR #11 MS365, PR #12 Local import)
 
 Ghi lại các phần **đã merge nhưng còn giới hạn/POC** sau khi tích hợp PR #11 (MS365) và PR #12
