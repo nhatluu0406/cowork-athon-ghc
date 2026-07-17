@@ -99,10 +99,10 @@
 
 ### Implementation for US3
 
-- [ ] T028 [US3] Extend `app/backend/internal/localimport/processor.go` `Run` method: after walking, compute set of rel_paths from `LocalFileStore.ListBySource` → subtract current scan entries → mark missing as `DeltaDeleted`; DELETE their `chunks` rows (by `local_file_id`) then DELETE `local_files` row; update `import_jobs.files_deleted` counter
-- [ ] T029 [US3] Extend `app/backend/internal/localimport/processor.go` for Modified action: DELETE existing `chunks` rows for that `local_file_id` before inserting new chunks; update `local_files` row (`content_hash`, `mtime`, `file_size`, `chunk_count`, `updated_at`)
-- [ ] T030 [P] [US3] Write unit tests `app/backend/tests/unit/localimport/delta_test.go` (extend): full cycle — first import sets `local_files` rows; second import with one file changed → Modified; one file deleted → Deleted; one file new → Added; unchanged → Unchanged; verify DB state after each action
-- [ ] T031 [US3] Verify `GET /api/local/jobs/{id}` response includes `files_added`, `files_modified`, `files_deleted`, `files_skipped` with correct values — add assertions to integration test `import_test.go`
+- [X] T028 [US3] Extend `app/backend/internal/localimport/processor.go` `Run` method: after walking, compute set of rel_paths from `LocalFileStore.ListBySource` → subtract current scan entries → mark missing as `DeltaDeleted`; DELETE their `chunks` rows (by `local_file_id`) then DELETE `local_files` row; update `import_jobs.files_deleted` counter
+- [X] T029 [US3] Extend `app/backend/internal/localimport/processor.go` for Modified action: DELETE existing `chunks` rows for that `local_file_id` before inserting new chunks; update `local_files` row (`content_hash`, `mtime`, `file_size`, `chunk_count`, `updated_at`)
+- [X] T030 [P] [US3] Write unit tests `app/backend/tests/unit/localimport/delta_test.go` (extend): full cycle — first import sets `local_files` rows; second import with one file changed → Modified; one file deleted → Deleted; one file new → Added; unchanged → Unchanged; verify DB state after each action
+- [X] T031 [US3] Verify `GET /api/local/jobs/{id}` response includes `files_added`, `files_modified`, `files_deleted`, `files_skipped` with correct values — add assertions to integration test `import_test.go`
 
 **Checkpoint**: Delta sync integration test passes; re-sync of unchanged corpus completes with `files_skipped = N, files_modified = 0`.
 
