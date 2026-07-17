@@ -1,20 +1,16 @@
 package localimport_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // TestNeo4jClient_UpsertSource verifies LocalSource nodes are created in Neo4j (T044).
 func TestNeo4jClient_UpsertSource(t *testing.T) {
 	// Skip if Neo4j is not available
 	t.Skip("Neo4j integration test - requires running Neo4j instance")
-
-	ctx := context.Background()
 
 	// Create mock Neo4j client (would require real Neo4j for actual testing)
 	source := &localimport.LocalSource{
@@ -35,8 +31,6 @@ func TestNeo4jClient_UpsertDocument(t *testing.T) {
 	// Skip if Neo4j is not available
 	t.Skip("Neo4j integration test - requires running Neo4j instance")
 
-	ctx := context.Background()
-
 	// Create mock LocalFile
 	file := &localimport.LocalFile{
 		ID:       "test-file-1",
@@ -55,8 +49,6 @@ func TestNeo4jClient_DeleteDocument(t *testing.T) {
 	// Skip if Neo4j is not available
 	t.Skip("Neo4j integration test - requires running Neo4j instance")
 
-	ctx := context.Background()
-
 	localFileID := "test-file-1"
 
 	// This test verifies that the LocalNeo4jClient can delete LocalDocument nodes
@@ -68,8 +60,6 @@ func TestNeo4jClient_DeleteDocument(t *testing.T) {
 func TestNeo4jClient_CreateMentionsRelationship(t *testing.T) {
 	// Skip if Neo4j is not available
 	t.Skip("Neo4j integration test - requires running Neo4j instance")
-
-	ctx := context.Background()
 
 	localFileID := "test-file-1"
 	entityType := "PERSON"
