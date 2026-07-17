@@ -30,7 +30,12 @@ You are Cowork GHC, a local-first desktop AI coworker.
 
 /** Trusted "currently open file" hint for the Workspace companion turn (path only). */
 export interface WorkspaceDispatchContext {
-  readonly openFilePath: string;
+  readonly openFilePath?: string;
+  /**
+   * Trusted, non-secret loopback URL of a running runtime web preview (Code surface), if any.
+   * Path/URL only — never page content — so the agent knows a dev server is live for this project.
+   */
+  readonly previewUrl?: string;
 }
 
 const WORKSPACE_CONTEXT_START = "<cowork-workspace-context>";
@@ -44,15 +49,28 @@ const WORKSPACE_CONTEXT_END = "</cowork-workspace-context>";
  */
 export function assembleWorkspaceContext(ctx: WorkspaceDispatchContext | undefined): string {
   const path = ctx?.openFilePath?.trim();
-  if (path === undefined || path.length === 0) return "";
-  const safe = path.replace(/[\r\n]+/g, " ").replace(/`/g, "'").slice(0, 400);
-  return (
-    `${WORKSPACE_CONTEXT_START}\n` +
-    `Người dùng đang mở tệp này trong Workspace: \`${safe}\`. ` +
-    `Khi họ nói "tệp này", "file đang mở", "file này" mà không nêu đường dẫn, hiểu là tệp trên. ` +
-    `Đọc/chỉnh sửa bằng công cụ workspace theo đường dẫn workspace-relative đó.\n` +
-    `${WORKSPACE_CONTEXT_END}`
-  );
+  const previewUrl = ctx?.previewUrl?.trim();
+  const hasPath = path !== undefined && path.length > 0;
+  const hasPreview = previewUrl !== undefined && previewUrl.length > 0;
+  if (!hasPath && !hasPreview) return "";
+  const lines: string[] = [WORKSPACE_CONTEXT_START];
+  if (hasPath) {
+    const safe = path.replace(/[\r\n]+/g, " ").replace(/`/g, "'").slice(0, 400);
+    lines.push(
+      `Người dùng đang mở tệp này: \`${safe}\`. ` +
+        `Khi họ nói "tệp này", "file đang mở", "file này" mà không nêu đường dẫn, hiểu là tệp trên. ` +
+        `Đọc/chỉnh sửa bằng công cụ workspace theo đường dẫn workspace-relative đó.`,
+    );
+  }
+  if (hasPreview) {
+    const safeUrl = previewUrl.replace(/[\r\n`]+/g, " ").slice(0, 200);
+    lines.push(
+      `Một web preview đang chạy cho dự án tại \`${safeUrl}\` (loopback). ` +
+        `Khi người dùng nói về "preview", "trang đang chạy", hiểu là dev server này.`,
+    );
+  }
+  lines.push(WORKSPACE_CONTEXT_END);
+  return lines.join("\n");
 }
 
 export type AttachmentInclusionStatus =

@@ -7,7 +7,7 @@
 
 import { createActivityPanel, setRightPanelCollapsed, type ActivityPanelDom } from "../activity-panel.js";
 import type { ProductSurfaceId } from "../surface-registry.js";
-import { createClaudeCodeView, type ClaudeCodeViewDom } from "./code/code-view.js";
+import { createClaudeCodeView, type ClaudeCodeViewDom, type CodeMode } from "./code/code-view.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
 import type { ConversationProviderControl } from "./conversation-provider-control.js";
 import type { PermissionModeControl } from "./permission-mode-control.js";
@@ -98,6 +98,7 @@ export interface AppFrameDom {
   applySidebarCollapsed: (collapsed: boolean) => void;
   applyRightPanelCollapsed: (collapsed: boolean) => void;
   onCodePanelSend: (text: string) => void;
+  onCodeModeChange: (mode: CodeMode) => void;
 }
 
 export function createAppFrame(root: HTMLElement): AppFrameDom {
@@ -112,7 +113,10 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const knowledgeView = createKnowledgeView();
   const integrationSurface = createIntegrationView();
   const microsoftView = createMicrosoftView();
-  const codeView = createClaudeCodeView({ onSendPrompt: (text) => dom.onCodePanelSend(text) });
+  const codeView = createClaudeCodeView({
+    onSendPrompt: (text) => dom.onCodePanelSend(text),
+    onModeChange: (mode) => dom.onCodeModeChange(mode),
+  });
   const skillsMcpView = createSkillsMcpView();
   const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
@@ -216,6 +220,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     applySidebarCollapsed: () => undefined,
     applyRightPanelCollapsed: () => undefined,
     onCodePanelSend: () => undefined,
+    onCodeModeChange: () => undefined,
   };
 
   const closeSettings = (): void => {

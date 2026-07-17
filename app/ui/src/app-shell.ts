@@ -64,6 +64,7 @@ import type { MicrosoftIntegrationView } from "./integration-slots.js";
 import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code-editor.js";
+import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
@@ -128,6 +129,9 @@ let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
 let codeNavigator: WorkspaceNavigatorHandle | null = null;
 let codeEditor: CodeEditorController | null = null;
+let previewController: PreviewController | null = null;
+/** The running runtime-preview loopback URL (fed into the Code Agent turn context). */
+let codePreviewUrl: string | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
 let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
@@ -959,6 +963,8 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
+  // Drive the embedded runtime-preview view: show only in Code surface + Preview mode, unobstructed.
+  previewController?.setActive(isCodeSurface && !settingsOpen && dom.codeView.mode === "preview");
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
@@ -1916,7 +1922,15 @@ async function sendPrompt(
       : state.workMode === "workspace"
         ? (workspaceCompanionHandle?.getOpenPath() ?? null)
         : null;
-  const workspaceContext = openFilePath !== null ? { openFilePath } : undefined;
+  // Code surface: also tell the agent when a runtime web preview is live (loopback URL only).
+  const previewUrl = state.activeSurface === "code" ? (previewController?.getPreviewUrl() ?? null) : null;
+  const workspaceContext =
+    openFilePath !== null || previewUrl !== null
+      ? {
+          ...(openFilePath !== null ? { openFilePath } : {}),
+          ...(previewUrl !== null ? { previewUrl } : {}),
+        }
+      : undefined;
   // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
   // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
   const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, [], workspaceContext);
@@ -2316,7 +2330,10 @@ export function mountCoworkApp(root: HTMLElement): void {
               onActivated: (rootPath) => {
                 // A different active workspace resets the Code editor (its tabs pointed at the old
                 // project). "reset đúng" per ADR 0013; unsaved Code edits are discarded on switch.
-                if (state.activeWorkspace !== rootPath) codeEditor?.reset();
+                if (state.activeWorkspace !== rootPath) {
+                  codeEditor?.reset();
+                  previewController?.reset();
+                }
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
                 void workspaceNavigator?.refresh();
@@ -2326,6 +2343,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               onDeactivated: () => {
                 state.activeWorkspace = null;
                 codeEditor?.reset();
+                previewController?.reset();
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
@@ -2358,6 +2376,23 @@ export function mountCoworkApp(root: HTMLElement): void {
               renderState(dom, state, handlers);
             },
           });
+          previewController = mountPreviewController(
+            dom.codeView.previewPaneHost,
+            dynamicClient,
+            getShellBridge(),
+            {
+              onPreviewUrlChange: (url) => {
+                codePreviewUrl = url;
+              },
+              // Hide the floating view under Settings or a permission dialog.
+              isObstructed: () =>
+                !dom.settingsSurface.hidden || document.querySelector(".permission-dialog") !== null,
+            },
+          );
+          // Code → Preview mode switch drives the embedded view lifecycle.
+          dom.onCodeModeChange = (mode) => {
+            previewController?.setActive(mode === "preview" && state.activeSurface === "code");
+          };
           workspaceCompanionHandle = mountWorkspaceCompanionPane(
             dom.workspaceView.companionSlot,
             dynamicClient,
@@ -2375,7 +2410,10 @@ export function mountCoworkApp(root: HTMLElement): void {
             onSettingsUpdated: (view) => {
               state.settings = view;
               const nextWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
-              if (nextWorkspace !== state.activeWorkspace) codeEditor?.reset();
+              if (nextWorkspace !== state.activeWorkspace) {
+                codeEditor?.reset();
+                previewController?.reset();
+              }
               state.activeWorkspace = nextWorkspace;
               void workspaceNavigator?.refresh();
               void codeNavigator?.refresh();
