@@ -1,0 +1,51 @@
+{
+  "journey": "C",
+  "result": "BLOCKED",
+  "at": "2026-07-13T07:46:51.175Z",
+  "mode": "deterministic",
+  "rootCause": "OpenCode v1.17.11 build agent does not expose patch/delete in LLM tool schema; mock falls back to edit and cannot delete.",
+  "mockGatewayLog": [
+    {
+      "requestNumber": 1,
+      "model": "deepseek-chat",
+      "requestedToolNames": [],
+      "selected": "final_text",
+      "stream": false
+    },
+    {
+      "requestNumber": 2,
+      "model": "deepseek-chat",
+      "requestedToolNames": [
+        "edit",
+        "glob",
+        "grep",
+        "question",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "write"
+      ],
+      "selected": "tool_call",
+      "stream": true
+    },
+    {
+      "requestNumber": 3,
+      "model": "deepseek-chat",
+      "requestedToolNames": [
+        "edit",
+        "glob",
+        "grep",
+        "question",
+        "read",
+        "skill",
+        "task",
+        "todowrite",
+        "write"
+      ],
+      "selected": "final_text",
+      "stream": true
+    }
+  ],
+  "failedStage": "A04 provider ready"
+}
