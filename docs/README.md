@@ -25,6 +25,7 @@ updated_at: "2026-07-15"
 | `product/current-status.md` | Sự thật hiện tại: WORKS / PARTIAL / NOT IMPLEMENTED / DEFERRED |
 | `product/product-plan.md` | Tầm nhìn, phạm vi và capability sản phẩm |
 | `product/roadmap.md` | NOW / NEXT / LATER / WAITING với checkbox |
+| `design.md` | Mô tả hệ thống diagram-ready: node/edge/boundary/layout đủ để sinh HTML & Excalidraw |
 | `architecture/system-overview.md` | Boundary và kiến trúc đang chạy |
 | `architecture/ev-stream-events.md` | Định dạng EV event streaming theo turn (thinking/tool/metrics) |
 | `architecture/opencode-runtime-notes.md` | Forensic runtime OpenCode (delete/question tool, turn-perf, fix) |
