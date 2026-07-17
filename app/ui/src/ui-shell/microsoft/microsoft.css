@@ -9,7 +9,15 @@
 .ms-card { background: #fff; border: 1px solid #e2e6ec; border-radius: 14px; box-shadow: 0 1px 2px rgba(16,24,40,.06); padding: 24px; }
 .ms-card__title { font-size: 17px; font-weight: 600; color: #1a2332; margin: 10px 0 6px; }
 .ms-card__copy { font-size: 14px; line-height: 1.6; color: #4b5565; margin: 0 0 14px; }
-.ms-assistant { display: flex; flex-direction: column; flex: 1; max-width: 840px; width: 100%; margin: 0 auto; padding: 24px 16px 0; }
+.ms-assistant-layout { display: flex; flex: 1; min-height: 0; width: 100%; }
+.ms-history { width: 240px; flex: 0 0 auto; display: flex; flex-direction: column; border-right: 1px solid #eceff3; background: #fff; padding: 14px 12px; overflow-y: auto; }
+.ms-history__new { border: 1px solid #e2e6ec; background: #fff; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #1a2332; cursor: pointer; margin-bottom: 10px; }
+.ms-history__new:hover { border-color: #e85d1a; color: #e85d1a; }
+.ms-history__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ms-history__item-btn { width: 100%; text-align: left; border: 0; background: transparent; border-radius: 8px; padding: 8px 10px; font-size: 13px; color: #4b5565; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-history__item-btn:hover { background: #f1f3f6; color: #1a2332; }
+.ms-history__item-btn--active { background: var(--surface-active, #fff3eb); color: #e85d1a; font-weight: 600; }
+.ms-assistant { display: flex; flex-direction: column; flex: 1; min-width: 0; max-width: 840px; width: 100%; margin: 0 auto; padding: 24px 16px 0; }
 .ms-assistant__transcript { flex: 1; display: flex; align-items: center; justify-content: center; }
 .ms-assistant__empty { text-align: center; max-width: 420px; }
 .ms-assistant__connect-cta { background: #e85d1a; color: #fff; border: 0; border-radius: 10px; padding: 9px 18px; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -41,3 +49,11 @@
 .ms-service-card__state { font-size: 12px; color: #6b7585; }
 .ms-granted-scopes { display: flex; flex-wrap: wrap; gap: 6px; }
 .ms-scope-pill { font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 12px; background: #f1f3f6; border-radius: 999px; padding: 3px 10px; color: #1a2332; }
+.ms-assistant__tools { display: flex; flex-direction: column; gap: 2px; margin: 4px 0; }
+.ms-assistant__tool { font-size: 12px; opacity: 0.85; }
+.ms-assistant__tool--running { opacity: 1; }
+.ms-assistant__tool--failed, .ms-assistant__tool--denied { color: var(--danger, #c0392b); }
+.ms-assistant__tool--cancelled, .ms-assistant__tool--warning { color: #6b7585; }
+.ms-assistant__status { font-size: 14px; color: #4b5565; }
+.ms-assistant__status--error { color: var(--danger, #c0392b); }
+.ms-assistant__status--permission { color: var(--warn, #b45309); }

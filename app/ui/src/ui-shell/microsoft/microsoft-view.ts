@@ -1,7 +1,7 @@
 import type { MicrosoftIntegrationView } from "../../integration-slots.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
-import { renderMsAssistant } from "./ms-assistant-view.js";
+import { renderMsAssistant, type MsAssistantComposerRefs, type MsAssistantConversationItem } from "./ms-assistant-view.js";
 import { renderMsConnect } from "./ms-connect-view.js";
 
 export type MicrosoftTab = "assistant" | "connect";
@@ -13,6 +13,21 @@ export interface MicrosoftViewDom {
   readonly tabConnect: HTMLButtonElement;
   msTab: MicrosoftTab;
   lastView: MicrosoftIntegrationView | null;
+  lastHandlers: MicrosoftSurfaceHandlers | null;
+  lastConversations: readonly MsAssistantConversationItem[];
+  lastActiveConversationId: string | null;
+  /** The live assistant transcript element, when the assistant tab is the last-rendered tab. */
+  assistantTranscript: HTMLElement | null;
+  /** The live composer refs (send/input/chips), when the assistant tab is the last-rendered tab. */
+  msComposer: MsAssistantComposerRefs | null;
+}
+
+export interface MicrosoftSurfaceHandlers {
+  readonly onSend: (text: string) => void;
+  readonly onConnect: (token: string) => void;
+  readonly onDisconnect: () => void;
+  readonly onSelectConversation: (id: string) => void;
+  readonly onNewConversation: () => void;
 }
 
 export function createMicrosoftView(): MicrosoftViewDom {
@@ -34,10 +49,22 @@ export function createMicrosoftView(): MicrosoftViewDom {
   const body = el("div", "ms-surface__body");
   root.append(header, body);
 
-  const dom: MicrosoftViewDom = { root, body, tabAssistant, tabConnect, msTab: "assistant", lastView: null };
+  const dom: MicrosoftViewDom = {
+    root,
+    body,
+    tabAssistant,
+    tabConnect,
+    msTab: "assistant",
+    lastView: null,
+    lastHandlers: null,
+    lastConversations: [],
+    lastActiveConversationId: null,
+    assistantTranscript: null,
+    msComposer: null,
+  };
   const select = (tab: MicrosoftTab): void => {
     dom.msTab = tab;
-    if (dom.lastView !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView);
+    if (dom.lastView !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView, dom.lastHandlers);
   };
   tabAssistant.addEventListener("click", () => select("assistant"));
   tabConnect.addEventListener("click", () => select("connect"));
@@ -62,25 +89,48 @@ function segmentedButton(label: string, active: boolean): HTMLButtonElement {
   return button;
 }
 
-export function renderMicrosoftSurface(dom: MicrosoftViewDom, view: MicrosoftIntegrationView): void {
+export function renderMicrosoftSurface(
+  dom: MicrosoftViewDom,
+  view: MicrosoftIntegrationView,
+  handlers: MicrosoftSurfaceHandlers,
+  conversations: readonly MsAssistantConversationItem[] = [],
+  activeId: string | null = null,
+): void {
   dom.lastView = view;
-  renderMicrosoftSurfaceInternal(dom, view);
+  dom.lastHandlers = handlers;
+  dom.lastConversations = conversations;
+  dom.lastActiveConversationId = activeId;
+  renderMicrosoftSurfaceInternal(dom, view, handlers);
 }
 
-function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: MicrosoftIntegrationView): void {
+function renderMicrosoftSurfaceInternal(
+  dom: MicrosoftViewDom,
+  view: MicrosoftIntegrationView,
+  handlers: MicrosoftSurfaceHandlers | null,
+): void {
   const assistantActive = dom.msTab === "assistant";
   dom.tabAssistant.classList.toggle("ms-segmented__item--active", assistantActive);
   dom.tabConnect.classList.toggle("ms-segmented__item--active", !assistantActive);
   dom.tabAssistant.setAttribute("aria-selected", assistantActive ? "true" : "false");
   dom.tabConnect.setAttribute("aria-selected", assistantActive ? "false" : "true");
   if (assistantActive) {
-    renderMsAssistant(dom.body, view, {
+    const rendered = renderMsAssistant(dom.body, view, {
       onOpenConnect: () => {
         dom.msTab = "connect";
-        renderMicrosoftSurfaceInternal(dom, view);
+        renderMicrosoftSurfaceInternal(dom, view, handlers);
       },
-    });
+      onSend: (text) => handlers?.onSend(text),
+      onSelectConversation: (id) => handlers?.onSelectConversation(id),
+      onNewConversation: () => handlers?.onNewConversation(),
+    }, dom.lastConversations, dom.lastActiveConversationId);
+    dom.assistantTranscript = rendered.transcript;
+    dom.msComposer = rendered.composer;
   } else {
-    renderMsConnect(dom.body, view);
+    dom.assistantTranscript = null;
+    dom.msComposer = null;
+    renderMsConnect(dom.body, view, {
+      onConnect: (token) => handlers?.onConnect(token),
+      onDisconnect: () => handlers?.onDisconnect(),
+    });
   }
 }

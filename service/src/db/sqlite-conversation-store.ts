@@ -43,6 +43,7 @@ interface ConversationShell {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  readonly surface: "cowork" | "ms365";
   readonly model?: ConversationRecord["model"];
   readonly providerSnapshot?: ConversationRecord["providerSnapshot"];
   readonly activity?: PersistedActivitySnapshot;
@@ -66,6 +67,7 @@ function summaryOf(shell: ConversationShell): ConversationSummary {
     createdAt: shell.createdAt,
     updatedAt: shell.updatedAt,
     messageCount: shell.messageCount,
+    surface: shell.surface ?? "cowork",
     ...(shell.providerId !== undefined ? { providerId: shell.providerId } : {}),
     ...(shell.modelId !== undefined ? { modelId: shell.modelId } : {}),
     ...(shell.parentId !== undefined ? { parentId: shell.parentId } : {}),
@@ -240,6 +242,7 @@ export function createSqliteConversationStore(
       createdAt: shell.createdAt,
       updatedAt: shell.updatedAt,
       messageCount: messages.length,
+      surface: shell.surface ?? "cowork",
       messages,
       ...(shell.providerId !== undefined ? { providerId: shell.providerId } : {}),
       ...(shell.modelId !== undefined ? { modelId: shell.modelId } : {}),
@@ -270,15 +273,22 @@ export function createSqliteConversationStore(
   }
 
   return {
-    async list(query) {
+    async list(query, options) {
       const rows = listConv.all() as Array<{ id: string; documentJson: string }>;
       const q = query?.trim().toLowerCase();
+      const wantSurface = options?.surface;
+      const keep = (shell: ConversationShell): boolean =>
+        wantSurface === undefined || (shell.surface ?? "cowork") === wantSurface;
       if (q === undefined || q.length === 0) {
-        return rows.map((row) => summaryOf(parseShell(row.documentJson)));
+        return rows
+          .map((row) => parseShell(row.documentJson))
+          .filter(keep)
+          .map(summaryOf);
       }
       const matches: ConversationSummary[] = [];
       for (const row of rows) {
         const shell = parseShell(row.documentJson);
+        if (!keep(shell)) continue;
         if (shell.title.toLowerCase().includes(q)) {
           matches.push(summaryOf(shell));
           continue;
@@ -308,6 +318,7 @@ export function createSqliteConversationStore(
         createdAt: now,
         updatedAt: now,
         messageCount: 0,
+        surface: input.surface ?? "cowork",
         messages: [],
         ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
         ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),

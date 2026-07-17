@@ -16,6 +16,7 @@ import {
   type ActivitySnapshot,
   type PermissionHistoryEntry,
 } from "./activity-model.js";
+import { ms365ToolLabel } from "./ms365-tool-label.js";
 import {
   createActivityPanel,
   permissionEntryFromDecision,
@@ -62,6 +63,7 @@ import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-pi
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import type { MicrosoftIntegrationView } from "./integration-slots.js";
 import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
+import { createMs365ChatController, type Ms365ChatController } from "./ms365-chat-controller.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
@@ -132,6 +134,11 @@ let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
 let permissionPausePoll: (() => void) | null = null;
 let permissionResumePoll: (() => void) | null = null;
+/** MS365-tab dedicated controller lifecycle hooks (always-ask, session-scoped to ms365Chat). */
+let ms365PermissionStart: (() => void) | null = null;
+let ms365PermissionStop: (() => void) | null = null;
+let ms365PermissionPausePoll: (() => void) | null = null;
+let ms365PermissionResumePoll: (() => void) | null = null;
 
 const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
   connectionState: "disconnected",
@@ -200,6 +207,19 @@ interface AppState {
    * skip connect — that path hits not-attached session create → Internal boundary.
    */
   liveAttached: boolean;
+  /** MS365 tab: connection state driving the composer gate (D2 OAuth deferred → always disconnected today). */
+  ms365View: MicrosoftIntegrationView;
+  /** Honest running/failed indicator for the MS365 transcript (does not fake success on stream failure). */
+  ms365Phase: "idle" | "running" | "failed";
+  ms365Error: string | null;
+  /** MS365 transcript for the current in-session conversation (user + assistant turns, in order). */
+  ms365Messages: { role: "user" | "assistant"; text: string }[];
+  /** Conversation id of the current MS365 turn, set once `ms365Chat.send()` resolves; read by the stream `onView` handler (defined before `ms365Chat` exists) so it does not need to close over the controller. */
+  ms365ActiveConversationId: string | null;
+  /** MS365 conversation-list items for the history sidebar (surface "ms365"). */
+  ms365Conversations: { readonly id: string; readonly title: string }[];
+  ms365Events: EvEvent[];
+  ms365PermissionHistory: PermissionHistoryEntry[];
 }
 
 type AppDom = AppFrameDom;
@@ -951,6 +971,11 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   onSelect: (id: string) => void;
   onRename: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  onMs365Send?: (text: string) => void;
+  onMs365Connect?: (token: string) => void;
+  onMs365Disconnect?: () => void;
+  onMs365SelectConversation?: (id: string) => void;
+  onMs365NewConversation?: () => void;
 }): void {
   const phase = state.conv.state.runtimePhase;
   const record = state.conv.state.activeRecord;
@@ -994,7 +1019,14 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
   } else if (isMicrosoftSurface) {
-    renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
+    renderMicrosoftSurface(dom.microsoftView, state.ms365View, {
+      onSend: (text) => handlers.onMs365Send?.(text),
+      onConnect: (token) => handlers.onMs365Connect?.(token),
+      onDisconnect: () => handlers.onMs365Disconnect?.(),
+      onSelectConversation: (id) => handlers.onMs365SelectConversation?.(id),
+      onNewConversation: () => handlers.onMs365NewConversation?.(),
+    }, state.ms365Conversations, state.ms365ActiveConversationId);
+    renderMs365Transcript(dom, state);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
@@ -1518,6 +1550,7 @@ async function ensureLive(
   // Pause permission polls BEFORE stopping settings-only: otherwise the 100ms poller keeps
   // hitting the dying base URL and DevTools fills with net::ERR_CONNECTION_REFUSED.
   permissionPausePoll?.();
+  ms365PermissionPausePoll?.();
   state.liveAttached = false;
   state.client = null;
   state.bootstrap = null;
@@ -1555,6 +1588,7 @@ async function ensureLive(
     throw new Error("Không kết nối lại được local service.");
   } finally {
     permissionResumePoll?.();
+    ms365PermissionResumePoll?.();
   }
 }
 
@@ -2155,6 +2189,130 @@ function createShell(root: HTMLElement): AppDom {
   return createAppFrame(root);
 }
 
+/**
+ * Render the MS365 transcript from current state (user bubble + streaming assistant text +
+ * an honest running/failed line — never a fabricated success).
+ */
+function renderMs365Transcript(dom: AppDom, state: AppState): void {
+  const transcript = dom.microsoftView.assistantTranscript;
+  if (transcript === null) return;
+  if (state.ms365View.connectionState !== "connected") return; // the empty-state card owns the DOM here
+  transcript.replaceChildren();
+  for (const message of state.ms365Messages) {
+    if (message.text.length === 0) continue;
+    const cls =
+      message.role === "user"
+        ? "ms-assistant__bubble ms-assistant__bubble--user"
+        : "ms-assistant__bubble ms-assistant__bubble--assistant";
+    transcript.append(el("div", cls, message.text));
+  }
+  const snap = buildActivitySnapshot(state.ms365Events, state.activeWorkspace, []);
+  const toolItems = snap.items.filter((i) => i.kind === "tool");
+  if (toolItems.length > 0) {
+    const strip = el("div", "ms-assistant__tools");
+    for (const item of toolItems) {
+      const done = item.status === "success";
+      const failed = item.status === "failed" || item.status === "denied";
+      const stopped = item.status === "cancelled" || item.status === "warning";
+      const icon = failed ? "✗" : done ? "✓" : stopped ? "•" : "🔧";
+      const row = el(
+        "div",
+        `ms-assistant__tool ms-assistant__tool--${item.status}`,
+        `${icon} ${ms365ToolLabel(item.toolName ?? "", done)}`,
+      );
+      strip.append(row);
+    }
+    transcript.append(strip);
+  }
+  const pendingPerm = state.ms365PermissionHistory.filter((p) => p.decision === "pending");
+  if (pendingPerm.length > 0) {
+    transcript.append(
+      el("p", "ms-assistant__status ms-assistant__status--permission", "Đang chờ bạn phê duyệt hành động…"),
+    );
+  }
+  if (state.ms365Phase === "running") {
+    transcript.append(el("p", "ms-assistant__status", "Đang chạy…"));
+  } else if (state.ms365Phase === "failed") {
+    transcript.append(el("p", "ms-assistant__status ms-assistant__status--error", state.ms365Error ?? "Đã xảy ra lỗi."));
+  }
+  const composer = dom.microsoftView.msComposer;
+  if (composer !== null) {
+    const connected = state.ms365View.connectionState === "connected";
+    const disabled = state.ms365Phase === "running" || !connected;
+    composer.send.disabled = disabled;
+    composer.input.disabled = disabled;
+    for (const chip of composer.chips) chip.disabled = disabled;
+  }
+}
+
+/** Refresh the MS365 history-sidebar conversation list from the service (surface "ms365"). */
+async function refreshMs365Conversations(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  const client = state.client;
+  if (client === null || state.ms365View.connectionState !== "connected") return;
+  try {
+    const list = await client.listConversations(undefined, "ms365");
+    state.ms365Conversations = list.map((c) => ({ id: c.id, title: c.title }));
+  } catch {
+    state.ms365Conversations = [];
+  }
+  renderState(dom, state, handlers);
+}
+
+/** Wire the thin MS365 chat controller to the app's real client/workspace/EV-stream transport. */
+function createMs365Chat(state: AppState, dom: AppDom): Ms365ChatController {
+  return createMs365ChatController({
+    getClient: () => state.client,
+    isConnected: () => state.ms365View.connectionState === "connected",
+    workspacePath: () => state.activeWorkspace,
+    startStream: (sessionId) => {
+      const bootstrap = state.bootstrap;
+      if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) {
+        throw new Error("Shell chưa cung cấp kết nối live.");
+      }
+      const handle = startEvStream({
+        baseUrl: bootstrap.serviceBaseUrl,
+        clientToken: bootstrap.clientToken,
+        sessionId,
+        onEvent: (event) => {
+          state.ms365Events = [...mergeEvEvents(state.ms365Events, [event])];
+        },
+        onView: (view) => {
+          if (view.text.length > 0) {
+            const last = state.ms365Messages[state.ms365Messages.length - 1];
+            if (last !== undefined && last.role === "assistant") last.text = view.text;
+          }
+          if (view.terminal === "completed") {
+            state.ms365Phase = "idle";
+            if (view.text.length > 0) {
+              const convId = state.ms365ActiveConversationId;
+              const client = state.client;
+              if (convId !== null && client !== null) {
+                void client.appendConversationMessage(convId, "assistant", view.text).catch(() => undefined);
+              }
+            }
+          }
+          if (view.terminal === "cancelled") state.ms365Phase = "idle";
+          if (view.terminal === "errored" || view.terminal === "denied") {
+            state.ms365Phase = "failed";
+            state.ms365Error = view.error?.message ?? "Phiên kết thúc với lỗi.";
+          }
+          renderMs365Transcript(dom, state);
+        },
+        onError: (message) => {
+          state.ms365Phase = "failed";
+          state.ms365Error = message;
+          renderMs365Transcript(dom, state);
+        },
+      });
+      return { stop: () => handle.stop(), done: handle.done };
+    },
+  });
+}
+
 
 export function mountCoworkApp(root: HTMLElement): void {
   const dom = createShell(root);
@@ -2206,7 +2364,17 @@ export function mountCoworkApp(root: HTMLElement): void {
     processingConversationId: null,
     pendingUserRow: null,
     liveAttached: false,
+    ms365View: MS_DISCONNECTED_VIEW,
+    ms365Phase: "idle",
+    ms365Error: null,
+    ms365Messages: [],
+    ms365ActiveConversationId: null,
+    ms365Conversations: [],
+    ms365Events: [],
+    ms365PermissionHistory: [],
   };
+
+  const ms365Chat = createMs365Chat(state, dom);
 
   dom.permissionModeControl.setMode(state.permissionMode);
   dom.permissionModeControl.root.addEventListener("permission-mode-change", (event) => {
@@ -2224,6 +2392,106 @@ export function mountCoworkApp(root: HTMLElement): void {
     },
     onRename: (id: string, title: string) => {
       void state.conv.rename(id, title).then(() => renderState(dom, state, handlers));
+    },
+    onMs365Send: (text: string) => {
+      if (state.ms365Phase === "running") return; // #1 guard: no overlapping turn
+      state.ms365Messages.push({ role: "user", text });
+      state.ms365Messages.push({ role: "assistant", text: "" }); // streaming target
+      state.ms365Phase = "running";
+      state.ms365Error = null;
+      renderMs365Transcript(dom, state);
+      void (async () => {
+        try {
+          await ms365Chat.send(text);
+          const convId = ms365Chat.conversationId;
+          state.ms365ActiveConversationId = convId;
+          const client = state.client;
+          if (convId !== null && client !== null) {
+            await client.appendConversationMessage(convId, "user", text).catch(() => undefined);
+          }
+          if (convId !== null) void refreshMs365Conversations(state, dom, handlers);
+        } catch (error) {
+          state.ms365Phase = "failed";
+          state.ms365Error = safeError(error);
+          renderMs365Transcript(dom, state);
+        }
+      })();
+    },
+    onMs365Connect: (token: string) => {
+      void (async () => {
+        const client = state.client;
+        if (client === null) return;
+        try {
+          state.ms365View = await client.connectMs365(token);
+          if (state.ms365View.connectionState === "connected") {
+            dom.microsoftView.msTab = "assistant";
+          }
+        } catch (error) {
+          state.ms365View = { ...MS_DISCONNECTED_VIEW, connectionState: "error", error: safeError(error) };
+        }
+        renderState(dom, state, handlers);
+        if (state.ms365View.connectionState === "connected") {
+          ms365PermissionStart?.();
+          void refreshMs365Conversations(state, dom, handlers);
+        }
+      })();
+    },
+    onMs365NewConversation: () => {
+      if (state.ms365Phase === "running") return;
+      ms365Chat.resetConversation();
+      state.ms365Events = [];
+      state.ms365ActiveConversationId = null;
+      state.ms365Messages = [];
+      state.ms365Phase = "idle";
+      state.ms365Error = null;
+      renderState(dom, state, handlers);
+    },
+    onMs365SelectConversation: (id: string) => {
+      if (state.ms365Phase === "running") return;
+      const client = state.client;
+      if (client === null) return;
+      void (async () => {
+        try {
+          const rec = await client.getConversation(id);
+          state.ms365Messages = rec.messages.map((m) => ({ role: m.role, text: m.text }));
+          state.ms365Events = [];
+          state.ms365Phase = "idle";
+          state.ms365Error = null;
+          ms365Chat.adoptConversation(id);
+          state.ms365ActiveConversationId = id;
+        } catch {
+          state.ms365Error = "Không mở được cuộc trò chuyện.";
+          state.ms365Phase = "failed";
+        }
+        renderState(dom, state, handlers);
+      })();
+    },
+    onMs365Disconnect: () => {
+      void (async () => {
+        // Revoke the tool scope + tear down the chat session FIRST (the security-critical step),
+        // then disconnect the Graph connection. Reset UI to disconnected regardless of either result.
+        try {
+          await ms365Chat.disconnect();
+        } catch {
+          /* fail-safe: still reset below */
+        }
+        const client = state.client;
+        if (client !== null) {
+          try {
+            await client.disconnectMs365();
+          } catch {
+            /* fail-safe */
+          }
+        }
+        state.ms365View = MS_DISCONNECTED_VIEW;
+        state.ms365Messages = [];
+        state.ms365Events = [];
+        ms365PermissionStop?.();
+        state.ms365PermissionHistory = [];
+        state.ms365Phase = "idle";
+        state.ms365Error = null;
+        renderState(dom, state, handlers);
+      })();
     },
     onDelete: (id: string) => {
       const wasActive = state.conv.state.activeConversationId === id;
@@ -2555,6 +2823,9 @@ export function mountCoworkApp(root: HTMLElement): void {
             // Discover permission ASAP — workspace_auto still needs the poll to see pending.
             pollIntervalMs: 100,
             getMode: () => state.permissionMode,
+            // Chỉ xử lý request của session Cowork đang chạy. Request MS365 (session khác) do
+            // controller MS365 riêng đảm nhiệm — tránh pop nhầm surface (P2-B bug fix).
+            sessionFilter: (sid) => sid === state.streamSessionId,
             onPending: (request) => {
               touchStreamActivity(state);
               state.turnTiming.mark("PERMISSION_SHOWN", request.requestId);
@@ -2620,6 +2891,63 @@ export function mountCoworkApp(root: HTMLElement): void {
             permissions.resume();
           };
           permissions.start();
+          const ms365Permissions = createPermissionController({
+            client: dynamicClient,
+            container: dom.root,
+            pollIntervalMs: 100,
+            // Luôn hỏi: write MS365 qua Graph luôn cần phê duyệt (đúng hint composer).
+            getMode: () => "ask",
+            // Chỉ request của session MS365 sống hiện tại. Đọc getter tại thời điểm poll nên
+            // tự bám session mới sau reset/adopt; request session cũ không pop lại.
+            sessionFilter: (sid) => sid === ms365Chat.runtimeSessionId,
+            onPending: (request) => {
+              const target =
+                request.action.targetPath !== undefined
+                  ? toRelativePath(request.action.targetPath, state.activeWorkspace)
+                  : request.action.description;
+              const entry = permissionEntryFromDecision({
+                requestId: request.requestId,
+                actionLabel: permissionActionLabel(request.action.kind),
+                targetSummary: target,
+                decision: "pending",
+                at: request.requestedAt,
+              });
+              if (!state.ms365PermissionHistory.some((p) => p.requestId === request.requestId)) {
+                state.ms365PermissionHistory = [...state.ms365PermissionHistory, entry];
+                renderMs365Transcript(dom, state);
+              }
+            },
+            onDecision: ({ request, outcome, requestedDecision }) => {
+              const target =
+                request.action.targetPath !== undefined
+                  ? toRelativePath(request.action.targetPath, state.activeWorkspace)
+                  : request.action.description;
+              const decision =
+                outcome.status !== "resolved"
+                  ? "denied"
+                  : requestedDecision === "deny"
+                    ? "denied"
+                    : outcome.scope === "always"
+                      ? "allowed_always"
+                      : "allowed_once";
+              const entry = permissionEntryFromDecision({
+                requestId: request.requestId,
+                actionLabel: permissionActionLabel(request.action.kind),
+                targetSummary: target,
+                decision,
+                at: request.requestedAt,
+              });
+              state.ms365PermissionHistory = [
+                ...state.ms365PermissionHistory.filter((p) => p.requestId !== request.requestId),
+                entry,
+              ];
+              renderMs365Transcript(dom, state);
+            },
+          });
+          ms365PermissionStart = () => ms365Permissions.start();
+          ms365PermissionStop = () => ms365Permissions.stop();
+          ms365PermissionPausePoll = () => ms365Permissions.pause();
+          ms365PermissionResumePoll = () => ms365Permissions.resume();
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>(".file-row--clickable");

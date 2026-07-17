@@ -71,6 +71,19 @@ export interface ServiceOptions {
    * the loopback Host-header check still apply on top.
    */
   readonly allowedOrigins?: readonly string[];
+  /**
+   * Additional per-launch tokens that are valid ONLY for the exact paths they list (never the
+   * whole boundary). Used so a lower-trust caller (e.g. the OpenCode child, via MS365 P5.5) can be
+   * handed a narrower credential than {@link clientToken} — a leak of a scoped token exposes only
+   * the routes it was scoped to. Default: none (baseline behavior unchanged).
+   */
+  readonly pathScopedTokens?: readonly PathScopedToken[];
+}
+
+/** A token that is valid only for the exact request paths listed in {@link paths}. */
+export interface PathScopedToken {
+  readonly token: string;
+  readonly paths: readonly string[];
 }
 
 export interface ServiceAddress {
@@ -97,6 +110,7 @@ class LocalServiceImpl implements LocalService {
   private readonly port: number;
   private readonly maxBodyBytes: number;
   private readonly allowedOrigins: ReadonlySet<string>;
+  private readonly pathScopedTokens: readonly PathScopedToken[];
   private readonly registry: RouterRegistry;
   private readonly server: Server;
   private readonly startedAt = new Date();
@@ -108,6 +122,7 @@ class LocalServiceImpl implements LocalService {
     this.port = options.port ?? 0;
     this.maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
     this.allowedOrigins = new Set(options.allowedOrigins ?? []);
+    this.pathScopedTokens = options.pathScopedTokens ?? [];
     // Reject an empty/too-short caller-supplied token rather than silently locking out clients.
     this.clientToken =
       options.clientToken !== undefined
@@ -208,7 +223,7 @@ class LocalServiceImpl implements LocalService {
           writeEnvelope(res, 401, errorEnvelope("unauthorized", "Client token required."));
           return;
         }
-        if (check === "invalid") {
+        if (check === "invalid" && !this.scopedTokenAllows(presented, url.pathname)) {
           writeEnvelope(res, 403, errorEnvelope("forbidden", "Invalid client token."));
           return;
         }
@@ -260,6 +275,16 @@ class LocalServiceImpl implements LocalService {
       res.statusCode = allowed ? 204 : 403;
       res.end();
       return true;
+    }
+    return false;
+  }
+
+  /** Token scoped to ONLY match on its registered paths (e.g. the child may only reach MS365 tool-call). */
+  private scopedTokenAllows(presented: string | undefined, pathname: string): boolean {
+    if (presented === undefined) return false;
+    for (const scoped of this.pathScopedTokens) {
+      if (!scoped.paths.includes(pathname)) continue;
+      if (checkClientToken(scoped.token, presented) === "ok") return true;
     }
     return false;
   }

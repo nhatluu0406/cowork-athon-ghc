@@ -32,6 +32,8 @@ export interface SupervisorStartSpec {
   readonly skillsPaths?: readonly string[];
   /** Enabled Skill ids; when present, replaces the blanket `skill: allow` policy with an allowlist. */
   readonly skillAllow?: readonly string[];
+  /** Extra plaintext secrets injected via `baseEnv` (e.g. the scoped MS365 tool token) to redact. */
+  readonly extraSecretValues?: readonly string[];
 }
 
 export interface OpencodeSupervisorOptions {

@@ -207,3 +207,18 @@ test("sqlite store: last active + recoverStaleRunning + continuation session fie
   assert.equal(count, 1);
   assert.equal((await store.get(created.id))?.status, "interrupted");
 });
+
+test("surface: create tags records and list filters by surface", async () => {
+  const { store } = freshStore();
+  await store.create({ workspacePath: "C:\\ws", surface: "ms365", title: "M" });
+  await store.create({ workspacePath: "C:\\ws", surface: "cowork", title: "C" });
+  await store.create({ workspacePath: "C:\\ws", title: "Default" }); // no surface → cowork
+
+  const cowork = await store.list(undefined, { surface: "cowork" });
+  const ms365 = await store.list(undefined, { surface: "ms365" });
+
+  assert.deepEqual(cowork.map((c) => c.title).sort(), ["C", "Default"]);
+  assert.deepEqual(ms365.map((c) => c.title), ["M"]);
+  for (const c of cowork) assert.equal(c.surface, "cowork");
+  assert.equal(ms365[0]!.surface, "ms365");
+});

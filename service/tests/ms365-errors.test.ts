@@ -20,3 +20,24 @@ test("404 → not_found; 500 → graph_error", () => {
   assert.equal(mapGraphStatus(404).kind, "not_found");
   assert.equal(mapGraphStatus(500).kind, "graph_error");
 });
+
+test("403 maps to insufficient_scope (NOT auth_expired) with consent recovery", () => {
+  const err = mapGraphStatus(403);
+  assert.equal(err.kind, "insufficient_scope");
+  assert.equal(err.retryable, false);
+  assert.match(err.recovery, /quyền|scope/i);
+  assert.ok(!/kết nối lại/i.test(err.recovery), "403 must not tell the user to reconnect");
+});
+
+test("401 still maps to auth_expired with reconnect recovery", () => {
+  const err = mapGraphStatus(401);
+  assert.equal(err.kind, "auth_expired");
+  assert.match(err.recovery, /kết nối lại/i);
+});
+
+test("412 maps to precondition_failed with re-read-etag recovery", () => {
+  const err = mapGraphStatus(412);
+  assert.equal(err.kind, "precondition_failed");
+  assert.equal(err.retryable, false);
+  assert.match(err.recovery, /etag/i);
+});

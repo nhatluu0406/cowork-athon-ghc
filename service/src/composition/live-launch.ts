@@ -13,20 +13,6 @@
  * SECURITY: inputs are validated (absolute workspace path, coherent provider, SSRF-checked custom
  * base URL reusing the outbound provider policy). No secret value is ever accepted here — a
  * credential crosses only as a non-secret {@link CredentialRef} handle; error messages carry no key.
- *
- * MS365 CHILD-ENV ADVERTISEMENT (Task 11 follow-up): when `CGHC_MS365_ENABLED` is on
- * ({@link isMs365Enabled}), the OpenCode child is told the loopback MS365 tool endpoint via the
- * EXISTING `SupervisorStartSpec.baseEnv` seam (`supervisor.ts` merges it into the child spawn env).
- * `CGHC_MS365_TOOL_ENDPOINT` carries only a non-secret loopback URL (host:port + path); the child
- * authenticates to this same service with the SAME per-launch client token every other call already
- * uses (reused from `input.service.clientToken`/`assertConfiguredToken`/`generateClientToken` — no
- * new secret is minted for this purpose). Because the parent service's own bind port/token are
- * normally decided later (inside `startLiveCoworkService`/`createCoworkService`, AFTER this function
- * returns), this function pre-decides them here (reusing any caller-supplied `input.service.host` /
- * `port` / `clientToken`, else generating them) and threads the SAME values back into the returned
- * `service` options so the service actually binds where the child was told to look. OFF (flag unset):
- * no `CGHC_MS365_*` var is added and `service.host`/`port`/`clientToken` are left exactly as the
- * caller passed them (`undefined` stays `undefined`) — baseline byte-for-byte unchanged.
  */
 
 import { randomBytes } from "node:crypto";
@@ -41,6 +27,8 @@ import {
 } from "@cowork-ghc/runtime";
 import type { CredentialService, CredentialInjectionRequest } from "../credential/index.js";
 import { resolveInjections } from "../credential/index.js";
+import { MS365_TOOL_CALL_PATH } from "../ms365/index.js";
+import { generateClientToken } from "../server/token.js";
 import {
   createSsrfPolicy,
   type DnsResolver,
@@ -58,8 +46,6 @@ import {
   type ResolveInjections,
   type SupervisorStartSpec,
 } from "../runtime/index.js";
-import { isMs365Enabled, MS365_TOOL_CALL_PATH } from "../ms365/index.js";
-import { assertConfiguredToken, generateClientToken } from "../server/token.js";
 import type { CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
 import type { LiveCoworkServiceOptions } from "./compose-live.js";
 import { defaultDnsResolver } from "./wiring.js";
@@ -191,20 +177,28 @@ export async function buildLiveCoworkOptions(
     ...(input.log !== undefined ? { log: input.log } : {}),
   });
 
-  // MS365 child-env advertisement (flag-gated, Task 11 follow-up): resolve the same
-  // host/port/clientToken the SERVICE (not the child) will bind to, so the endpoint the child is
-  // told about is the endpoint the service actually opens. When the caller already supplied any of
-  // these via `input.service`, reuse them as-is (never silently override a caller's choice).
-  const ms365Enabled = isMs365Enabled(process.env);
-  const servicePlan = ms365Enabled ? await resolveServiceBindPlan(input) : undefined;
-  const baseEnv = ms365Enabled
-    ? {
-        ...(input.baseEnv ?? {}),
-        CGHC_MS365_ENABLED: "1",
-        CGHC_MS365_TOOL_ENDPOINT: ms365ToolEndpointUrl(servicePlan!),
-        CGHC_MS365_TOKEN: servicePlan!.clientToken,
-      }
-    : input.baseEnv;
+  // MS365 tool bridge: advertise the loopback endpoint + a DISTINCT scoped token to the child.
+  // Unconditional — the MS365 router mounts unconditionally on main (no CGHC_MS365_ENABLED gate).
+  // The SERVICE (boundary) bind host/port/clientToken are a SEPARATE listener from the child's
+  // OpenCode `port` above (two independent sockets) — they are resolved HERE and threaded back
+  // into the returned `service` options below, so the endpoint advertised to the child is the
+  // endpoint the service actually opens. A caller-supplied `input.service.host/port/clientToken`
+  // is always reused as-is, never overridden. When the caller has not chosen a service port,
+  // default to an ephemeral OS-assigned loopback port (0) — NEVER the child's OpenCode `port`,
+  // which is a distinct process/socket and would collide with it.
+  const serviceHost = input.service?.host ?? input.host ?? "127.0.0.1";
+  const servicePort = input.service?.port ?? (await (input.allocatePort ?? allocateLoopbackPort)());
+  const serviceClientToken = input.service?.clientToken ?? generateClientToken();
+  // Task 2 (P5.5): the child gets a token scoped to ONLY MS365_TOOL_CALL_PATH — never the full
+  // client token that guards every route — so a leaked/compromised child cannot call anything
+  // else on the boundary. Minted with the SAME generator as clientToken (never persisted).
+  const ms365ToolToken = generateClientToken();
+  const ms365Endpoint = `http://${formatHostForUrl(serviceHost)}:${servicePort}${MS365_TOOL_CALL_PATH}`;
+  const baseEnv = {
+    ...(input.baseEnv ?? {}),
+    CGHC_MS365_TOOL_ENDPOINT: ms365Endpoint,
+    CGHC_MS365_TOKEN: ms365ToolToken,
+  };
 
   const startSpec: SupervisorStartSpec = {
     binPath,
@@ -214,8 +208,12 @@ export async function buildLiveCoworkOptions(
     configDir: join(launchDir, "config"),
     injectionRequests,
     ...(input.host !== undefined ? { host: input.host } : {}),
-    ...(baseEnv !== undefined ? { baseEnv } : {}),
+    baseEnv,
     ...(providerConfig !== undefined ? { providerConfig } : {}),
+    // The scoped MS365 tool token is baked into baseEnv above as CGHC_MS365_TOKEN — it must ALSO
+    // be masked in the log-safe spawn snapshot, same as any provider key. One source of truth:
+    // `secretValues`/`redactedEnvSnapshot` in `@cowork-ghc/runtime` (never a second ad-hoc list).
+    extraSecretValues: [ms365ToolToken],
   };
 
   // FIX-6: seed the SHARED value-scrubber via deps.credentialService (which registers the resolved
@@ -228,12 +226,20 @@ export async function buildLiveCoworkOptions(
     await deps.credentialService.resolveInjection(input.provider.credentialRef, spec);
   };
 
-  // When MS365 is enabled, the returned `service` options pin the SAME host/port/clientToken that
-  // were advertised to the child above (so the service binds where the child was told to look);
-  // otherwise `input.service` is passed through untouched (baseline unaffected when the flag is off).
-  const service = servicePlan
-    ? { ...(input.service ?? {}), ...servicePlan }
-    : input.service;
+  // The returned `service` options pin the SAME host/port/clientToken that were advertised to the
+  // child above (so the service binds where the child was told to look), AND register
+  // `ms365ToolToken` as valid ONLY for MS365_TOOL_CALL_PATH — the token actually handed to the
+  // child (CGHC_MS365_TOKEN above) grants it nothing else on the boundary.
+  const service = {
+    ...(input.service ?? {}),
+    host: serviceHost,
+    port: servicePort,
+    clientToken: serviceClientToken,
+    pathScopedTokens: [
+      ...(input.service?.pathScopedTokens ?? []),
+      { token: ms365ToolToken, paths: [MS365_TOOL_CALL_PATH] },
+    ],
+  };
 
   return {
     supervisor,
@@ -243,7 +249,7 @@ export async function buildLiveCoworkOptions(
     attachCredentialService: (service: CredentialService) => {
       attachedResolve = (requests) => resolveInjections(service, requests);
     },
-    ...(service !== undefined ? { service } : {}),
+    service,
     ...(input.now !== undefined ? { now: input.now } : {}),
   };
 }
@@ -293,36 +299,6 @@ async function resolveProvider(
   return { spec, providerConfig };
 }
 
-/** The service host/port/clientToken the MS365 endpoint is advertised against. */
-interface ServiceBindPlan {
-  readonly host: string;
-  readonly port: number;
-  readonly clientToken: string;
-}
-
-/**
- * Resolve the exact host/port/clientToken the SERVICE (not the OpenCode child) will bind to,
- * reusing any value the caller already fixed via `input.service` and generating the rest. This
- * lets the MS365 advertisement below name the real endpoint even though the service itself binds
- * later (inside `startLiveCoworkService`) — as long as the SAME plan is threaded into the returned
- * `service` options (done by the caller of this function), the service ends up bound exactly there.
- */
-async function resolveServiceBindPlan(input: BuildLiveCoworkInput): Promise<ServiceBindPlan> {
-  const host = input.service?.host?.trim() || "127.0.0.1";
-  const port = input.service?.port ?? (await (input.allocatePort ?? allocateLoopbackPort)());
-  const clientToken =
-    input.service?.clientToken !== undefined
-      ? assertConfiguredToken(input.service.clientToken)
-      : generateClientToken();
-  return { host, port, clientToken };
-}
-
-/** The loopback MS365 tool-call endpoint URL the child is told about (non-secret). */
-function ms365ToolEndpointUrl(plan: ServiceBindPlan): string {
-  const authority = plan.host.includes(":") ? `[${plan.host}]` : plan.host;
-  return `http://${authority}:${plan.port}${MS365_TOOL_CALL_PATH}`;
-}
-
 /** Default the pinned OpenCode binary path under the app install root. */
 function resolveBinPath(input: BuildLiveCoworkInput): string {
   // Honor an explicit binPath, then a `COWORK_OPENCODE_BIN` env override (packaged apps ship the binary outside `node_modules`, under `resourcesPath`).
@@ -333,6 +309,16 @@ function resolveBinPath(input: BuildLiveCoworkInput): string {
     throw new LiveLaunchConfigError("binPath or appRoot is required to locate the OpenCode binary.");
   }
   return join(appRoot, "node_modules", "opencode-ai", "bin", "opencode.exe");
+}
+
+/**
+ * Format a loopback host for embedding in a URL authority. An IPv6 literal (contains ":")
+ * must be wrapped in brackets — `http://::1:PORT` is malformed; `http://[::1]:PORT` is correct.
+ * IPv4 / hostnames pass through unchanged; an already-bracketed host is returned as-is.
+ */
+export function formatHostForUrl(host: string): string {
+  if (host.startsWith("[") && host.endsWith("]")) return host;
+  return host.includes(":") ? `[${host}]` : host;
 }
 
 /** Production free-port allocator: bind loopback port 0, read the assigned port, release it. */

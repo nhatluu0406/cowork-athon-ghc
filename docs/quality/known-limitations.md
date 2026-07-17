@@ -75,3 +75,24 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   nhưng instruction ngoài workspace có thể đổi hành vi/danh tính agent mà người dùng không biết.
   Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
   cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
+
+## MS365 OpenCode plugin `tool.execute.before` hook (intentional no-op seam)
+
+The MS365 OpenCode plugin (`service/src/runtime/ms365-plugin-file.ts`) includes a
+`tool.execute.before` hook that is deliberately a **no-op passthrough** — it does not gate any tool
+calls. This is **not** a missing security gate; it is a reserved seam.
+
+**Why no-op?** The child process (OpenCode's sandboxed runtime) cannot read its own session's
+MS365 scope, so any authorization decision made inside the hook would be a guess. The real,
+fail-closed authorization boundary is `Ms365SessionScope` in the router
+(`service/src/ms365/ms365-tool-router.ts`): only sessions explicitly registered by the **Microsoft
+365** tab are allowed to call any MS365 tool. Every other session is rejected at the router level.
+
+**Design choice:** The hook is kept as a **RESERVED SEAM** (documented in the source). If OpenCode
+ever exposes a way for the child to learn its own session scope, the hook could become an early,
+in-process friendly block (fail fast before round-tripping to the router). Until then, it is a
+no-op for all sessions — no action needed, and adding a gate here today would be security theater.
+
+**Related:** Session gating is enforced in `service/src/ms365/ms365-tools.ts:handleToolCall`, which
+checks `deps.sessionAllowed(sessionId)` first, before any tool-specific logic. This is the
+production authorization boundary.

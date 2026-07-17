@@ -51,6 +51,37 @@ export {
 export { buildMs365View, type Ms365ViewData } from "./ms365-view.js";
 
 export {
+  createOutlookService,
+  type OutlookService,
+  type OutlookMessageHit,
+} from "./outlook-service.js";
+
+export {
+  createPlannerService,
+  type PlannerService,
+  type PlannerPlan,
+  type PlannerTask,
+} from "./planner-service.js";
+
+export {
+  createListsService,
+  type ListsService,
+  type ListInfo,
+  type ListItem,
+} from "./lists-service.js";
+
+export {
+  createTeamsService,
+  type TeamsService,
+  type TeamsChat,
+  type TeamsTeam,
+  type TeamsChannel,
+  type TeamsMember,
+  type TeamsMessage,
+  type MessageTarget,
+} from "./teams-service.js";
+
+export {
   handleToolCall,
   type ToolCall,
   type ToolResult,
@@ -64,16 +95,59 @@ export {
   MS365_TOOL_CALL_PATH,
   MS365_CONNECT_PATH,
   MS365_VIEW_PATH,
+  MS365_DEVICE_BEGIN_PATH,
+  MS365_DEVICE_POLL_PATH,
+  MS365_DISCONNECT_PATH,
+  MS365_SITES_PATH,
+  MS365_SITES_TOGGLE_PATH,
+  MS365_WRITE_MODE_PATH,
+  MS365_SESSION_SCOPE_PATH,
   type Ms365RouterDeps,
 } from "./ms365-tool-router.js";
 
+export {
+  createMs365SessionScope,
+  type Ms365SessionScope,
+} from "./ms365-session-scope.js";
+
+export {
+  createSiteScopeStore,
+  type SiteScopeStore,
+  type SiteScopePersistence,
+  type SiteEnabledRecord,
+} from "./site-scope-store.js";
+
+export {
+  createSiteScopeService,
+  type SiteScopeService,
+  type JoinedSite,
+} from "./site-scope-service.js";
+
+export { createSiteScopeFilePersistence } from "./site-scope-file-persistence.js";
+
+export {
+  createWriteModeStore,
+  type Ms365WriteMode,
+  type WriteModePersistence,
+  type WriteModeStore,
+} from "./write-mode-store.js";
+export { createWriteModeFilePersistence } from "./write-mode-file-persistence.js";
+
+
 /**
- * Feature-flag gate for the whole MS365 unit (Task 11). OFF (`false`) unless the env var is
- * EXACTLY `"1"` or `"true"` — every other value, including `undefined`, `"0"`, `"false"`, or
- * any other string, is OFF. This is the ONLY switch the composition root reads to decide
- * whether to construct the connector and mount {@link createMs365Router}; default-OFF keeps
- * the baseline service byte-for-byte unaffected when the var is unset.
+ * Pure reader for the device-code auth env vars (Task 3). Returns a config only when
+ * `CGHC_MS365_CLIENT_ID` is a non-empty string; `CGHC_MS365_TENANT` defaults to `"common"`
+ * when unset or empty. The composition root uses this to decide whether to construct a
+ * {@link createDeviceCodeProvider} and pass it into {@link createMs365Connector}'s `device`
+ * dep — no device provider is built when this returns `null`.
  */
-export function isMs365Enabled(env: Record<string, string | undefined>): boolean {
-  return env.CGHC_MS365_ENABLED === "1" || env.CGHC_MS365_ENABLED === "true";
+export function readMs365DeviceConfig(
+  env: Record<string, string | undefined>,
+): { clientId: string; tenant: string } | null {
+  const clientId = env.CGHC_MS365_CLIENT_ID;
+  if (clientId === undefined || clientId === "") {
+    return null;
+  }
+  const tenant = env.CGHC_MS365_TENANT;
+  return { clientId, tenant: tenant !== undefined && tenant !== "" ? tenant : "common" };
 }

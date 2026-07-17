@@ -33,6 +33,7 @@ import {
   type PendingPermissionView,
   type PermissionDecisionResponse,
 } from "./permission-client.js";
+import type { MicrosoftIntegrationView } from "./integration-slots.js";
 
 // Re-exported so consumers keep importing the permission wire types from `./service-client.js`
 // (the split in CGHC-025 preserves the public surface).
@@ -370,6 +371,8 @@ export interface ConversationSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  /** Which product surface owns this conversation. Absent in legacy records → treat as "cowork". */
+  readonly surface: "cowork" | "ms365";
 }
 
 /** Redacted activity metadata from conversation persistence (no secrets). */
@@ -410,6 +413,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly surface?: "cowork" | "ms365";
   readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
@@ -553,6 +557,12 @@ export interface ServiceClient {
   sendSessionMessage(sessionId: string, text: string): Promise<SendSessionMessageResult>;
   /** Request cancellation of the in-flight run. */
   cancelSession(sessionId: string): Promise<void>;
+  /** Register/revoke a runtime session for MS365 tool execution (Microsoft 365 tab only). */
+  setMs365SessionScope(sessionId: string, enabled: boolean): Promise<{ readonly allowed: boolean }>;
+  /** Connect Microsoft 365 with a manual access token (Microsoft 365 tab). Returns the fresh view. */
+  connectMs365(token: string): Promise<MicrosoftIntegrationView>;
+  /** Disconnect Microsoft 365. Returns the fresh (disconnected) view. */
+  disconnectMs365(): Promise<MicrosoftIntegrationView>;
   /** Read remote-control status (gateway URL, LAN URLs, paired devices). */
   remoteStatus(): Promise<RemoteStatus>;
   /** Issue a one-time pairing code (+ QR SVG when the gateway is reachable). */
@@ -569,8 +579,11 @@ export interface ServiceClient {
   getDispatchRun(runId: string): Promise<DispatchRunView>;
   /** Cancel a dispatch run (loop + in-flight branches). */
   cancelDispatchRun(runId: string): Promise<void>;
-  /** List persisted conversations (optional local search query). */
-  listConversations(query?: string): Promise<readonly ConversationSummary[]>;
+  /** List persisted conversations (optional local search query + surface filter). */
+  listConversations(
+    query?: string,
+    surface?: "cowork" | "ms365",
+  ): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
   getConversation(id: string): Promise<ConversationRecord>;
   getLastActiveConversationId(): Promise<string | null>;
@@ -955,6 +968,24 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       );
     },
 
+    setMs365SessionScope: (sessionId, enabled) =>
+      call<{ allowed: boolean }>("/v1/ms365/session-scope", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, enabled }),
+      }),
+
+    connectMs365: (token) =>
+      call<MicrosoftIntegrationView>("/v1/ms365/connect", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+
+    disconnectMs365: () =>
+      call<MicrosoftIntegrationView>("/v1/ms365/disconnect", {
+        method: "POST",
+        body: "{}",
+      }),
+
     remoteStatus: () => call<RemoteStatus>("/v1/remote/status"),
     remoteIssuePairingCode: () =>
       call<RemotePairingCode>("/v1/remote/pairing-code", { method: "POST", body: "{}" }),
@@ -982,12 +1013,13 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       );
     },
 
-    listConversations: async (query) => {
+    listConversations: async (query, surface) => {
+      const params = new URLSearchParams();
       const q = query?.trim();
-      const path =
-        q !== undefined && q.length > 0
-          ? `/v1/conversations?q=${encodeURIComponent(q)}`
-          : "/v1/conversations";
+      if (q !== undefined && q.length > 0) params.set("q", q);
+      if (surface !== undefined) params.set("surface", surface);
+      const suffix = params.toString();
+      const path = suffix.length > 0 ? `/v1/conversations?${suffix}` : "/v1/conversations";
       return (await call<{ conversations: readonly ConversationSummary[] }>(path)).conversations;
     },
 
