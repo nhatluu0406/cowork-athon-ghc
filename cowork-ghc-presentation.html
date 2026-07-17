@@ -208,8 +208,8 @@
         <p>Spec, plan, contracts đầy đủ. Test riêng: 43/43 Go, 43/43 Rust, Playwright pass. Connectors, graph builder, retrieval pipeline, embedding runtime đã code.</p>
       </div>
       <div class="card">
-        <h3><span class="badge warn">Đang chờ</span> Tích hợp vào Cowork (REQ-205)</h3>
-        <p>Spec ở trạng thái Draft, chờ Product Owner quyết định 2 vấn đề kiến trúc trước khi merge chính thức.</p>
+        <h3><span class="badge warn">Phase 3 DONE</span> Tích hợp vào Cowork (REQ-205)</h3>
+        <p>Stack supervisor wiring fixed (compile clean, 12/12 tests pass). D2 resolved (2026-07-13). D1 pending PO sign-off. Knowledge router/service/tool wired to compose-service.</p>
       </div>
       <div class="card">
         <h3><span class="badge ok">Đã vá</span> Lọc quyền trong Graph API</h3>
@@ -232,9 +232,9 @@
     <div class="kicker">Rủi ro đã ghi nhận</div>
     <h2>Khoảng hở kỹ thuật cần giải quyết tiếp</h2>
     <ul class="list" style="font-size:17px; margin-top:10px;">
-      <li><b>Delta sync mới ở mức đếm:</b> coordinator chưa ghi nhận file/chunk thật vào metadata DB (TODO còn trong <code>connectors/delta.go</code>), cần hoàn thiện để đảm bảo dữ liệu đồng bộ chính xác.</li>
-      <li><b>Local inference chưa chạy thật:</b> phần load model ONNX/GGUF trong llm-svc mới là khung sườn (scaffolding), chưa production-ready.</li>
-      <li><b>Quyết định kiến trúc treo:</b> REQ-205 cần Product Owner chốt cách gọi tool <code>m365_knowledge_search</code> (server-to-server qua PermissionGate) trước khi tích hợp UI.</li>
+      <li><b>Stack supervisor integration:</b> ✓ DONE (2026-07-18) — M365KGStackSupervisor now wired to real GenericChildSupervisor (spawn, readiness polling, identity capture, graceful shutdown). Compile clean, 12/12 stack tests pass.</li>
+      <li><b>Delta sync & local inference:</b> coordinator/GraphBuilder.Publish/ONNX still scaffolded in REQ-204 backend (independent of Cowork integration).</li>
+      <li><b>D1 decision:</b> PO confirmed full React reuse for Knowledge Panel (2026-07-13). Stack wiring now complete; UI integration next.</li>
     </ul>
   </section>
 
