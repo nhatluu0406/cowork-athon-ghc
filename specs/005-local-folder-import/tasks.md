@@ -179,11 +179,11 @@
 
 **Purpose**: Security hardening, performance, documentation.
 
-- [ ] T047 [P] Security audit of `app/backend/internal/localimport/path.go`: add test cases for Windows long path (`\\?\C:\...`), null byte in path, path with only spaces, path pointing to `/proc` or `/sys` (Linux); ensure all rejected with clear error codes
-- [ ] T048 [P] Performance: implement batch INSERT for chunks using `lib/pq` `pq.CopyIn` in `app/backend/internal/localimport/processor.go` for large imports (>500 chunks in one file); fallback to single INSERT if CopyIn fails
-- [ ] T049 [P] Add `app/backend/cmd/routes_test.go` smoke tests for all new `/api/local/*` routes: verify 401 when no JWT; verify 404 for unknown source ID; verify 400 for invalid path
-- [ ] T050 Run `go test ./...` — all tests pass; run `go vet ./...` — no warnings; run migration on a fresh DB and verify schema matches data-model.md
-- [ ] T051 Update `docs/` with Vietnamese-language API overview for local folder import: create `app/backend/docs/local-import-api.md` summarising endpoints, setup steps, and search integration (data-model.md §4 as reference)
+- [X] T047 [P] Security audit of `app/backend/internal/localimport/path.go`: add test cases for Windows long path (`\\?\C:\...`), null byte in path, path with only spaces, path pointing to `/proc` or `/sys` (Linux); ensure all rejected with clear error codes
+- [X] T048 [P] Performance: implement batch INSERT for chunks using `lib/pq` `pq.CopyIn` in `app/backend/internal/localimport/processor.go` for large imports (>500 chunks in one file); fallback to single INSERT if CopyIn fails
+- [X] T049 [P] Add `app/backend/cmd/routes_test.go` smoke tests for all new `/api/local/*` routes: verify 401 when no JWT; verify 404 for unknown source ID; verify 400 for invalid path
+- [X] T050 Run `go test ./...` — all tests pass; run `go vet ./...` — no warnings; run migration on a fresh DB and verify schema matches data-model.md
+- [X] T051 Update `docs/` with Vietnamese-language API overview for local folder import: create `app/backend/docs/local-import-api.md` summarising endpoints, setup steps, and search integration (data-model.md §4 as reference)
 
 ---
 
