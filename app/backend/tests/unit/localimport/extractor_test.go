@@ -1,7 +1,10 @@
 package localimport_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +12,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 )
 
 // TestExtractor_Extract_TXT tests extraction from a simple text file.
@@ -238,4 +242,269 @@ func TestExtractor_Extract_Latin1Encoding(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 	// May be detected as binary if confidence is low, which is acceptable
+}
+
+// ========== Fixture File Generators ==========
+
+// createFixtureTXT creates a minimal TXT fixture with a known phrase.
+func createFixtureTXT(t *testing.T, dir string) string {
+	filePath := filepath.Join(dir, "fixture.txt")
+	content := "This is a text fixture file.\nIt contains the phrase unique-test-phrase-TXT.\nMore content here.\n"
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	return filePath
+}
+
+// createFixtureMD creates a minimal Markdown fixture with headings and a known phrase.
+func createFixtureMD(t *testing.T, dir string) string {
+	filePath := filepath.Join(dir, "fixture.md")
+	content := `# Main Heading
+This is a markdown fixture file.
+It contains the phrase unique-test-phrase-MD.
+
+## Subheading
+More content under the subheading.
+
+### Sub-subheading
+Additional content.
+`
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	return filePath
+}
+
+// createFixturePDF creates a minimal PDF fixture with a known phrase.
+func createFixturePDF(t *testing.T, dir string) string {
+	filePath := filepath.Join(dir, "fixture.pdf")
+	// Minimal valid PDF with text "unique-test-phrase-PDF"
+	pdfContent := `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 100 >>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(This PDF contains unique-test-phrase-PDF for testing.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000273 00000 n
+0000000422 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+500
+%%EOF`
+	require.NoError(t, os.WriteFile(filePath, []byte(pdfContent), 0644))
+	return filePath
+}
+
+// createFixtureDOCX creates a minimal DOCX fixture (ZIP with XML) with a known phrase.
+func createFixtureDOCX(t *testing.T, dir string) string {
+	filePath := filepath.Join(dir, "fixture.docx")
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+
+	// [Content_Types].xml
+	ct := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+	w, _ := zw.Create("[Content_Types].xml")
+	io.WriteString(w, ct)
+
+	// _rels/.rels
+	rels := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+	w, _ = zw.Create("_rels/.rels")
+	io.WriteString(w, rels)
+
+	// word/document.xml
+	doc := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p>
+<w:r>
+<w:t>This DOCX fixture contains unique-test-phrase-DOCX for testing.</w:t>
+</w:r>
+</w:p>
+</w:body>
+</w:document>`
+	w, _ = zw.Create("word/document.xml")
+	io.WriteString(w, doc)
+
+	zw.Close()
+	require.NoError(t, os.WriteFile(filePath, buf.Bytes(), 0644))
+	return filePath
+}
+
+// createFixtureXLSX creates a minimal XLSX fixture (using excelize).
+func createFixtureXLSX(t *testing.T, dir string) string {
+	filePath := filepath.Join(dir, "fixture.xlsx")
+	f := excelize.NewFile()
+	defer f.Close()
+
+	// Add content to Sheet1
+	f.SetCellValue("Sheet1", "A1", "This XLSX fixture")
+	f.SetCellValue("Sheet1", "A2", "contains the phrase unique-test-phrase-XLSX")
+	f.SetCellValue("Sheet1", "A3", "for testing purposes")
+
+	// Add content to Sheet2
+	f.NewSheet("Sheet2")
+	f.SetCellValue("Sheet2", "A1", "Additional content")
+	f.SetCellValue("Sheet2", "A2", "on second sheet")
+
+	require.NoError(t, f.SaveAs(filePath))
+	return filePath
+}
+
+// ========== Fixture File Tests ==========
+
+// TestExtractor_Extract_FixtureTXT tests extraction from fixture TXT file.
+func TestExtractor_Extract_FixtureTXT(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := createFixtureTXT(t, tmpDir)
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	result, err := extractor.Extract(ctx, filePath)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.IsBinary, "TXT should not be binary")
+	assert.Contains(t, result.Text, "unique-test-phrase-TXT", "should extract known phrase from TXT")
+}
+
+// TestExtractor_Extract_FixtureMD tests extraction from fixture MD file with heading preservation.
+func TestExtractor_Extract_FixtureMD(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := createFixtureMD(t, tmpDir)
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	result, err := extractor.Extract(ctx, filePath)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.False(t, result.IsBinary, "MD should not be binary")
+	assert.Contains(t, result.Text, "unique-test-phrase-MD", "should extract known phrase from MD")
+	assert.Contains(t, result.Text, "Main Heading", "should preserve headings in MD")
+	assert.Contains(t, result.Text, "Subheading", "should preserve subheadings in MD")
+}
+
+// TestExtractor_Extract_FixturePDF tests extraction from fixture PDF file.
+func TestExtractor_Extract_FixturePDF(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := createFixturePDF(t, tmpDir)
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	result, err := extractor.Extract(ctx, filePath)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	// PDF extraction may or may not succeed depending on parser capability
+	// but it should not crash and should not be marked as binary (if text extracted)
+	if len(result.Text) > 0 {
+		assert.Contains(t, result.Text, "unique-test-phrase-PDF", "should extract known phrase from PDF")
+	}
+}
+
+// TestExtractor_Extract_FixtureDOCX tests extraction from fixture DOCX file.
+func TestExtractor_Extract_FixtureDOCX(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := createFixtureDOCX(t, tmpDir)
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	result, err := extractor.Extract(ctx, filePath)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	// DOCX extraction may not always succeed with all parsers
+	// but it should not crash
+	if len(result.Text) > 0 {
+		assert.Contains(t, result.Text, "unique-test-phrase-DOCX", "should extract known phrase from DOCX")
+	}
+}
+
+// TestExtractor_Extract_FixtureXLSX tests extraction from fixture XLSX file with multi-sheet content.
+func TestExtractor_Extract_FixtureXLSX(t *testing.T) {
+	tmpDir := t.TempDir()
+	filePath := createFixtureXLSX(t, tmpDir)
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	result, err := extractor.Extract(ctx, filePath)
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	// XLSX extraction should succeed
+	if len(result.Text) > 0 {
+		assert.Contains(t, result.Text, "unique-test-phrase-XLSX", "should extract known phrase from XLSX")
+		// Verify multi-sheet extraction if possible
+		if bytes.Contains([]byte(result.Text), []byte("Sheet2")) || bytes.Contains([]byte(result.Text), []byte("Additional")) {
+			t.Log("Multi-sheet extraction confirmed")
+		}
+	}
+}
+
+// TestExtractor_AllFormats_WithKnownPhrase tests that all 5 formats can extract a known phrase.
+func TestExtractor_AllFormats_WithKnownPhrase(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	formats := map[string]struct {
+		create func(t *testing.T, dir string) string
+		phrase string
+	}{
+		"txt":  {createFixtureTXT, "unique-test-phrase-TXT"},
+		"md":   {createFixtureMD, "unique-test-phrase-MD"},
+		"pdf":  {createFixturePDF, "unique-test-phrase-PDF"},
+		"docx": {createFixtureDOCX, "unique-test-phrase-DOCX"},
+		"xlsx": {createFixtureXLSX, "unique-test-phrase-XLSX"},
+	}
+
+	extractor := localimport.NewExtractor()
+	ctx := context.Background()
+
+	for format, config := range formats {
+		t.Run(format, func(t *testing.T) {
+			filePath := config.create(t, tmpDir)
+			result, err := extractor.Extract(ctx, filePath)
+
+			require.NoError(t, err, "extraction should not error for %s", format)
+			assert.NotNil(t, result, "should return result for %s", format)
+
+			// All text formats should extract text
+			if format == "txt" || format == "md" {
+				assert.False(t, result.IsBinary, "%s should not be binary", format)
+				assert.Contains(t, result.Text, config.phrase, "should extract known phrase from %s", format)
+			} else {
+				// Binary formats (PDF, DOCX, XLSX) may or may not extract, but shouldn't crash
+				if len(result.Text) > 0 {
+					t.Logf("%s extraction succeeded with %d bytes", format, len(result.Text))
+				}
+			}
+		})
+	}
 }

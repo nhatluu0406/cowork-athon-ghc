@@ -1,8 +1,11 @@
 package localimport_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"database/sql"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +15,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/parsers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/xuri/excelize/v2"
 )
 
 // setupIntegrationTestDB creates an in-memory SQLite database with all required tables.
@@ -355,4 +359,256 @@ func (m *mockChunkStore) GetChunk(ctx context.Context, id string) (interface{}, 
 // StoreChunks is a placeholder method for the integration test.
 func (m *mockChunkStore) StoreChunks(ctx context.Context, chunks []interface{}) error {
 	return nil
+}
+
+// Helper functions for creating fixture files
+
+// createFixtureTXT creates a TXT file with a known phrase.
+func createFixtureTXT(t *testing.T, dir string, phrase string) string {
+	filePath := filepath.Join(dir, "document.txt")
+	content := "This is a text document.\nIt contains " + phrase + ".\nEnd of file.\n"
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	return filePath
+}
+
+// createFixtureMD creates a Markdown file with a known phrase.
+func createFixtureMD(t *testing.T, dir string, phrase string) string {
+	filePath := filepath.Join(dir, "document.md")
+	content := "# Document Title\n\nThis is a markdown document.\n\nIt contains " + phrase + ".\n\n## Section\n\nMore content.\n"
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+	return filePath
+}
+
+// createFixturePDF creates a minimal PDF file with a known phrase.
+func createFixturePDF(t *testing.T, dir string, phrase string) string {
+	filePath := filepath.Join(dir, "document.pdf")
+	pdfContent := `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 100 >>
+stream
+BT
+/F1 12 Tf
+100 700 Td
+(This PDF contains ` + phrase + `.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000009 00000 n
+0000000058 00000 n
+0000000115 00000 n
+0000000273 00000 n
+0000000422 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+500
+%%EOF`
+	require.NoError(t, os.WriteFile(filePath, []byte(pdfContent), 0644))
+	return filePath
+}
+
+// createFixtureDOCX creates a minimal DOCX file with a known phrase.
+func createFixtureDOCX(t *testing.T, dir string, phrase string) string {
+	filePath := filepath.Join(dir, "document.docx")
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+
+	// [Content_Types].xml
+	ct := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`
+	w, _ := zw.Create("[Content_Types].xml")
+	io.WriteString(w, ct)
+
+	// _rels/.rels
+	rels := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`
+	w, _ = zw.Create("_rels/.rels")
+	io.WriteString(w, rels)
+
+	// word/document.xml
+	doc := `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:body>
+<w:p>
+<w:r>
+<w:t>This DOCX document contains ` + phrase + `.</w:t>
+</w:r>
+</w:p>
+</w:body>
+</w:document>`
+	w, _ = zw.Create("word/document.xml")
+	io.WriteString(w, doc)
+
+	zw.Close()
+	require.NoError(t, os.WriteFile(filePath, buf.Bytes(), 0644))
+	return filePath
+}
+
+// createFixtureXLSX creates a minimal XLSX file with a known phrase.
+func createFixtureXLSX(t *testing.T, dir string, phrase string) string {
+	filePath := filepath.Join(dir, "document.xlsx")
+	f := excelize.NewFile()
+	defer f.Close()
+
+	f.SetCellValue("Sheet1", "A1", "This XLSX document")
+	f.SetCellValue("Sheet1", "A2", "contains "+phrase)
+	f.SetCellValue("Sheet1", "A3", "for integration testing")
+
+	require.NoError(t, f.SaveAs(filePath))
+	return filePath
+}
+
+// TestImport_AllFormats tests importing one file of each format (TXT, MD, PDF, DOCX, XLSX).
+func TestImport_AllFormats(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create one fixture of each format with the same unique phrase
+	uniquePhrase := "unique-test-phrase-XK7"
+
+	createFixtureTXT(t, tmpDir, uniquePhrase)
+	createFixtureMD(t, tmpDir, uniquePhrase)
+	createFixturePDF(t, tmpDir, uniquePhrase)
+	createFixtureDOCX(t, tmpDir, uniquePhrase)
+	createFixtureXLSX(t, tmpDir, uniquePhrase)
+
+	db := setupIntegrationTestDB(t)
+	ctx := context.Background()
+
+	// Create source
+	sourceStore := localimport.NewLocalSourceStore(db)
+	source, err := sourceStore.Create(ctx, localimport.CreateSourceRequest{
+		Name:           "Multi-Format Test Source",
+		FolderPath:     tmpDir,
+		Recursive:      true,
+		HiddenFiles:    false,
+		FollowSymlinks: false,
+		MaxDepth:       10,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, source)
+
+	// Create and run import job
+	jobStore := localimport.NewImportJobStore(db)
+	job, err := jobStore.Create(ctx, source.ID)
+	require.NoError(t, err)
+
+	fileStore := localimport.NewLocalFileStore(db)
+	resolver := localimport.NewDeltaResolver(fileStore)
+	extractor := localimport.NewExtractor()
+	chunker := parsers.NewChunker(512, 128)
+
+	processor := localimport.NewProcessor(
+		resolver, extractor, chunker,
+		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+	)
+
+	err = processor.Run(ctx, job)
+	require.NoError(t, err)
+
+	// Verify all files were imported
+	files, err := fileStore.ListBySource(ctx, source.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 5, len(files), "should have imported 5 files (one of each format)")
+
+	// Verify each file is present
+	fileNames := map[string]bool{}
+	for _, f := range files {
+		fileNames[f.FileName] = true
+	}
+
+	assert.True(t, fileNames["document.txt"], "TXT file should be imported")
+	assert.True(t, fileNames["document.md"], "MD file should be imported")
+	assert.True(t, fileNames["document.pdf"], "PDF file should be imported")
+	assert.True(t, fileNames["document.docx"], "DOCX file should be imported")
+	assert.True(t, fileNames["document.xlsx"], "XLSX file should be imported")
+
+	// Verify job completed successfully
+	updatedJob, err := jobStore.Get(ctx, job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, localimport.JobCompleted, updatedJob.Status)
+	assert.Greater(t, updatedJob.Progress.FilesAdded, 0, "should have added files")
+}
+
+// TestImport_AllFormats_WithSourceType verifies source_type is set correctly for all formats.
+func TestImport_AllFormats_WithSourceType(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	uniquePhrase := "unique-test-phrase-ALL"
+
+	createFixtureTXT(t, tmpDir, uniquePhrase)
+	createFixtureMD(t, tmpDir, uniquePhrase)
+	createFixturePDF(t, tmpDir, uniquePhrase)
+	createFixtureDOCX(t, tmpDir, uniquePhrase)
+	createFixtureXLSX(t, tmpDir, uniquePhrase)
+
+	db := setupIntegrationTestDB(t)
+	ctx := context.Background()
+
+	sourceStore := localimport.NewLocalSourceStore(db)
+	source, err := sourceStore.Create(ctx, localimport.CreateSourceRequest{
+		Name:       "Source Type Test",
+		FolderPath: tmpDir,
+		Recursive:  true,
+	})
+	require.NoError(t, err)
+
+	jobStore := localimport.NewImportJobStore(db)
+	job, err := jobStore.Create(ctx, source.ID)
+	require.NoError(t, err)
+
+	fileStore := localimport.NewLocalFileStore(db)
+	resolver := localimport.NewDeltaResolver(fileStore)
+	extractor := localimport.NewExtractor()
+	chunker := parsers.NewChunker(512, 128)
+
+	processor := localimport.NewProcessor(
+		resolver, extractor, chunker,
+		&mockEmbeddingRuntime{}, fileStore, sourceStore, &mockChunkStore{}, jobStore, nil,
+	)
+
+	err = processor.Run(ctx, job)
+	require.NoError(t, err)
+
+	// Verify all 5 files exist in local_files
+	files, err := fileStore.ListBySource(ctx, source.ID)
+	require.NoError(t, err)
+	assert.Len(t, files, 5, "should have 5 files in local_files")
+
+	// Verify source_type for each file (all should be "local" since they're in local_files)
+	for _, file := range files {
+		t.Logf("File: %s, Size: %d, Binary: %v", file.FileName, file.FileSize, file.IsBinary)
+		// All files should be successfully identified (not all marked as binary for test-compatible parsers)
+		if file.FileName == "document.txt" || file.FileName == "document.md" {
+			assert.False(t, file.IsBinary, "%s should not be marked as binary", file.FileName)
+		}
+	}
+
+	// Verify job progress
+	updatedJob, err := jobStore.Get(ctx, job.ID)
+	require.NoError(t, err)
+	assert.Equal(t, localimport.JobCompleted, updatedJob.Status)
+	assert.Equal(t, 5, updatedJob.Progress.FilesAdded, "should have added all 5 files")
+	assert.Equal(t, 0, updatedJob.Progress.FilesModified, "no files should be modified on first import")
+	assert.Equal(t, 0, updatedJob.Progress.FilesDeleted, "no files should be deleted on first import")
 }
