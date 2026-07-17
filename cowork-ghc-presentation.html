@@ -91,7 +91,7 @@
     <p class="lead">Biến SharePoint, Teams và Microsoft Graph thành một nguồn tri thức có thể hỏi-đáp bằng ngôn ngữ tự nhiên — có trích dẫn nguồn, tôn trọng quyền truy cập, và xử lý local-first.</p>
     <div class="footer-brand">
       <span>Trình bày cho Ban Giám Khảo</span>
-      <span>DungPD4 · 17/07/2026</span>
+      <span>DungPD4 · 18/07/2026</span>
     </div>
   </section>
 
@@ -202,7 +202,7 @@
   <section class="slide">
     <div class="kicker">Trạng thái triển khai</div>
     <h2>Minh bạch: đã làm gì, còn gì đang dang dở</h2>
-    <div class="grid cols-2">
+    <div class="grid cols-3">
       <div class="card">
         <h3><span class="badge ok">Đã có</span> Backend Knowledge Graph (REQ-204)</h3>
         <p>Spec, plan, contracts đầy đủ. Test riêng: 43/43 Go, 43/43 Rust, Playwright pass. Connectors, graph builder, retrieval pipeline, embedding runtime đã code.</p>
@@ -212,8 +212,12 @@
         <p>Spec ở trạng thái Draft, chờ Product Owner quyết định 2 vấn đề kiến trúc trước khi merge chính thức.</p>
       </div>
       <div class="card">
+        <h3><span class="badge ok">Đã vá</span> Lọc quyền trong Graph API</h3>
+        <p>Handler <code>ListNodes</code>/<code>ListEdges</code> khôi phục đúng logic <code>PermissionFilter.Filter()</code>; Retriever trả <code>permission_denied</code> intent ngay khi người dùng không có quyền trên file nào. Test tích hợp T3.2 PASS trở lại.</p>
+      </div>
+      <div class="card">
         <h3><span class="badge warn">Còn stub</span> Một số phần thực thi</h3>
-        <p><code>DeltaSyncCoordinator</code> chưa ghi file/chunk thật vào DB (mới đếm); <code>GraphBuilder.Publish()</code> chưa cập nhật graph epoch thật; local model inference (ONNX/GGUF) mới là scaffolding.</p>
+        <p><code>DeltaSyncCoordinator</code> chưa ghi file/chunk thật vào DB (mới đếm, TODO còn trong code); <code>GraphBuilder.Publish()</code> chưa cập nhật graph epoch thật (còn TODO); local model inference (ONNX/GGUF) mới là scaffolding.</p>
       </div>
       <div class="card">
         <h3><span class="badge danger">Chưa bật</span> M365 connector</h3>
@@ -228,8 +232,7 @@
     <div class="kicker">Rủi ro đã ghi nhận</div>
     <h2>Khoảng hở kỹ thuật cần giải quyết tiếp</h2>
     <ul class="list" style="font-size:17px; margin-top:10px;">
-      <li><b>Graph Expansion chưa lọc quyền:</b> bước mở rộng đồ thị (BFS 1–2 hop) hiện chưa bị giới hạn theo permission_cache như bước lọc ban đầu — cần vá trước khi đưa vào production.</li>
-      <li><b>Delta sync mới ở mức đếm:</b> coordinator chưa ghi nhận file/chunk thật vào metadata DB, cần hoàn thiện để đảm bảo dữ liệu đồng bộ chính xác.</li>
+      <li><b>Delta sync mới ở mức đếm:</b> coordinator chưa ghi nhận file/chunk thật vào metadata DB (TODO còn trong <code>connectors/delta.go</code>), cần hoàn thiện để đảm bảo dữ liệu đồng bộ chính xác.</li>
       <li><b>Local inference chưa chạy thật:</b> phần load model ONNX/GGUF trong llm-svc mới là khung sườn (scaffolding), chưa production-ready.</li>
       <li><b>Quyết định kiến trúc treo:</b> REQ-205 cần Product Owner chốt cách gọi tool <code>m365_knowledge_search</code> (server-to-server qua PermissionGate) trước khi tích hợp UI.</li>
     </ul>
