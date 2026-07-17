@@ -85,6 +85,40 @@ test("clicking run starts the task through the client", async () => {
   body.remove();
 });
 
+test("run buttons are disabled with a reason when the readiness gate blocks (F3)", async () => {
+  const body = document.createElement("div");
+  document.body.appendChild(body);
+  await renderDispatchBoard(boardClient(), body, {
+    canRun: false,
+    reason: "Cấu hình provider trong Cài đặt trước khi chạy task dispatch.",
+  });
+  const runBtn = body.querySelector<HTMLButtonElement>("button.dispatch-btn");
+  assert.ok(runBtn, "the task still renders");
+  assert.equal(runBtn!.disabled, true, "the run action is disabled while not ready");
+  assert.match(body.textContent ?? "", /Cấu hình provider/);
+  body.remove();
+});
+
+test("a blocked gate prevents the task from being started even if clicked", async () => {
+  let ranTask: string | null = null;
+  const body = document.createElement("div");
+  document.body.appendChild(body);
+  await renderDispatchBoard(
+    boardClient({
+      runDispatchTask: async (taskId) => {
+        ranTask = taskId;
+        return RUN;
+      },
+    }),
+    body,
+    { canRun: false, reason: "Chọn workspace trước khi chạy task dispatch." },
+  );
+  body.querySelector<HTMLButtonElement>("button.dispatch-btn")!.click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(ranTask, null, "a blocked run must not reach the service");
+  body.remove();
+});
+
 test("an unreachable service renders an honest note, not a broken board", async () => {
   const body = document.createElement("div");
   await renderDispatchBoard(

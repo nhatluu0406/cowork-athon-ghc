@@ -2206,6 +2206,38 @@ function openWorkspaceFileFromCowork(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Cross-surface "Hỏi Cowork về tệp này": switch to Cowork and seed the composer with a question
+ * scoped to `relativePath`. The shared active workspace is unchanged; the agent reads the file via
+ * its normal workspace tools, so nothing here fabricates content or an attachment. If the composer
+ * already holds a draft it is preserved (the reference is prepended once, not duplicated).
+ */
+function askCoworkAboutFile(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): void {
+  state.activeSurface = "cowork";
+  state.workMode = "cowork";
+  const lead = `Về tệp \`${relativePath}\`: `;
+  const existing = textFromComposer(dom.composerInput);
+  if (!existing.startsWith(`Về tệp \`${relativePath}\``)) {
+    setComposerText(dom.composerInput, existing.length > 0 ? `${lead}${existing}` : lead);
+  }
+  renderState(dom, state, handlers);
+  // Focus + caret to end so the user just types the question.
+  dom.composerInput.focus();
+  const sel = window.getSelection();
+  if (sel !== null) {
+    const range = document.createRange();
+    range.selectNodeContents(dom.composerInput);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
 function createShell(root: HTMLElement): AppDom {
   return createAppFrame(root);
 }
@@ -2663,6 +2695,8 @@ export function mountCoworkApp(root: HTMLElement): void {
               void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
+            // Code → Cowork handoff: ask the agent about the active file.
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
           });
           previewController = mountPreviewController(
             dom.codeView.previewPaneHost,
@@ -2702,6 +2736,8 @@ export function mountCoworkApp(root: HTMLElement): void {
                 codeEditor?.openFile(relativePath);
                 renderState(dom, state, handlers);
               },
+              // Workspace → Cowork handoff: ask the agent about the open file.
+              onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
             },
           );
           mountProviderProfilesPanel(dom.settingsProviderBody, {
