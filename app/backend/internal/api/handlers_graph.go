@@ -83,6 +83,11 @@ func HandleGraphEdges(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFi
 		// means "don't filter by allowed file IDs" (useful for users with no
 		// permission_cache entries, e.g. during initial system setup). An explicit
 		// empty slice []int{} means "user has no access to anything".
+		
+		if allowedFileIDs == nil {
+			allowedFileIDs = []int{}
+		}
+
 
 		relType := r.URL.Query().Get("type")
 		limit := parseLimit(r, 100)
