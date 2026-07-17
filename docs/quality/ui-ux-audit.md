@@ -10,11 +10,13 @@ owner: "quality"
 Findings from reviewing **real screenshots of the packaged app**, against
 `.agents/skills/cowork-ghc-commercial-ui/SKILL.md` and the current design tokens.
 
-> **Status: awaiting evidence.** The audit session that created this file scoped *out* packaging and
-> the automated UI-capture tool (by Product-Owner decision). The screenshot base is produced by the
-> next slice — **ER-013** in `../product/exhibition-readiness-plan.md §4`. This document is the
-> destination for those findings; the method, quality bar, and finding schema below are fixed now so
-> the capture slice can populate it directly.
+> **Status: first evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
+> `tools/ui-audit/`) captured 21 screenshots of the packaged `coworkghc.exe` across every rail
+> surface, both themes, plus the first-run and Settings states. Raw output is git-ignored under
+> `reports/ui-audit/<run-id>/` (contact sheet: `contact-sheet.html`). Findings below are from that
+> first pass on a **fresh, unconfigured** profile (no provider, no workspace) — the honest cold-start
+> a newcomer sees. States requiring a live provider / a loaded workspace / error injection are not
+> yet covered (see Gaps).
 
 ## Quality bar to preserve
 
@@ -48,12 +50,68 @@ missing state · confusing UX · unfinished placeholder · polish.
 
 ## Findings
 
-_None yet — populated by the ER-013 capture slice._
+Screenshot IDs refer to files under `reports/ui-audit/<run-id>/screenshots/`. Severity here is
+UI/UX only; none of these are functional crashes (the packaged app renders every surface cleanly).
 
-## Roll-ups (to be completed)
+| ID | Surface | Screenshot | Severity | Observation | User impact | Proposed fix | Scope | Acceptance |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| F1 | First-run | 01/02-first-run-setup | MEDIUM | The `.app-lock` setup/unlock card renders dark in **both** light and dark themes (theme-independent). | The very first screen ignores the chosen/system light theme — feels off-brand at cold start. | Theme the lock card via `data-theme` tokens (or confirm the dark "spotlight" is intentional and document it). | shared (`app-lock`) | Card matches active theme, or intent recorded. |
+| F2 | Dispatch | 07-surface-dispatch | MEDIUM | Remote pane instructs the user to "Khởi động lại với `CGHC_REMOTE_ENABLED=1` (và `CGHC_REMOTE_LAN=1`)". | Exposing env-var + restart steps in product UI is developer-facing, not exhibition-grade. | Replace with an in-app enable toggle, or hide the remote pane unless the capability is available. | dispatch remote | No env-var/restart instructions in the shipped UI. |
+| F3 | Dispatch | 07-surface-dispatch | MEDIUM | Built-in dispatch tasks show active **Chạy** buttons while `Provider · Chưa cấu hình`. | Running a task with no provider will fail; the enabled button implies readiness it lacks. | Gate the actions on provider-ready; show a disabled state with a "configure a provider" reason. | dispatch | Actions disabled + explained until a provider is configured. |
+| F4 | Cowork / all | 03-surface-cowork, status bar | MEDIUM | Status bar reads green **Sẵn sàng** while `Provider · Chưa cấu hình` (orange) and chat is impossible. | Mixed readiness signal — "Ready" contradicts "provider not configured". | Make the readiness chip reflect the blocking dependency (needs-config) per the ER-007 model. | shared status bar | Readiness chip never shows "Ready" when a required dependency is missing. |
+| F5 | Microsoft 365 | 09-surface-microsoft | LOW | Suggestion chips + composer are interactive while `Chưa kết nối` and no provider is set. | Inviting input that cannot succeed yet; click leads to failure/no-op. | Disable chips/composer until connected + provider-ready, or route them to the connect flow. | microsoft | Input gated until prerequisites met. |
+| F6 | Knowledge / Gateway | 06 / 08 | LOW | The same semantic "awaiting integration" state is laid out differently — Knowledge = left block + Kho/Đồ thị tabs; Gateway = centered hero + pill. | Cross-surface inconsistency for identical status. | Converge pure-placeholder surfaces on one "awaiting integration" template (ER-010). | shared placeholder | D3/D4 placeholders share one layout. |
+| F7 | Cowork | 03-surface-cowork | LOW | Provider-not-configured is stated twice (composer "Provider chưa cấu hình" + status bar "Provider · Chưa cấu hình"). | Minor redundancy/visual noise. | Keep one primary indicator + one actionable CTA. | cowork | Single clear provider-config affordance. |
+| F8 | Settings · Chung | 22-settings-general | LOW | "Giao diện" column is sparse (control at top, large empty area) while "Chẩn đoán" is full — unbalanced. | Wasted whitespace; asymmetric density. | Balance the two-column layout or add theme-preview/description to the left column. | settings | Columns visually balanced. |
+| F9 | Top bar | 03 vs 05 vs 06/08/09 | LOW | Top-right controls vary by surface (Cowork: inspector-toggle + settings; Code: sparkle + settings; placeholders: settings only). | Slightly inconsistent affordance placement. | Standardise the top-bar control set / order across surfaces. | shared topbar | Consistent top-bar controls. |
 
-- Score per surface (1–5)
-- Cross-product findings (shared components)
-- Top exhibition blockers
-- Strengths to preserve (baseline: Cowork, Workspace)
-- Screens needing redesign vs polish-only
+## Roll-ups
+
+### Score per surface (1–5)
+
+| Surface | Score | Note |
+| --- | --- | --- |
+| Cowork | 5 | Reference bar — clean hierarchy, honest empty state. **Preserve.** |
+| Code (Workspace) | 5 | Reference bar — three-pane Explorer/editor/Agent, honest empty states. **Preserve.** |
+| Skill & MCP | 4 | Clear catalog, create/detail flow, honest "Đang tắt" state. |
+| Settings (Nhà cung cấp / Chung) | 4 | Clean; minor whitespace balance (F8). |
+| Knowledge (D3) | 4 | Honest "sẽ bật khi backend D3 sẵn sàng"; no fake data. |
+| Gateway (D4) | 4 | Honest "không hiển thị dữ liệu giả trước khi team tích hợp". |
+| Microsoft 365 (D2) | 3.5 | Good connect card; interactive-while-disconnected (F5). |
+| First-run lock | 3.5 | Clear + localized; dark-in-light-theme (F1). |
+| Dispatch (D1) | 3 | Env-var UX (F2) + ungated actions (F3). |
+
+### Cross-product (shared components)
+
+Readiness signalling (F3/F4/F5) and placeholder treatment (F6) recur across surfaces — fix once in
+the shared status bar + a shared "awaiting integration"/"needs config" component (ER-007, ER-010).
+
+### Top exhibition items (from this cold-start pass)
+
+1. F2 — remove developer env-var instructions from the Dispatch remote pane.
+2. F4/F3 — coherent readiness model so "Ready" never contradicts "provider not configured".
+3. F1 — first-run card should honour the light theme (or document the intent).
+
+No BLOCKER-severity UI defects in the cold-start set: every surface renders in both themes, and the
+D1–D4 placeholders are honest (no fabricated capability).
+
+### Preserve (do not redesign)
+
+Cowork and Code are the quality bar. The **honesty** of the D3/D4/MS365 empty states is a strength —
+keep the explicit "not integrated / no fake data" messaging when consolidating layouts.
+
+### Redesign vs polish
+
+All findings are **polish-only** (gating, theming, layout balance, copy). No surface needs a
+redesign based on the cold-start evidence.
+
+## Gaps (next capture passes)
+
+The first pass used a fresh, unconfigured profile. Not yet captured, needed before exhibition sign-off:
+
+- Provider **configured + connected**: Cowork streaming a turn, model switcher, provider status green.
+- **Workspace loaded**: Code editor with a file open + dirty edit + diff; Workspace Companion preview.
+- **Permission + File Work Review** dialogs; Inspector plan/activity/files populated.
+- **Error/recovery** states (N1–N20 in `release-acceptance.md`): provider offline, DB locked,
+  OpenCode crash, permission denied — needs fault injection in audit mode.
+- **DPI 125/150%** and larger displays (this run's "large" viewport clamped to the work area).
