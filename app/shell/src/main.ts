@@ -18,6 +18,7 @@
 
 import { app, BrowserWindow, Menu, protocol, session } from "electron";
 import { appendFileSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -100,6 +101,13 @@ function resolveRuntimePaths() {
   const builtInSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
+  // Claude Code-style skill folders: the project checkout's `.agents/skills` (shipped to
+  // `<resources>/agents-skills` when packaged) plus the user-global `~/.agents/skills`.
+  // Roots that do not exist are skipped by the catalog, so these are safe to list always.
+  const agentsSkillsRoot = app.isPackaged
+    ? join(process.resourcesPath, "agents-skills")
+    : join(DEV_APP_ROOT, ".agents", "skills");
+  const userAgentsSkillsRoot = join(homedir(), ".agents", "skills");
   lifecycleLogPath = join(appDataRoot, "service-lifecycle.log");
   mkdirSync(conversationsDir, { recursive: true });
   if (process.env["COWORK_GHC_VERBOSE_LOGGING"] === "1") {
@@ -114,6 +122,8 @@ function resolveRuntimePaths() {
     dataPaths,
     skillRoots: [
       { path: builtInSkillsRoot, source: "built_in" as const },
+      { path: agentsSkillsRoot, source: "built_in" as const },
+      { path: userAgentsSkillsRoot, source: "built_in" as const },
       { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
     ],
   };

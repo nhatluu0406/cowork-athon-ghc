@@ -55,6 +55,24 @@ test("enabled state persists across catalog relaunch", async () => {
   assert.equal(second.list()[0]?.status, "enabled");
 });
 
+test("Claude Code-style frontmatter (no id/version, long description) is valid via folder id", async () => {
+  const f = await fixture();
+  const dir = join(f.root, "pdf-tools");
+  await mkdir(dir);
+  const description = "Use this skill for PDF work. ".repeat(20).trim();
+  assert.ok(description.length > 300 && description.length <= 1000);
+  await writeFile(
+    join(dir, "SKILL.md"),
+    `---\nname: pdf-tools\ndescription: ${description}\nlicense: Proprietary\n---\n\nHow to process PDFs.\n`,
+    "utf8",
+  );
+  const catalog = await f.catalog();
+  const view = catalog.list()[0]!;
+  assert.equal(view.validationStatus, "valid");
+  assert.equal(view.id, "pdf-tools");
+  assert.equal(view.version, "1");
+});
+
 test("malformed metadata, binary, oversized, and marker skills are invalid", async () => {
   const f = await fixture();
   for (const name of ["malformed", "binary", "large", "marker"]) await mkdir(join(f.root, name));

@@ -34,6 +34,7 @@ export const SKILL_MAX_COUNT = 64;
 export const SKILL_MAX_FILE_BYTES = 32 * 1024;
 export const SKILL_PREVIEW_CHARS = 6_000;
 export const SKILL_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,63}$/u;
+export const SKILL_MAX_DESCRIPTION_CHARS = 1000;
 const INTERNAL_MARKER = /<<<(?:END_)?CGHC_/u;
 
 interface ParsedSkill {
@@ -59,8 +60,8 @@ function validateDraft(draft: SkillDraft, id: string): string | null {
   if (draft.name.trim().length === 0 || draft.name.length > 100) {
     return "Skill name là bắt buộc (tối đa 100 ký tự).";
   }
-  if (draft.description.trim().length === 0 || draft.description.length > 300) {
-    return "Skill description là bắt buộc (tối đa 300 ký tự).";
+  if (draft.description.trim().length === 0 || draft.description.length > SKILL_MAX_DESCRIPTION_CHARS) {
+    return `Skill description là bắt buộc (tối đa ${SKILL_MAX_DESCRIPTION_CHARS} ký tự).`;
   }
   if (draft.version.trim().length === 0 || draft.version.length > 40) {
     return "Skill version không hợp lệ.";
@@ -208,7 +209,9 @@ async function parseSkill(
       return { view: invalidView(source, folder, "SKILL.md không phải UTF-8 hợp lệ.") };
     }
     const { metadata, body } = parseFrontmatter(text);
-    const id = metadata["id"] ?? "";
+    // Claude Code-style skill folders (e.g. `.agents/skills/*`) carry only name/description in
+    // their frontmatter; the folder name is the stable identity there, so fall back to it.
+    const id = metadata["id"] ?? (SKILL_ID_PATTERN.test(folder.toLowerCase()) ? folder.toLowerCase() : "");
     const name = metadata["name"] ?? "";
     const description = metadata["description"] ?? "";
     const version = metadata["version"] ?? "1";
@@ -225,12 +228,14 @@ async function parseSkill(
     if (name.length === 0 || name.length > 100) {
       return { view: invalidView(source, folder, "Skill name là bắt buộc (tối đa 100 ký tự).", { id }) };
     }
-    if (description.length === 0 || description.length > 300) {
+    if (description.length === 0 || description.length > SKILL_MAX_DESCRIPTION_CHARS) {
       return {
-        view: invalidView(source, folder, "Skill description là bắt buộc (tối đa 300 ký tự).", {
-          id,
-          name,
-        }),
+        view: invalidView(
+          source,
+          folder,
+          `Skill description là bắt buộc (tối đa ${SKILL_MAX_DESCRIPTION_CHARS} ký tự).`,
+          { id, name },
+        ),
       };
     }
     if (version.length === 0 || version.length > 40) {

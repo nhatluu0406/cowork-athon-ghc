@@ -66,6 +66,8 @@ extraResources:
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  - from: ".agents/skills"
+    to: "agents-skills"
   - from: "app/shell/assets/cowork-ghc.ico"
     to: "branding/cowork-ghc.ico"
 
