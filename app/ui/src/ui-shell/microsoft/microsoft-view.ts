@@ -1,8 +1,9 @@
-import type { MicrosoftIntegrationView } from "../../integration-slots.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
-import { renderMsAssistant, type MsAssistantComposerRefs, type MsAssistantConversationItem } from "./ms-assistant-view.js";
-import { renderMsConnect } from "./ms-connect-view.js";
+import { renderMsAssistant } from "./ms-assistant-view.js";
+import { renderMsConnect, type Ms365ConnectClient } from "./ms-connect-view.js";
+import type { Ms365ViewData } from "../../service-client.js";
+import type { MsChatController } from "./ms-chat-controller.js";
 
 export type MicrosoftTab = "assistant" | "connect";
 
@@ -12,22 +13,20 @@ export interface MicrosoftViewDom {
   readonly tabAssistant: HTMLButtonElement;
   readonly tabConnect: HTMLButtonElement;
   msTab: MicrosoftTab;
-  lastView: MicrosoftIntegrationView | null;
-  lastHandlers: MicrosoftSurfaceHandlers | null;
-  lastConversations: readonly MsAssistantConversationItem[];
-  lastActiveConversationId: string | null;
-  /** The live assistant transcript element, when the assistant tab is the last-rendered tab. */
-  assistantTranscript: HTMLElement | null;
-  /** The live composer refs (send/input/chips), when the assistant tab is the last-rendered tab. */
-  msComposer: MsAssistantComposerRefs | null;
+  lastView: Ms365ViewData | null;
+  lastDeps: MicrosoftSurfaceDeps | null;
 }
 
-export interface MicrosoftSurfaceHandlers {
-  readonly onSend: (text: string) => void;
-  readonly onConnect: (token: string) => void;
-  readonly onDisconnect: () => void;
-  readonly onSelectConversation: (id: string) => void;
-  readonly onNewConversation: () => void;
+/** Dependencies the connect/assistant tabs need from the host shell. */
+export interface MicrosoftSurfaceDeps {
+  readonly client: Ms365ConnectClient;
+  readonly onViewChange: (view: Ms365ViewData) => void;
+  /** MS365 tab chat controller — owned by app-shell, survives replaceChildren (Task 1). */
+  readonly chat: MsChatController;
+  readonly onSend: (prompt: string) => void;
+  readonly onCancel: () => void;
+  /** Root of the write-mode pill (Task 3); mounted into the composer row when provided. */
+  readonly writeModePill?: HTMLElement;
 }
 
 export function createMicrosoftView(): MicrosoftViewDom {
@@ -56,15 +55,11 @@ export function createMicrosoftView(): MicrosoftViewDom {
     tabConnect,
     msTab: "assistant",
     lastView: null,
-    lastHandlers: null,
-    lastConversations: [],
-    lastActiveConversationId: null,
-    assistantTranscript: null,
-    msComposer: null,
+    lastDeps: null,
   };
   const select = (tab: MicrosoftTab): void => {
     dom.msTab = tab;
-    if (dom.lastView !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView, dom.lastHandlers);
+    if (dom.lastView !== null && dom.lastDeps !== null) renderMicrosoftSurfaceInternal(dom, dom.lastView, dom.lastDeps);
   };
   tabAssistant.addEventListener("click", () => select("assistant"));
   tabConnect.addEventListener("click", () => select("connect"));
@@ -89,48 +84,30 @@ function segmentedButton(label: string, active: boolean): HTMLButtonElement {
   return button;
 }
 
-export function renderMicrosoftSurface(
-  dom: MicrosoftViewDom,
-  view: MicrosoftIntegrationView,
-  handlers: MicrosoftSurfaceHandlers,
-  conversations: readonly MsAssistantConversationItem[] = [],
-  activeId: string | null = null,
-): void {
+export function renderMicrosoftSurface(dom: MicrosoftViewDom, view: Ms365ViewData, deps: MicrosoftSurfaceDeps): void {
   dom.lastView = view;
-  dom.lastHandlers = handlers;
-  dom.lastConversations = conversations;
-  dom.lastActiveConversationId = activeId;
-  renderMicrosoftSurfaceInternal(dom, view, handlers);
+  dom.lastDeps = deps;
+  renderMicrosoftSurfaceInternal(dom, view, deps);
 }
 
-function renderMicrosoftSurfaceInternal(
-  dom: MicrosoftViewDom,
-  view: MicrosoftIntegrationView,
-  handlers: MicrosoftSurfaceHandlers | null,
-): void {
+function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: Ms365ViewData, deps: MicrosoftSurfaceDeps): void {
   const assistantActive = dom.msTab === "assistant";
   dom.tabAssistant.classList.toggle("ms-segmented__item--active", assistantActive);
   dom.tabConnect.classList.toggle("ms-segmented__item--active", !assistantActive);
   dom.tabAssistant.setAttribute("aria-selected", assistantActive ? "true" : "false");
   dom.tabConnect.setAttribute("aria-selected", assistantActive ? "false" : "true");
   if (assistantActive) {
-    const rendered = renderMsAssistant(dom.body, view, {
+    renderMsAssistant(dom.body, view, {
       onOpenConnect: () => {
         dom.msTab = "connect";
-        renderMicrosoftSurfaceInternal(dom, view, handlers);
+        renderMicrosoftSurfaceInternal(dom, view, deps);
       },
-      onSend: (text) => handlers?.onSend(text),
-      onSelectConversation: (id) => handlers?.onSelectConversation(id),
-      onNewConversation: () => handlers?.onNewConversation(),
-    }, dom.lastConversations, dom.lastActiveConversationId);
-    dom.assistantTranscript = rendered.transcript;
-    dom.msComposer = rendered.composer;
-  } else {
-    dom.assistantTranscript = null;
-    dom.msComposer = null;
-    renderMsConnect(dom.body, view, {
-      onConnect: (token) => handlers?.onConnect(token),
-      onDisconnect: () => handlers?.onDisconnect(),
+      chat: deps.chat,
+      onSend: deps.onSend,
+      onCancel: deps.onCancel,
+      ...(deps.writeModePill !== undefined ? { writeModePill: deps.writeModePill } : {}),
     });
+  } else {
+    renderMsConnect(dom.body, { view, client: deps.client, onViewChange: deps.onViewChange });
   }
 }

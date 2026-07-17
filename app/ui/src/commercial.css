@@ -708,6 +708,23 @@ button {
   border-top: 0;
 }
 
+.ms365-mode-control__button {
+  border: 1px solid var(--cghc-border-subtle);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--cghc-text-muted);
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ms365-mode-control__button[data-mode="auto"] {
+  border-color: var(--cghc-accent);
+  color: var(--cghc-accent);
+}
+
 .composer .icon-btn,
 .composer .skills-btn,
 .composer .provider-control,

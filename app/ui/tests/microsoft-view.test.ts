@@ -1,34 +1,42 @@
 import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { MicrosoftIntegrationView } from "../src/integration-slots.js";
-import { createMicrosoftView, renderMicrosoftSurface } from "../src/ui-shell/microsoft/microsoft-view.js";
+import type { Ms365ViewData } from "../src/service-client.js";
+import { createMicrosoftView, renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "../src/ui-shell/microsoft/microsoft-view.js";
+import type { Ms365ConnectClient } from "../src/ui-shell/microsoft/ms-connect-view.js";
+import { createMsChatController } from "../src/ui-shell/microsoft/ms-chat-controller.js";
 
-const DISCONNECTED: MicrosoftIntegrationView = {
+const DISCONNECTED: Ms365ViewData = {
   connectionState: "disconnected",
   services: [],
   scopes: [],
   actionHistory: [],
 };
 
-const NO_HANDLERS = {
-  onSend: () => {},
-  onConnect: () => {},
-  onDisconnect: () => {},
-  onSelectConversation: () => {},
-  onNewConversation: () => {},
-};
-
-const CONNECTED: MicrosoftIntegrationView = {
-  connectionState: "connected",
-  services: [],
-  scopes: [],
-  actionHistory: [],
-};
+function fakeDeps(): MicrosoftSurfaceDeps {
+  const client: Ms365ConnectClient = {
+    connectMs365Token: async () => DISCONNECTED,
+    fetchMs365View: async () => DISCONNECTED,
+    beginMs365Device: async () => ({ error: "not_configured" }),
+    pollMs365Device: async () => ({ status: "pending" }),
+  };
+  const chat = createMsChatController({
+    preflight: () => ({ canSend: true, message: "" }),
+    workspaceId: () => "ws-1",
+    createSession: async () => ({ id: "sess-1" }),
+    setSessionScope: async () => {},
+    sendMessage: async () => ({ accepted: true }),
+    cancelSession: async () => {},
+    startStream: () => ({ stop: () => {} }),
+    buildDispatch: (_prior, prompt) => ({ ok: true, text: prompt }),
+    onStateChange: () => {},
+  });
+  return { client, onViewChange: () => {}, chat, onSend: () => {}, onCancel: () => {} };
+}
 
 test("assistant tab shows honest not-connected card and disabled composer", () => {
   const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, DISCONNECTED, NO_HANDLERS);
+  renderMicrosoftSurface(dom, DISCONNECTED, fakeDeps());
   assert.equal(dom.msTab, "assistant");
   assert.match(dom.body.textContent ?? "", /Chưa kết nối Microsoft 365/);
   const composerInput = dom.body.querySelector<HTMLTextAreaElement>(".ms-composer__input");
@@ -37,20 +45,20 @@ test("assistant tab shows honest not-connected card and disabled composer", () =
   assert.equal(send?.disabled, true);
 });
 
-test("connect tab shows a token form disabled until typed, and requested scopes", () => {
+test("connect tab shows enabled sign-in and requested scopes", () => {
   const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, DISCONNECTED, NO_HANDLERS);
+  const view: Ms365ViewData = { ...DISCONNECTED, scopes: ["Files.ReadWrite.All", "Tasks.ReadWrite"] };
+  renderMicrosoftSurface(dom, view, fakeDeps());
   dom.tabConnect.click();
   assert.equal(dom.msTab, "connect");
   const signIn = dom.body.querySelector<HTMLButtonElement>(".ms-connect__signin");
-  assert.equal(signIn?.disabled, true);
-  assert.ok(dom.body.querySelector(".ms-connect__token-input"));
-  assert.match(dom.body.textContent ?? "", /Mail\.Send/);
+  assert.equal(signIn?.disabled, false);
+  assert.match(dom.body.textContent ?? "", /Files\.ReadWrite\.All/);
 });
 
 test("no fabricated account or service data is rendered when disconnected", () => {
   const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, DISCONNECTED, NO_HANDLERS);
+  renderMicrosoftSurface(dom, DISCONNECTED, fakeDeps());
   dom.tabConnect.click();
   assert.doesNotMatch(dom.body.textContent ?? "", /Đã kết nối/);
   assert.equal(dom.body.querySelectorAll(".ms-service-card").length, 0);
@@ -58,53 +66,8 @@ test("no fabricated account or service data is rendered when disconnected", () =
 
 test("'Mở trang kết nối' switches to connect tab", () => {
   const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, DISCONNECTED, NO_HANDLERS);
+  renderMicrosoftSurface(dom, DISCONNECTED, fakeDeps());
   const cta = dom.body.querySelector<HTMLButtonElement>(".ms-assistant__connect-cta");
   cta?.click();
   assert.equal(dom.msTab, "connect");
-});
-
-test("connected: renders sidebar with conversation list + new button, and fires handlers", () => {
-  const dom = createMicrosoftView();
-  const selected: string[] = [];
-  let newClicked = false;
-  const handlers = {
-    ...NO_HANDLERS,
-    onSelectConversation: (id: string) => selected.push(id),
-    onNewConversation: () => { newClicked = true; },
-  };
-  renderMicrosoftSurface(dom, CONNECTED, handlers, [
-    { id: "conv-1", title: "Task trễ trên Planner" },
-    { id: "conv-2", title: "Mail chưa đọc" },
-  ]);
-  const sidebar = dom.body.querySelector(".ms-history");
-  assert.ok(sidebar);
-  const items = dom.body.querySelectorAll(".ms-history__item-btn");
-  assert.equal(items.length, 2);
-  assert.equal(items[0]?.textContent, "Task trễ trên Planner");
-
-  (items[1] as HTMLButtonElement).click();
-  assert.deepEqual(selected, ["conv-2"]);
-
-  const newBtn = dom.body.querySelector<HTMLButtonElement>(".ms-history__new");
-  assert.ok(newBtn);
-  assert.equal(newBtn?.textContent, "Cuộc trò chuyện mới");
-  newBtn?.click();
-  assert.equal(newClicked, true);
-});
-
-test("disconnected: no sidebar is rendered", () => {
-  const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, DISCONNECTED, NO_HANDLERS, [{ id: "conv-1", title: "x" }]);
-  assert.equal(dom.body.querySelector(".ms-history"), null);
-});
-
-test("switching tabs and back preserves the conversation list", () => {
-  const dom = createMicrosoftView();
-  renderMicrosoftSurface(dom, CONNECTED, NO_HANDLERS, [{ id: "conv-1", title: "Task trễ trên Planner" }]);
-  dom.tabConnect.click();
-  dom.tabAssistant.click();
-  const items = dom.body.querySelectorAll(".ms-history__item-btn");
-  assert.equal(items.length, 1);
-  assert.equal(items[0]?.textContent, "Task trễ trên Planner");
 });

@@ -23,6 +23,12 @@ export interface SupervisorStartSpec {
   readonly dataHome: string;
   readonly configDir: string;
   readonly baseEnv?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Extra plaintext secret VALUES already baked into `baseEnv` (e.g. a scoped MS365 tool token)
+   * that must ALSO be masked in the log-safe spawn snapshot — one source of truth with
+   * `redactedEnvSnapshot`'s value-equality redaction (see `@cowork-ghc/runtime`).
+   */
+  readonly extraSecretValues?: readonly string[];
   readonly healthTimeoutMs?: number;
   /** Credential handles resolved to child-env injections at launch (never persisted). */
   readonly injectionRequests: readonly CredentialInjectionRequest[];
@@ -32,8 +38,6 @@ export interface SupervisorStartSpec {
   readonly skillsPaths?: readonly string[];
   /** Enabled Skill ids; when present, replaces the blanket `skill: allow` policy with an allowlist. */
   readonly skillAllow?: readonly string[];
-  /** Extra plaintext secrets injected via `baseEnv` (e.g. the scoped MS365 tool token) to redact. */
-  readonly extraSecretValues?: readonly string[];
 }
 
 export interface OpencodeSupervisorOptions {

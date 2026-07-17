@@ -34,6 +34,7 @@ export function toStartedService(live: LiveCoworkService): StartedService {
   return {
     baseUrl: live.running.baseUrl,
     token: live.running.clientToken,
+    tier: "live",
     stop: () => live.stop(),
   };
 }

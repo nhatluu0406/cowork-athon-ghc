@@ -1,6 +1,7 @@
-import type { MicrosoftIntegrationView } from "../../integration-slots.js";
+import type { Ms365ViewData } from "../../service-client.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
+import type { MsChatController, MsChatMessage } from "./ms-chat-controller.js";
 
 const SUGGESTIONS = [
   "Task trễ trên Planner",
@@ -9,41 +10,28 @@ const SUGGESTIONS = [
   "Đăng thông báo lên Teams",
 ] as const;
 
-export interface MsAssistantConversationItem {
-  readonly id: string;
-  readonly title: string;
-}
-
 export interface MsAssistantHandlers {
   readonly onOpenConnect: () => void;
-  readonly onSend: (text: string) => void;
-  readonly onSelectConversation: (id: string) => void;
-  readonly onNewConversation: () => void;
-}
-
-export interface MsAssistantComposerRefs {
-  readonly send: HTMLButtonElement;
-  readonly input: HTMLTextAreaElement;
-  readonly chips: readonly HTMLButtonElement[];
-}
-
-export interface MsAssistantRenderResult {
-  readonly transcript: HTMLElement;
-  readonly composer: MsAssistantComposerRefs | null;
+  /** Render đọc chat.state() — nguồn sự thật duy nhất cho transcript (không state trong DOM). */
+  readonly chat: MsChatController;
+  readonly onSend: (prompt: string) => void;
+  readonly onCancel: () => void;
+  /** Root của pill write-mode (Task 3 truyền vào); Task 2 chỉ mount vào composer row. */
+  readonly writeModePill?: HTMLElement;
 }
 
 export function renderMsAssistant(
   container: HTMLElement,
-  view: MicrosoftIntegrationView,
+  view: Ms365ViewData,
   handlers: MsAssistantHandlers,
-  conversations: readonly MsAssistantConversationItem[],
-  activeId: string | null = null,
-): MsAssistantRenderResult {
+): void {
   container.replaceChildren();
-  const layout = el("div", "ms-assistant-layout");
+  const connected = view.connectionState === "connected";
+  const state = handlers.chat.state();
   const column = el("div", "ms-assistant");
   const transcript = el("div", "ms-assistant__transcript");
-  if (view.connectionState !== "connected") {
+
+  if (!connected) {
     const card = el("section", "ms-card ms-assistant__empty");
     const logo = el("div", "ms-assistant__logo");
     logo.append(createMicrosoftLogo(30));
@@ -56,93 +44,101 @@ export function renderMsAssistant(
       el("p", "ms-card__copy", "Kết nối tài khoản để trợ lý thao tác trên Outlook, Teams, SharePoint và Planner thay bạn."),
       cta,
     );
+    transcript.classList.add("ms-assistant__transcript--empty");
     transcript.append(card);
-    const composer = renderComposer(false, handlers.onSend);
-    column.append(transcript, composer.root);
-    layout.append(column); // no sidebar when disconnected
-    container.append(layout);
-    return { transcript, composer: { send: composer.send, input: composer.input, chips: composer.chips } };
+  } else if (state.messages.length === 0) {
+    transcript.classList.add("ms-assistant__transcript--empty");
+    transcript.append(
+      el("p", "ms-assistant__placeholder", "Bắt đầu bằng cách hỏi trợ lý hoặc chọn một gợi ý bên dưới."),
+    );
+  } else {
+    transcript.classList.add("ms-assistant__transcript--list");
+    for (const message of state.messages) {
+      transcript.append(renderBubble(message));
+    }
   }
-  const sidebar = renderMs365Sidebar(conversations, handlers, activeId);
-  const composer = renderComposer(true, handlers.onSend);
-  column.append(transcript, composer.root);
-  layout.append(sidebar, column);
-  container.append(layout);
-  return { transcript, composer: { send: composer.send, input: composer.input, chips: composer.chips } };
+
+  if (state.errorMessage) {
+    transcript.append(el("p", "ms-assistant__error-banner", state.errorMessage));
+  }
+
+  column.append(transcript, renderComposer(connected, state.phase, handlers));
+  container.append(column);
 }
 
-function renderMs365Sidebar(
-  conversations: readonly MsAssistantConversationItem[],
-  handlers: MsAssistantHandlers,
-  activeId: string | null,
-): HTMLElement {
-  const sidebar = el("aside", "ms-history");
-  const newBtn = el("button", "ms-history__new", "Cuộc trò chuyện mới") as HTMLButtonElement;
-  newBtn.type = "button";
-  newBtn.addEventListener("click", () => handlers.onNewConversation());
-  const list = el("ul", "ms-history__list");
-  for (const conv of conversations) {
-    const item = el("li", "ms-history__item");
-    const btn = el("button", "ms-history__item-btn", conv.title || "Cuộc trò chuyện") as HTMLButtonElement;
-    btn.type = "button";
-    if (conv.id === activeId) btn.classList.add("ms-history__item-btn--active");
-    btn.addEventListener("click", () => handlers.onSelectConversation(conv.id));
-    item.append(btn);
-    list.append(item);
+function renderBubble(message: MsChatMessage): HTMLElement {
+  const classes = ["ms-bubble", `ms-bubble--${message.role}`];
+  if (message.pending) classes.push("ms-bubble--pending");
+  if (message.error) classes.push("ms-bubble--error");
+  const bubble = el("div", classes.join(" "));
+  const text = message.error ? message.error : message.content;
+  bubble.textContent = text;
+  if (message.pending) {
+    bubble.append(el("span", "ms-bubble__pending-marker", " (đang xử lý…)"));
   }
-  sidebar.append(newBtn, list);
-  return sidebar;
+  return bubble;
 }
 
 function renderComposer(
   enabled: boolean,
-  onSend: (text: string) => void,
-): { root: HTMLElement; send: HTMLButtonElement; input: HTMLTextAreaElement; chips: readonly HTMLButtonElement[] } {
+  phase: "idle" | "running" | "error",
+  handlers: MsAssistantHandlers,
+): HTMLElement {
   const composer = el("div", "ms-composer");
-  const chipsWrap = el("div", "ms-composer__chips");
-  const chips: HTMLButtonElement[] = [];
+  const chips = el("div", "ms-composer__chips");
+  const running = phase === "running";
   for (const suggestion of SUGGESTIONS) {
     const chip = el("button", "ms-composer__chip", suggestion) as HTMLButtonElement;
     chip.type = "button";
-    chip.disabled = !enabled;
-    chip.addEventListener("click", () => {
-      if (chip.disabled) return;
-      onSend(suggestion);
-    });
-    chips.push(chip);
-    chipsWrap.append(chip);
+    chip.disabled = !enabled || running;
+    chip.addEventListener("click", () => handlers.onSend(suggestion));
+    chips.append(chip);
   }
+
   const inputRow = el("div", "ms-composer__row");
   const input = el("textarea", "ms-composer__input") as HTMLTextAreaElement;
   input.rows = 1;
   input.placeholder = "Hỏi trợ lý về Microsoft 365…";
   input.setAttribute("aria-label", "Soạn yêu cầu Microsoft 365");
-  input.disabled = !enabled;
-  const send = el("button", "ms-composer__send") as HTMLButtonElement;
-  send.type = "button";
-  send.setAttribute("aria-label", "Gửi yêu cầu");
-  send.textContent = "➤";
-  send.disabled = !enabled;
+  input.disabled = !enabled || running;
+
   const submit = (): void => {
-    if (send.disabled) return;
-    const text = input.value.trim();
-    if (text.length === 0) return;
+    const value = input.value.trim();
+    if (value.length === 0) return;
+    handlers.onSend(value);
     input.value = "";
-    onSend(text);
   };
-  send.addEventListener("click", submit);
+
   input.addEventListener("keydown", (event) => {
+    if (!(event instanceof KeyboardEvent)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submit();
     }
   });
-  inputRow.append(input, send);
+
+  const send = el("button", "ms-composer__send") as HTMLButtonElement;
+  send.type = "button";
+  send.setAttribute("aria-label", "Gửi yêu cầu");
+  send.textContent = "➤";
+  send.disabled = !enabled;
+  send.hidden = running;
+  send.addEventListener("click", submit);
+
+  const cancel = el("button", "ms-composer__cancel", "Hủy") as HTMLButtonElement;
+  cancel.type = "button";
+  cancel.setAttribute("aria-label", "Hủy yêu cầu đang xử lý");
+  cancel.hidden = !running;
+  cancel.addEventListener("click", handlers.onCancel);
+
+  inputRow.append(input, send, cancel);
+  if (handlers.writeModePill) inputRow.append(handlers.writeModePill);
+
   const hint = el(
     "p",
     "ms-composer__hint",
     "Hành động ghi (gửi mail, đăng Teams…) luôn cần phê duyệt trước khi thực thi qua Microsoft Graph.",
   );
-  composer.append(chipsWrap, inputRow, hint);
-  return { root: composer, send, input, chips };
+  composer.append(chips, inputRow, hint);
+  return composer;
 }
