@@ -90,6 +90,13 @@ import {
 } from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
+import {
+  createPreviewGate,
+  createPreviewService,
+  createRuntimePreviewRouter,
+  type PreviewService,
+} from "../runtime-preview/index.js";
+import type { TelemetryCounter } from "../diagnostics/telemetry-store.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -454,6 +461,26 @@ export async function createCoworkService(
     return outcome;
   };
 
+  // --- Runtime preview (Code surface): bounded process runner for static / dev-server web
+  // preview. It gets its OWN permission gate (no-op reply/session sinks — a user-initiated
+  // launch has no OpenCode runtime to reply to — but the SHARED audit sink, so every launch
+  // Allow/Deny is recorded). Enforcement is identical: the command runs only inside the gate's
+  // `proceed`. Single owner of the one preview process; torn down on workspace change + shutdown.
+  const previewGate = createPreviewGate({
+    audit: permissionAudit,
+    scheduler: createNodeScheduler(),
+    now,
+  });
+  const previewService: PreviewService = createPreviewService({
+    getActiveRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    gate: previewGate,
+    scrubber,
+    ...(telemetry !== undefined
+      ? { telemetry: (counter: string) => telemetry.increment(counter as TelemetryCounter) }
+      : {}),
+    log: (line: string) => logger.debug(line),
+  });
+
   // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
   // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
   // reads from at the SAME execution boundary every other tool-permission event flows through —
@@ -613,7 +640,10 @@ export async function createCoworkService(
     createCredentialRouter(credentialService, {
       allowEnvImport: options.allowEnvCredentialImport === true,
     }),
-    createSettingsRouter(settingsStore, modelPort, providerProfileStore),
+    createSettingsRouter(settingsStore, modelPort, providerProfileStore, (_rootPath) => {
+      // Workspace changed → tear down any preview confined to the previous workspace.
+      void previewService.dispose("workspace_changed");
+    }),
     createProviderRouter(providerPort, modelConfig),
     createProviderProfileRouter({
       profiles: providerProfileStore,
@@ -653,6 +683,7 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    createRuntimePreviewRouter(previewService),
     createDiagnosticsRouter({
       logger,
       ...(fileSink !== undefined ? { fileSink } : {}),
@@ -682,6 +713,7 @@ export async function createCoworkService(
     recentWorkspaces,
     permissionGate,
     permissionAudit,
+    previewService,
     branchPermissionBindings,
     sessionService,
     streamHub,

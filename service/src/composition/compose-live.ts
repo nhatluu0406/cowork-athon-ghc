@@ -398,6 +398,9 @@ export async function startLiveCoworkService(
       // child is killed. Each step is protected so a later step always runs.
       stop: async (): Promise<void> => {
         try {
+          // Kill any running preview process tree FIRST (independent of the OpenCode child) so
+          // shutdown never leaves an orphaned dev server.
+          await composed.deps.previewService.dispose("shutdown").catch(() => undefined);
           if (discordTimer !== undefined) clearInterval(discordTimer);
           remoteGatewayInfo = null;
           await remote?.stop().catch(() => undefined);

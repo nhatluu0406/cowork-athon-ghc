@@ -30,6 +30,10 @@ export const TELEMETRY_COUNTERS = [
   "file_modified",
   "file_deleted",
   "errors",
+  "preview_started",
+  "preview_running",
+  "preview_stopped",
+  "preview_failed",
 ] as const;
 
 export type TelemetryCounter = (typeof TELEMETRY_COUNTERS)[number];

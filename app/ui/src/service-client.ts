@@ -22,6 +22,10 @@ import {
   type ModelRef,
   type ProviderDescriptor,
   type ResponseEnvelope,
+  type RuntimePreviewOutput,
+  type RuntimePreviewProjectInfo,
+  type RuntimePreviewStartInput,
+  type RuntimePreviewState,
   type SessionMeta,
   type TestResult,
   type WorkspaceGrant,
@@ -487,6 +491,26 @@ export interface ServiceClient {
   recentWorkspaces(): Promise<readonly RecentWorkspaceView[]>;
   /** List direct children of the active workspace or a loaded child folder. */
   listWorkspaceChildren(relativePath?: string, limit?: number): Promise<WorkspaceListResult>;
+
+  // --- Runtime preview (Code surface web preview) ---
+  /** Inspect the active workspace for previewable capability (static / dev-server). */
+  detectRuntimePreview(): Promise<RuntimePreviewProjectInfo>;
+  /** Read the current preview state. */
+  getRuntimePreviewState(): Promise<RuntimePreviewState>;
+  /** Read preview state + output lines newer than `afterSeq`. */
+  getRuntimePreviewOutput(afterSeq: number): Promise<RuntimePreviewOutput>;
+  /** Start a static (no-command) preview of the workspace. */
+  startStaticPreview(): Promise<RuntimePreviewState>;
+  /** Step 1 of a dev-server launch: raise a `command_exec` permission request. */
+  requestPreviewLaunch(
+    input: RuntimePreviewStartInput,
+  ): Promise<{ requestId: string; command: string; cwd: string }>;
+  /** Step 2: resolve the launch permission (Allow starts it server-side). */
+  resolvePreviewLaunch(requestId: string, decision: "allow" | "deny"): Promise<RuntimePreviewState>;
+  /** Stop the active preview. */
+  stopRuntimePreview(): Promise<RuntimePreviewState>;
+  /** Restart the active preview (re-uses the approved launch / static kind). */
+  restartRuntimePreview(): Promise<RuntimePreviewState>;
   /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
   getSettings(): Promise<SettingsView>;
   /** List provider descriptors exposed by the service (provider-neutral). */
@@ -732,6 +756,37 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       query.set("limit", String(limit));
       return (await call<{ tree: WorkspaceListResult }>(`/v1/workspace/list?${query.toString()}`)).tree;
     },
+
+    detectRuntimePreview: async () =>
+      (await call<{ info: RuntimePreviewProjectInfo }>("/v1/runtime-preview/detect")).info,
+    getRuntimePreviewState: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/state")).state,
+    getRuntimePreviewOutput: async (afterSeq) =>
+      (
+        await call<{ output: RuntimePreviewOutput }>(
+          `/v1/runtime-preview/output?after=${String(afterSeq)}`,
+        )
+      ).output,
+    startStaticPreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/start-static", { method: "POST" }))
+        .state,
+    requestPreviewLaunch: (input) =>
+      call<{ requestId: string; command: string; cwd: string }>("/v1/runtime-preview/request-launch", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    resolvePreviewLaunch: async (requestId, decision) =>
+      (
+        await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/resolve", {
+          method: "POST",
+          body: JSON.stringify({ requestId, decision }),
+        })
+      ).state,
+    stopRuntimePreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/stop", { method: "POST" })).state,
+    restartRuntimePreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/restart", { method: "POST" }))
+        .state,
 
     getSettings: async () => (await call<{ settings: SettingsView }>("/v1/settings")).settings,
     listProviders: async () =>
