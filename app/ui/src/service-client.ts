@@ -27,6 +27,7 @@ import {
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
+import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
 import {
   createPermissionClient,
   type DecidePermissionInput,
@@ -690,13 +691,13 @@ export interface ServiceClient {
     readonly userId: string;
   }>;
   /** Get M365 Knowledge Graph configuration status. */
-  getKnowledgeStatus(): Promise<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>;
+  getKnowledgeStatus(): Promise<KnowledgeStatusView>;
   /** Configure M365 Knowledge Graph connection (baseUrl + token). */
-  configureKnowledgeSource(baseUrl: string, token: string): Promise<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>;
+  configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
   /** Test M365 Knowledge Graph connection. */
-  testKnowledgeConnection(): Promise<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>;
+  testKnowledgeConnection(): Promise<KnowledgeStatusView>;
   /** Disconnect M365 Knowledge Graph. */
-  disconnectKnowledgeSource(): Promise<{ readonly status: "not_configured" }>;
+  disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -1204,20 +1205,20 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       ),
 
     getKnowledgeStatus: () =>
-      call<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>(
+      call<KnowledgeStatusView>(
         "/v1/knowledge/status",
       ),
     configureKnowledgeSource: (baseUrl, token) =>
-      call<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>(
+      call<KnowledgeStatusView>(
         "/v1/knowledge/configure",
         { method: "POST", body: JSON.stringify({ baseUrl, token }) },
       ),
     testKnowledgeConnection: () =>
-      call<{ readonly status: string; readonly baseUrl: string | null; readonly lastHealthCheckAt: string | null }>(
+      call<KnowledgeStatusView>(
         "/v1/knowledge/test-connection",
         { method: "POST", body: "{}" },
       ),
     disconnectKnowledgeSource: () =>
-      call<{ readonly status: "not_configured" }>("/v1/knowledge/connection", { method: "DELETE" }),
+      call<KnowledgeStatusView>("/v1/knowledge/connection", { method: "DELETE" }),
   };
 }

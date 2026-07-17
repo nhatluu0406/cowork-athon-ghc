@@ -139,8 +139,8 @@ export function createKnowledgeGraphView(
 
   // Truncate if necessary
   const nodesToShow = config.graph.nodes.slice(0, KNOWLEDGE_PANEL_MAX_NODES);
-  const nodeIdSet = new Set(nodesToShow.map((n) => n.id));
-  const edgesToShow = config.graph.edges.filter((e) => nodeIdSet.has(e.from) && nodeIdSet.has(e.to));
+  const nodeIdSet = new Set(nodesToShow.map((n: KnowledgeGraphNode) => n.id));
+  const edgesToShow = config.graph.edges.filter((e: KnowledgeGraphEdge) => nodeIdSet.has(e.from) && nodeIdSet.has(e.to));
 
   const svgElement = svg("svg", {
     width,
@@ -167,16 +167,16 @@ export function createKnowledgeGraphView(
     const layoutMap = initializeLayout(nodesToShow, width, height);
     const layoutNodes = Array.from(layoutMap.values());
     const layoutEdges: LayoutEdge[] = edgesToShow
-      .map((e) => ({
+      .map((e: KnowledgeGraphEdge) => ({
         source: layoutMap.get(e.from)!,
         target: layoutMap.get(e.to)!,
       }))
-      .filter((le) => le.source && le.target);
+      .filter((le: LayoutEdge) => le.source && le.target);
 
     simulateLayout(layoutNodes, layoutEdges);
 
     // Render edges
-    edgesToShow.forEach((edge) => {
+    edgesToShow.forEach((edge: KnowledgeGraphEdge) => {
       const sourceNode = layoutMap.get(edge.from);
       const targetNode = layoutMap.get(edge.to);
       if (!sourceNode || !targetNode) return;
@@ -194,7 +194,7 @@ export function createKnowledgeGraphView(
     });
 
     // Render nodes
-    nodesToShow.forEach((node) => {
+    nodesToShow.forEach((node: KnowledgeGraphNode) => {
       const layoutNode = layoutMap.get(node.id);
       if (!layoutNode) return;
 
