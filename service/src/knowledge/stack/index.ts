@@ -16,7 +16,6 @@ export {
 export {
   type StackPaths,
   type StackPorts,
-  type RoleDefinition,
   postgresRole,
   neo4jRole,
   llmSvcRole,

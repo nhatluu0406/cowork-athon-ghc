@@ -12,8 +12,9 @@
 
 import net from "node:net";
 import type { RuntimeProcessIdentity } from "@cowork-ghc/runtime";
-import { GenericChildSupervisor, type GenericChildSupervisorOptions } from "@cowork-ghc/runtime/generic-child-supervisor";
-import { GenericChildAlreadyStartedError } from "@cowork-ghc/runtime/generic-supervisor-errors";
+import { GenericChildSupervisor, type GenericChildSupervisorOptions, type GenericStartSpec } from "../../runtime/generic-child-supervisor.js";
+import { GenericChildAlreadyStartedError } from "../../runtime/generic-supervisor-errors.js";
+import { tcpConnectProbe, httpOkProbe, type ReadinessProbe } from "../../runtime/generic-readiness.js";
 import { backendRole, llmSvcRole, neo4jRole, postgresRole, type StackPaths, type StackPorts } from "./stack-roles.js";
 
 const STACK_ROLE = "m365kg-stack" as const;
@@ -88,13 +89,18 @@ export class M365KGStackSupervisor {
     );
   }
 
-  private newSupervisor(readinessProbe: GenericChildSupervisorOptions["readinessProbe"]): GenericChildSupervisor {
+  private newSupervisor(role: string, readinessProbe: ReadinessProbe): GenericChildSupervisor {
     return new GenericChildSupervisor({
       root: this.opts.root,
       readinessProbe,
       log: this.log,
       ...this.opts.supervisorOptionsOverride,
     });
+  }
+
+  private applyTimeoutToSpec(spec: GenericStartSpec): GenericStartSpec {
+    if (this.opts.readyTimeoutMs === undefined) return spec;
+    return { ...spec, readyTimeoutMs: this.opts.readyTimeoutMs };
   }
 
   async start(): Promise<StackIdentities> {
@@ -105,30 +111,34 @@ export class M365KGStackSupervisor {
 
     this.log(`m365kg_stack_start ports=${JSON.stringify(ports)}`);
 
-    const pg = postgresRole(paths, ports, secrets.pgPassword);
-    const neo = neo4jRole(paths, ports);
-    const llm = llmSvcRole(paths, ports);
+    const pgSpec = postgresRole(paths, ports, secrets.pgPassword);
+    const neoSpec = neo4jRole(paths, ports);
+    const llmSpec = llmSvcRole(paths, ports);
+    const beSpec = backendRole(paths, ports, secrets);
 
-    this.postgres = this.newSupervisor(pg.readinessProbe);
-    this.neo4j = this.newSupervisor(neo.readinessProbe);
-    this.llmSvc = this.newSupervisor(llm.readinessProbe);
+    this.postgres = this.newSupervisor("postgres", tcpConnectProbe());
+    this.neo4j = this.newSupervisor("neo4j", tcpConnectProbe());
+    this.llmSvc = this.newSupervisor("llm-svc", tcpConnectProbe());
 
-    const readyTimeoutOverride = this.opts.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.opts.readyTimeoutMs } : {};
     try {
       // Postgres, Neo4j, llm-svc are mutually independent — start concurrently.
-      const [postgresIdentity, neo4jIdentity, llmSvcIdentity] = await Promise.all([
-        this.postgres.start({ ...pg.spec, ...readyTimeoutOverride }),
-        this.neo4j.start({ ...neo.spec, ...readyTimeoutOverride }),
-        this.llmSvc.start({ ...llm.spec, ...readyTimeoutOverride }),
+      const [pgId, neoId, llmId] = await Promise.all([
+        this.postgres.start(this.applyTimeoutToSpec(pgSpec)),
+        this.neo4j.start(this.applyTimeoutToSpec(neoSpec)),
+        this.llmSvc.start(this.applyTimeoutToSpec(llmSpec)),
       ]);
 
       // The backend depends on all three being reachable — start only after they're ready.
-      const be = backendRole(paths, ports, secrets);
-      this.backend = this.newSupervisor(be.readinessProbe);
-      const backendIdentity = await this.backend.start({ ...be.spec, ...readyTimeoutOverride });
+      this.backend = this.newSupervisor("backend", httpOkProbe("/health"));
+      const beId = await this.backend.start(this.applyTimeoutToSpec(beSpec));
 
       this.log("m365kg_stack_ready");
-      return { postgres: postgresIdentity, neo4j: neo4jIdentity, llmSvc: llmSvcIdentity, backend: backendIdentity };
+      return {
+        postgres: pgId,
+        neo4j: neoId,
+        llmSvc: llmId,
+        backend: beId,
+      };
     } catch (err) {
       // Partial failure — never leave orphaned siblings running (one-owner invariant, ADR 0004).
       await this.stop();

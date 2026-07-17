@@ -29,8 +29,8 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { GenericChildSupervisor } from "@cowork-ghc/runtime/generic-child-supervisor";
-import type { ReadinessProbe } from "@cowork-ghc/runtime/generic-readiness";
+import { GenericChildSupervisor, type GenericChildSupervisorOptions, type GenericStartSpec } from "../../runtime/generic-child-supervisor.js";
+import { tcpConnectProbe } from "../../runtime/generic-readiness.js";
 import { neo4jRole, postgresRole, type StackPaths, type StackPorts } from "./stack-roles.js";
 import type { StackSupervisorSecrets } from "./stack-supervisor.js";
 
@@ -84,11 +84,11 @@ export function nodeCommandRunner(): CommandRunner {
     });
 }
 
-/** Supervisor-factory seam — tests inject one preconfigured with fakes (spawner/probes/etc). */
-export type SupervisorFactory = (root: string, readinessProbe: ReadinessProbe) => GenericChildSupervisor;
+/** Supervisor-factory seam — tests inject one preconfigured with fakes (spawner/options/etc). */
+export type SupervisorFactory = (options: GenericChildSupervisorOptions) => GenericChildSupervisor;
 
-function defaultSupervisorFactory(log: (line: string) => void): SupervisorFactory {
-  return (root, readinessProbe) => new GenericChildSupervisor({ root, readinessProbe, log });
+function defaultSupervisorFactory(_log: (line: string) => void): SupervisorFactory {
+  return (options) => new GenericChildSupervisor(options);
 }
 
 export interface StackInitializerOptions {
@@ -207,8 +207,8 @@ export class M365KGStackInitializer {
       await this.runInitdb(paths, secrets);
 
       const pg = postgresRole(paths, ports, secrets.pgPassword);
-      postgres = this.createSupervisor(root, pg.readinessProbe);
-      await postgres.start({ ...pg.spec, ...(this.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.readyTimeoutMs } : {}) });
+      postgres = this.createSupervisor({ root: paths.stackRoot, readinessProbe: tcpConnectProbe() });
+      await postgres.start(this.applyTimeoutToSpec(pg));
       this.log("m365kg_init_postgres_ready");
 
       await this.bootstrapDatabase(paths, ports, secrets);
@@ -221,8 +221,8 @@ export class M365KGStackInitializer {
       await this.setNeo4jInitialPassword(paths, secrets);
 
       const neo = neo4jRole(paths, ports);
-      neo4j = this.createSupervisor(root, neo.readinessProbe);
-      await neo4j.start({ ...neo.spec, ...(this.readyTimeoutMs !== undefined ? { readyTimeoutMs: this.readyTimeoutMs } : {}) });
+      neo4j = this.createSupervisor({ root: paths.stackRoot, readinessProbe: tcpConnectProbe() });
+      await neo4j.start(this.applyTimeoutToSpec(neo));
       this.log("m365kg_init_neo4j_ready");
 
       await this.applyNeo4jMigrations(paths, ports, secrets, migrationsDir);
@@ -340,6 +340,13 @@ export class M365KGStackInitializer {
         { cwd: join(paths.stackRoot, "neo4j", "bin"), env: { JAVA_HOME: join(paths.stackRoot, "jre") } },
       );
     }
+  }
+
+  // ---- Spec helpers -------------------------------------------------------------------------
+
+  private applyTimeoutToSpec(spec: GenericStartSpec): GenericStartSpec {
+    if (this.readyTimeoutMs === undefined) return spec;
+    return { ...spec, readyTimeoutMs: this.readyTimeoutMs };
   }
 
   // ---- Marker / cleanup ----------------------------------------------------------------------
