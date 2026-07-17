@@ -63,6 +63,8 @@ export interface PreviewServiceDeps {
   readonly parentEnv?: Readonly<Record<string, string | undefined>>;
   readonly comspec?: string;
   readonly now?: () => string;
+  /** Monotonic clock in ms for the startup deadline (tests inject a controllable one). */
+  readonly nowMs?: () => number;
   readonly log?: (line: string) => void;
   readonly telemetry?: (counter: string) => void;
   readonly startupTimeoutMs?: number;
@@ -112,6 +114,7 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
   const detect = deps.detect ?? detectPreviewProject;
   const parentEnv = deps.parentEnv ?? process.env;
   const now = deps.now ?? (() => new Date().toISOString());
+  const nowMs = deps.nowMs ?? (() => Date.now());
   const log = deps.log ?? noop;
   const telemetry = deps.telemetry ?? noop;
   const startupTimeoutMs = deps.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
@@ -123,12 +126,22 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
       handle.unref?.();
       return { cancel: () => clearInterval(handle) };
     });
-  const confineCwd =
+  const rawConfineCwd =
     deps.confineCwd ??
     (async (root: string) => {
       const guard = createWorkspaceGuard(grantWorkspace({ rootPath: root }));
       return guard.assertRealPathInside(".");
     });
+  // Any confinement failure (traversal / symlink escape / bad root) is a clean launch refusal.
+  const confineCwd = async (root: string): Promise<string> => {
+    try {
+      return await rawConfineCwd(root);
+    } catch (err) {
+      throw new InvalidLaunchError(
+        `Không thể xác nhận thư mục làm việc nằm trong workspace: ${(err as Error).message}`,
+      );
+    }
+  };
 
   const output: OutputBuffer = createOutputBuffer(deps.scrubber);
 
@@ -214,13 +227,15 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
   }
 
   async function terminateChild(c: PreviewChild): Promise<void> {
+    // Register the exit wait BEFORE killing: a well-behaved child may exit synchronously on
+    // kill(), and we must not miss that and escalate to a needless tree-kill.
+    const exited = waitForExit(c, gracefulStopMs);
     try {
       if (!c.killed) c.kill();
     } catch {
       /* ignore */
     }
-    const exited = await waitForExit(c, gracefulStopMs);
-    if (!exited) {
+    if (!(await exited)) {
       try {
         c.killTree();
       } catch {
@@ -247,14 +262,14 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
   }
 
   async function startPollLoop(): Promise<void> {
-    startupDeadline = Date.now() + startupTimeoutMs;
+    startupDeadline = nowMs() + startupTimeoutMs;
     poll = setPoll(() => {
       void (async () => {
         if (status !== "starting") {
           clearPoll();
           return;
         }
-        if (Date.now() > startupDeadline) {
+        if (nowMs() > startupDeadline) {
           const c = child;
           fail("Hết thời gian khởi động dev server (không phát hiện được localhost).");
           if (c !== null) {

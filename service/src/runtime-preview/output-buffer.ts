@@ -27,8 +27,8 @@ const PATTERNS: readonly { readonly re: RegExp; readonly replace: string }[] = [
     re: /(\b(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|client[_-]?secret|secret|token|password|passwd|pwd)\b\s*[:=]\s*)(['"]?)[^\s'"]+/gi,
     replace: `$1${PLACEHOLDER}`,
   },
-  // URL userinfo: https://user:pass@host  →  https://[REDACTED]@host
-  { re: /(\bhttps?:\/\/)[^/\s:@]+:[^/\s@]+@/gi, replace: `$1${PLACEHOLDER}@` },
+  // URL userinfo (any scheme): scheme://user:pass@host → scheme://[REDACTED]@host
+  { re: /(\b[a-z][a-z0-9+.-]*:\/\/)[^/\s:@]+:[^/\s@]+@/gi, replace: `$1${PLACEHOLDER}@` },
   // secret-bearing query params: ?token=...  &api_key=...
   {
     re: /([?&](?:api[_-]?key|access[_-]?token|token|key|secret|password)=)[^&\s'"]+/gi,
