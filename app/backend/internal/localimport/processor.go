@@ -8,21 +8,24 @@ import (
 	"path/filepath"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
+	"github.com/rad-system/m365-knowledge-graph/internal/nlp"
 	"github.com/rad-system/m365-knowledge-graph/internal/parsers"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 )
 
 // Processor orchestrates the import pipeline for a job.
 type Processor struct {
-	resolver    *DeltaResolver
-	extractor   *Extractor
-	chunker     *parsers.Chunker
-	embedder    retrieval.EmbeddingRuntime
-	fileStore   *LocalFileStore
-	sourceStore *LocalSourceStore
-	chunkStore  *metadata.ChunkStore
-	jobStore    *ImportJobStore
-	logger      *slog.Logger
+	resolver      *DeltaResolver
+	extractor     *Extractor
+	chunker       *parsers.Chunker
+	embedder      retrieval.EmbeddingRuntime
+	fileStore     *LocalFileStore
+	sourceStore   *LocalSourceStore
+	chunkStore    *metadata.ChunkStore
+	jobStore      *ImportJobStore
+	neo4jClient   *LocalNeo4jClient  // T044: Neo4j operations for local documents
+	nlpExtractor  *nlp.Extractor     // T046: NLP entity extraction
+	logger        *slog.Logger
 }
 
 // NewProcessor creates a new Processor.
@@ -35,18 +38,22 @@ func NewProcessor(
 	sourceStore *LocalSourceStore,
 	chunkStore *metadata.ChunkStore,
 	jobStore *ImportJobStore,
+	neo4jClient *LocalNeo4jClient,
+	nlpExtractor *nlp.Extractor,
 	logger *slog.Logger,
 ) *Processor {
 	return &Processor{
-		resolver:    resolver,
-		extractor:   extractor,
-		chunker:     chunker,
-		embedder:    embedder,
-		fileStore:   fileStore,
-		sourceStore: sourceStore,
-		chunkStore:  chunkStore,
-		jobStore:    jobStore,
-		logger:      logger,
+		resolver:     resolver,
+		extractor:    extractor,
+		chunker:      chunker,
+		embedder:     embedder,
+		fileStore:    fileStore,
+		sourceStore:  sourceStore,
+		chunkStore:   chunkStore,
+		jobStore:     jobStore,
+		neo4jClient:  neo4jClient,
+		nlpExtractor: nlpExtractor,
+		logger:       logger,
 	}
 }
 
@@ -66,6 +73,14 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		return fmt.Errorf("source not found: %s", job.SourceID)
 	}
 
+	// T044: Upsert LocalSource node in Neo4j
+	if p.neo4jClient != nil {
+		if err := p.neo4jClient.UpsertSource(ctx, source); err != nil {
+			p.logger.Error("failed to upsert source to Neo4j", "error", err, "source_id", source.ID)
+			// Non-fatal: continue with import even if Neo4j fails
+		}
+	}
+
 	// Create a scanner for this source
 	scanner := NewScanner(*source)
 
@@ -83,7 +98,8 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		case err := <-errChan:
 			if err != nil {
 				p.logger.Error("scan error", "error", err, "source", source.ID)
-				if err := p.jobStore.AppendError(ctx, job.ID, fmt.Sprintf("scan: %s", RedactPath(entry.RelPath, source.FolderPath))); err != nil {
+				absPath := filepath.Join(source.FolderPath, entry.RelPath)
+				if err := p.jobStore.AppendError(ctx, job.ID, fmt.Sprintf("scan: %s", RedactPath(absPath, source.FolderPath))); err != nil {
 					p.logger.Error("failed to log error", "error", err)
 				}
 				progress.FilesSkipped++
@@ -166,6 +182,19 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 			continue
 		}
 
+		// T044: Upsert LocalDocument node in Neo4j for Added/Modified files
+		if (delta.Action == DeltaAdded || delta.Action == DeltaModified) && p.neo4jClient != nil {
+			if err := p.neo4jClient.UpsertDocument(ctx, storedFile); err != nil {
+				p.logger.Error("failed to upsert document to Neo4j", "error", err, "file_id", storedFile.ID)
+				// Non-fatal: continue with import even if Neo4j fails
+			}
+
+			// T046: Extract entities using NLP and create MENTIONS relationships
+			if p.nlpExtractor != nil && !extractResult.IsBinary {
+				p.extractAndCreateMentions(ctx, storedFile.ID, extractResult.Text)
+			}
+		}
+
 		// Chunk the text
 		chunks := p.chunker.ChunkText(extractResult.Text, "")
 		storedFile.ChunkCount = len(chunks)
@@ -237,6 +266,14 @@ func (p *Processor) handleDeletedFiles(ctx context.Context, sourceID string, sca
 	for _, dbFile := range dbFiles {
 		if !scannedRelPaths[dbFile.RelPath] {
 			// File was deleted from filesystem
+			// T044: Delete the LocalDocument node from Neo4j
+			if p.neo4jClient != nil {
+				if err := p.neo4jClient.DeleteDocument(ctx, dbFile.ID); err != nil {
+					p.logger.Error("failed to delete document from Neo4j", "error", err, "file_id", dbFile.ID)
+					// Non-fatal: continue with cleanup even if Neo4j fails
+				}
+			}
+
 			// Delete its chunks first
 			if err := p.deleteChunksByLocalFileID(ctx, dbFile.ID); err != nil {
 				p.logger.Error("failed to delete chunks for deleted file", "error", err, "file_id", dbFile.ID)
@@ -254,6 +291,32 @@ func (p *Processor) handleDeletedFiles(ctx context.Context, sourceID string, sca
 	}
 
 	return nil
+}
+
+// extractAndCreateMentions extracts entities from text and creates MENTIONS relationships in Neo4j (T046).
+func (p *Processor) extractAndCreateMentions(ctx context.Context, localFileID string, text string) {
+	if text == "" {
+		return
+	}
+
+	// Extract entities from the document text
+	extractionResult, err := p.nlpExtractor.Extract(ctx, text)
+	if err != nil {
+		p.logger.Error("entity extraction failed", "error", err, "file_id", localFileID)
+		return
+	}
+
+	if extractionResult == nil || len(extractionResult.Entities) == 0 {
+		return
+	}
+
+	// Create MENTIONS relationships for each extracted entity
+	for _, entity := range extractionResult.Entities {
+		if err := p.neo4jClient.CreateMentionsRelationship(ctx, localFileID, entity.Type, entity.Name, entity.Confidence); err != nil {
+			p.logger.Error("failed to create MENTIONS relationship", "error", err, "file_id", localFileID, "entity", entity.Name)
+			// Non-fatal: continue creating other relationships even if one fails
+		}
+	}
 }
 
 // computeHash returns the SHA-256 hash of data as a hex string.

@@ -42,18 +42,9 @@ func extractWithPDFLibrary(r *pdf.Reader) (string, error) {
 	// Iterate through all pages
 	for i := 1; i <= r.NumPage(); i++ {
 		p := r.Page(i)
-		// ledongthuc/pdf returns a Page struct, not a pointer
-		// A zero Page is a valid but empty page
-
-		// Build fonts map from page using the Font() method
-		fontNames := p.Fonts()
-		fonts := make(map[string]*pdf.Font)
-		for _, fontName := range fontNames {
-			f := p.Font(fontName)
-			fonts[fontName] = &f
-		}
-
-		text, err := p.GetPlainText(fonts)
+		// ledongthuc/pdf returns a Page struct, which is never nil for valid page index
+		// Extract plain text using the page's GetPlainText method with empty fonts map
+		text, err := p.GetPlainText(make(map[string]*pdf.Font))
 		if err != nil {
 			// Skip pages with errors; continue with remaining pages
 			continue

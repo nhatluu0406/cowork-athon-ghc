@@ -105,3 +105,33 @@ func (c *LocalNeo4jClient) DeleteDocument(ctx context.Context, localFileID strin
 
 	return err
 }
+
+// CreateMentionsRelationship creates a MENTIONS relationship between a LocalDocument and an Entity node.
+func (c *LocalNeo4jClient) CreateMentionsRelationship(ctx context.Context, localFileID string, entityType string, entityName string, confidence float64) error {
+	session := c.driver.NewSession(ctx, neo4j.SessionConfig{AccessMode: neo4j.AccessModeWrite})
+	defer session.Close(ctx)
+
+	_, err := session.ExecuteWrite(ctx, func(tx neo4j.ManagedTransaction) (interface{}, error) {
+		// First, find or create the Entity node
+		query := `
+		MATCH (d:LocalDocument {local_file_id: $file_id})
+		MERGE (e:Entity {type: $entity_type, name: $entity_name})
+		MERGE (d)-[r:MENTIONS {confidence: $confidence}]->(e)
+		RETURN d, e, r`
+
+		result, err := tx.Run(ctx, query, map[string]interface{}{
+			"file_id":      localFileID,
+			"entity_type":  entityType,
+			"entity_name":  entityName,
+			"confidence":   confidence,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = result.Single(ctx)
+		return nil, err
+	})
+
+	return err
+}

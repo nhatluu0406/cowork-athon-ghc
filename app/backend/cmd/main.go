@@ -23,6 +23,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
 	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
 	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
+	"github.com/rad-system/m365-knowledge-graph/internal/nlp"
 	"github.com/rad-system/m365-knowledge-graph/internal/parsers"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 	"github.com/rad-system/m365-knowledge-graph/internal/scheduler"
@@ -228,6 +229,17 @@ func main() {
 	// Create local file scanner and delta resolver
 	localDeltaResolver := localimport.NewDeltaResolver(localFileStore)
 
+	// T044: Create Neo4j client for local documents
+	localNeo4jClient := localimport.NewLocalNeo4jClient(neoDriver)
+
+	// T046: Create NLP extractor for entity extraction
+	// Note: nlpExtractor can be nil if neither brainClient nor llmClient is available;
+	// in that case, entity extraction is skipped during import but the import continues.
+	var localNLPExtractor *nlp.Extractor
+	if llmClient != nil {
+		localNLPExtractor = nlp.NewExtractor(llmClient)
+	}
+
 	// Create processor for import jobs
 	localChunkStore := metadata.NewChunkStore(db)
 	localProcessor := localimport.NewProcessor(
@@ -239,6 +251,8 @@ func main() {
 		localSourceStore,
 		localChunkStore,
 		localJobStore,
+		localNeo4jClient,
+		localNLPExtractor,
 		logger,
 	)
 

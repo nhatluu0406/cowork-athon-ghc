@@ -3,6 +3,7 @@ package localimport
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/lib/pq"
@@ -97,21 +98,43 @@ func (s *ImportJobStore) Get(ctx context.Context, id string) (*ImportJob, error)
 	return job, nil
 }
 
-// List retrieves import jobs with optional filtering by source_id.
-func (s *ImportJobStore) List(ctx context.Context, sourceID *string) ([]ImportJob, error) {
+// List retrieves import jobs with optional filtering by source_id, status, and pagination.
+// sourceID and status are optional filters; limit and offset are for pagination (default limit=50, offset=0).
+func (s *ImportJobStore) List(ctx context.Context, sourceID *string, status *string, limit *int, offset *int) ([]ImportJob, error) {
 	var query string
 	var args []interface{}
+	argIndex := 1
 
-	if sourceID != nil {
-		query = `SELECT id, source_id, status, started_at, finished_at, files_total, files_added, files_modified,
+	query = `SELECT id, source_id, status, started_at, finished_at, files_total, files_added, files_modified,
 		files_deleted, files_skipped, files_binary, error_messages, progress_pct, created_at
-		FROM import_jobs WHERE source_id = $1 ORDER BY created_at DESC`
+		FROM import_jobs WHERE 1=1`
+
+	if sourceID != nil && *sourceID != "" {
+		query += fmt.Sprintf(" AND source_id = $%d", argIndex)
 		args = append(args, *sourceID)
-	} else {
-		query = `SELECT id, source_id, status, started_at, finished_at, files_total, files_added, files_modified,
-		files_deleted, files_skipped, files_binary, error_messages, progress_pct, created_at
-		FROM import_jobs ORDER BY created_at DESC`
+		argIndex++
 	}
+
+	if status != nil && *status != "" {
+		query += fmt.Sprintf(" AND status = $%d", argIndex)
+		args = append(args, *status)
+		argIndex++
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	// Default pagination values
+	pageLimit := 50
+	pageOffset := 0
+	if limit != nil && *limit > 0 && *limit <= 1000 {
+		pageLimit = *limit
+	}
+	if offset != nil && *offset >= 0 {
+		pageOffset = *offset
+	}
+
+	query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", argIndex, argIndex+1)
+	args = append(args, pageLimit, pageOffset)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
