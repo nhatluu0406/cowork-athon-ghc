@@ -44,12 +44,12 @@ func (sm *SchemaMigrations) ApplySchema(ctx context.Context) error {
 		`CREATE INDEX uses IF NOT EXISTS FOR ()-[r:USES]->() WHERE r.confidence IS NOT NULL`,
 
 		// Node type indices for statistics queries
-		`CREATE INDEX all_persons FOR (p:Person)`,
-		`CREATE INDEX all_projects FOR (p:Project)`,
-		`CREATE INDEX all_documents FOR (d:Document)`,
-		`CREATE INDEX all_technologies FOR (t:Technology)`,
-		`CREATE INDEX all_customers FOR (c:Customer)`,
-		`CREATE INDEX all_departments FOR (d:Department)`,
+		`CREATE INDEX all_persons IF NOT EXISTS FOR (p:Person)`,
+		`CREATE INDEX all_projects IF NOT EXISTS FOR (p:Project)`,
+		`CREATE INDEX all_documents IF NOT EXISTS FOR (d:Document)`,
+		`CREATE INDEX all_technologies IF NOT EXISTS FOR (t:Technology)`,
+		`CREATE INDEX all_customers IF NOT EXISTS FOR (c:Customer)`,
+		`CREATE INDEX all_departments IF NOT EXISTS FOR (d:Department)`,
 	}
 
 	slog.InfoContext(ctx, "applying Neo4j schema", "statement_count", len(statements))
