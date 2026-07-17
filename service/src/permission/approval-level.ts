@@ -38,6 +38,8 @@ export function classifyApprovalLevel(kind: PermissionActionKind): ApprovalLevel
       return "elevated";
     case "file_create":
     case "file_edit":
+    case "network_access":
+      // network_access — read-only external data access (M365KG queries); treat as standard.
       return "standard";
     default: {
       const exhaustive: never = kind;

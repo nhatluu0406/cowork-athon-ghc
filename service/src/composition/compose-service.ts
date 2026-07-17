@@ -90,6 +90,8 @@ import {
 } from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
+import { createKnowledgeService, createKnowledgeRouter, createKnowledgeSourceConfigStore } from "../knowledge/index.js";
+import { createKnowledgeTool } from "../knowledge/tool.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -157,6 +159,7 @@ const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
 const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
 const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
+const DEFAULT_KNOWLEDGE_SOURCE_CONFIG_PATH = ".runtime/knowledge-source.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -558,6 +561,22 @@ export async function createCoworkService(
     basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
 
+  // M365 Knowledge Graph integration (REQ-205 Phase 1): compose the knowledge service
+  // (store + client + credential resolution) and wire the permission-gated tool.
+  const knowledgeConfigStore = createKnowledgeSourceConfigStore({
+    filePath: options.knowledgeSourceConfigPath ?? DEFAULT_KNOWLEDGE_SOURCE_CONFIG_PATH,
+  });
+  const knowledgeService = createKnowledgeService({
+    configStore: knowledgeConfigStore,
+    credentialService,
+    now,
+  });
+  const knowledgeTool = createKnowledgeTool({
+    gate: permissionGate,
+    port: knowledgeService,
+    now,
+  });
+
   // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
   // reads the SAME `process.env` the rest of this module treats as the environment source
   // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
@@ -653,6 +672,7 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    createKnowledgeRouter(knowledgeService),
     createDiagnosticsRouter({
       logger,
       ...(fileSink !== undefined ? { fileSink } : {}),
@@ -695,6 +715,8 @@ export async function createCoworkService(
     redactError,
     ...(localAuth !== undefined ? { localAuth } : {}),
     ...(sqliteDatabase !== undefined ? { sqliteDatabase } : {}),
+    knowledgeTool,
+    knowledgeService,
     buildToolPermissionProxy: (guard) =>
       new ToolPermissionProxy({
         guard,

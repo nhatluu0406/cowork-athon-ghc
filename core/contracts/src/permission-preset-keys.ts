@@ -28,12 +28,14 @@ const ALL_PERMISSION_ACTION_KINDS: readonly PermissionActionKind[] = [
   "file_move",
   "command_exec",
   "ms365_write",
+  "network_access",
 ];
 
 /**
  * Map a boundary action kind to the preset key that governs it. `ms365_write` maps here only for
  * exhaustiveness — MS365 tool calls do not flow through `ToolPermissionProxy` (they submit
  * directly to the `PermissionGate`), so a preset never actually governs an MS365 write today.
+ * `network_access` is external-data-access (M365KG queries) and maps to its own preset key.
  */
 export function presetKeyForActionKind(kind: PermissionActionKind): string {
   switch (kind) {
@@ -45,6 +47,8 @@ export function presetKeyForActionKind(kind: PermissionActionKind): string {
       return "edit";
     case "command_exec":
       return "bash";
+    case "network_access":
+      return "network";
     default: {
       const exhaustive: never = kind;
       return exhaustive;
