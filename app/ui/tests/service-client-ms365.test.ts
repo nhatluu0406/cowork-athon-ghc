@@ -111,7 +111,7 @@ test("connectMs365 POSTs the token to /v1/ms365/connect and returns the view", a
   }) as typeof fetch;
   try {
     const client = createServiceClient(BASE, TOKEN);
-    const view = await client.connectMs365("eyJ.fake.token");
+    const view = await client.connectMs365Token("eyJ.fake.token");
     assert.equal(view.connectionState, "connected");
     const call = calls.find((c) => c.url.includes("/v1/ms365/connect"));
     assert.ok(call, "hit the connect route");

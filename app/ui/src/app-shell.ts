@@ -1980,7 +1980,15 @@ async function sendPrompt(
       : undefined;
   // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
   // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, [], workspaceContext);
+  const dispatchPlan = planDispatchPrompt(
+    priorMessages,
+    snapshots,
+    prompt,
+    undefined,
+    [],
+    workspaceContext,
+    state.msView.connectionState === "connected",
+  );
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
@@ -2073,6 +2081,7 @@ async function sendPrompt(
           undefined,
           [],
           workspaceContext,
+          state.msView.connectionState === "connected",
         );
         if (!retryPlan.ok) {
           state.currentFileActionIntent = null;

@@ -144,7 +144,8 @@ test("MS365 policy block absent by default and when not connected", () => {
 });
 
 test("MS365 policy block present right after the action policy when connected", () => {
-  const plan = planDispatchPrompt([], [], "xin chào", undefined, [], true);
+  // ms365Connected is the 7th arg (workspaceContext is the 6th); pass it in the right slot.
+  const plan = planDispatchPrompt([], [], "xin chào", undefined, [], undefined, true);
   assert.equal(plan.ok, true);
   if (!plan.ok) return;
   assert.ok(plan.text.includes(MS365_ORCHESTRATION_POLICY));
@@ -172,7 +173,7 @@ test("MS365 policy block contains the five orchestration rules", () => {
 test("MS365 policy block is budget-accounted (attachments path)", () => {
   // Với maxChars nhỏ, block bật lên phải tính vào fixedChars → fail-fast thay vì tràn budget.
   const tight = COWORK_SYSTEM_PROMPT.length + MS365_ORCHESTRATION_POLICY.length + 250;
-  const plan = planDispatchPrompt([], [], "yêu cầu", tight, [], true);
+  const plan = planDispatchPrompt([], [], "yêu cầu", tight, [], undefined, true);
   if (plan.ok) {
     assert.ok(plan.text.length <= tight);
   } else {

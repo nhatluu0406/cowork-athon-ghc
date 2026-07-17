@@ -56,19 +56,16 @@ test("live policy denies OpenCode question tool (no product Question UI yet)", (
   assert.equal(agent.build.permission["question"], "deny");
 });
 
-test("ms365Enabled=false leaves the permission policy unchanged (no MS365 entries)", () => {
-  const config = buildOpencodeConfig(undefined, false);
-  const permission = config["permission"] as Record<string, string>;
-  for (const name of TOOL_NAMES) {
-    assert.equal(permission[name], undefined, `unexpected policy entry for ${name}`);
-  }
-});
-
-test("ms365Enabled=true allows all 25 MS365 tool names at both permission surfaces", () => {
-  const config = buildOpencodeConfig(undefined, true);
+test("MS365 tools are allowed at both permission surfaces (bridge is the real gate)", () => {
+  // MS365 mounts unconditionally on main (the CGHC_MS365_ENABLED gate was removed), and the MS365
+  // tools are gated by the MS365 bridge (permission card per call), so opencode.json marks them
+  // "allow" to avoid a double-prompt from OpenCode's "*":"ask" wildcard.
+  const config = buildOpencodeConfig();
   const permission = config["permission"] as Record<string, string>;
   const agent = config["agent"] as { build: { permission: Record<string, string> } };
-  assert.equal(TOOL_NAMES.length, 25);
+  // The MS365 tool surface: SharePoint + Outlook + Teams + Planner + Lists + Calendar + OneDrive
+  // + Power Automate + people/identity. Lock the count so an accidental add/drop is caught.
+  assert.equal(TOOL_NAMES.length, 34);
   for (const name of TOOL_NAMES) {
     assert.equal(permission[name], "allow", `missing top-level allow for ${name}`);
     assert.equal(agent.build.permission[name], "allow", `missing agent.build allow for ${name}`);
