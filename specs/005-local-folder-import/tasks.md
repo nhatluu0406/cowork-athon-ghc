@@ -22,10 +22,10 @@
 
 **Purpose**: Migrations, go.mod dependencies, and new package skeleton.
 
-- [ ] T001 Add new Go dependencies to `app/backend/go.mod`: `github.com/ledongthuc/pdf`, `github.com/saintfish/chardet`, `golang.org/x/text` (check if `excelize` and `go-docx` already present)
-- [ ] T002 Create migration file `app/backend/migrations/005_local_import.sql` — tables `local_sources`, `import_jobs`, `local_files`; ALTER `chunks` ADD COLUMN `local_file_id UUID NULL REFERENCES local_files(id) ON DELETE CASCADE`; DROP NOT NULL on `chunks.file_id`; add CHECK constraint `chunks_source_xor`; indexes (see data-model.md §1)
-- [ ] T003 [P] Create package skeleton `app/backend/internal/localimport/` with empty files: `source.go`, `job.go`, `file.go`, `scanner.go`, `path.go`, `encoding.go`, `extractor.go`, `processor.go`, `dispatcher.go`, `neo4j.go`, `handler.go`
-- [ ] T004 [P] Create Neo4j constraint migration `app/backend/migrations/005_local_import_neo4j.cypher` — `LocalDocument` uniqueness constraint on `local_file_id`, `LocalSource` node schema (data-model.md §2)
+- [X] T001 Add new Go dependencies to `app/backend/go.mod`: `github.com/ledongthuc/pdf`, `github.com/saintfish/chardet`, `golang.org/x/text` (check if `excelize` and `go-docx` already present)
+- [X] T002 Create migration file `app/backend/migrations/005_local_import.sql` — tables `local_sources`, `import_jobs`, `local_files`; ALTER `chunks` ADD COLUMN `local_file_id UUID NULL REFERENCES local_files(id) ON DELETE CASCADE`; DROP NOT NULL on `chunks.file_id`; add CHECK constraint `chunks_source_xor`; indexes (see data-model.md §1)
+- [X] T003 [P] Create package skeleton `app/backend/internal/localimport/` with empty files: `source.go`, `job.go`, `file.go`, `scanner.go`, `path.go`, `encoding.go`, `extractor.go`, `processor.go`, `dispatcher.go`, `neo4j.go`, `handler.go`
+- [X] T004 [P] Create Neo4j constraint migration `app/backend/migrations/005_local_import_neo4j.cypher` — `LocalDocument` uniqueness constraint on `local_file_id`, `LocalSource` node schema (data-model.md §2)
 
 **Checkpoint**: `go mod tidy` passes; migration SQL is syntactically valid; package files compile (empty bodies)
 
@@ -37,11 +37,11 @@
 
 **⚠️ CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T005 Implement Go types in `app/backend/internal/localimport/source.go`: `LocalSource` struct, `CreateSourceRequest`, `PatchSourceRequest`, `LocalSourceStore` with `Create`, `List`, `Get`, `Update`, `Delete`, `UpdateStats`, `SetStatus` methods backed by PostgreSQL `local_sources` table
-- [ ] T006 Implement Go types in `app/backend/internal/localimport/job.go`: `ImportJob` struct, `JobStatus` constants (`queued`/`running`/`completed`/`failed`/`stale`), `JobProgress`, `ImportJobStore` with `Create`, `UpdateStatus`, `UpdateProgress`, `List`, `Get`, `MarkStaleJobs` methods backed by PostgreSQL `import_jobs` table
-- [ ] T007 Implement Go types in `app/backend/internal/localimport/file.go`: `LocalFile` struct, `ScanEntry`, `DeltaResult`, `DeltaAction` constants, `LocalFileStore` with `Upsert`, `GetByRelPath`, `ListBySource`, `Delete` methods backed by PostgreSQL `local_files` table
-- [ ] T008 Implement `app/backend/internal/localimport/path.go`: `ValidateSourcePath(userInput string) (string, error)` using `filepath.Abs` + `filepath.Clean` + UNC rejection; `RedactPath(absPath, sourceRoot string) string` returning rel_path only; `IsInsideRoot(path, root string) bool`
-- [ ] T009 [P] Write unit tests `app/backend/tests/unit/localimport/path_test.go`: valid absolute path, relative path rejected, `..` traversal rejected, UNC path rejected (`\\server\share`), Windows-style path on Linux (`C:\Users\...` rejected), symlink path accepted as-is (resolution tested separately), empty string rejected — target >90% coverage
+- [X] T005 Implement Go types in `app/backend/internal/localimport/source.go`: `LocalSource` struct, `CreateSourceRequest`, `PatchSourceRequest`, `LocalSourceStore` with `Create`, `List`, `Get`, `Update`, `Delete`, `UpdateStats`, `SetStatus` methods backed by PostgreSQL `local_sources` table
+- [X] T006 Implement Go types in `app/backend/internal/localimport/job.go`: `ImportJob` struct, `JobStatus` constants (`queued`/`running`/`completed`/`failed`/`stale`), `JobProgress`, `ImportJobStore` with `Create`, `UpdateStatus`, `UpdateProgress`, `List`, `Get`, `MarkStaleJobs` methods backed by PostgreSQL `import_jobs` table
+- [X] T007 Implement Go types in `app/backend/internal/localimport/file.go`: `LocalFile` struct, `ScanEntry`, `DeltaResult`, `DeltaAction` constants, `LocalFileStore` with `Upsert`, `GetByRelPath`, `ListBySource`, `Delete` methods backed by PostgreSQL `local_files` table
+- [X] T008 Implement `app/backend/internal/localimport/path.go`: `ValidateSourcePath(userInput string) (string, error)` using `filepath.Abs` + `filepath.Clean` + UNC rejection; `RedactPath(absPath, sourceRoot string) string` returning rel_path only; `IsInsideRoot(path, root string) bool`
+- [X] T009 [P] Write unit tests `app/backend/tests/unit/localimport/path_test.go`: valid absolute path, relative path rejected, `..` traversal rejected, UNC path rejected (`\\server\share`), Windows-style path on Linux (`C:\Users\...` rejected), symlink path accepted as-is (resolution tested separately), empty string rejected — target >90% coverage
 
 **Checkpoint**: `go test ./internal/localimport/... -run TestPath` passes; `go test ./internal/localimport/... -run TestStore` passes with test DB
 
@@ -55,21 +55,21 @@
 
 ### Implementation for US1
 
-- [ ] T010 [US1] Implement `app/backend/internal/localimport/scanner.go`: `Scanner` struct with `Walk(ctx) (<-chan ScanEntry, <-chan error)`; respect `Recursive`, `HiddenFiles`, `FollowSymlinks`, `MaxDepth` from `LocalSource`; use `filepath.WalkDir`; symlink detection via `os.Lstat`; skip `ModeSymlink` entries when `follow_symlinks=false`
-- [ ] T011 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/scanner_test.go`: temp dir with nested structure, depth limit enforcement, hidden file include/exclude, non-recursive mode, permission-denied subdirectory skipped gracefully
-- [ ] T012 [US1] Implement `app/backend/internal/localimport/encoding.go`: `DetectEncoding(sample []byte) (charset string, confidence float64, err error)` using BOM check (UTF-8 `EF BB BF`, UTF-16 LE/BE) then `chardet.Detect()` on first 4KB; `ConvertToUTF8(data []byte, charset string) ([]byte, error)` using `golang.org/x/text/transform`; confidence threshold 0.7 → treat as binary
-- [ ] T013 [P] [US1] Upgrade `app/backend/internal/parsers/pdf.go`: replace regex-scraper stub with `github.com/ledongthuc/pdf` reader; preserve existing regex fallback when library returns empty/error; return `(string, error)`; streaming read for files >8MB
-- [ ] T014 [P] [US1] Inspect and upgrade `app/backend/internal/parsers/docx.go` and `app/backend/internal/parsers/xlsx.go` — if stubs, wire `go-docx` and `excelize` respectively; if real libraries already used, verify they handle streaming large files
-- [ ] T015 [US1] Implement `app/backend/internal/localimport/extractor.go`: `Extractor` struct; `Extract(ctx, absPath, mimeType string) (ExtractResult, error)`; route by MIME type and extension to `parsers.PDFParser` / `parsers.DocxParser` / `parsers.XlsxParser` / `parsers.TextParser`; binary detection via `net/http.DetectContentType` on first 512 bytes; set `IsBinary=true` and skip text extraction for non-supported MIME types
-- [ ] T016 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/extractor_test.go`: PDF with known text, DOCX with known text, XLSX with known data, TXT UTF-8, binary PNG → metadata-only, unknown extension → metadata-only
-- [ ] T017 [US1] Implement `DeltaResolver` in `app/backend/internal/localimport/file.go`: `Classify(ctx, sourceID string, entry ScanEntry) (DeltaResult, error)` — compare `mtime`+`size` fast-path; if changed compute SHA-256 via `crypto/sha256`; classify as `DeltaAdded` / `DeltaModified` / `DeltaUnchanged` / `DeltaDeleted`
-- [ ] T018 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/delta_test.go`: new file → Added, unchanged file → Unchanged (no hash computed), mtime changed same content → Unchanged (hash matches), content changed → Modified, file in DB not on disk → Deleted
-- [ ] T019 [US1] Implement `app/backend/internal/localimport/processor.go`: `Processor.Run(ctx, job ImportJob) error` — scan source → for each DeltaResult: skip Unchanged; for Added/Modified: Extract → Chunk (via `parsers.Chunker`) → batch INSERT into `chunks` with `local_file_id` → Upsert `local_files`; for Deleted: DELETE chunks + local_files row; update `import_jobs` progress every 50 files; call `localFileStore.Upsert` with final stats
-- [ ] T020 [US1] Implement `app/backend/internal/localimport/dispatcher.go`: `Dispatcher` with buffered channel queue (cap=100), `N = min(4, runtime.GOMAXPROCS(0))` workers; `Enqueue(job) error` returns `ErrQueueFull` if full; `Start(ctx)` launches worker goroutines; `MarkStaleJobs` called at startup; one running job per source enforced via `ImportJobStore.HasRunning(ctx, sourceID) bool`
-- [ ] T021 [US1] Implement HTTP handlers in `app/backend/internal/localimport/handler.go`: `POST /api/local/sources` (validate path via `ValidateSourcePath`, create source, return 201); `GET /api/local/sources` (list); `GET /api/local/sources/{id}` (get, 404 if missing); `DELETE /api/local/sources/{id}` (delete, 202 async cleanup); `POST /api/local/sync` (validate enabled, check running job, enqueue, return 202 with job_id); `GET /api/local/jobs` (list with filter); `GET /api/local/jobs/{id}` (get)
-- [ ] T022 [US1] Wire local handler and dispatcher into `app/backend/cmd/main.go`: instantiate `LocalSourceStore`, `ImportJobStore`, `LocalFileStore`, `Scanner`, `Extractor`, `Processor`, `Dispatcher`; register routes on router; call `dispatcher.MarkStaleJobs` at startup; call `dispatcher.Start(ctx)` before server listen
-- [ ] T023 [US1] Update `app/backend/internal/retrieval/stages.go` SemanticSearch SQL query: add LEFT JOIN `local_files lf ON lf.id = c.local_file_id`; add LEFT JOIN `m365_files mf ON mf.id = c.file_id`; populate `SourceType` (`"local"` | `"m365"`) and `DisplayPath` (`"Local: " + lf.rel_path` | `"M365: " + mf.file_name`) in `SearchResult` struct
-- [ ] T024 [US1] Write integration test `app/backend/tests/integration/localimport/import_test.go`: create temp dir with 5 TXT files containing known phrases; POST source; POST sync; poll job until completed; GET `/api/knowledge/query?q=<phrase>`; assert result has `source_type: "local"` and `display_path` matches filename
+- [X] T010 [US1] Implement `app/backend/internal/localimport/scanner.go`: `Scanner` struct with `Walk(ctx) (<-chan ScanEntry, <-chan error)`; respect `Recursive`, `HiddenFiles`, `FollowSymlinks`, `MaxDepth` from `LocalSource`; use `filepath.WalkDir`; symlink detection via `os.Lstat`; skip `ModeSymlink` entries when `follow_symlinks=false`
+- [X] T011 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/scanner_test.go`: temp dir with nested structure, depth limit enforcement, hidden file include/exclude, non-recursive mode, permission-denied subdirectory skipped gracefully
+- [X] T012 [US1] Implement `app/backend/internal/localimport/encoding.go`: `DetectEncoding(sample []byte) (charset string, confidence float64, err error)` using BOM check (UTF-8 `EF BB BF`, UTF-16 LE/BE) then `chardet.Detect()` on first 4KB; `ConvertToUTF8(data []byte, charset string) ([]byte, error)` using `golang.org/x/text/transform`; confidence threshold 0.7 → treat as binary
+- [X] T013 [P] [US1] Upgrade `app/backend/internal/parsers/pdf.go`: replace regex-scraper stub with `github.com/ledongthuc/pdf` reader; preserve existing regex fallback when library returns empty/error; return `(string, error)`; streaming read for files >8MB
+- [X] T014 [P] [US1] Inspect and upgrade `app/backend/internal/parsers/docx.go` and `app/backend/internal/parsers/xlsx.go` — if stubs, wire `go-docx` and `excelize` respectively; if real libraries already used, verify they handle streaming large files
+- [X] T015 [US1] Implement `app/backend/internal/localimport/extractor.go`: `Extractor` struct; `Extract(ctx, absPath, mimeType string) (ExtractResult, error)`; route by MIME type and extension to `parsers.PDFParser` / `parsers.DocxParser` / `parsers.XlsxParser` / `parsers.TextParser`; binary detection via `net/http.DetectContentType` on first 512 bytes; set `IsBinary=true` and skip text extraction for non-supported MIME types
+- [X] T016 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/extractor_test.go`: PDF with known text, DOCX with known text, XLSX with known data, TXT UTF-8, binary PNG → metadata-only, unknown extension → metadata-only
+- [X] T017 [US1] Implement `DeltaResolver` in `app/backend/internal/localimport/file.go`: `Classify(ctx, sourceID string, entry ScanEntry) (DeltaResult, error)` — compare `mtime`+`size` fast-path; if changed compute SHA-256 via `crypto/sha256`; classify as `DeltaAdded` / `DeltaModified` / `DeltaUnchanged` / `DeltaDeleted`
+- [X] T018 [P] [US1] Write unit tests `app/backend/tests/unit/localimport/delta_test.go`: new file → Added, unchanged file → Unchanged (no hash computed), mtime changed same content → Unchanged (hash matches), content changed → Modified, file in DB not on disk → Deleted
+- [X] T019 [US1] Implement `app/backend/internal/localimport/processor.go`: `Processor.Run(ctx, job ImportJob) error` — scan source → for each DeltaResult: skip Unchanged; for Added/Modified: Extract → Chunk (via `parsers.Chunker`) → batch INSERT into `chunks` with `local_file_id` → Upsert `local_files`; for Deleted: DELETE chunks + local_files row; update `import_jobs` progress every 50 files; call `localFileStore.Upsert` with final stats
+- [X] T020 [US1] Implement `app/backend/internal/localimport/dispatcher.go`: `Dispatcher` with buffered channel queue (cap=100), `N = min(4, runtime.GOMAXPROCS(0))` workers; `Enqueue(job) error` returns `ErrQueueFull` if full; `Start(ctx)` launches worker goroutines; `MarkStaleJobs` called at startup; one running job per source enforced via `ImportJobStore.HasRunning(ctx, sourceID) bool`
+- [X] T021 [US1] Implement HTTP handlers in `app/backend/internal/localimport/handler.go`: `POST /api/local/sources` (validate path via `ValidateSourcePath`, create source, return 201); `GET /api/local/sources` (list); `GET /api/local/sources/{id}` (get, 404 if missing); `DELETE /api/local/sources/{id}` (delete, 202 async cleanup); `POST /api/local/sync` (validate enabled, check running job, enqueue, return 202 with job_id); `GET /api/local/jobs` (list with filter); `GET /api/local/jobs/{id}` (get)
+- [X] T022 [US1] Wire local handler and dispatcher into `app/backend/cmd/main.go`: instantiate `LocalSourceStore`, `ImportJobStore`, `LocalFileStore`, `Scanner`, `Extractor`, `Processor`, `Dispatcher`; register routes on router; call `dispatcher.MarkStaleJobs` at startup; call `dispatcher.Start(ctx)` before server listen
+- [X] T023 [US1] Update `app/backend/internal/retrieval/stages.go` SemanticSearch SQL query: add LEFT JOIN `local_files lf ON lf.id = c.local_file_id`; add LEFT JOIN `m365_files mf ON mf.id = c.file_id`; populate `SourceType` (`"local"` | `"m365"`) and `DisplayPath` (`"Local: " + lf.rel_path` | `"M365: " + mf.file_name`) in `SearchResult` struct
+- [X] T024 [US1] Write integration test `app/backend/tests/integration/localimport/import_test.go`: create temp dir with 5 TXT files containing known phrases; POST source; POST sync; poll job until completed; GET `/api/knowledge/query?q=<phrase>`; assert result has `source_type: "local"` and `display_path` matches filename
 
 **Checkpoint**: Integration test passes. `go test ./tests/integration/localimport/...` green. M365 integration tests still pass (`go test ./tests/integration/connectors/...`).
 
@@ -83,9 +83,9 @@
 
 ### Implementation for US2
 
-- [ ] T025 [US2] Extend `app/backend/internal/localimport/scanner.go` `Walk` method: apply `IncludeExt` / `ExcludeExt` filter per `ScanEntry`; normalise extensions to lowercase before comparison; log skipped file count to job metrics (`files_skipped++`); apply `MaxDepth` counter via WalkDir depth tracking
-- [ ] T026 [P] [US2] Write unit tests in `app/backend/tests/unit/localimport/scanner_test.go` (extend existing): `include_ext=[".pdf"]` → only PDF entries emitted; `exclude_ext=[".log"]` → `.log` files skipped; mixed case `.PDF` normalised and matched; very deep dir (>MaxDepth) → warning logged, entries up to depth included
-- [ ] T027 [US2] Verify and test `POST /api/local/sources` accepts `include_ext` and `exclude_ext` arrays and persists them to `local_sources` — add validation: each ext must start with `.`; add handler test in `app/backend/tests/unit/localimport/handler_test.go`
+- [X] T025 [US2] Extend `app/backend/internal/localimport/scanner.go` `Walk` method: apply `IncludeExt` / `ExcludeExt` filter per `ScanEntry`; normalise extensions to lowercase before comparison; log skipped file count to job metrics (`files_skipped++`); apply `MaxDepth` counter via WalkDir depth tracking
+- [X] T026 [P] [US2] Write unit tests in `app/backend/tests/unit/localimport/scanner_test.go` (extend existing): `include_ext=[".pdf"]` → only PDF entries emitted; `exclude_ext=[".log"]` → `.log` files skipped; mixed case `.PDF` normalised and matched; very deep dir (>MaxDepth) → warning logged, entries up to depth included
+- [X] T027 [US2] Verify and test `POST /api/local/sources` accepts `include_ext` and `exclude_ext` arrays and persists them to `local_sources` — add validation: each ext must start with `.`; add handler test in `app/backend/tests/unit/localimport/handler_test.go`
 
 **Checkpoint**: `go test ./internal/localimport/... -run TestScanner` passes including filter cases.
 
@@ -99,10 +99,10 @@
 
 ### Implementation for US3
 
-- [ ] T028 [US3] Extend `app/backend/internal/localimport/processor.go` `Run` method: after walking, compute set of rel_paths from `LocalFileStore.ListBySource` → subtract current scan entries → mark missing as `DeltaDeleted`; DELETE their `chunks` rows (by `local_file_id`) then DELETE `local_files` row; update `import_jobs.files_deleted` counter
-- [ ] T029 [US3] Extend `app/backend/internal/localimport/processor.go` for Modified action: DELETE existing `chunks` rows for that `local_file_id` before inserting new chunks; update `local_files` row (`content_hash`, `mtime`, `file_size`, `chunk_count`, `updated_at`)
-- [ ] T030 [P] [US3] Write unit tests `app/backend/tests/unit/localimport/delta_test.go` (extend): full cycle — first import sets `local_files` rows; second import with one file changed → Modified; one file deleted → Deleted; one file new → Added; unchanged → Unchanged; verify DB state after each action
-- [ ] T031 [US3] Verify `GET /api/local/jobs/{id}` response includes `files_added`, `files_modified`, `files_deleted`, `files_skipped` with correct values — add assertions to integration test `import_test.go`
+- [X] T028 [US3] Extend `app/backend/internal/localimport/processor.go` `Run` method: after walking, compute set of rel_paths from `LocalFileStore.ListBySource` → subtract current scan entries → mark missing as `DeltaDeleted`; DELETE their `chunks` rows (by `local_file_id`) then DELETE `local_files` row; update `import_jobs.files_deleted` counter
+- [X] T029 [US3] Extend `app/backend/internal/localimport/processor.go` for Modified action: DELETE existing `chunks` rows for that `local_file_id` before inserting new chunks; update `local_files` row (`content_hash`, `mtime`, `file_size`, `chunk_count`, `updated_at`)
+- [X] T030 [P] [US3] Write unit tests `app/backend/tests/unit/localimport/delta_test.go` (extend): full cycle — first import sets `local_files` rows; second import with one file changed → Modified; one file deleted → Deleted; one file new → Added; unchanged → Unchanged; verify DB state after each action
+- [X] T031 [US3] Verify `GET /api/local/jobs/{id}` response includes `files_added`, `files_modified`, `files_deleted`, `files_skipped` with correct values — add assertions to integration test `import_test.go`
 
 **Checkpoint**: Delta sync integration test passes; re-sync of unchanged corpus completes with `files_skipped = N, files_modified = 0`.
 
@@ -116,10 +116,10 @@
 
 ### Implementation for US4
 
-- [ ] T032 [US4] Extend `app/backend/internal/localimport/encoding.go`: handle MD files as UTF-8 text (same path as TXT); ensure `parsers.TextParser` returns full content for `.md` extension; verify heading preservation (headings remain as text, not stripped)
-- [ ] T033 [P] [US4] Write parser fixture tests `app/backend/tests/unit/localimport/extractor_test.go` (extend): create minimal fixture files (testdata/) for each format — PDF (ledongthuc), DOCX (go-docx), XLSX (excelize multi-sheet), TXT UTF-8, MD with headings; verify known phrases extracted; verify XLSX extracts from all sheets; verify MD headings in output
-- [ ] T034 [P] [US4] Add `app/backend/tests/unit/localimport/encoding_test.go`: UTF-8 BOM file, UTF-16 LE file, Latin-1 file, undetectable binary → `IsBinary=true`; verify all convertible files output valid UTF-8
-- [ ] T035 [US4] Extend integration test `app/backend/tests/integration/localimport/import_test.go`: add one fixture of each format; verify all 5 appear in query results with correct `source_type`
+- [X] T032 [US4] Extend `app/backend/internal/localimport/encoding.go`: handle MD files as UTF-8 text (same path as TXT); ensure `parsers.TextParser` returns full content for `.md` extension; verify heading preservation (headings remain as text, not stripped)
+- [X] T033 [P] [US4] Write parser fixture tests `app/backend/tests/unit/localimport/extractor_test.go` (extend): create minimal fixture files (testdata/) for each format — PDF (ledongthuc), DOCX (go-docx), XLSX (excelize multi-sheet), TXT UTF-8, MD with headings; verify known phrases extracted; verify XLSX extracts from all sheets; verify MD headings in output
+- [X] T034 [P] [US4] Add `app/backend/tests/unit/localimport/encoding_test.go`: UTF-8 BOM file, UTF-16 LE file, Latin-1 file, undetectable binary → `IsBinary=true`; verify all convertible files output valid UTF-8
+- [X] T035 [US4] Extend integration test `app/backend/tests/integration/localimport/import_test.go`: add one fixture of each format; verify all 5 appear in query results with correct `source_type`
 
 **Checkpoint**: All parser unit tests pass. Integration test with mixed formats passes.
 
@@ -133,10 +133,10 @@
 
 ### Implementation for US5
 
-- [ ] T036 [US5] Extend `app/backend/internal/localimport/processor.go`: update `import_jobs.progress_pct` every 50 files via `ImportJobStore.UpdateProgress`; set `files_total` at scan completion before processing begins; set `started_at` when processing begins, `finished_at` when done
-- [ ] T037 [US5] Extend `app/backend/internal/localimport/job.go` `ImportJobStore`: add `UpdateProgress(ctx, id string, progress JobProgress) error` where `JobProgress` holds all counter fields; ensure progress update is a single SQL UPDATE (atomic)
-- [ ] T038 [P] [US5] Add error collection to processor: when a file fails with `EPERM` / parser error, append redacted path (`RedactPath(absPath, sourceRoot)`) to `import_jobs.error_messages` array; increment `files_skipped`; continue processing; cap stored errors at 100 entries
-- [ ] T039 [US5] Add `GET /api/local/jobs` query param support for `source_id` and `status` filters in `app/backend/internal/localimport/handler.go`; verify pagination `limit`/`offset` works correctly
+- [X] T036 [US5] Extend `app/backend/internal/localimport/processor.go`: update `import_jobs.progress_pct` every 50 files via `ImportJobStore.UpdateProgress`; set `files_total` at scan completion before processing begins; set `started_at` when processing begins, `finished_at` when done
+- [X] T037 [US5] Extend `app/backend/internal/localimport/job.go` `ImportJobStore`: add `UpdateProgress(ctx, id string, progress JobProgress) error` where `JobProgress` holds all counter fields; ensure progress update is a single SQL UPDATE (atomic)
+- [X] T038 [P] [US5] Add error collection to processor: when a file fails with `EPERM` / parser error, append redacted path (`RedactPath(absPath, sourceRoot)`) to `import_jobs.error_messages` array; increment `files_skipped`; continue processing; cap stored errors at 100 entries
+- [X] T039 [US5] Add `GET /api/local/jobs` query param support for `source_id` and `status` filters in `app/backend/internal/localimport/handler.go`; verify pagination `limit`/`offset` works correctly
 
 **Checkpoint**: `GET /api/local/jobs/{id}` shows `progress_pct > 0` for in-flight job; `error_messages` populated when permission-denied files exist.
 
@@ -150,10 +150,10 @@
 
 ### Implementation for US6
 
-- [ ] T040 [US6] Add `ImportJobStore.HasRunning(ctx, sourceID string) (*ImportJob, error)` to `app/backend/internal/localimport/job.go`: SELECT from `import_jobs` WHERE `source_id=$1 AND status='running'` LIMIT 1
-- [ ] T041 [US6] Extend `POST /api/local/sync` handler in `app/backend/internal/localimport/handler.go`: check `HasRunning` before enqueue; if running → return 409 with `{ "error": "job_running", "job_id": "<id>" }`; if disabled source → return 400 with `{ "error": "source_disabled" }`
-- [ ] T042 [P] [US6] Add `DELETE /api/local/sources/{id}` cleanup: when source deleted, set `import_jobs.status = 'stale'` for any running jobs for that source; then DELETE `local_files` (cascades to `chunks` via FK), DELETE `local_sources`; return 202
-- [ ] T043 [P] [US6] Add `PATCH /api/local/sources/{id}` enabled toggle: when `enabled=false`, subsequent `POST /api/local/sync` returns 400 `source_disabled`; re-enabling allows sync; verify in handler unit test
+- [X] T040 [US6] Add `ImportJobStore.HasRunning(ctx, sourceID string) (*ImportJob, error)` to `app/backend/internal/localimport/job.go`: SELECT from `import_jobs` WHERE `source_id=$1 AND status='running'` LIMIT 1
+- [X] T041 [US6] Extend `POST /api/local/sync` handler in `app/backend/internal/localimport/handler.go`: check `HasRunning` before enqueue; if running → return 409 with `{ "error": "job_running", "job_id": "<id>" }`; if disabled source → return 400 with `{ "error": "source_disabled" }`
+- [X] T042 [P] [US6] Add `DELETE /api/local/sources/{id}` cleanup: when source deleted, set `import_jobs.status = 'stale'` for any running jobs for that source; then DELETE `local_files` (cascades to `chunks` via FK), DELETE `local_sources`; return 202
+- [X] T043 [P] [US6] Add `PATCH /api/local/sources/{id}` enabled toggle: when `enabled=false`, subsequent `POST /api/local/sync` returns 400 `source_disabled`; re-enabling allows sync; verify in handler unit test
 
 **Checkpoint**: Concurrent sync test: second POST returns 409 while first job is running. Source disable/enable cycle works correctly.
 
@@ -167,9 +167,9 @@
 
 ### Implementation for Neo4j
 
-- [ ] T044 Implement `app/backend/internal/localimport/neo4j.go`: `LocalNeo4jClient` struct wrapping `neo4j.DriverWithContext`; `UpsertSource(ctx, source LocalSource) error` — MERGE `LocalSource {source_id}`; `UpsertDocument(ctx, f LocalFile, source LocalSource) error` — MERGE `LocalDocument {local_file_id}` SET properties; CREATE `(d)-[:PART_OF]->(s)` relationship; `DeleteDocument(ctx, localFileID string) error` — DETACH DELETE node
-- [ ] T045 Wire `LocalNeo4jClient` into `app/backend/internal/localimport/processor.go`: call `UpsertSource` once per job start; call `UpsertDocument` for each Added/Modified file after chunk storage; call `DeleteDocument` for each Deleted file; errors in neo4j are logged and skipped (non-fatal for MVP — text search still works)
-- [ ] T046 [P] Wire existing NLP entity extraction into processor: after extracting text for a file, call `nlp.Extractor.Extract(ctx, text)` to get entities; create `MENTIONS` relationships between `LocalDocument` and extracted `Entity` nodes in Neo4j
+- [X] T044 Implement `app/backend/internal/localimport/neo4j.go`: `LocalNeo4jClient` struct wrapping `neo4j.DriverWithContext`; `UpsertSource(ctx, source LocalSource) error` — MERGE `LocalSource {source_id}`; `UpsertDocument(ctx, f LocalFile, source LocalSource) error` — MERGE `LocalDocument {local_file_id}` SET properties; CREATE `(d)-[:PART_OF]->(s)` relationship; `DeleteDocument(ctx, localFileID string) error` — DETACH DELETE node
+- [X] T045 Wire `LocalNeo4jClient` into `app/backend/internal/localimport/processor.go`: call `UpsertSource` once per job start; call `UpsertDocument` for each Added/Modified file after chunk storage; call `DeleteDocument` for each Deleted file; errors in neo4j are logged and skipped (non-fatal for MVP — text search still works)
+- [X] T046 [P] Wire existing NLP entity extraction into processor: after extracting text for a file, call `nlp.Extractor.Extract(ctx, text)` to get entities; create `MENTIONS` relationships between `LocalDocument` and extracted `Entity` nodes in Neo4j
 
 **Checkpoint**: Neo4j query after integration test returns `LocalDocument` nodes. Graph expander in retrieval pipeline can traverse from local doc.
 
@@ -179,11 +179,11 @@
 
 **Purpose**: Security hardening, performance, documentation.
 
-- [ ] T047 [P] Security audit of `app/backend/internal/localimport/path.go`: add test cases for Windows long path (`\\?\C:\...`), null byte in path, path with only spaces, path pointing to `/proc` or `/sys` (Linux); ensure all rejected with clear error codes
-- [ ] T048 [P] Performance: implement batch INSERT for chunks using `lib/pq` `pq.CopyIn` in `app/backend/internal/localimport/processor.go` for large imports (>500 chunks in one file); fallback to single INSERT if CopyIn fails
-- [ ] T049 [P] Add `app/backend/cmd/routes_test.go` smoke tests for all new `/api/local/*` routes: verify 401 when no JWT; verify 404 for unknown source ID; verify 400 for invalid path
-- [ ] T050 Run `go test ./...` — all tests pass; run `go vet ./...` — no warnings; run migration on a fresh DB and verify schema matches data-model.md
-- [ ] T051 Update `docs/` with Vietnamese-language API overview for local folder import: create `app/backend/docs/local-import-api.md` summarising endpoints, setup steps, and search integration (data-model.md §4 as reference)
+- [X] T047 [P] Security audit of `app/backend/internal/localimport/path.go`: add test cases for Windows long path (`\\?\C:\...`), null byte in path, path with only spaces, path pointing to `/proc` or `/sys` (Linux); ensure all rejected with clear error codes
+- [X] T048 [P] Performance: implement batch INSERT for chunks using `lib/pq` `pq.CopyIn` in `app/backend/internal/localimport/processor.go` for large imports (>500 chunks in one file); fallback to single INSERT if CopyIn fails
+- [X] T049 [P] Add `app/backend/cmd/routes_test.go` smoke tests for all new `/api/local/*` routes: verify 401 when no JWT; verify 404 for unknown source ID; verify 400 for invalid path
+- [X] T050 Run `go test ./...` — all tests pass; run `go vet ./...` — no warnings; run migration on a fresh DB and verify schema matches data-model.md
+- [X] T051 Update `docs/` with Vietnamese-language API overview for local folder import: create `app/backend/docs/local-import-api.md` summarising endpoints, setup steps, and search integration (data-model.md §4 as reference)
 
 ---
 

@@ -32,12 +32,11 @@ func HandleGraphNodes(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFi
 			http.Error(w, "permission filter failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// Note: we do NOT convert nil to []int{} here. Passing nil to ListNodes
-		// means "don't filter by allowed file IDs" (useful for users with no
-		// permission_cache entries, e.g. during initial system setup). An explicit
-		// empty slice []int{} means "user has no access to anything".
-		
 		if allowedFileIDs == nil {
+			// Defensive: should never happen in current implementation, but treat nil as
+			// empty allow-list to ensure fail-closed behavior (INVARIANT-1). Scoping is
+			// always enforced when permFilter is configured. If admin/unscoped queries
+			// are needed in the future, they require an explicit role check, not nil.
 			allowedFileIDs = []int{}
 		}
 
@@ -79,15 +78,13 @@ func HandleGraphEdges(qb *graph.QueryBuilder, permFilter *retrieval.PermissionFi
 			http.Error(w, "permission filter failed: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
-		// Note: we do NOT convert nil to []int{} here. Passing nil to ListEdges
-		// means "don't filter by allowed file IDs" (useful for users with no
-		// permission_cache entries, e.g. during initial system setup). An explicit
-		// empty slice []int{} means "user has no access to anything".
-		
 		if allowedFileIDs == nil {
+			// Defensive: should never happen in current implementation, but treat nil as
+			// empty allow-list to ensure fail-closed behavior (INVARIANT-1). Scoping is
+			// always enforced when permFilter is configured. If admin/unscoped queries
+			// are needed in the future, they require an explicit role check, not nil.
 			allowedFileIDs = []int{}
 		}
-
 
 		relType := r.URL.Query().Get("type")
 		limit := parseLimit(r, 100)

@@ -1,7 +1,10 @@
 package parsers
 
 import (
+	"bytes"
 	"strings"
+
+	"github.com/ledongthuc/pdf"
 )
 
 type PDFParser struct{}
@@ -10,15 +13,58 @@ func NewPDFParser() *PDFParser {
 	return &PDFParser{}
 }
 
-// Parse extracts text content from a PDF file
-// Note: This is a simplified implementation that extracts printable text from PDF bytes
-// For production use, consider using a more robust PDF library with proper text extraction
+// Parse extracts text content from a PDF file using ledongthuc/pdf.
+// Falls back to regex-based extraction if the library returns empty text.
 func (p *PDFParser) Parse(content []byte) (string, error) {
 	if len(content) == 0 {
 		return "", nil
 	}
 
-	// Simple text extraction: look for text between BT (begin text) and ET (end text) markers
+	// Try using ledongthuc/pdf for PDF parsing
+	reader := bytes.NewReader(content)
+	r, err := pdf.NewReader(reader, int64(len(content)))
+	if err == nil {
+		text, err := extractWithPDFLibrary(r)
+		if err == nil && len(text) > 0 {
+			return text, nil
+		}
+		// If library returns empty or error, fall through to regex fallback
+	}
+
+	// Fallback: regex-based extraction for cases where library fails
+	return fallbackPDFExtraction(content), nil
+}
+
+// extractWithPDFLibrary uses ledongthuc/pdf to extract text from PDF.
+func extractWithPDFLibrary(r *pdf.Reader) (string, error) {
+	var textContent strings.Builder
+
+	// Iterate through all pages
+	for i := 1; i <= r.NumPage(); i++ {
+		p := r.Page(i)
+		// ledongthuc/pdf returns a Page struct, which is never nil for valid page index
+		// Extract plain text using the page's GetPlainText method with empty fonts map
+		text, err := p.GetPlainText(make(map[string]*pdf.Font))
+		if err != nil {
+			// Skip pages with errors; continue with remaining pages
+			continue
+		}
+		if text != "" {
+			textContent.WriteString(text)
+			textContent.WriteString("\n")
+		}
+	}
+
+	return textContent.String(), nil
+}
+
+// fallbackPDFExtraction uses regex-like patterns to extract text when library fails.
+// This is the legacy implementation preserved as a fallback.
+func fallbackPDFExtraction(content []byte) string {
+	if len(content) == 0 {
+		return ""
+	}
+
 	var extracted strings.Builder
 
 	// Convert to string and look for readable text
@@ -49,7 +95,7 @@ func (p *PDFParser) Parse(content []byte) (string, error) {
 		}
 	}
 
-	return extracted.String(), nil
+	return extracted.String()
 }
 
 func isPDFBinaryLine(line string) bool {

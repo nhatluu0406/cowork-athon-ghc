@@ -68,6 +68,8 @@ coverage/
 **/coverage/
 .nyc_output/
 *.lcov
+coverage.out
+**/coverage.out
 
 # --- Local databases / caches ---
 *.sqlite

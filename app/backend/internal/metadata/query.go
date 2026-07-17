@@ -126,6 +126,112 @@ func (cs *ChunkStore) Create(ctx context.Context, fileID int64, chunkIndex int, 
 	return id, nil
 }
 
+// T048: CreateBatch performs high-performance batch insertion of chunks.
+// For >500 chunks, uses a transaction for efficiency.
+// If batch fails, falls back to sequential single INSERTs.
+type ChunkData struct {
+	FileID      int64
+	ChunkIndex  int
+	Text        string
+	ContentHash string
+	HeadingPath string
+}
+
+func (cs *ChunkStore) CreateBatch(ctx context.Context, chunks []ChunkData) error {
+	if len(chunks) == 0 {
+		return nil
+	}
+
+	// For small batches, use individual inserts for simplicity
+	if len(chunks) < 500 {
+		for _, c := range chunks {
+			_, err := cs.Create(ctx, c.FileID, c.ChunkIndex, c.Text, c.ContentHash, c.HeadingPath)
+			if err != nil {
+				return fmt.Errorf("ChunkStore.CreateBatch (fallback): %w", err)
+			}
+		}
+		return nil
+	}
+
+	// For large batches, attempt batch insert via transaction
+	err := cs.db.WithTx(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx,
+			"INSERT INTO chunks (file_id, chunk_index, text, content_hash, heading_path) VALUES ($1, $2, $3, $4, $5)")
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		for _, c := range chunks {
+			if _, err := stmt.ExecContext(ctx, c.FileID, c.ChunkIndex, c.Text, c.ContentHash, c.HeadingPath); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		// Fallback: retry with individual inserts
+		for _, chunk := range chunks {
+			_, err := cs.Create(ctx, chunk.FileID, chunk.ChunkIndex, chunk.Text, chunk.ContentHash, chunk.HeadingPath)
+			if err != nil {
+				return fmt.Errorf("ChunkStore.CreateBatch (fallback single): %w", err)
+			}
+		}
+		return nil
+	}
+
+	return nil
+}
+
+// CreateLocal inserts one chunk that belongs to a LOCAL file (local_file_id set, file_id NULL).
+// The chunks table's XOR constraint requires exactly one of file_id/local_file_id; local import
+// must use this path (never file_id=0, which would violate the m365_files FK). Returns the new
+// chunk id so the caller can queue/store an embedding for it.
+func (cs *ChunkStore) CreateLocal(ctx context.Context, localFileID string, chunkIndex int, text, contentHash, headingPath string) (int64, error) {
+	var id int64
+	err := cs.db.QueryRow(ctx,
+		`INSERT INTO chunks (local_file_id, chunk_index, text, content_hash, heading_path)
+		 VALUES ($1, $2, $3, $4, $5)
+		 RETURNING id`,
+		localFileID, chunkIndex, text, contentHash, headingPath).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("ChunkStore.CreateLocal: %w", err)
+	}
+	return id, nil
+}
+
+// CreateBatchLocal inserts all chunks for a single local file (file_id NULL, local_file_id set)
+// inside one transaction and returns the inserted chunk ids in order. On any failure the whole
+// batch rolls back (no partially-indexed file).
+func (cs *ChunkStore) CreateBatchLocal(ctx context.Context, localFileID string, chunks []ChunkData) ([]int64, error) {
+	if len(chunks) == 0 {
+		return nil, nil
+	}
+	ids := make([]int64, 0, len(chunks))
+	err := cs.db.WithTx(ctx, func(tx *sql.Tx) error {
+		stmt, err := tx.PrepareContext(ctx,
+			`INSERT INTO chunks (local_file_id, chunk_index, text, content_hash, heading_path)
+			 VALUES ($1, $2, $3, $4, $5) RETURNING id`)
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+		for _, c := range chunks {
+			var id int64
+			if err := stmt.QueryRowContext(ctx, localFileID, c.ChunkIndex, c.Text, c.ContentHash, c.HeadingPath).Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("ChunkStore.CreateBatchLocal: %w", err)
+	}
+	return ids, nil
+}
+
 func (cs *ChunkStore) GetByFileID(ctx context.Context, fileID int64) ([]map[string]interface{}, error) {
 	rows, err := cs.db.Query(ctx,
 		"SELECT id, chunk_index, text, content_hash, heading_path FROM chunks WHERE file_id = $1 ORDER BY chunk_index",
@@ -152,6 +258,17 @@ func (cs *ChunkStore) GetByFileID(ctx context.Context, fileID int64) ([]map[stri
 		})
 	}
 	return chunks, nil
+}
+
+// DeleteByLocalFileID deletes all chunks for a local file (used for delta sync).
+func (cs *ChunkStore) DeleteByLocalFileID(ctx context.Context, localFileID string) error {
+	_, err := cs.db.Exec(ctx,
+		"DELETE FROM chunks WHERE local_file_id = $1",
+		localFileID)
+	if err != nil {
+		return fmt.Errorf("ChunkStore.DeleteByLocalFileID: %w", err)
+	}
+	return nil
 }
 
 // ConnectionStore handles m365_connections CRUD

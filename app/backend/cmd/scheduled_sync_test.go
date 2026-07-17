@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/api"
+	"github.com/rad-system/m365-knowledge-graph/internal/connectors"
 )
 
 // TestRunScheduledDeltaSyncFunctionExists tests that runScheduledDeltaSync exists and is callable
@@ -40,6 +41,7 @@ func TestSyncOneConnection_OneDrive_MissingDriveID(t *testing.T) {
 		"onedrive",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	assert.Error(t, err)
@@ -60,6 +62,7 @@ func TestSyncOneConnection_OneDrive_NoCreds(t *testing.T) {
 		"onedrive",
 		"",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	assert.Error(t, err)
@@ -80,6 +83,7 @@ func TestSyncOneConnection_Teams_NoCreds(t *testing.T) {
 		"teams",
 		"",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	assert.Error(t, err)
@@ -101,6 +105,7 @@ func TestSyncOneConnection_Teams_WithCreds(t *testing.T) {
 		"teams",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Expected error from trying to get real M365 token
@@ -121,6 +126,7 @@ func TestSyncOneConnection_UnsupportedType(t *testing.T) {
 		"unsupported-type",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	assert.Error(t, err)
@@ -136,7 +142,7 @@ func TestRunScheduledDeltaSync_ContextCancellation(t *testing.T) {
 	cancel()
 
 	// Should handle cancelled context gracefully
-	_ = runScheduledDeltaSync(ctx, deps, logger)
+	_ = runScheduledDeltaSync(ctx, deps, &connectors.PermissionExtractor{}, logger)
 	assert.True(t, true)
 }
 
@@ -154,6 +160,7 @@ func TestSyncOneConnection_OneDrive_ValidConfig(t *testing.T) {
 		"onedrive",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Expected to fail on token fetch since we don't have real credentials
@@ -176,6 +183,7 @@ func TestSyncOneConnectionConnectionID(t *testing.T) {
 		"teams",
 		"",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Should error on credentials, not connection ID
@@ -198,6 +206,7 @@ func TestSyncOneConnectionTenantID(t *testing.T) {
 		"teams",
 		tenantID,
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Should error on credentials
@@ -221,6 +230,7 @@ func TestSyncOneConnectionConfig(t *testing.T) {
 		"teams",
 		"",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Should error on credentials
@@ -244,6 +254,7 @@ func TestSyncOneConnectionContextPropagation(t *testing.T) {
 		"teams",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Should error on Graph call
@@ -287,6 +298,7 @@ func TestSyncOneConnectionEmptyConfig(t *testing.T) {
 		"teams",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Teams connection with empty config should proceed to token fetch
@@ -307,6 +319,7 @@ func TestSyncOneConnectionNilConfig(t *testing.T) {
 		"teams",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	// Should still work with nil config
@@ -327,6 +340,7 @@ func TestSyncOneConnectionOneDriveEmptyDrive(t *testing.T) {
 		"onedrive",
 		"tenant-id",
 		config,
+		&connectors.PermissionExtractor{},
 	)
 
 	assert.Error(t, err)
@@ -360,6 +374,7 @@ func TestSyncOneConnectionStringArguments(t *testing.T) {
 			tc.connType,
 			tc.tenantID,
 			config,
+			&connectors.PermissionExtractor{},
 		)
 
 		// All should error (either on missing credentials or unsupported type)

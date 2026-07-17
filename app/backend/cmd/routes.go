@@ -10,6 +10,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/embedding"
 	"github.com/rad-system/m365-knowledge-graph/internal/feedback"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
+	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 	"github.com/rad-system/m365-knowledge-graph/internal/websocket"
 )
@@ -43,7 +44,7 @@ func (a similaritySearcherAdapter) SearchSimilar(ctx context.Context, modelID in
 // JWT), Neo4j graph/entity queries with Stage-0 permission filtering, and
 // M365 connection persistence/connector triggering. /api/knowledge/query
 // was wired to the real Retriever earlier (Group D remediation).
-func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedback.FeedbackStore, feedbackAnalyzer *feedback.FeedbackAnalyzer, retriever *retrieval.Retriever, entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, oauthRedirectURI, devUsername, devPassword string, queryBuilder *graph.QueryBuilder, statsDB *sql.DB, permFilter *retrieval.PermissionFilter, m365Deps *api.M365Deps) {
+func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedback.FeedbackStore, feedbackAnalyzer *feedback.FeedbackAnalyzer, retriever *retrieval.Retriever, entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, oauthRedirectURI, devUsername, devPassword string, queryBuilder *graph.QueryBuilder, statsDB *sql.DB, permFilter *retrieval.PermissionFilter, m365Deps *api.M365Deps, localImportDeps *localimport.LocalImportDeps) {
 	// Health check
 	router.Register("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -59,6 +60,14 @@ func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedb
 	router.Register("/api/m365/sources", api.HandleM365Sources(m365Deps))
 	router.Register("/api/m365/sync", api.HandleM365Sync(m365Deps))
 	router.Register("/api/m365/sync/status", api.HandleM365SyncStatus(m365Deps))
+
+	// Local folder import (Phase 3 — US1)
+	localImportHandler := localimport.NewLocalImportHandler(localImportDeps)
+	router.Register("/api/local/sources", localImportHandler)
+	router.Register("/api/local/sources/", localImportHandler)
+	router.Register("/api/local/sync", localImportHandler)
+	router.Register("/api/local/jobs", localImportHandler)
+	router.Register("/api/local/jobs/", localImportHandler)
 
 	// LLM config (dynamic configuration from service/src/provider)
 	router.Register("/api/llm/config", api.HandleLLMConfig(statsDB, jwtAuth))         // POST: update config

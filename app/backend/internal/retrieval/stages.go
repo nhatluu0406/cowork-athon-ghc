@@ -218,11 +218,11 @@ type ScoredChunkResult struct {
 // similar chunks via cosine similarity (research.md §6: brute-force, no
 // pgvector at this POC's data volume).
 type SemanticSearch struct {
-	db        *sql.DB
-	embedder  EmbeddingRuntime
-	searcher  SimilaritySearcher
-	modelID   int64
-	topK      int
+	db       *sql.DB
+	embedder EmbeddingRuntime
+	searcher SimilaritySearcher
+	modelID  int64
+	topK     int
 }
 
 func NewSemanticSearch(db *sql.DB, embedder EmbeddingRuntime, searcher SimilaritySearcher, modelID int64) *SemanticSearch {
@@ -255,22 +255,38 @@ func (ss *SemanticSearch) Search(ctx context.Context, query string, allowedFileI
 
 	results := make([]map[string]interface{}, 0, len(scored))
 	for _, sc := range scored {
-		var fileID int64
-		var text, headingPath, fileName sql.NullString
+		var fileID sql.NullInt64
+		var text, headingPath, fileName, sourceType, displayPath sql.NullString
 		row := ss.db.QueryRowContext(ctx, `
-			SELECT c.file_id, c.text, c.heading_path, f.file_name
+			SELECT c.file_id, c.text, c.heading_path,
+			       COALESCE(mf.file_name, lf.file_name) AS file_name,
+			       CASE WHEN lf.id IS NOT NULL THEN 'local'
+			            WHEN mf.id IS NOT NULL THEN 'm365'
+			            ELSE NULL END AS source_type,
+			       CASE WHEN lf.id IS NOT NULL THEN 'Local: ' || lf.rel_path
+			            WHEN mf.id IS NOT NULL THEN 'M365: ' || mf.file_name
+			            ELSE NULL END AS display_path
 			FROM chunks c
-			JOIN m365_files f ON f.id = c.file_id
+			LEFT JOIN m365_files mf ON mf.id = c.file_id
+			LEFT JOIN local_files lf ON lf.id = c.local_file_id
 			WHERE c.id = $1
 		`, sc.ChunkID)
-		if err := row.Scan(&fileID, &text, &headingPath, &fileName); err != nil {
+		if err := row.Scan(&fileID, &text, &headingPath, &fileName, &sourceType, &displayPath); err != nil {
 			continue
 		}
 
-		// INVARIANT-1 enforcement: skip any chunk whose file is outside the
-		// caller's permitted scope, even though it matched semantically.
-		if !allowed[fileID] {
-			continue
+		// INVARIANT-1 enforcement. Two distinct chunk classes, handled EXPLICITLY so a
+		// local chunk (file_id NULL) can never silently bypass the M365 scope check the way
+		// the old `fileID.Valid && !allowed[...]` guard let it:
+		//   * M365 chunk (file_id set): must be inside the caller's permitted scope.
+		//   * Local-import chunk (file_id NULL, local_file_id set): these are the LOCAL user's
+		//     own files, imported from their own machine in this local-first desktop backend.
+		//     There is no per-M365-user ACL for them, so they are visible to the authenticated
+		//     caller by design — an explicit ownership policy, not an accidental fail-open.
+		if fileID.Valid {
+			if !allowed[fileID.Int64] {
+				continue
+			}
 		}
 
 		results = append(results, map[string]interface{}{
@@ -279,6 +295,8 @@ func (ss *SemanticSearch) Search(ctx context.Context, query string, allowedFileI
 			"text":         text.String,
 			"heading_path": headingPath.String,
 			"file_name":    fileName.String,
+			"source_type":  sourceType.String,
+			"display_path": displayPath.String,
 			"source":       "semantic",
 		})
 	}
@@ -369,7 +387,7 @@ func (ge *GraphExpander) Expand(ctx context.Context, seeds []map[string]interfac
 // T173: Optional llmsvc.Client for specialized Rerank RPC; fallback to in-process scoring if nil.
 // T177: Optional brainClient for task-type tagging
 type Reranker struct {
-	llmsvcClient *llmsvc.Client  // Optional; nil means use fallback scoring
+	llmsvcClient *llmsvc.Client     // Optional; nil means use fallback scoring
 	brainClient  *brain.BrainClient // T177
 }
 
@@ -527,9 +545,9 @@ type CompressionProvider interface {
 // oversized contexts instead of truncating them (NLP_MODE >= 2).
 // T180: Optional llmsvc.Client for LLM-based compression.
 type ContextPacker struct {
-	compressor    CompressionProvider // Optional compression provider
-	llmsvcClient  *llmsvc.Client      // T180: Optional llmsvc client for compression
-	brainClient   *brain.BrainClient  // T177: Optional brain client for task-type tagging
+	compressor   CompressionProvider // Optional compression provider
+	llmsvcClient *llmsvc.Client      // T180: Optional llmsvc client for compression
+	brainClient  *brain.BrainClient  // T177: Optional brain client for task-type tagging
 }
 
 func NewContextPacker() *ContextPacker {
@@ -641,9 +659,9 @@ type LLMClient interface {
 // AnswerGenerator implements Stage 7: LLM answer generation with citations.
 // T174: Optional llmsvc.Client for specialized Generate RPC; fallback to LLMClient.Complete if nil.
 type AnswerGenerator struct {
-	llm          LLMClient           // Fallback LLM client
-	llmsvcClient *llmsvc.Client      // T174: Optional specialized client
-	brainClient  *brain.BrainClient  // T177: Optional brain client for task-type tagging
+	llm          LLMClient          // Fallback LLM client
+	llmsvcClient *llmsvc.Client     // T174: Optional specialized client
+	brainClient  *brain.BrainClient // T177: Optional brain client for task-type tagging
 }
 
 func NewAnswerGenerator(llm LLMClient) *AnswerGenerator {
