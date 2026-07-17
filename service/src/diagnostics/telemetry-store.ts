@@ -34,6 +34,12 @@ export const TELEMETRY_COUNTERS = [
   "preview_running",
   "preview_stopped",
   "preview_failed",
+  "app_run_started",
+  "app_running",
+  "app_stopped",
+  "app_failed",
+  "app_build_started",
+  "app_build_succeeded",
 ] as const;
 
 export type TelemetryCounter = (typeof TELEMETRY_COUNTERS)[number];

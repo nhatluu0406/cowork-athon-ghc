@@ -35,7 +35,7 @@ import type { SecretScrubber } from "../diagnostics/secret-scrubber.js";
 import { createOutputBuffer, type OutputBuffer } from "./output-buffer.js";
 import { detectPreviewProject } from "./project-detector.js";
 import { buildDevServerCommand, buildPreviewEnv, InvalidLaunchError, type PreviewLaunchCommand } from "./launch-policy.js";
-import { nodePreviewSpawner, type PreviewChild, type PreviewSpawner } from "./preview-spawner.js";
+import { nodePreviewSpawner, terminateChildTree, type PreviewChild, type PreviewSpawner } from "./preview-spawner.js";
 import { allocateLoopbackPort, detectUrlInLine, probeLoopbackPort } from "./port-detect.js";
 import { startStaticServer, type StaticServerHandle } from "./static-server.js";
 
@@ -213,42 +213,8 @@ export function createPreviewService(deps: PreviewServiceDeps): PreviewService {
     }
   }
 
-  function waitForExit(c: PreviewChild, ms: number): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-      let done = false;
-      const finish = (v: boolean): void => {
-        if (done) return;
-        done = true;
-        resolve(v);
-      };
-      c.once("exit", () => finish(true));
-      const t = setTimeout(() => finish(false), ms);
-      t.unref?.();
-    });
-  }
-
-  async function terminateChild(c: PreviewChild): Promise<void> {
-    // Register the exit wait BEFORE terminating so a synchronous exit is never missed.
-    const exited = waitForExit(c, gracefulStopMs);
-    // WHOLE-TREE termination is mandatory here. The direct child is `cmd.exe`; a graceful
-    // `kill()` of it terminates ONLY cmd.exe and orphans the `pm → node → …` descendants — and
-    // once cmd.exe is gone the parent links are broken, so a *later* tree-kill can no longer find
-    // them. So we kill the still-LIVE tree by PID up front (`taskkill /PID <pid> /T /F`, identity
-    // by PID only — never `/IM`). This is the product's no-orphan guarantee.
-    try {
-      c.killTree();
-    } catch {
-      /* ignore */
-    }
-    if (!(await exited)) {
-      // Last resort if the tree somehow outlived the grace window: force the direct child too.
-      try {
-        c.kill();
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+  // Whole-tree, no-orphan termination is shared with the app runner (see terminateChildTree).
+  const terminateChild = (c: PreviewChild): Promise<void> => terminateChildTree(c, gracefulStopMs);
 
   function onChildExit(code: number | null): void {
     if (child === null) return;

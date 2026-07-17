@@ -96,6 +96,7 @@ import {
   createRuntimePreviewRouter,
   type PreviewService,
 } from "../runtime-preview/index.js";
+import { createAppService, createRuntimeAppRouter, type AppService } from "../runtime-app/index.js";
 import type { TelemetryCounter } from "../diagnostics/telemetry-store.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
@@ -481,6 +482,25 @@ export async function createCoworkService(
     log: (line: string) => logger.debug(line),
   });
 
+  // --- Runtime desktop-app launch (Code surface Slice 2): reuses the SAME bounded process-runner
+  // primitives and a preview-style permission gate (own gate instance, shared audit). Launches
+  // the app as its own separate process/window (never embedded). Single owner; torn down on
+  // workspace change + shutdown alongside the preview.
+  const appGate = createPreviewGate({
+    audit: permissionAudit,
+    scheduler: createNodeScheduler(),
+    now,
+  });
+  const appService: AppService = createAppService({
+    getActiveRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    gate: appGate,
+    scrubber,
+    ...(telemetry !== undefined
+      ? { telemetry: (counter: string) => telemetry.increment(counter as TelemetryCounter) }
+      : {}),
+    log: (line: string) => logger.debug(line),
+  });
+
   // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
   // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
   // reads from at the SAME execution boundary every other tool-permission event flows through —
@@ -641,8 +661,9 @@ export async function createCoworkService(
       allowEnvImport: options.allowEnvCredentialImport === true,
     }),
     createSettingsRouter(settingsStore, modelPort, providerProfileStore, (_rootPath) => {
-      // Workspace changed → tear down any preview confined to the previous workspace.
+      // Workspace changed → tear down any preview / desktop app confined to the previous workspace.
       void previewService.dispose("workspace_changed");
+      void appService.dispose("workspace_changed");
     }),
     createProviderRouter(providerPort, modelConfig),
     createProviderProfileRouter({
@@ -684,6 +705,7 @@ export async function createCoworkService(
       },
     }),
     createRuntimePreviewRouter(previewService),
+    createRuntimeAppRouter(appService),
     createDiagnosticsRouter({
       logger,
       ...(fileSink !== undefined ? { fileSink } : {}),
@@ -714,6 +736,7 @@ export async function createCoworkService(
     permissionGate,
     permissionAudit,
     previewService,
+    appService,
     branchPermissionBindings,
     sessionService,
     streamHub,

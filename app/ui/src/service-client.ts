@@ -26,6 +26,10 @@ import {
   type RuntimePreviewProjectInfo,
   type RuntimePreviewStartInput,
   type RuntimePreviewState,
+  type RuntimeAppOutput,
+  type RuntimeAppProjectInfo,
+  type RuntimeAppStartInput,
+  type RuntimeAppState,
   type SessionMeta,
   type TestResult,
   type WorkspaceGrant,
@@ -511,6 +515,24 @@ export interface ServiceClient {
   stopRuntimePreview(): Promise<RuntimePreviewState>;
   /** Restart the active preview (re-uses the approved launch / static kind). */
   restartRuntimePreview(): Promise<RuntimePreviewState>;
+
+  // --- Runtime desktop-app launch (Code surface Slice 2) ---
+  /** Inspect the active workspace for desktop-app (Electron) launch capability. */
+  detectRuntimeApp(): Promise<RuntimeAppProjectInfo>;
+  /** Read the current desktop-app state. */
+  getRuntimeAppState(): Promise<RuntimeAppState>;
+  /** Read desktop-app state + output lines newer than `afterSeq`. */
+  getRuntimeAppOutput(afterSeq: number): Promise<RuntimeAppOutput>;
+  /** Step 1 of a Build/Run: raise a `command_exec` permission request. */
+  requestAppLaunch(
+    input: RuntimeAppStartInput,
+  ): Promise<{ requestId: string; action: "build" | "run"; command: string; cwd: string }>;
+  /** Step 2: resolve the launch permission (Allow starts it server-side). */
+  resolveAppLaunch(requestId: string, decision: "allow" | "deny"): Promise<RuntimeAppState>;
+  /** Stop the active desktop app. */
+  stopRuntimeApp(): Promise<RuntimeAppState>;
+  /** Restart the active desktop app (re-uses the last approved run launch). */
+  restartRuntimeApp(): Promise<RuntimeAppState>;
   /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
   getSettings(): Promise<SettingsView>;
   /** List provider descriptors exposed by the service (provider-neutral). */
@@ -787,6 +809,29 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
     restartRuntimePreview: async () =>
       (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/restart", { method: "POST" }))
         .state,
+
+    detectRuntimeApp: async () =>
+      (await call<{ info: RuntimeAppProjectInfo }>("/v1/runtime-app/detect")).info,
+    getRuntimeAppState: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/state")).state,
+    getRuntimeAppOutput: async (afterSeq) =>
+      (await call<{ output: RuntimeAppOutput }>(`/v1/runtime-app/output?after=${String(afterSeq)}`)).output,
+    requestAppLaunch: (input) =>
+      call<{ requestId: string; action: "build" | "run"; command: string; cwd: string }>(
+        "/v1/runtime-app/request-launch",
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    resolveAppLaunch: async (requestId, decision) =>
+      (
+        await call<{ state: RuntimeAppState }>("/v1/runtime-app/resolve", {
+          method: "POST",
+          body: JSON.stringify({ requestId, decision }),
+        })
+      ).state,
+    stopRuntimeApp: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/stop", { method: "POST" })).state,
+    restartRuntimeApp: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/restart", { method: "POST" })).state,
 
     getSettings: async () => (await call<{ settings: SettingsView }>("/v1/settings")).settings,
     listProviders: async () =>

@@ -18,6 +18,7 @@ export * from "./provider.js";
 export * from "./permission.js";
 export * from "./workspace.js";
 export * from "./runtime-preview.js";
+export * from "./runtime-app.js";
 export * from "./text-file-types.js";
 export * from "./session.js";
 export * from "./refs.js";

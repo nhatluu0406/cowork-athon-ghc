@@ -79,6 +79,48 @@ function adaptChildProcess(cp: ChildProcess): PreviewChild {
   };
 }
 
+/**
+ * Wait up to `ms` for a child's `exit` event; resolves `true` if it exited, `false` on timeout.
+ * The listener is registered by the caller BEFORE any kill so a synchronous exit is never missed.
+ */
+export function waitForChildExit(c: PreviewChild, ms: number): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    let done = false;
+    const finish = (v: boolean): void => {
+      if (done) return;
+      done = true;
+      resolve(v);
+    };
+    c.once("exit", () => finish(true));
+    const t = setTimeout(() => finish(false), ms);
+    (t as { unref?: () => void }).unref?.();
+  });
+}
+
+/**
+ * Terminate a spawned child's WHOLE process tree with no orphan (shared by the preview + app
+ * runners). The direct child is a `cmd.exe` wrapper on Windows; a graceful `kill()` of it reaps
+ * ONLY cmd.exe and orphans the `pm → node → …` descendants — and once cmd.exe is gone the
+ * parent links break so a later tree-kill can no longer find them. So kill the still-LIVE tree
+ * up front (`taskkill /PID <pid> /T /F`, identity by PID only). A last-resort direct kill covers
+ * the case where the tree somehow outlives the grace window.
+ */
+export async function terminateChildTree(c: PreviewChild, gracefulStopMs: number): Promise<void> {
+  const exited = waitForChildExit(c, gracefulStopMs);
+  try {
+    c.killTree();
+  } catch {
+    /* ignore */
+  }
+  if (!(await exited)) {
+    try {
+      c.kill();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Production spawner: pipes stdout/stderr, hidden window, argument array. */
 export function nodePreviewSpawner(): PreviewSpawner {
   return {
