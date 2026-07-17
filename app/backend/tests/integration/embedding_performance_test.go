@@ -121,7 +121,7 @@ func TestEmbeddingConsistency(t *testing.T) {
 	similarity := cosineSimilarity(vecs1[0], vecs2[0])
 	t.Logf("Embedding consistency (cosine similarity): %.6f", similarity)
 
-	minSimilarity := 0.99
+	minSimilarity := float32(0.99)
 	if similarity < minSimilarity {
 		t.Logf("WARNING: Embeddings not perfectly consistent (similarity: %.6f, expected >= %.2f)", similarity, minSimilarity)
 	}

@@ -5,7 +5,6 @@ package integration
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +25,7 @@ func TestLLMConfigPostValidConfig(t *testing.T) {
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
 
 	// Generate valid JWT token
-	token, err := jwtAuth.GenerateToken("test-user@example.com")
+	token, err := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 	if err != nil {
 		t.Fatalf("Failed to generate JWT: %v", err)
 	}
@@ -82,7 +81,7 @@ func TestLLMConfigPostInvalidProvider(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	reqBody := map[string]interface{}{
 		"provider": "invalid-provider",
@@ -163,7 +162,7 @@ func TestLLMConfigGetWithNoConfig(t *testing.T) {
 	db.Exec("DELETE FROM llm_config WHERE id = 1")
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	req := httptest.NewRequest("GET", "/api/llm/config/current", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -190,7 +189,7 @@ func TestLLMConfigUpsert(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	handler := api.HandleLLMConfig(db, jwtAuth)
 
@@ -252,7 +251,7 @@ func TestLLMConfigNLPModeValidation(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	testCases := []struct {
 		nlpMode  int
@@ -307,7 +306,7 @@ func TestLLMConfigAPIKeyEncryption(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	apiKey := "sk-very-secret-key-12345"
 
@@ -352,7 +351,7 @@ func TestLLMConfigAPIKeyNotReturnedInGET(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	// First, insert a config
 	postReqBody := map[string]interface{}{
@@ -404,7 +403,7 @@ func TestLLMConfigSSRFValidation(t *testing.T) {
 	defer teardownTestDB(t, db)
 
 	jwtAuth := auth.NewJWTAuth("test-secret-key-for-testing")
-	token, _ := jwtAuth.GenerateToken("test-user@example.com")
+	token, _ := jwtAuth.GenerateToken("test-user-id", "test-user@example.com", 3600)
 
 	maliciousURLs := []string{
 		"http://localhost:8080",           // HTTP not allowed

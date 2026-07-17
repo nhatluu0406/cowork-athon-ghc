@@ -220,14 +220,16 @@ func TestImport_DeltaSync(t *testing.T) {
 
 	// First import
 	sourceStore := localimport.NewLocalSourceStore(db)
-	source, _ := sourceStore.Create(ctx, localimport.CreateSourceRequest{
+	source, err := sourceStore.Create(ctx, localimport.CreateSourceRequest{
 		Name:       "Test Source",
 		FolderPath: tmpDir,
 		Recursive:  true,
 	})
+	require.NoError(t, err)
 
 	jobStore := localimport.NewImportJobStore(db)
-	job1, _ := jobStore.Create(ctx, source.ID)
+	job1, err := jobStore.Create(ctx, source.ID)
+	require.NoError(t, err)
 
 	fileStore := localimport.NewLocalFileStore(db)
 	resolver := localimport.NewDeltaResolver(fileStore)
