@@ -150,10 +150,10 @@
 
 ### Implementation for US6
 
-- [ ] T040 [US6] Add `ImportJobStore.HasRunning(ctx, sourceID string) (*ImportJob, error)` to `app/backend/internal/localimport/job.go`: SELECT from `import_jobs` WHERE `source_id=$1 AND status='running'` LIMIT 1
-- [ ] T041 [US6] Extend `POST /api/local/sync` handler in `app/backend/internal/localimport/handler.go`: check `HasRunning` before enqueue; if running → return 409 with `{ "error": "job_running", "job_id": "<id>" }`; if disabled source → return 400 with `{ "error": "source_disabled" }`
-- [ ] T042 [P] [US6] Add `DELETE /api/local/sources/{id}` cleanup: when source deleted, set `import_jobs.status = 'stale'` for any running jobs for that source; then DELETE `local_files` (cascades to `chunks` via FK), DELETE `local_sources`; return 202
-- [ ] T043 [P] [US6] Add `PATCH /api/local/sources/{id}` enabled toggle: when `enabled=false`, subsequent `POST /api/local/sync` returns 400 `source_disabled`; re-enabling allows sync; verify in handler unit test
+- [X] T040 [US6] Add `ImportJobStore.HasRunning(ctx, sourceID string) (*ImportJob, error)` to `app/backend/internal/localimport/job.go`: SELECT from `import_jobs` WHERE `source_id=$1 AND status='running'` LIMIT 1
+- [X] T041 [US6] Extend `POST /api/local/sync` handler in `app/backend/internal/localimport/handler.go`: check `HasRunning` before enqueue; if running → return 409 with `{ "error": "job_running", "job_id": "<id>" }`; if disabled source → return 400 with `{ "error": "source_disabled" }`
+- [X] T042 [P] [US6] Add `DELETE /api/local/sources/{id}` cleanup: when source deleted, set `import_jobs.status = 'stale'` for any running jobs for that source; then DELETE `local_files` (cascades to `chunks` via FK), DELETE `local_sources`; return 202
+- [X] T043 [P] [US6] Add `PATCH /api/local/sources/{id}` enabled toggle: when `enabled=false`, subsequent `POST /api/local/sync` returns 400 `source_disabled`; re-enabling allows sync; verify in handler unit test
 
 **Checkpoint**: Concurrent sync test: second POST returns 409 while first job is running. Source disable/enable cycle works correctly.
 
