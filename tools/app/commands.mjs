@@ -38,6 +38,8 @@ function toolPresent(cmd) {
 export function cmdInit(root, deps = {}) {
   const present = deps.toolPresent ?? toolPresent;
   const install = deps.install ?? ((cwd) => execSync('npm install', { cwd, stdio: 'inherit' }));
+  const rebuildNative = deps.rebuildNative ??
+    ((cwd) => execSync('npm run rebuild:native:electron', { cwd, stdio: 'inherit' }));
   const build = deps.build ?? ((cwd) => execSync('npm run build:app', { cwd, stdio: 'inherit' }));
   const binExists = deps.binExists ?? (() => existsSync(opencodeBinPath(root)));
 
@@ -49,6 +51,12 @@ export function cmdInit(root, deps = {}) {
   }
   try { install(root); }
   catch { log(root, 'init', 'ERROR: npm install failed'); return EXIT.BUILD_FAILED; }
+  // Native modules (e.g. better-sqlite3) are compiled against the system Node.js ABI by
+  // `npm install`, but the packaged/dev app runs under Electron's own ABI — a mismatched
+  // build throws NODE_MODULE_VERSION errors at service startup. Always rebuild for Electron
+  // right after install so `init` is never followed by a silent native-module crash.
+  try { rebuildNative(root); }
+  catch { log(root, 'init', 'ERROR: native module rebuild for Electron failed'); return EXIT.BUILD_FAILED; }
   try { build(root); }
   catch { log(root, 'init', 'ERROR: build (renderer + shell + service) failed'); return EXIT.BUILD_FAILED; }
   if (!binExists()) {
