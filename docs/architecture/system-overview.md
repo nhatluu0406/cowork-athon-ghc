@@ -38,3 +38,7 @@ OpenCode remains a supervised exact pin. Runtime upgrade requires a server-contr
 ## Conversation boundary
 
 Persist user-visible messages and durable turn summaries. Raw streaming deltas stay transient. Conversation identity remains independent from ephemeral OpenCode session IDs.
+
+## Surface boundary (Workspace ↔ Code)
+
+`Workspace` (file/document-centric) and `Code` (project/developer-centric) are **two renderer surfaces over one shared backend** (ADR 0013). Both use the same `settingsStore.activeWorkspace()`, the same `WorkspaceGuard`, workspace-relative file APIs, the guarded direct-save route, the `PermissionGate`, File Work Review + verified evidence, the `SessionService`, and the single supervised OpenCode runtime. `Code` has **no** backend/session/runtime/guard/permission-gate of its own; all its file I/O goes through the loopback service token-guarded client (no generic IPC, no renderer `fs`, per ADR 0009). There is no terminal, dev-server, or embedded web preview.

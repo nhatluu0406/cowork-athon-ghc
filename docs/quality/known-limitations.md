@@ -66,6 +66,14 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
+- **Surface `Code` (PLANNED — Hybrid, ADR 0013):** hiện là **renderer surface dùng chung backend
+  Cowork** (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session) — Explorer +
+  xem diff/preview **chỉ đọc** + panel dùng chung phiên. **Chưa phải IDE**: không terminal/PTY,
+  không Git client, không dev-server, không runtime web preview, không embedded app launch. Các chip
+  gợi ý "Chạy test / Commit / Sửa lỗi lint" hiện chỉ đổ text vào composer — runtime pin không có
+  terminal/git nên **không thực thi được**; sẽ gỡ ở Code Phase 1. Editor Code hiện **read-only** (yếu
+  hơn companion của Workspace vốn sửa+lưu được) — edit+save là Code Phase 1. Product label sẽ đổi
+  "Claude Code" → "Code".
 - **Web / Next.js** vẫn deferred.
 - **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
   workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)

@@ -92,6 +92,29 @@ updated_at: "2026-07-17"
 - [x] No network telemetry. (No egress anywhere in the diagnostics modules.)
 - [x] Diagnostics documentation and acceptance.
 
+## WAVE 7 — Code Phase 1: Shared Workspace Multi-File Editor (PLANNED — ADR 0013)
+
+Kiến trúc chốt **Hybrid**: `Code` là project/developer-centric, giữ surface riêng nhưng **dùng chung
+hoàn toàn** backend với Workspace (một active workspace, `WorkspaceGuard`, `PermissionGate`,
+`SessionService`, một OpenCode runtime). Không backend/session/runtime riêng cho Code.
+
+- [ ] Đổi product label "Claude Code" → "Code" (item đầu tiên; registry + code-view + panel + onboarding + focused UI test).
+- [ ] Shared active workspace (dùng lại `settingsStore.activeWorkspace()`).
+- [ ] Project explorer (dùng chung navigator, hợp nhất state để không mount lệch).
+- [ ] Multi-tab code editor với save/dirty/conflict (promote logic companion + `PUT /v1/workspace/file-content`).
+- [ ] Close/reopen tabs.
+- [ ] Workspace ↔ Code handoff (`Mở trong Code` / `Xem trong Workspace`).
+- [ ] Active-file làm Agent context.
+- [ ] Verified Agent mutation refresh (dùng lại File Work Review evidence).
+- [ ] Syntax highlighting.
+- [ ] Gỡ chip/nhãn hứa terminal/git/test cho tới khi runtime hỗ trợ.
+
+Deferred (không thuộc Phase 1): terminal/PTY; Git UI; debugger; language server phức tạp;
+dev-server; runtime web preview; desktop app launch; extension marketplace.
+
+Web/App preview taxonomy (ADR 0013): **File preview** (bounded local, có thể làm Later trong Code) ≠
+**Runtime web preview** (dev-server/port, deferred) ≠ **Desktop app launch** (process riêng, deferred).
+
 ## WAITING
 
 - [ ] D1 Dispatch integration.

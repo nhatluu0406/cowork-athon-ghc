@@ -24,6 +24,7 @@ Cowork GHC desktop POC. Wave 0A/0B (local vault + conversation SQLite) đã land
 | MS365 | SOURCE PRESENT | Vault tokens after unlock. |
 | Inspector | WORKS — Phase 1 | Cowork-only pane: Kế hoạch/Hoạt động/Tệp(+Xem lại) from normalized EV events (no raw SSE/token/tool payloads), reuses File Work Review, clear empty/loading/error states, persists across reopen. PO-observed 2026-07-17. |
 | Logging/telemetry | WORKS — Wave 6 | Local rotating redacted file logs under `data/logs` ("Ghi log chi tiết" → service debug); local-only aggregate telemetry (SQLite counters, allowlist, toggle gates collection); Settings → Chẩn đoán shows status/counters with redacted Export (save dialog) + Clear. No network egress. PO-observed 2026-07-17. |
+| Code | PLANNED — Hybrid (ADR 0013) | Hiện là **renderer surface dùng chung backend Cowork** (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session — không có backend/session/runtime riêng): Explorer + xem diff/preview **chỉ đọc** + panel dùng chung phiên. **Chưa phải IDE**: không terminal/Git client/dev-server/runtime web preview. Kiến trúc chốt **Hybrid** (Workspace=document-centric, Code=project-centric); slice kế tiếp là **Code Phase 1 — multi-file editor** (xem roadmap). Product label sẽ đổi "Claude Code" → "Code" (item đầu Phase 1). Không claim WORKS. |
 
 ## Security direction
 
