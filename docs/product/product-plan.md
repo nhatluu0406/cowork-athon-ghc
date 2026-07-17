@@ -38,12 +38,15 @@ Cowork GHC là desktop AI workspace local-first trên Windows: người dùng k�
 - [ ] Agent-created/modified file auto-open và live refresh
 - [ ] Workspace companion chat refinement
 
-### Code (PLANNED — Hybrid, ADR 0013)
+### Code (Hybrid, ADR 0013 — Phase 1 implemented, packaged PO obs pending)
 
 - [x] Shared-backend renderer surface (một active workspace/guard/permission/OpenCode session)
-- [x] Read-only explorer + diff/preview + shared-session panel
-- [ ] Code Phase 1 — Shared Workspace Multi-File Editor (multi-tab edit/save/dirty/conflict, Workspace ↔ Code handoff, active-file context, verified refresh) — see roadmap Wave 7
-- [ ] Rename product label "Claude Code" → "Code"
+- [x] Project Explorer (dùng chung navigator) + shared-session Agent panel
+- [x] Code Phase 1 — multi-tab editor: mở/chuyển/đóng tab, **sửa + lưu** (Ctrl+S, `PUT /v1/workspace/file-content`), dirty + hộp thoại đóng-khi-chưa-lưu, syntax highlight
+- [x] Verified Agent mutation refresh / conflict / deleted (dùng lại File Work Review)
+- [x] Workspace ↔ Code handoff ("Mở trong Code" / "Xem trong Workspace"); active-file làm Agent context
+- [x] Rename product label "Claude Code" → "Code"; gỡ chip giả
+- [ ] Packaged PO observation (demo-acceptance) trước khi claim WORKS
 - Deferred: terminal, Git UI, debugger, LSP, dev-server, runtime web preview, desktop app launch (no separate backend/session/runtime for Code)
 
 ### Providers

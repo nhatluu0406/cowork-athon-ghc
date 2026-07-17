@@ -92,25 +92,29 @@ updated_at: "2026-07-17"
 - [x] No network telemetry. (No egress anywhere in the diagnostics modules.)
 - [x] Diagnostics documentation and acceptance.
 
-## WAVE 7 — Code Phase 1: Shared Workspace Multi-File Editor (PLANNED — ADR 0013)
+## WAVE 7 — Code Phase 1: Shared Workspace Multi-File Editor (code/tests/build PASS — packaged PO obs pending; ADR 0013)
 
 Kiến trúc chốt **Hybrid**: `Code` là project/developer-centric, giữ surface riêng nhưng **dùng chung
 hoàn toàn** backend với Workspace (một active workspace, `WorkspaceGuard`, `PermissionGate`,
 `SessionService`, một OpenCode runtime). Không backend/session/runtime riêng cho Code.
 
-- [ ] Đổi product label "Claude Code" → "Code" (item đầu tiên; registry + code-view + panel + onboarding + focused UI test).
-- [ ] Shared active workspace (dùng lại `settingsStore.activeWorkspace()`).
-- [ ] Project explorer (dùng chung navigator, hợp nhất state để không mount lệch).
-- [ ] Multi-tab code editor với save/dirty/conflict (promote logic companion + `PUT /v1/workspace/file-content`).
-- [ ] Close/reopen tabs.
-- [ ] Workspace ↔ Code handoff (`Mở trong Code` / `Xem trong Workspace`).
-- [ ] Active-file làm Agent context.
-- [ ] Verified Agent mutation refresh (dùng lại File Work Review evidence).
-- [ ] Syntax highlighting.
-- [ ] Gỡ chip/nhãn hứa terminal/git/test cho tới khi runtime hỗ trợ.
+- [x] Đổi product label "Claude Code" → "Code" (registry + rail + code-view + panel + onboarding + focused UI test).
+- [x] Shared active workspace (dùng lại `settingsStore.activeWorkspace()`; không có store thứ hai).
+- [x] Project explorer (dùng chung `mountWorkspaceNavigator`).
+- [x] Multi-tab code editor với save/dirty/conflict (controller `mountCodeEditor` promote logic companion + `PUT /v1/workspace/file-content`).
+- [x] Close/reopen tabs (đóng-khi-dirty có hộp thoại Lưu/Không lưu/Huỷ).
+- [x] Workspace ↔ Code handoff (`Mở trong Code` / `Xem trong Workspace`).
+- [x] Active-file làm Agent context (workspace-relative; không nhồi full-tree/nội dung).
+- [x] Verified Agent mutation refresh (dùng lại File Work Review evidence; reload/xung đột/deleted).
+- [x] Syntax highlighting (highlight.js, bỏ qua khi > 256 KiB).
+- [x] Gỡ chip/nhãn hứa terminal/git/test.
+
+Trạng thái: focused UI tests (68/68) + `npm run typecheck` + `npm run build:app` PASS. Còn lại
+**packaged PO observation** (14 bước ở `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
 
 Deferred (không thuộc Phase 1): terminal/PTY; Git UI; debugger; language server phức tạp;
-dev-server; runtime web preview; desktop app launch; extension marketplace.
+dev-server; runtime web preview; desktop app launch; extension marketplace. Đổi workspace khi Code
+còn tab dirty sẽ **reset** (bỏ sửa chưa lưu) — như companion Workspace; pre-switch guard là việc sau.
 
 Web/App preview taxonomy (ADR 0013): **File preview** (bounded local, có thể làm Later trong Code) ≠
 **Runtime web preview** (dev-server/port, deferred) ≠ **Desktop app launch** (process riêng, deferred).

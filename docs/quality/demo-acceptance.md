@@ -49,6 +49,27 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 - Note: verified delete VIA THE AGENT is blocked upstream — the pinned OpenCode build exposes no
   delete tool (see known-limitations), so this journey is only observable when the delete is verified.
 
+## Code Phase 1 demo (multi-file editor — ADR 0013)
+
+Implementation + focused UI tests + `build:app` PASS; the boxes below are the remaining **packaged
+PO observation** gate (check only on the packaged Windows app).
+
+- [ ] Rail/surface hiển thị nhãn **`Code`** (không còn `Claude Code`); không có chip "Chạy test/Commit".
+- [ ] Chọn workspace → mở Code → Project Explorer hiện cây tệp của **cùng** active workspace.
+- [ ] Mở ba tệp code/text thành ba tab; chuyển tab giữ nguyên nội dung từng tab.
+- [ ] Sửa hai tệp (nút "Sửa" → textarea), dirty indicator hiện trên tab.
+- [ ] Ctrl+S (hoặc "Lưu") ghi tệp thật qua route file được guard; dirty được xoá.
+- [ ] Đóng một tab còn sửa chưa lưu → hộp thoại Lưu / Không lưu / Huỷ hoạt động đúng.
+- [ ] Từ Workspace dùng **"Mở trong Code"**; từ Code dùng **"Xem trong Workspace"** → đúng tệp,
+      active workspace không đổi.
+- [ ] Agent sửa một tệp đang mở (clean) → tab tự tải lại từ đĩa.
+- [ ] Agent sửa một tệp đang mở (dirty) → banner xung đột, giữ bản đang sửa.
+- [ ] Verified delete tệp đang mở → tab vào trạng thái "đã xóa", không recreate.
+- [ ] Đổi workspace → tab Code reset đúng theo workspace mới.
+- [ ] Quay lại Cowork chat → chat/transcript không regression.
+- Note: PDF/Office/ảnh trong Code hiển thị trạng thái chỉ đọc + "Xem trong Workspace" (không dựng lại
+  viewer). Terminal/Git/test runner/dev-server **không** thuộc Phase 1.
+
 ## Settings / Skills / Inspector
 
 - [ ] Provider actions are understandable without button clutter.

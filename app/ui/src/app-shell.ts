@@ -63,7 +63,7 @@ import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import type { MicrosoftIntegrationView } from "./integration-slots.js";
 import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
-import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
+import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code-editor.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
@@ -127,6 +127,7 @@ let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
 // file trees after an agent create/modify/delete, not just the mount closure.
 let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
 let codeNavigator: WorkspaceNavigatorHandle | null = null;
+let codeEditor: CodeEditorController | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
 let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
@@ -187,8 +188,6 @@ interface AppState {
   skillsMcpTab: SkillsMcpTab;
   serviceLabel: string;
   serviceOk: boolean;
-  codeOpenFiles: OpenCodeFile[];
-  codeActiveKey: string | null;
   permissionMode: PermissionMode;
   /** Conversation that owns the current processing indicator (`Đang xử lý`). */
   processingConversationId: string | null;
@@ -245,13 +244,13 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
   const reviews = state.fileReviews;
   const workspaceName =
     state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
+  // The editor is a persistent controller; keep its open diff tabs in sync with the reviews.
+  codeEditor?.setReviews(reviews);
   renderClaudeCodeSurface(
     dom.codeView,
     {
       workspaceName,
       reviews,
-      openFiles: state.codeOpenFiles,
-      activeKey: state.codeActiveKey,
       sessionTitle: record?.title ?? null,
       messages: record?.messages ?? [],
       phase: state.conv.state.runtimePhase,
@@ -259,44 +258,12 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       composerDisabledReason: preflight.canSend ? null : preflight.message,
     },
     {
-      onSelectTab: (key) => {
-        state.codeActiveKey = key;
-        renderState(dom, state, handlers);
-      },
-      onCloseTab: (key) => {
-        state.codeOpenFiles = state.codeOpenFiles.filter((f) => f.key !== key);
-        if (state.codeActiveKey === key) state.codeActiveKey = state.codeOpenFiles[0]?.key ?? null;
-        renderState(dom, state, handlers);
-      },
       onOpenReview: (review) => {
-        const key = fileTabKey("review", review.relativePath);
-        if (!state.codeOpenFiles.some((f) => f.key === key)) {
-          state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath: review.relativePath, kind: "review", reviewId: review.id }];
-        }
-        state.codeActiveKey = key;
+        codeEditor?.openReview(review);
         renderState(dom, state, handlers);
-      },
-      onLoadFile: (relativePath, body) => {
-        void loadCodePreview(state, relativePath, body);
       },
     },
   );
-}
-
-async function loadCodePreview(state: AppState, relativePath: string, body: HTMLElement): Promise<void> {
-  if (state.client === null) {
-    body.textContent = "Service chưa sẵn sàng.";
-    return;
-  }
-  try {
-    const result = await state.client.previewWorkspaceFile(relativePath);
-    if (result.kind === "binary") { body.textContent = "Chưa hỗ trợ xem trước loại tệp này."; return; }
-    if (result.kind === "missing") { body.textContent = "Không tìm thấy tệp trong workspace."; return; }
-    const suffix = result.truncated ? "\n\n[Đã cắt bớt — tệp lớn hơn giới hạn xem trước 64 KiB]" : "";
-    body.textContent = `${result.content ?? ""}${suffix}`;
-  } catch (error) {
-    body.textContent = safeError(error);
-  }
 }
 
 function surfaceById(id: ProductSurfaceId): ProductSurfaceDefinition {
@@ -829,6 +796,9 @@ async function finalizeFileMutationReview(
     // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
     void workspaceNavigator?.refresh();
     void codeNavigator?.refresh();
+    // Code Phase 1 — update any open Code editor tab for this file (reload clean, conflict if dirty,
+    // deleted-state on a verified delete). Uses the same verified evidence, no new verifier.
+    codeEditor?.applyVerifiedMutation(relativePath, event.operation === "delete" ? "delete" : "modify");
     // 2) Update the open file, or auto-open the affected file when safe.
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
     if (openPath !== null && openPath === relativePath) {
@@ -1941,7 +1911,11 @@ async function sendPrompt(
   // Wave 4: when the Workspace companion has a file open, tell the agent which file it is
   // (path only) so "tệp này / file đang mở" resolves without the user pasting a path.
   const openFilePath =
-    state.workMode === "workspace" ? (workspaceCompanionHandle?.getOpenPath() ?? null) : null;
+    state.activeSurface === "code"
+      ? (codeEditor?.getActivePath() ?? null)
+      : state.workMode === "workspace"
+        ? (workspaceCompanionHandle?.getOpenPath() ?? null)
+        : null;
   const workspaceContext = openFilePath !== null ? { openFilePath } : undefined;
   // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
   // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
@@ -2200,8 +2174,6 @@ export function mountCoworkApp(root: HTMLElement): void {
     skillsMcpTab: "skills",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
-    codeOpenFiles: [],
-    codeActiveKey: null,
     permissionMode: readPermissionMode(),
     processingConversationId: null,
     pendingUserRow: null,
@@ -2342,6 +2314,9 @@ export function mountCoworkApp(root: HTMLElement): void {
               bridge: getShellBridge(),
               client: dynamicClient,
               onActivated: (rootPath) => {
+                // A different active workspace resets the Code editor (its tabs pointed at the old
+                // project). "reset đúng" per ADR 0013; unsaved Code edits are discarded on switch.
+                if (state.activeWorkspace !== rootPath) codeEditor?.reset();
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
                 void workspaceNavigator?.refresh();
@@ -2350,6 +2325,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               },
               onDeactivated: () => {
                 state.activeWorkspace = null;
+                codeEditor?.reset();
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
@@ -2369,23 +2345,38 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onFileSelected: (relativePath) => {
-              const key = fileTabKey("file", relativePath);
-              if (!state.codeOpenFiles.some((f) => f.key === key)) {
-                state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath, kind: "file" }];
-              }
-              state.codeActiveKey = key;
+              codeEditor?.openFile(relativePath);
+            },
+          });
+          codeEditor = mountCodeEditor(dom.codeView.editorHost, dynamicClient, {
+            // Code → Workspace handoff via a shared, bounded contract (no URL hack / global string).
+            onOpenInWorkspace: (relativePath) => {
+              state.activeSurface = "cowork";
+              state.workMode = "workspace";
+              workspaceNavigator?.selectPath(relativePath);
+              void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
           });
           workspaceCompanionHandle = mountWorkspaceCompanionPane(
             dom.workspaceView.companionSlot,
             dynamicClient,
+            {
+              // Workspace → Code handoff for text/code files (shared active workspace unchanged).
+              onOpenInCode: (relativePath) => {
+                state.activeSurface = "code";
+                codeEditor?.openFile(relativePath);
+                renderState(dom, state, handlers);
+              },
+            },
           );
           mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             onSettingsUpdated: (view) => {
               state.settings = view;
-              state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              const nextWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              if (nextWorkspace !== state.activeWorkspace) codeEditor?.reset();
+              state.activeWorkspace = nextWorkspace;
               void workspaceNavigator?.refresh();
               void codeNavigator?.refresh();
               renderState(dom, state, handlers);

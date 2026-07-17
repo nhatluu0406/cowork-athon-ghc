@@ -1,15 +1,15 @@
 import { el } from "../dom-utils.js";
 
 const STEPS: readonly { readonly title: string; readonly copy: string }[] = [
-  { title: "Phiên chạy cục bộ", copy: "Mọi phiên chạy trên máy bạn qua local service; không có backend đám mây ẩn." },
-  { title: "Ranh giới thực thi", copy: "Ghi tệp và lệnh chạy đều qua permission — Từ chối là chặn thật ở service." },
-  { title: "Xem lại diff", copy: "Mỗi thay đổi tệp có snapshot trước/sau và diff chỉ đọc trong SOURCE CONTROL." },
+  { title: "Cùng workspace, cùng backend", copy: "Code dùng chung active workspace, local service và phiên Agent với Cowork — không có backend riêng." },
+  { title: "Sửa nhiều tệp", copy: "Mở nhiều tệp thành các tab, chỉnh sửa và lưu (Ctrl+S) qua route file được guard bảo vệ." },
+  { title: "Xem lại thay đổi Agent", copy: "Mỗi thay đổi tệp có snapshot trước/sau và diff chỉ đọc trong SOURCE CONTROL; tệp đang mở tự cập nhật hoặc báo xung đột." },
   { title: "Provider trung lập", copy: "Model/provider cấu hình trong Cài đặt; surface này không khoá vào một LLM cụ thể." },
 ];
 
 export function createCodeOnboarding(onStart: () => void): HTMLElement {
   const wrap = el("section", "cc-onboarding");
-  wrap.append(el("h2", "cc-onboarding__title", "Claude Code Desktop hoạt động thế nào"));
+  wrap.append(el("h2", "cc-onboarding__title", "Code hoạt động thế nào"));
   const list = el("ol", "cc-onboarding__steps");
   for (const step of STEPS) {
     const item = el("li", "cc-onboarding__step");

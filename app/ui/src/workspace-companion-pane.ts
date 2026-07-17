@@ -94,6 +94,12 @@ export interface WorkspaceCompanionPaneOptions {
    * inject a fake to exercise the wiring without a real browser layout engine.
    */
   readonly loadPptxViewer?: () => Promise<PptxViewerModuleLike>;
+  /**
+   * Workspace → Code handoff (Code Phase 1). When provided, an "Mở trong Code" action appears for
+   * text/code files and opens the same workspace-relative file in the Code multi-tab editor. The
+   * app shell owns the surface switch; the active workspace never changes.
+   */
+  readonly onOpenInCode?: (relativePath: string) => void;
 }
 
 export function mountWorkspaceCompanionPane(
@@ -145,7 +151,19 @@ export function mountWorkspaceCompanionPane(
   saveButton.dataset["tooltip"] = "Lưu tệp";
   saveButton.setAttribute("aria-label", "Lưu tệp");
   saveButton.append(icon("save", "Lưu tệp"));
-  toolbar.append(pathWrap, statusBadge, editButton, saveButton);
+  // Workspace → Code handoff: only shown for text/code files when a handler is wired.
+  const openInCodeButton = el(
+    "button",
+    "workspace-companion-pane__open-in-code",
+    "Mở trong Code",
+  ) as HTMLButtonElement;
+  openInCodeButton.type = "button";
+  openInCodeButton.hidden = true;
+  openInCodeButton.setAttribute("aria-label", "Mở tệp này trong Code");
+  openInCodeButton.addEventListener("click", () => {
+    if (openPath !== null) options.onOpenInCode?.(openPath);
+  });
+  toolbar.append(pathWrap, statusBadge, editButton, saveButton, openInCodeButton);
 
   // Conflict banner: shown when an agent edits the open file while the buffer is dirty.
   const conflictBanner = el("div", "workspace-companion-pane__conflict");
@@ -567,6 +585,7 @@ export function mountWorkspaceCompanionPane(
     editButton.hidden = true;
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
+    openInCodeButton.hidden = !(file.kind === "text" && options.onOpenInCode !== undefined);
     revokeBlob();
     destroyPptxViewer();
     pathLabel.textContent = file.relativePath;
@@ -726,6 +745,7 @@ export function mountWorkspaceCompanionPane(
       editButton.hidden = true;
       saveButton.hidden = true;
       saveButton.disabled = true;
+      openInCodeButton.hidden = true;
       pathLabel.textContent = deleted ?? "Tệp đã bị xóa";
       pathLabel.title = "";
       statusBadge.hidden = true;

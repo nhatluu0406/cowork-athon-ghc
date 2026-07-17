@@ -66,14 +66,21 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
-- **Surface `Code` (PLANNED — Hybrid, ADR 0013):** hiện là **renderer surface dùng chung backend
-  Cowork** (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session) — Explorer +
-  xem diff/preview **chỉ đọc** + panel dùng chung phiên. **Chưa phải IDE**: không terminal/PTY,
-  không Git client, không dev-server, không runtime web preview, không embedded app launch. Các chip
-  gợi ý "Chạy test / Commit / Sửa lỗi lint" hiện chỉ đổ text vào composer — runtime pin không có
-  terminal/git nên **không thực thi được**; sẽ gỡ ở Code Phase 1. Editor Code hiện **read-only** (yếu
-  hơn companion của Workspace vốn sửa+lưu được) — edit+save là Code Phase 1. Product label sẽ đổi
-  "Claude Code" → "Code".
+- **Surface `Code` (Hybrid, ADR 0013 — Phase 1):** **renderer surface dùng chung backend Cowork**
+  (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session — không backend/session/
+  runtime riêng). Code Phase 1 đã có editor nhiều tab **sửa + lưu** (Ctrl+S, `PUT /v1/workspace/
+  file-content` guard-confined), dirty + hộp thoại đóng-khi-chưa-lưu, syntax highlight, verified-
+  mutation refresh/xung đột/deleted, handoff "Mở trong Code" ↔ "Xem trong Workspace"; label đã đổi
+  "Claude Code" → "Code" và đã gỡ chip giả. Giới hạn còn lại:
+  - **Chưa phải IDE**: không terminal/PTY, Git client, dev-server, runtime web preview, embedded app
+    launch, debugger, LSP — deferred (ADR 0013). PDF/Office/ảnh trong Code hiển thị chỉ đọc + nút
+    "Xem trong Workspace" (không dựng lại viewer).
+  - **Chỉ sửa được tệp văn bản/mã** (kind `text`); spreadsheet/tài liệu vẫn xem/sửa ở Workspace.
+  - **Đổi active workspace khi còn tab Code chưa lưu sẽ reset** (bỏ thay đổi chưa lưu) — giống
+    companion Workspace hiện tại; hộp thoại xác nhận trước khi đổi workspace là việc sau (không nằm
+    trong Phase 1). Hộp thoại xác nhận **đã có** cho thao tác đóng tab.
+  - **Packaged PO observation chưa chạy**: focused UI tests + `build:app` PASS nhưng chưa claim WORKS
+    cho tới khi PO quan sát trên packaged app (xem `demo-acceptance.md`).
 - **Web / Next.js** vẫn deferred.
 - **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
   workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)

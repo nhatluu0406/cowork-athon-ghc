@@ -3,7 +3,6 @@ import type { RuntimePhase } from "../../conversation-controller.js";
 import type { ConversationMessage } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
 import { createClaudePanel, renderClaudePanel, type ClaudePanelDom } from "./claude-panel.js";
-import { createCodeEditor, renderCodeEditor, type CodeEditorDom, type OpenCodeFile } from "./code-editor.js";
 import { createCodeExplorer, renderSourceControl, type CodeExplorerDom } from "./code-explorer.js";
 import { createCodeOnboarding } from "./code-onboarding.js";
 
@@ -13,7 +12,8 @@ export interface ClaudeCodeViewDom {
   readonly root: HTMLElement;
   readonly repoChip: HTMLElement;
   readonly explorer: CodeExplorerDom;
-  readonly editor: CodeEditorDom;
+  /** Host element for the stateful multi-tab editor (mounted by the app shell). */
+  readonly editorHost: HTMLElement;
   readonly panel: ClaudePanelDom;
   readonly sessionBody: HTMLElement;
   readonly onboardingBody: HTMLElement;
@@ -23,8 +23,6 @@ export interface ClaudeCodeViewDom {
 export interface ClaudeCodeRenderInput {
   readonly workspaceName: string | null;
   readonly reviews: readonly FileReviewArtifact[];
-  readonly openFiles: readonly OpenCodeFile[];
-  readonly activeKey: string | null;
   readonly sessionTitle: string | null;
   readonly messages: readonly ConversationMessage[];
   readonly phase: RuntimePhase;
@@ -33,10 +31,7 @@ export interface ClaudeCodeRenderInput {
 }
 
 export interface ClaudeCodeHandlers {
-  readonly onSelectTab: (key: string) => void;
-  readonly onCloseTab: (key: string) => void;
   readonly onOpenReview: (review: FileReviewArtifact) => void;
-  readonly onLoadFile: (relativePath: string, body: HTMLElement) => void;
 }
 
 export function createClaudeCodeView(handlers: { readonly onSendPrompt: (text: string) => void }): ClaudeCodeViewDom {
@@ -47,28 +42,28 @@ export function createClaudeCodeView(handlers: { readonly onSendPrompt: (text: s
   const header = el("header", "cc-surface__header");
   const titleWrap = el("div", "cc-surface__title-wrap");
   const logoChip = el("span", "cc-surface__logo");
-  logoChip.append(icon("code", "Claude Code"));
+  logoChip.append(icon("code", "Code"));
   const repoChip = el("span", "cc-surface__repo");
-  titleWrap.append(logoChip, el("h1", "cc-surface__title", "Claude Code"), repoChip);
+  titleWrap.append(logoChip, el("h1", "cc-surface__title", "Code"), repoChip);
   const segmented = el("div", "cc-segmented");
   segmented.setAttribute("role", "tablist");
-  segmented.setAttribute("aria-label", "Chế độ Claude Code");
+  segmented.setAttribute("aria-label", "Chế độ Code");
   const tabSession = segButton("Phiên làm việc", true);
   const tabHow = segButton("Cách hoạt động", false);
   segmented.append(tabSession, tabHow);
   header.append(titleWrap, segmented);
 
   const explorer = createCodeExplorer();
-  const editor = createCodeEditor();
+  const editorHost = el("div", "code-editor-host");
   const panel = createClaudePanel({ onSend: handlers.onSendPrompt });
   const sessionBody = el("div", "cc-surface__session");
-  sessionBody.append(explorer.root, editor.root, panel.root);
+  sessionBody.append(explorer.root, editorHost, panel.root);
 
   const onboardingBody = el("div", "cc-surface__onboarding");
   onboardingBody.hidden = true;
 
   root.append(header, sessionBody, onboardingBody);
-  const dom: ClaudeCodeViewDom = { root, repoChip, explorer, editor, panel, sessionBody, onboardingBody, codeTab: "session" };
+  const dom: ClaudeCodeViewDom = { root, repoChip, explorer, editorHost, panel, sessionBody, onboardingBody, codeTab: "session" };
 
   onboardingBody.append(
     createCodeOnboarding(() => selectTab(dom, tabSession, tabHow, "session")),
@@ -112,11 +107,6 @@ export function renderClaudeCodeSurface(
 ): void {
   dom.repoChip.textContent = input.workspaceName ?? "Chưa chọn workspace";
   renderSourceControl(dom.explorer, input.reviews, handlers.onOpenReview);
-  renderCodeEditor(
-    dom.editor,
-    { openFiles: input.openFiles, activeKey: input.activeKey, reviews: input.reviews },
-    { onSelect: handlers.onSelectTab, onClose: handlers.onCloseTab, onLoadFile: handlers.onLoadFile },
-  );
   renderClaudePanel(dom.panel, {
     title: input.sessionTitle,
     messages: input.messages,
