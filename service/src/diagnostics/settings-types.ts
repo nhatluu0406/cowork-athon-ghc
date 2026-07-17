@@ -65,7 +65,7 @@ export interface ModelPreference {
 export interface PersistedProviderProfile {
   readonly id: string;
   readonly displayName: string;
-  readonly providerType: "deepseek" | "custom-openai-compat";
+  readonly providerType: "deepseek" | "fptcloud" | "custom-openai-compat";
   readonly baseUrl: string;
   readonly modelId: string;
   readonly envVar: string;
