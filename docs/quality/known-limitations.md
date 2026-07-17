@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-17"
+updated_at: "2026-07-18"
 ---
 
 # Known limitations
@@ -114,6 +114,41 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   nhưng instruction ngoài workspace có thể đổi hành vi/danh tính agent mà người dùng không biết.
   Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
   cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
+
+## Tích hợp gần đây — giới hạn còn tồn (PR #11 MS365, PR #12 Local import)
+
+Ghi lại các phần **đã merge nhưng còn giới hạn/POC** sau khi tích hợp PR #11 (MS365) và PR #12
+(Local folder import → Knowledge Graph, Go backend). Đây là ghi nhận trung thực, không phải blocker
+demo, nhưng KHÔNG được coi là "chạy đầy đủ".
+
+- **Local folder import → Knowledge Graph (D3, Go backend `app/backend`):**
+  - **Embedding local chunk là best-effort, cần llm-svc:** chunk local được embed inline dưới đúng
+    model retrieval dùng, nhưng chỉ khi `llm-svc` (gRPC embeddings) chạy; thiếu dịch vụ → chunk vẫn
+    lưu **text-only** (không semantic search). Pipeline job source-agnostic
+    (`embedding.BatchProcessor.QueueJob/ProcessJob`) **tồn tại nhưng chưa được caller nào gọi** —
+    khoảng trống POC, chưa nối vào luồng import.
+  - **Cần dịch vụ ngoài để chạy/kiểm thử thật:** import + Neo4j graph cần **Postgres + Neo4j +
+    llm-svc**. Ở máy dev không dựng được nên **integration test import/neo4j chưa chạy**; chỉ verify
+    unit (91 pass) + 4 test auth mới. 5 unit `now()` fail là **môi trường** (store SQL nhắm Postgres,
+    chạy trên sqlite thiếu hàm `now()`), không phải lỗi logic.
+  - **Đã cứng hoá (landed):** endpoint bắt buộc **JWT** (fail-closed 401), cap đọc file **25 MiB**,
+    chặn escape qua **symlink/junction** (EvalSymlinks + confine trong root), **job timeout 30′**,
+    unique index chống job trùng (→ 409). Chính sách hiển thị chunk: local chunk theo **local-first
+    ownership tường minh** (không fail-open như M365 scope). Log đã **redact** absolute path.
+- **MS365 (PR #11):**
+  - **Power Automate flow store chỉ in-memory:** đường persist ra JSON plaintext đã bị **gỡ** (URL
+    flow là bearer SAS — không lưu plaintext). Seam `setFlows` **chưa nối** nguồn bền vững nào, nên
+    flow phải **đăng ký lại sau mỗi lần khởi động service**. Trigger đã cứng hoá: **IP-pin qua dialer**,
+    **host-allowlist** Logic Apps (`.logic.azure.com/.us/.cn/.de`), timeout 15s, redact `sig` khỏi
+    permission card.
+  - **SSRF private-provider opt-in (`CGHC_SSRF_ALLOW_PRIVATE_PROVIDER`) chưa wire:** policy `ssrf`
+    hiện **dùng chung** cho provider + MCP + MS365 + Power Automate. Wire opt-in ở điểm dùng chung sẽ
+    **nới lỏng SSRF cho cả MS365/MCP** (regression bảo mật), nên cố ý **không tự ý wire** — cần tách
+    scope riêng + **independent review** theo CLAUDE.md. Hệ quả: **2 test private-provider opt-in vẫn
+    đỏ** (chưa có wiring ở cả hai nhánh) — đây là giới hạn đã biết, không phải hồi quy do merge.
+- **Môi trường dev (không phải giới hạn sản phẩm):** pin OpenCode local hiện là `v1.17.11`; **2 test
+  config** khẳng định `v1.18.1` sẽ **đỏ tại máy dev** cho tới khi cài đúng build pin (xem mục
+  "OpenCode pin" ở trên). Không ảnh hưởng logic.
 
 ## MS365 OpenCode plugin `tool.execute.before` hook (intentional no-op seam)
 
