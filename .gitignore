@@ -23,6 +23,9 @@ out/
 *.tsbuildinfo
 .vite/
 **/.vite/
+target/
+**/target/
+app/llm-svc/target/
 
 # --- Electron packaging / release artifacts (large binaries) ---
 dist-app/
@@ -40,6 +43,12 @@ builder-effective-config.yaml
 opencode/
 **/opencode.exe
 **/opencode-*/
+
+# --- Large vendor binaries (database/service distributions) ---
+vendor/*.zip
+vendor/**/*.zip
+vendor/postgresql-*/
+vendor/neo4j-*/
 
 # --- Runtime / process state (PID, port, temp, logs) ---
 .runtime/
