@@ -199,10 +199,26 @@ func (p *Processor) Run(ctx context.Context, job *ImportJob) error {
 		chunks := p.chunker.ChunkText(extractResult.Text, "")
 		storedFile.ChunkCount = len(chunks)
 
-		// Store chunks and embeddings
-		// TODO: For now, we skip chunk storage; will be implemented in phase 3
-		// This is where we'd insert into chunks table with local_file_id
-		// and call embedder.Embed() for the chunk texts
+		// Store chunks using batch insert for performance (T048)
+		if len(chunks) > 0 {
+			chunkDataList := make([]metadata.ChunkData, len(chunks))
+			for i, chunk := range chunks {
+				chunkDataList[i] = metadata.ChunkData{
+					FileID:      0, // Will be populated by localFile ID
+					ChunkIndex:  i,
+					Text:        chunk.Text,
+					ContentHash: computeHash([]byte(chunk.Text)),
+					HeadingPath: chunk.HeadingPath,
+				}
+			}
+
+			// Perform batch insert with performance optimization
+			if err := p.chunkStore.CreateBatch(ctx, chunkDataList); err != nil {
+				p.logger.Error("chunk batch insert failed", "error", err, "file", entry.RelPath)
+				progress.FilesSkipped++
+				continue
+			}
+		}
 
 		if delta.Action == DeltaAdded {
 			progress.FilesAdded++
