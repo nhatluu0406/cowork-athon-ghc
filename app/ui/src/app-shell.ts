@@ -65,6 +65,7 @@ import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code-editor.js";
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
+import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
@@ -130,6 +131,7 @@ let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
 let codeNavigator: WorkspaceNavigatorHandle | null = null;
 let codeEditor: CodeEditorController | null = null;
 let previewController: PreviewController | null = null;
+let appController: AppController | null = null;
 /** The running runtime-preview loopback URL (fed into the Code Agent turn context). */
 let codePreviewUrl: string | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
@@ -963,8 +965,11 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
-  // Drive the embedded runtime-preview view: show only in Code surface + Preview mode, unobstructed.
-  previewController?.setActive(isCodeSurface && !settingsOpen && dom.codeView.mode === "preview");
+  // Drive the runtime panes: only in Code surface + Preview mode; Web drives the embedded preview,
+  // Ứng dụng drives the desktop-app pane. Exactly one is active at a time.
+  const codePreviewActive = isCodeSurface && !settingsOpen && dom.codeView.mode === "preview";
+  previewController?.setActive(codePreviewActive && dom.codeView.runtimeMode === "web");
+  appController?.setActive(codePreviewActive && dom.codeView.runtimeMode === "app");
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
@@ -2333,6 +2338,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                 if (state.activeWorkspace !== rootPath) {
                   codeEditor?.reset();
                   previewController?.reset();
+                  appController?.reset();
                 }
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
@@ -2344,6 +2350,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                 state.activeWorkspace = null;
                 codeEditor?.reset();
                 previewController?.reset();
+                appController?.reset();
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
@@ -2389,9 +2396,20 @@ export function mountCoworkApp(root: HTMLElement): void {
                 !dom.settingsSurface.hidden || document.querySelector(".permission-dialog") !== null,
             },
           );
-          // Code → Preview mode switch drives the embedded view lifecycle.
+          appController = mountAppController(dom.codeView.appPaneHost, dynamicClient, {
+            isObstructed: () =>
+              !dom.settingsSurface.hidden || document.querySelector(".permission-dialog") !== null,
+          });
+          // Code → Preview mode / Web↔App switch drives the runtime panes' lifecycle.
           dom.onCodeModeChange = (mode) => {
-            previewController?.setActive(mode === "preview" && state.activeSurface === "code");
+            const inPreview = mode === "preview" && state.activeSurface === "code";
+            previewController?.setActive(inPreview && dom.codeView.runtimeMode === "web");
+            appController?.setActive(inPreview && dom.codeView.runtimeMode === "app");
+          };
+          dom.onCodeRuntimeModeChange = (mode) => {
+            const inPreview = dom.codeView.mode === "preview" && state.activeSurface === "code";
+            previewController?.setActive(inPreview && mode === "web");
+            appController?.setActive(inPreview && mode === "app");
           };
           workspaceCompanionHandle = mountWorkspaceCompanionPane(
             dom.workspaceView.companionSlot,
@@ -2413,6 +2431,7 @@ export function mountCoworkApp(root: HTMLElement): void {
               if (nextWorkspace !== state.activeWorkspace) {
                 codeEditor?.reset();
                 previewController?.reset();
+                appController?.reset();
               }
               state.activeWorkspace = nextWorkspace;
               void workspaceNavigator?.refresh();

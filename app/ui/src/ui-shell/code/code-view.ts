@@ -5,8 +5,10 @@ import { el, icon } from "../dom-utils.js";
 import { createClaudePanel, renderClaudePanel, type ClaudePanelDom } from "./claude-panel.js";
 import { createCodeExplorer, renderSourceControl, type CodeExplorerDom } from "./code-explorer.js";
 
-/** Center-pane mode: source editor vs runtime web preview. */
+/** Center-pane mode: source editor vs runtime preview. */
 export type CodeMode = "code" | "preview";
+/** Within Preview mode: embedded web preview vs desktop-app launch. */
+export type RuntimeMode = "web" | "app";
 
 export interface ClaudeCodeViewDom {
   readonly root: HTMLElement;
@@ -19,11 +21,18 @@ export interface ClaudeCodeViewDom {
   readonly editorHost: HTMLElement;
   /** Host the preview controller mounts into (status bar + viewport + output drawer). */
   readonly previewPaneHost: HTMLElement;
+  /** Host the desktop-app controller mounts into (status bar + status + output drawer). */
+  readonly appPaneHost: HTMLElement;
   readonly modeCode: HTMLButtonElement;
   readonly modePreview: HTMLButtonElement;
+  /** Web/App segmented control (visible only in Preview mode). */
+  readonly runtimeSegmented: HTMLElement;
+  readonly modeWeb: HTMLButtonElement;
+  readonly modeApp: HTMLButtonElement;
   readonly panel: ClaudePanelDom;
   readonly panelToggle: HTMLButtonElement;
   mode: CodeMode;
+  runtimeMode: RuntimeMode;
 }
 
 export interface ClaudeCodeRenderInput {
@@ -44,6 +53,8 @@ export interface ClaudeCodeViewHandlers {
   readonly onSendPrompt: (text: string) => void;
   /** Fired when the user switches the center pane between Code and Preview. */
   readonly onModeChange?: (mode: CodeMode) => void;
+  /** Fired when the user switches Preview between Web and Ứng dụng (desktop app). */
+  readonly onRuntimeModeChange?: (mode: RuntimeMode) => void;
 }
 
 export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCodeViewDom {
@@ -81,13 +92,24 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   const modeCode = modeButton("code", "Code", true);
   const modePreview = modeButton("preview", "Preview", false);
   segmented.append(modeCode, modePreview);
-  toolbar.append(segmented);
+
+  // Web / Ứng dụng segmented — only meaningful in Preview mode (hidden otherwise).
+  const runtimeSegmented = el("div", "code-mode code-runtime-mode");
+  runtimeSegmented.setAttribute("role", "tablist");
+  runtimeSegmented.setAttribute("aria-label", "Loại runtime");
+  runtimeSegmented.hidden = true;
+  const modeWeb = runtimeButton("web", "eye", "Web", true);
+  const modeApp = runtimeButton("app", "window", "Ứng dụng", false);
+  runtimeSegmented.append(modeWeb, modeApp);
+  toolbar.append(segmented, runtimeSegmented);
 
   const stack = el("div", "code-center__stack");
   const editorHost = el("div", "code-editor-host");
   const previewPaneHost = el("div", "code-preview-host");
   previewPaneHost.hidden = true;
-  stack.append(editorHost, previewPaneHost);
+  const appPaneHost = el("div", "code-app-host");
+  appPaneHost.hidden = true;
+  stack.append(editorHost, previewPaneHost, appPaneHost);
   center.append(toolbar, stack);
 
   const panel = createClaudePanel({ onSend: handlers.onSendPrompt });
@@ -104,11 +126,24 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
     explorer,
     editorHost,
     previewPaneHost,
+    appPaneHost,
     modeCode,
     modePreview,
+    runtimeSegmented,
+    modeWeb,
+    modeApp,
     panel,
     panelToggle,
     mode: "code",
+    runtimeMode: "web",
+  };
+
+  const applyRuntimePanes = (): void => {
+    const preview = dom.mode === "preview";
+    const app = preview && dom.runtimeMode === "app";
+    previewPaneHost.hidden = !(preview && dom.runtimeMode === "web");
+    appPaneHost.hidden = !app;
+    runtimeSegmented.hidden = !preview;
   };
 
   const setMode = (mode: CodeMode): void => {
@@ -116,7 +151,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
     dom.mode = mode;
     const preview = mode === "preview";
     editorHost.hidden = preview;
-    previewPaneHost.hidden = !preview;
+    applyRuntimePanes();
     modeCode.classList.toggle("code-mode__item--active", !preview);
     modePreview.classList.toggle("code-mode__item--active", preview);
     modeCode.setAttribute("aria-selected", preview ? "false" : "true");
@@ -125,6 +160,20 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   };
   modeCode.addEventListener("click", () => setMode("code"));
   modePreview.addEventListener("click", () => setMode("preview"));
+
+  const setRuntimeMode = (mode: RuntimeMode): void => {
+    if (dom.runtimeMode === mode) return;
+    dom.runtimeMode = mode;
+    applyRuntimePanes();
+    const app = mode === "app";
+    modeWeb.classList.toggle("code-mode__item--active", !app);
+    modeApp.classList.toggle("code-mode__item--active", app);
+    modeWeb.setAttribute("aria-selected", app ? "false" : "true");
+    modeApp.setAttribute("aria-selected", app ? "true" : "false");
+    handlers.onRuntimeModeChange?.(mode);
+  };
+  modeWeb.addEventListener("click", () => setRuntimeMode("web"));
+  modeApp.addEventListener("click", () => setRuntimeMode("app"));
 
   panelToggle.addEventListener("click", () => {
     const collapsed = root.classList.toggle("cc-surface--panel-collapsed");
@@ -150,10 +199,27 @@ function modeButton(mode: CodeMode, label: string, active: boolean): HTMLButtonE
   return button;
 }
 
+function runtimeButton(mode: RuntimeMode, iconName: "eye" | "window", label: string, active: boolean): HTMLButtonElement {
+  const button = el("button", "code-mode__item") as HTMLButtonElement;
+  button.type = "button";
+  button.dataset["runtimeMode"] = mode;
+  button.setAttribute("role", "tab");
+  button.setAttribute("aria-selected", active ? "true" : "false");
+  button.append(icon(iconName, ""), el("span", "", label));
+  if (active) button.classList.add("code-mode__item--active");
+  return button;
+}
+
 /** Programmatically set the center mode (used by the app shell / preview handoff). */
 export function setCodeMode(dom: ClaudeCodeViewDom, mode: CodeMode): void {
   if (mode === "preview") dom.modePreview.click();
   else dom.modeCode.click();
+}
+
+/** Programmatically set the Web/App runtime mode. */
+export function setRuntimeMode(dom: ClaudeCodeViewDom, mode: RuntimeMode): void {
+  if (mode === "app") dom.modeApp.click();
+  else dom.modeWeb.click();
 }
 
 export function renderClaudeCodeSurface(

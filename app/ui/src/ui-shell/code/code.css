@@ -75,6 +75,11 @@
 .code-editor-host[hidden] { display: none; }
 .code-preview-host { flex: 1; min-width: 0; display: flex; }
 .code-preview-host[hidden] { display: none; }
+.code-app-host { flex: 1; min-width: 0; display: flex; }
+.code-app-host[hidden] { display: none; }
+/* Web/App runtime segmented sits after the Code/Preview toggle with a subtle separator. */
+.code-runtime-mode { margin-left: 4px; }
+.code-runtime-mode[hidden] { display: none; }
 
 /* --- Editor (mounted by mountCodeEditor) --- */
 .code-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--cghc-surface-solid); }

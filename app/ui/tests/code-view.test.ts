@@ -1,7 +1,7 @@
 import "./setup-dom.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createClaudeCodeView, renderClaudeCodeSurface, setCodeMode } from "../src/ui-shell/code/code-view.js";
+import { createClaudeCodeView, renderClaudeCodeSurface, setCodeMode, setRuntimeMode } from "../src/ui-shell/code/code-view.js";
 
 const EMPTY_INPUT = {
   workspaceName: "cowork-athon-ghc",
@@ -54,6 +54,27 @@ test("Code/Preview mode toggle shows the preview host and fires onModeChange", (
   setCodeMode(dom, "code");
   assert.equal(dom.mode, "code");
   assert.deepEqual(modes, ["preview", "code"]);
+});
+
+test("Web/App runtime segmented is hidden in Code mode, shown in Preview, and toggles panes", () => {
+  const runtimeModes: string[] = [];
+  const dom = createClaudeCodeView({ onSendPrompt: () => undefined, onRuntimeModeChange: (m) => runtimeModes.push(m) });
+  renderClaudeCodeSurface(dom, EMPTY_INPUT, NOOP);
+  // Hidden in Code mode; app host present but hidden.
+  assert.equal(dom.runtimeSegmented.hidden, true);
+  assert.ok(dom.root.querySelector(".code-app-host"));
+  assert.equal(dom.appPaneHost.hidden, true);
+  // Entering Preview shows the Web/App control; Web is the default pane.
+  setCodeMode(dom, "preview");
+  assert.equal(dom.runtimeSegmented.hidden, false);
+  assert.equal(dom.previewPaneHost.hidden, false);
+  assert.equal(dom.appPaneHost.hidden, true);
+  // Switch to Ứng dụng → app pane shows, web pane hides.
+  setRuntimeMode(dom, "app");
+  assert.equal(dom.runtimeMode, "app");
+  assert.equal(dom.appPaneHost.hidden, false);
+  assert.equal(dom.previewPaneHost.hidden, true);
+  assert.deepEqual(runtimeModes, ["app"]);
 });
 
 test("panel toggle collapses the Agent panel; explorer collapse toggles a class", () => {
