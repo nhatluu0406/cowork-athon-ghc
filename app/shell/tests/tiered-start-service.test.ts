@@ -67,3 +67,38 @@ test("falls back to settings-only on RuntimeSpawnError when enabled", async () =
   const started = await start();
   assert.equal(started, settingsHandle);
 });
+
+test("falls back to settings-only on SsrfBlockedError even when fallbackOnLiveSpawnFailure is unset", async () => {
+  // The packaged live-boot lockout (security-review fix): a persisted provider base_url that no
+  // longer passes the SSRF policy (e.g. corporate split-horizon DNS now resolves it to a private
+  // IP) must NOT rethrow — that would leave the packaged app with no service at all (a full
+  // Settings lockout). This must fall back UNCONDITIONALLY (not gated on
+  // fallbackOnLiveSpawnFailure, unlike the RuntimeSpawnError case above).
+  const { SsrfBlockedError } = await import("@cowork-ghc/service");
+  let settingsCalled = false;
+  const start = createTieredStartService(
+    () => Promise.reject(new SsrfBlockedError("private", "192.168.11.1")),
+    () => {
+      settingsCalled = true;
+      return Promise.resolve(settingsHandle);
+    },
+  );
+  const started = await start();
+  assert.equal(started, settingsHandle);
+  assert.equal(settingsCalled, true);
+});
+
+test("a live-spawn-failure fallback preserves the settings-only handle's honest tier tag", async () => {
+  // The ServiceController reads `started.tier` to decide `runningTier` — the tiered composer
+  // must hand the settings-only handle through unmodified so a fallback never gets reported as
+  // "live" by the controller (CGHC connectLive idempotence fix).
+  const { RuntimeSpawnError } = await import("@cowork-ghc/service");
+  const taggedSettingsHandle: StartedService = { ...settingsHandle, tier: "settings_only" };
+  const start = createTieredStartService(
+    () => Promise.reject(new RuntimeSpawnError("OpenCode binary not found (ENOENT)", "ENOENT")),
+    () => Promise.resolve(taggedSettingsHandle),
+    { fallbackOnLiveSpawnFailure: true },
+  );
+  const started = await start();
+  assert.equal(started.tier, "settings_only");
+});

@@ -224,6 +224,17 @@ Focused acceptance for each track. Full combined milestone tests are in §8.
 | Regression | `npm run typecheck` PASS; `npm run build:renderer` PASS; 54/54 MS365 unit test PASS (10 file); ~20 lỗi có sẵn không liên quan trên 13 suite khác (live/integration/streaming), không đổi khi tắt flag |
 | Merge ready | **Không** — đây là nền tảng (foundation) được triển khai phía sau flag, không phải một tích hợp live hoàn chỉnh; chưa sẵn sàng merge vào `integration/d2-microsoft` cho tới khi có xác minh packaged/live và xác minh tool-consumption end-to-end |
 
+**Cập nhật UI wiring (2026-07-14, branch `feature/ms365-ui-wiring-device-code` @ `1f7a0fa`):**
+
+| Tiêu chí | Bằng chứng |
+|---|---|
+| Surface / Auth (UI) | `microsoft` tab, tab con "Kết nối" nay **đã nối thật backend** cho cả hai đường: nút đăng nhập `.ms-connect__signin` gọi `beginMs365Device()` thật (device-code), và fallback `.ms-connect__manual` gọi `connectMs365Token()` thật (manual token — **đường dùng được ngay hôm nay, không cần IT**) |
+| Device-code trạng thái honest | Mặc định nút enable; khi click và backend báo thiếu app registration, nút chuyển `disabled` kèm ghi chú `"Cần app registration — nhờ IT cấu hình CGHC_MS365_CLIENT_ID."` — không giả lập kết nối thành công |
+| Revocation / view state | Thẻ dịch vụ, scope đã cấp, pill trạng thái trong view kết nối phản ánh đúng dữ liệu thật trả về từ service (không phải mock); ngắt kết nối phản ánh đúng trạng thái, không còn badge "đã kết nối" giả sau khi mất token |
+| IT dependency | `docs/integration/ms365-it-request.md` — yêu cầu app registration gửi IT để cấp `CGHC_MS365_CLIENT_ID` / `CGHC_MS365_TENANT`; device-code vẫn gated cho tới khi IT cấp |
+| Packaged verification | `npm run build:renderer` PASS, `npm run typecheck` PASS, `npm run package:win` PASS, `node tools/verify/ui-shell-v3-production-screenshots.mjs` exit 0 — assertion `assertMicrosoftConnect` mở rộng để kiểm tra cả `.ms-connect__signin` (2 trạng thái honest) và `.ms-connect__manual` (input + submit) |
+| Merge ready | **Không đổi so với slice trước** — UI đã nối thật nhưng vẫn thiếu: xác minh live-tenant, xác minh tool-consumption end-to-end qua OpenCode child thật |
+
 ### D3 — Knowledge system (RAG, vector, graph)
 
 | Criterion | Acceptance |
@@ -378,3 +389,4 @@ Sequential checklist for integration Agent (do not skip steps).
 |---|---|
 | 2026-07-13 | Initial canonical intake doc at baseline `eaeb3eb` / tag `pre-external-integration-2026-07-14` |
 | 2026-07-14 | Filled D2 matrix row and §5 D2 acceptance evidence for `feature/ms365-connector-sharepoint` @ `d086ecd` — foundation implemented behind `CGHC_MS365_ENABLED` (OFF default); manual token works, device-code gated, tool consumption by live OpenCode child unverified, no packaged/live tenant run; **Not merge-ready** |
+| 2026-07-14 | Added §5 D2 UI wiring update for `feature/ms365-ui-wiring-device-code` @ `1f7a0fa` — connect UI now real (manual token works today; device-code wired but gated pending IT app registration, see `docs/integration/ms365-it-request.md`); packaged verifier assertion extended; still **Not merge-ready** (live-tenant and tool-consumption verification remain open) |

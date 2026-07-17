@@ -498,3 +498,38 @@ test("transport poll failures show a note, then clear it once polling recovers",
   assert.equal(note?.hidden, true, "transport note clears after a successful poll");
   assert.equal(note?.textContent ?? "", "");
 });
+
+test("sessionFilter: chỉ request khớp session mới thành head", async () => {
+  const fake = makeFake();
+  const container = host();
+  const COWORK_REQ: PendingPermissionView = { ...PENDING, requestId: "cowork-1", sessionId: "s-cowork" };
+  const MS365_REQ: PendingPermissionView = { ...PENDING, requestId: "ms365-1", sessionId: "s-ms365" };
+  fake.setPending([COWORK_REQ, MS365_REQ]);
+
+  const seen: string[] = [];
+  const ctrl = createPermissionController({
+    client: fake.client,
+    container,
+    sessionFilter: (sid) => sid === "s-ms365",
+    onPending: (req) => seen.push(req.requestId),
+  });
+  await ctrl.refresh();
+  assert.deepEqual(seen, ["ms365-1"], "only ms365 request is shown as head when filtered");
+});
+
+test("không sessionFilter: nhận request đầu tiên (hành vi cũ)", async () => {
+  const fake = makeFake();
+  const container = host();
+  const COWORK_REQ: PendingPermissionView = { ...PENDING, requestId: "cowork-1", sessionId: "s-cowork" };
+  const MS365_REQ: PendingPermissionView = { ...PENDING, requestId: "ms365-1", sessionId: "s-ms365" };
+  fake.setPending([COWORK_REQ, MS365_REQ]);
+
+  const seen: string[] = [];
+  const ctrl = createPermissionController({
+    client: fake.client,
+    container,
+    onPending: (req) => seen.push(req.requestId),
+  });
+  await ctrl.refresh();
+  assert.deepEqual(seen, ["cowork-1"], "first request is shown when no filter");
+});

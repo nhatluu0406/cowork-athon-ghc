@@ -46,3 +46,7 @@ export {
   type BuiltInProviderSelection,
   type CustomProviderSelection,
 } from "./live-launch.js";
+
+// Re-exported so shell-side callers (e.g. the tiered start-service) can `instanceof`-check the
+// SSRF boot-lockout case without importing the provider module directly (security-review fix).
+export { SsrfBlockedError } from "../provider/index.js";

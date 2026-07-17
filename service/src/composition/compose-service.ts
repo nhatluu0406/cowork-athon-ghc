@@ -124,7 +124,23 @@ import {
   createMs365Connector,
   createMs365Router,
   createSharePointService,
-  isMs365Enabled,
+  createSiteScopeStore,
+  createSiteScopeFilePersistence,
+  createSiteScopeService,
+  createWriteModeStore,
+  createWriteModeFilePersistence,
+  createOutlookService,
+  createPlannerService,
+  createListsService,
+  createTeamsService,
+  createCalendarService,
+  createOneDriveService,
+  createCommonService,
+  createPowerAutomateService,
+  createPowerAutomateStore,
+  createMs365SessionScope,
+  createDeviceCodeProvider,
+  readMs365DeviceConfig,
 } from "../ms365/index.js";
 import {
   closeSqliteDatabase,
@@ -153,11 +169,22 @@ import {
 import type { CredentialStore } from "../credential/index.js";
 
 /**
- * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
- * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
- * summary, upload). No extra scope is requested.
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11), matching the
+ * Graph operations the tool surface exposes. `Files.ReadWrite.All` covers SharePoint + OneDrive
+ * files (search/list/summary/upload, incl. `/me/drive` reads); `Sites.Read.All` the site reads;
+ * `Calendars.ReadWrite` the calendar list/search/create; `User.Read.All` the `resolve_user`
+ * `/users` lookup; `User.Read` the `get_me` `/me` identity; `MailboxSettings.Read` the best-effort
+ * `/me/mailboxSettings` time-zone read. Power Automate trigger is a plain webhook (no Graph
+ * scope). No extra scope is requested.
  */
-const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
+const MS365_SCOPES: readonly string[] = [
+  "Files.ReadWrite.All",
+  "Sites.Read.All",
+  "Calendars.ReadWrite",
+  "User.Read.All",
+  "User.Read",
+  "MailboxSettings.Read",
+];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
@@ -165,6 +192,8 @@ const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
 const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
 const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
+const DEFAULT_MS365_SITE_SCOPE_PATH = ".runtime/ms365-site-scope.json";
+const DEFAULT_MS365_WRITE_MODE_PATH = ".runtime/ms365-write-mode.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -605,36 +634,89 @@ export async function createCoworkService(
     basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
 
-  // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
-  // reads the SAME `process.env` the rest of this module treats as the environment source
-  // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
-  // directly, e.g. `readE2eMockLlmBaseUrl` above). With the var unset, `ms365Router` is
-  // `undefined` and NOTHING below is constructed or mounted — the baseline is byte-for-byte
-  // unaffected. The SAME `ssrf` policy instance built above (line ~105) is reused here; no
-  // second SsrfPolicy is created.
-  const ms365Router = isMs365Enabled(process.env)
-    ? (() => {
-        const ms365Manual = createManualTokenProvider({ credentials: credentialService });
-        const ms365Connector = createMs365Connector({
-          manual: ms365Manual,
-          makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
-        });
-        const sharepoint = createSharePointService({
-          connector: ms365Connector,
-          files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
-        });
-        return createMs365Router({
-          connector: ms365Connector,
-          scopes: MS365_SCOPES,
-          tools: {
-            sharepoint,
-            connectionState: () => ms365Connector.connectionState(),
-            gate: permissionGate,
-            now,
-          },
-        });
-      })()
-    : undefined;
+  // --- MS365 (SharePoint over Microsoft Graph): the router mounts UNCONDITIONALLY. The former
+  // `CGHC_MS365_ENABLED` env gate has been removed; there is no default-OFF switch. NOTE: this is a
+  // local flag-removal only — it is NOT the team-level D2 boundary merge described in CLAUDE.md.
+  // The SAME `ssrf` policy instance built above is reused here; no second SsrfPolicy is created.
+  const ms365Router = await (async () => {
+    const ms365Manual = createManualTokenProvider();
+    const ms365DeviceConfig = readMs365DeviceConfig(process.env);
+    const ms365Device =
+      ms365DeviceConfig !== null
+        ? createDeviceCodeProvider({
+            ssrf,
+            config: {
+              clientId: ms365DeviceConfig.clientId,
+              tenant: ms365DeviceConfig.tenant,
+              scopes: MS365_SCOPES,
+            },
+          })
+        : undefined;
+    const ms365Connector = createMs365Connector({
+      manual: ms365Manual,
+      makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
+      ...(ms365Device !== undefined ? { device: ms365Device } : {}),
+    });
+    const siteScopeStore = await createSiteScopeStore({
+      persistence: createSiteScopeFilePersistence(DEFAULT_MS365_SITE_SCOPE_PATH),
+    });
+    const siteScope = createSiteScopeService({ connector: ms365Connector, store: siteScopeStore });
+    const writeModeStore = await createWriteModeStore({
+      persistence: createWriteModeFilePersistence(DEFAULT_MS365_WRITE_MODE_PATH),
+    });
+    const sharepoint = createSharePointService({
+      connector: ms365Connector,
+      files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
+      siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
+    });
+    const outlook = createOutlookService({ connector: ms365Connector });
+    const planner = createPlannerService({ connector: ms365Connector });
+    const lists = createListsService({
+      connector: ms365Connector,
+      siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
+    });
+    const teams = createTeamsService({ connector: ms365Connector });
+    const calendar = createCalendarService({ connector: ms365Connector });
+    const onedrive = createOneDriveService({ connector: ms365Connector });
+    const common = createCommonService({ connector: ms365Connector });
+    // A Power Automate flow trigger URL embeds a SAS `sig` — it is a bearer SECRET, so it must
+    // NOT be persisted to plaintext JSON (vault invariant). No flow-configuration UI/route wires
+    // `setFlows` today, so the store stays in-memory (empty by default); `trigger_flow` works by
+    // direct URL regardless. When a flow-config surface lands, persist URLs in the vault (the
+    // `mcp:<id>:header` pattern), never plaintext on disk.
+    const powerAutomateStore = await createPowerAutomateStore({
+      persistence: { load: async () => null, save: async () => {} },
+    });
+    // Power Automate trigger is a plain webhook POST — the SAME `ssrf` policy the provider port
+    // and Graph client use guards a user-configured flow URL, and the fetch is IP-pinned + host-
+    // allowlisted (Logic Apps only) before it is ever sent (see power-automate-service.ts).
+    const powerAutomate = createPowerAutomateService({ store: powerAutomateStore, ssrf });
+    const sessionScope = createMs365SessionScope();
+    return createMs365Router({
+      connector: ms365Connector,
+      scopes: MS365_SCOPES,
+      siteScope,
+      writeMode: writeModeStore,
+      sessionScope,
+      tools: {
+        sharepoint,
+        siteScope: { listJoinedSites: () => siteScope.listJoinedSites() },
+        outlook,
+        planner,
+        lists,
+        teams,
+        calendar,
+        onedrive,
+        powerAutomate,
+        common,
+        connectionState: () => ms365Connector.connectionState(),
+        gate: permissionGate,
+        now,
+        writeMode: () => writeModeStore.mode(),
+        sessionAllowed: (sessionId) => sessionScope.isAllowed(sessionId),
+      },
+    });
+  })();
 
   const routers = [
     ...(localAuth !== undefined

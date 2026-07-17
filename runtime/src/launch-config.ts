@@ -47,6 +47,12 @@ export interface BuildLaunchSpecOptions {
    * whole parent environment, to keep the child's env surface minimal.
    */
   readonly baseEnv?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Additional plaintext secret values injected via `baseEnv` (e.g. a scoped MS365 tool token)
+   * that are NOT provider-key injections. Folded into {@link RuntimeLaunchSpec.secretValues} so
+   * value-based redaction covers them. Empty strings are ignored.
+   */
+  readonly extraSecretValues?: readonly string[];
 }
 
 /**
@@ -134,7 +140,10 @@ export function buildLaunchSpec(options: BuildLaunchSpecOptions): RuntimeLaunchS
 
   const host = resolveLoopbackHost(options.host);
   const args = ["serve", "--hostname", host, "--port", String(options.port)] as const;
-  const secretValues = injections.map((injection) => injection.value).filter((v) => v.length > 0);
+  const secretValues = [
+    ...injections.map((injection) => injection.value),
+    ...(options.extraSecretValues ?? []),
+  ].filter((v) => v.length > 0);
 
   return {
     command: options.binPath,

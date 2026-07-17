@@ -16,6 +16,7 @@ import {
   type ActivitySnapshot,
   type PermissionHistoryEntry,
 } from "./activity-model.js";
+import { ms365ToolLabel } from "./ms365-tool-label.js";
 import {
   createActivityPanel,
   permissionEntryFromDecision,
@@ -60,8 +61,12 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
-import type { MicrosoftIntegrationView } from "./integration-slots.js";
-import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
+import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
+import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
+import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
+import { buildMsChatDispatch, toMsChatStreamView } from "./ui-shell/microsoft/ms-chat-adapters.js";
+import { createMs365WriteModeControl, type Ms365WriteModeControl } from "./ui-shell/ms365-write-mode-control.js";
+import type { Ms365ViewData, Ms365WriteMode } from "./service-client.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
 import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code-editor.js";
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
@@ -139,13 +144,33 @@ let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
 let permissionPausePoll: (() => void) | null = null;
 let permissionResumePoll: (() => void) | null = null;
+/** MS365-tab dedicated controller lifecycle hooks (always-ask, session-scoped to ms365Chat). */
+let ms365PermissionStart: (() => void) | null = null;
+let ms365PermissionStop: (() => void) | null = null;
+let ms365PermissionPausePoll: (() => void) | null = null;
+let ms365PermissionResumePoll: (() => void) | null = null;
 
-const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
+const MS_DISCONNECTED_VIEW: Ms365ViewData = Object.freeze({
   connectionState: "disconnected",
   services: [],
   scopes: [],
   actionHistory: [],
 });
+
+/**
+ * A client stub used only before the real service client is ready. Every method rejects so a
+ * click during that brief window surfaces an honest error instead of a silently-fabricated
+ * success — the disconnected sign-in button is only truly wired once `state.client` exists.
+ */
+const NULL_MS365_CLIENT: Ms365ConnectClient = {
+  connectMs365Token: () => Promise.reject(new Error("service_not_ready")),
+  fetchMs365View: () => Promise.reject(new Error("service_not_ready")),
+  beginMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  pollMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  disconnectMs365: () => Promise.reject(new Error("service_not_ready")),
+  listMs365Sites: () => Promise.reject(new Error("service_not_ready")),
+  setMs365SiteEnabled: () => Promise.reject(new Error("service_not_ready")),
+};
 
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
@@ -205,6 +230,21 @@ interface AppState {
    * skip connect — that path hits not-attached session create → Internal boundary.
    */
   liveAttached: boolean;
+  /** MS365 tab connection view + services (rich device-code/token vertical). */
+  msView: Ms365ViewData;
+  /** True once the current client's MS365 view has been fetched (once per client, not per render). */
+  msViewFetched: boolean;
+  /**
+   * MS365 tab chat controller. Lives alongside `msView` so it survives the `replaceChildren()`
+   * re-render of the Microsoft surface body. Wired with the real send-flow once `readiness` exists.
+   */
+  msChat: MsChatController;
+  /** Write-mode pill relocated into the MS365 tab composer; only rendered while MS365 is connected. */
+  msWriteModePill: Ms365WriteModeControl;
+  /** MS365 history-sidebar conversation list (surface "ms365"). */
+  msConversations: readonly { readonly id: string; readonly title: string; readonly meta?: string }[];
+  /** Current search query for the MS365 history sidebar. */
+  msConversationSearch: string;
 }
 
 type AppDom = AppFrameDom;
@@ -975,7 +1015,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
   } else if (isMicrosoftSurface) {
-    renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
+    renderMicrosoftSurfaceBound(dom, state, handlers);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
@@ -1499,6 +1539,7 @@ async function ensureLive(
   // Pause permission polls BEFORE stopping settings-only: otherwise the 100ms poller keeps
   // hitting the dying base URL and DevTools fills with net::ERR_CONNECTION_REFUSED.
   permissionPausePoll?.();
+  ms365PermissionPausePoll?.();
   state.liveAttached = false;
   state.client = null;
   state.bootstrap = null;
@@ -1536,6 +1577,7 @@ async function ensureLive(
     throw new Error("Không kết nối lại được local service.");
   } finally {
     permissionResumePoll?.();
+    ms365PermissionResumePoll?.();
   }
 }
 
@@ -2148,6 +2190,201 @@ function createShell(root: HTMLElement): AppDom {
   return createAppFrame(root);
 }
 
+function ensureMs365ViewFetched(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  if (state.client === null || state.msViewFetched) return;
+  state.msViewFetched = true;
+  void state.client
+    .fetchMs365View()
+    .then((view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      if (view.connectionState === "connected") {
+        void refreshMs365Conversations(state, dom, handlers);
+      }
+      renderState(dom, state, handlers);
+    })
+    .catch(() => {
+      // Keep the last known (disconnected) view; the connect card still lets the user retry.
+    });
+}
+
+/** Shows the MS365 tab composer's write-mode pill only while MS365 is connected, seeded from
+ * the service (one source of truth). Errors hide the pill — never show a mode we could not
+ * read. Relocated here from the cowork composer (P5.6 Task 3) — the main chat's session is
+ * never registered in the MS365 session scope, so it has nothing meaningful to show. */
+async function refreshMsTabWriteModePill(state: AppState): Promise<void> {
+  const control = state.msWriteModePill;
+  if (state.client === null || state.msView.connectionState !== "connected") {
+    control.setVisible(false);
+    return;
+  }
+  try {
+    const { mode } = await state.client.fetchMs365WriteMode();
+    control.setMode(mode);
+    control.setVisible(true);
+  } catch {
+    control.setVisible(false);
+  }
+}
+
+/**
+ * Renders the Microsoft 365 surface bound to the real service client. Fetches the current
+ * connection view once per client (not on every re-render) so the connect view never starts
+ * from a fabricated "disconnected" default when a real connection already exists.
+ */
+// Rebound on every renderMicrosoftSurfaceBound call so the chat controller's onStateChange
+// (bound once, at state-init time, before `dom`/`handlers` exist) can trigger a re-render on
+// each state mutation without capturing a stale dom/handlers pair.
+let msChatRerender: (() => void) | null = null;
+
+function renderMicrosoftSurfaceBound(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  ensureMs365ViewFetched(dom, state, handlers);
+  msChatRerender = () => renderState(dom, state, handlers);
+  const connected = state.msView.connectionState === "connected";
+  const deps: MicrosoftSurfaceDeps = {
+    client: state.client ?? NULL_MS365_CLIENT,
+    onViewChange: (view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      if (view.connectionState !== "connected") {
+        void state.msChat.onDisconnected();
+        state.msConversations = [];
+      } else {
+        void refreshMs365Conversations(state, dom, handlers);
+      }
+      renderState(dom, state, handlers);
+    },
+    chat: state.msChat,
+    onSend: (prompt) => {
+      void (async () => {
+        await state.msChat.send(prompt);
+        // A first turn creates a conversation and persists messages — refresh so the sidebar
+        // shows the new/updated entry with fresh meta.
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
+    onCancel: () => void state.msChat.cancel(),
+    conversations: state.msConversations,
+    activeConversationId: state.msChat.state().conversationId,
+    onSelectConversation: (id) => {
+      const client = state.client;
+      if (client === null) return;
+      void (async () => {
+        try {
+          const record = await client.getConversation(id);
+          const messages = record.messages.map((m) => ({ role: m.role, content: m.text }));
+          state.msChat.adoptConversation(id, messages);
+        } catch {
+          // Leave the current transcript in place; surface nothing beyond a no-op.
+        }
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
+    onNewConversation: () => {
+      void state.msChat.reset();
+      void refreshMs365Conversations(state, dom, handlers);
+    },
+    onSearchConversations: (query) => {
+      state.msConversationSearch = query;
+      void refreshMs365Conversations(state, dom, handlers);
+    },
+    ...(connected ? { writeModePill: state.msWriteModePill.root } : {}),
+  };
+  renderMicrosoftSurface(dom.microsoftView, state.msView, deps);
+}
+
+/** Refreshes the MS365 history-sidebar conversation list from the service (surface "ms365"). */
+async function refreshMs365Conversations(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  const client = state.client;
+  if (client === null || state.msView.connectionState !== "connected") {
+    state.msConversations = [];
+    return;
+  }
+  const query = state.msConversationSearch.trim();
+  try {
+    const list = await client.listConversations(query.length > 0 ? query : undefined, "ms365");
+    state.msConversations = list.map((summary) => ({
+      id: summary.id,
+      title: summary.title,
+      meta: formatConversationMeta(summary),
+    }));
+  } catch {
+    state.msConversations = [];
+  }
+  renderState(dom, state, handlers);
+}
+
+/**
+ * Real MS365 tab chat deps (P5.6 Task 3) — wires the send-flow to the live service client:
+ * `createSession` -> `setMs365SessionScope(id, true)` -> `startEvStream` -> `sendSessionMessage`.
+ * `startStream` keeps its own tab-local `EvStreamHandle`; it never touches `state.stream` (the
+ * main chat's stream) so the two surfaces stay fully independent (per design doc §2).
+ */
+function createMsChatDeps(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  readiness: ReturnType<typeof createReadinessController>,
+): MsChatDeps {
+  return {
+    preflight: () => {
+      const result = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+      return { canSend: result.canSend, message: result.message };
+    },
+    workspaceId: () => state.activeWorkspace,
+    createSession: async (input) => {
+      const client = await ensureLive(state, readiness);
+      return client.createSession({ workspaceId: input.workspaceId, title: input.title });
+    },
+    setSessionScope: async (sessionId, enabled) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.setMs365SessionScope(sessionId, enabled);
+    },
+    sendMessage: async (sessionId, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      return state.client.sendSessionMessage(sessionId, text);
+    },
+    cancelSession: async (sessionId) => {
+      if (state.client === null) return;
+      await state.client.cancelSession(sessionId);
+    },
+    startStream: (sessionId, onView) => {
+      const bootstrap = state.bootstrap;
+      if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) {
+        return { stop: () => {} };
+      }
+      const handle = startEvStream({
+        baseUrl: bootstrap.serviceBaseUrl,
+        clientToken: bootstrap.clientToken,
+        sessionId,
+        onView: (view) => onView(toMsChatStreamView(view)),
+      });
+      return { stop: () => handle.stop() };
+    },
+    createConversation: async (input) => {
+      const client = await ensureLive(state, readiness);
+      const workspacePath = state.activeWorkspace ?? input.workspaceId;
+      const record = await client.createConversation({
+        workspacePath,
+        surface: "ms365",
+        title: input.title,
+      });
+      return { id: record.id };
+    },
+    persistMessage: async (conversationId, role, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.appendConversationMessage(conversationId, role, text);
+    },
+    buildDispatch: buildMsChatDispatch,
+    now: () => Date.now(),
+    onStateChange: () => msChatRerender?.(),
+  };
+}
+
 
 export function mountCoworkApp(root: HTMLElement): void {
   const dom = createShell(root);
@@ -2197,6 +2434,28 @@ export function mountCoworkApp(root: HTMLElement): void {
     processingConversationId: null,
     pendingUserRow: null,
     liveAttached: false,
+    msView: MS_DISCONNECTED_VIEW,
+    msViewFetched: false,
+    // Real send-flow deps are wired just below, once `readiness` exists (createMsChatDeps
+    // needs it for ensureLive). Until then this fails closed with an honest message rather
+    // than silently doing nothing — no send is possible before mountCoworkApp finishes wiring.
+    msChat: createMsChatController({
+      preflight: () => ({
+        canSend: false,
+        message: "Ứng dụng đang khởi động — vui lòng thử lại sau giây lát.",
+      }),
+      workspaceId: () => null,
+      createSession: () => Promise.reject(new Error("ms365 chat not wired yet")),
+      setSessionScope: () => Promise.resolve(),
+      sendMessage: () => Promise.resolve({ accepted: false, reason: "not_wired" }),
+      cancelSession: () => Promise.resolve(),
+      startStream: () => ({ stop: () => {} }),
+      buildDispatch: (_prior, prompt) => ({ ok: true, text: prompt }),
+      onStateChange: () => msChatRerender?.(),
+    }),
+    msWriteModePill: createMs365WriteModeControl(),
+    msConversations: [],
+    msConversationSearch: "",
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);
@@ -2603,6 +2862,9 @@ export function mountCoworkApp(root: HTMLElement): void {
             // Discover permission ASAP — workspace_auto still needs the poll to see pending.
             pollIntervalMs: 100,
             getMode: () => state.permissionMode,
+            // Chỉ xử lý request của session Cowork đang chạy. Request MS365 (session khác) do
+            // controller MS365 riêng đảm nhiệm — tránh pop nhầm surface (P2-B bug fix).
+            sessionFilter: (sid) => sid === state.streamSessionId,
             onPending: (request) => {
               touchStreamActivity(state);
               state.turnTiming.mark("PERMISSION_SHOWN", request.requestId);
@@ -2668,6 +2930,30 @@ export function mountCoworkApp(root: HTMLElement): void {
             permissions.resume();
           };
           permissions.start();
+          const ms365Permissions = createPermissionController({
+            client: dynamicClient,
+            container: dom.root,
+            pollIntervalMs: 100,
+            // Luôn hỏi: write MS365 qua Graph luôn cần phê duyệt (đúng hint composer).
+            getMode: () => "ask",
+            // Chỉ request của session MS365 sống hiện tại. Đọc getter tại thời điểm poll nên
+            // tự bám session mới sau reset/adopt; request session cũ không pop lại. The approval
+            // modal (container: dom.root) is the surface; the rich MS365 transcript renders its
+            // own permission/turn state from `msChat.state()`, so no separate history strip here.
+            sessionFilter: (sid) => sid === state.msChat.state().sessionId,
+            onDecision: () => {
+              renderState(dom, state, handlers);
+            },
+          });
+          ms365PermissionStart = () => ms365Permissions.start();
+          ms365PermissionStop = () => ms365Permissions.stop();
+          ms365PermissionPausePoll = () => ms365Permissions.pause();
+          ms365PermissionResumePoll = () => ms365Permissions.resume();
+          // The MS365 controller polls continuously; its `sessionFilter` returns nothing until the
+          // MS365 tab has a live session, so it never pops a prompt for another surface.
+          ms365Permissions.start();
+          // Wire the MS365 tab chat controller with the real send-flow now that `readiness` exists.
+          state.msChat = createMsChatController(createMsChatDeps(state, dom, handlers, readiness));
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>(".file-row--clickable");

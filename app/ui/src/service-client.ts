@@ -42,6 +42,7 @@ import {
   type PendingPermissionView,
   type PermissionDecisionResponse,
 } from "./permission-client.js";
+import type { MicrosoftIntegrationView } from "./integration-slots.js";
 
 // Re-exported so consumers keep importing the permission wire types from `./service-client.js`
 // (the split in CGHC-025 preserves the public surface).
@@ -379,6 +380,8 @@ export interface ConversationSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  /** Which product surface owns this conversation. Absent in legacy records → treat as "cowork". */
+  readonly surface: "cowork" | "ms365";
 }
 
 /** Redacted activity metadata from conversation persistence (no secrets). */
@@ -419,6 +422,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly surface?: "cowork" | "ms365";
   readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
@@ -432,6 +436,37 @@ export interface ContinueSessionResult {
 export interface ClearSessionModelResult {
   readonly cleared: boolean;
   readonly defaultModel: ModelRef | null;
+}
+
+/** MS365 integration state and connected services (Task 4: MS365 UI wiring). */
+export interface Ms365ViewData {
+  readonly connectionState: string;
+  readonly services: readonly { readonly id: string; readonly label: string; readonly connected: boolean }[];
+  readonly scopes: readonly string[];
+  readonly actionHistory: readonly { readonly label: string; readonly source: string; readonly at?: string }[];
+  readonly error?: string;
+}
+
+/** Batch write-mode for MS365 write operations: manual confirms each write; auto approves once. */
+export type Ms365WriteMode = "manual" | "auto";
+
+/** A SharePoint site the connected MS365 account can see, with its search-scope toggle. */
+export interface Ms365SiteView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly webUrl: string;
+  readonly enabled: boolean;
+}
+
+/** Result of initiating MS365 device-code flow. */
+export type Ms365DeviceBeginResult =
+  | { readonly userCode: string; readonly verificationUri: string; readonly expiresInSec: number }
+  | { readonly error: "not_configured" };
+
+/** Result of polling MS365 device-code status. */
+export interface Ms365DevicePollResult {
+  readonly status: "pending" | "connected" | "expired";
+  readonly view?: Ms365ViewData;
 }
 
 /**
@@ -616,8 +651,11 @@ export interface ServiceClient {
   getDispatchRun(runId: string): Promise<DispatchRunView>;
   /** Cancel a dispatch run (loop + in-flight branches). */
   cancelDispatchRun(runId: string): Promise<void>;
-  /** List persisted conversations (optional local search query). */
-  listConversations(query?: string): Promise<readonly ConversationSummary[]>;
+  /** List persisted conversations (optional local search query + surface filter). */
+  listConversations(
+    query?: string,
+    surface?: "cowork" | "ms365",
+  ): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
   getConversation(id: string): Promise<ConversationRecord>;
   getLastActiveConversationId(): Promise<string | null>;
@@ -745,6 +783,26 @@ export interface ServiceClient {
   configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
   testKnowledgeConnection(): Promise<{ readonly ok: boolean }>;
   disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
+  /** Connect an MS365 account using a Bearer token. */
+  connectMs365Token(token: string): Promise<Ms365ViewData>;
+  /** Fetch the current MS365 connection state and services. */
+  fetchMs365View(): Promise<Ms365ViewData>;
+  /** Begin MS365 device-code authentication flow. */
+  beginMs365Device(): Promise<Ms365DeviceBeginResult>;
+  /** Poll the status of an MS365 device-code flow. */
+  pollMs365Device(): Promise<Ms365DevicePollResult>;
+  /** Disconnect the current MS365 session; returns the fresh (disconnected) view. */
+  disconnectMs365(): Promise<Ms365ViewData>;
+  /** List SharePoint sites visible to the connected account, with their search-scope toggle. */
+  listMs365Sites(): Promise<readonly Ms365SiteView[]>;
+  /** Enable/disable a site for search scope; returns the refreshed site list. */
+  setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+  /** Đọc chế độ ghi hàng loạt MS365 hiện tại. */
+  fetchMs365WriteMode(): Promise<{ mode: Ms365WriteMode }>;
+  /** Đổi chế độ ghi hàng loạt MS365 (nguồn sự thật ở service). */
+  setMs365WriteMode(mode: Ms365WriteMode): Promise<{ mode: Ms365WriteMode }>;
+  /** Grant/revoke the MS365 tool session-scope allowlist for a single OpenCode session. */
+  setMs365SessionScope(sessionId: string, enabled: boolean): Promise<{ allowed: boolean }>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -1092,12 +1150,13 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       );
     },
 
-    listConversations: async (query) => {
+    listConversations: async (query, surface) => {
+      const params = new URLSearchParams();
       const q = query?.trim();
-      const path =
-        q !== undefined && q.length > 0
-          ? `/v1/conversations?q=${encodeURIComponent(q)}`
-          : "/v1/conversations";
+      if (q !== undefined && q.length > 0) params.set("q", q);
+      if (surface !== undefined) params.set("surface", surface);
+      const suffix = params.toString();
+      const path = suffix.length > 0 ? `/v1/conversations?${suffix}` : "/v1/conversations";
       return (await call<{ conversations: readonly ConversationSummary[] }>(path)).conversations;
     },
 
@@ -1323,5 +1382,52 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       });
       return { status: "not_configured", baseUrl: null, lastHealthCheckAt: null };
     },
+
+    connectMs365Token: async (token) =>
+      call<Ms365ViewData>("/v1/ms365/connect", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+
+    fetchMs365View: () => call<Ms365ViewData>("/v1/ms365/view"),
+
+    beginMs365Device: () =>
+      call<Ms365DeviceBeginResult>("/v1/ms365/device/begin", {
+        method: "POST",
+      }),
+
+    pollMs365Device: () =>
+      call<Ms365DevicePollResult>("/v1/ms365/device/poll", {
+        method: "POST",
+      }),
+
+    disconnectMs365: () =>
+      call<Ms365ViewData>("/v1/ms365/disconnect", {
+        method: "POST",
+      }),
+
+    listMs365Sites: async () =>
+      (await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites")).sites,
+
+    setMs365SiteEnabled: async (siteId, enabled) =>
+      (
+        await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites/toggle", {
+          method: "POST",
+          body: JSON.stringify({ siteId, enabled }),
+        })
+      ).sites,
+
+    fetchMs365WriteMode: () => call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode"),
+    setMs365WriteMode: (mode) =>
+      call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      }),
+
+    setMs365SessionScope: (sessionId, enabled) =>
+      call<{ allowed: boolean }>("/v1/ms365/session-scope", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, enabled }),
+      }),
   };
 }

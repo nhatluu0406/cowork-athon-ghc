@@ -79,6 +79,16 @@ export interface SsrfPolicyOptions {
    * candidate URL matches exactly, loopback `http` is allowed. Never set from request bodies.
    */
   readonly e2eMockLlmBaseUrl?: string;
+  /**
+   * Explicit user opt-in for LAN/split-horizon provider endpoints (e.g. corporate DNS resolving
+   * a provider hostname to an RFC-1918 address). When `true`, ONLY the `private` IP class becomes
+   * allowed — loopback (still gated by {@link loopbackEscape} exactly as before), link-local, and
+   * cloud-metadata targets stay blocked, and the `https`-required rule is unchanged (a private
+   * target still needs `https` unless it also happens to be loopback under the escape). This
+   * NEVER loosens metadata/link-local/scheme rules; it must be sourced ONLY from a trusted env
+   * reader (never a request body) — see `isPrivateProviderAllowed`. Defaults to `false`.
+   */
+  readonly allowPrivateNetwork?: boolean;
 }
 
 export interface SsrfPolicy {
@@ -123,6 +133,7 @@ function bareHost(hostname: string): string {
 
 export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
   const loopbackEscape = options.loopbackEscape === true;
+  const allowPrivateNetwork = options.allowPrivateNetwork === true;
   const e2eMockLlmBaseUrl = options.e2eMockLlmBaseUrl?.trim().replace(/\/+$/u, "");
 
   async function addressesFor(host: string): Promise<readonly ResolvedAddress[]> {
@@ -138,12 +149,17 @@ export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
   function classDecision(cls: IpClass): { ok: boolean; reason?: SsrfBlockReason } {
     if (cls === "public") return { ok: true };
     if (cls === "loopback" && loopbackEscape) return { ok: true };
+    // Explicit opt-in: ONLY the `private` (RFC-1918) class is affected. link_local and
+    // cloud_metadata stay blocked unconditionally, regardless of this flag.
+    if (cls === "private" && allowPrivateNetwork) return { ok: true };
     return { ok: false, reason: CLASS_TO_REASON[cls] };
   }
 
   async function evaluate(rawUrl: string): Promise<SsrfDecision> {
     const url = parseUrl(rawUrl);
-    if (url === null) return { allowed: false, reason: "invalid_url", detail: rawUrl };
+    // NEVER echo the raw input: a malformed paste may contain a credential. The reason
+    // alone is diagnosable; the user knows what they typed.
+    if (url === null) return { allowed: false, reason: "invalid_url", detail: "unparseable URL" };
 
     const normalized = url.href.replace(/\/+$/u, "");
     if (
@@ -208,4 +224,16 @@ export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
 function describe(cause: unknown): string {
   if (cause instanceof Error) return cause.name;
   return "resolver_error";
+}
+
+/**
+ * Env-flag gate for {@link SsrfPolicyOptions.allowPrivateNetwork} (PO decision 2026-07-15):
+ * OFF (`false`) unless the env var is EXACTLY `"1"` or `"true"` — every other value, including
+ * `undefined`, `"0"`, `"false"`, or any other string, is OFF. Mirrors `isMs365Enabled`'s style.
+ * Scope: PROVIDER endpoints only (see the composition root for exactly which SsrfPolicy
+ * instances read this) — it never applies to the MS365 Graph client, the device-code provider,
+ * or the extension/MCP registry's SsrfPolicy, which stay strict regardless of this flag.
+ */
+export function isPrivateProviderAllowed(env: NodeJS.ProcessEnv): boolean {
+  return env.CGHC_SSRF_ALLOW_PRIVATE_PROVIDER === "1" || env.CGHC_SSRF_ALLOW_PRIVATE_PROVIDER === "true";
 }

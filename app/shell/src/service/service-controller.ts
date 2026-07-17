@@ -22,11 +22,21 @@
 
 import { EMPTY_BOOTSTRAP, type ShellBootstrap } from "../bootstrap.js";
 
+/** Which start path actually produced the running handle. */
+export type ServiceTier = "settings_only" | "live";
+
 /** The minimal running-service handle the shell holds in memory. */
 export interface StartedService {
   readonly baseUrl: string;
   /** Per-launch client token (secret). Never logged; only reaches the renderer via the bridge. */
   readonly token: string;
+  /**
+   * Honest tier of the handle actually produced. Optional so existing fakes/tests default via
+   * the caller's `fallbackTier` (see {@link ServiceController.invokeStart}) — but any start path
+   * that can silently degrade (e.g. tiered live → settings-only fallback) MUST set this so a
+   * fallback never masquerades as live.
+   */
+  readonly tier?: ServiceTier;
   /** Stop the loopback socket AND the supervised OpenCode child (one owner). */
   stop(): Promise<void>;
 }
@@ -64,6 +74,7 @@ export class ServiceController {
   private startPromise: Promise<void> | null = null;
   private stopPromise: Promise<void> | null = null;
   private failureMessage: string | null = null;
+  private startedTier: ServiceTier | null = null;
 
   constructor(options: ServiceControllerOptions) {
     this.startFn = options.startService;
@@ -82,20 +93,30 @@ export class ServiceController {
     return this.failureMessage;
   }
 
+  /**
+   * The tier of the currently RUNNING handle, or `null` when not running. This is the honest
+   * signal `connectLive` uses to decide whether a restart is even necessary — it reflects the
+   * tier the handle actually reported (or the caller's fallback tier when the handle omitted
+   * it), never an assumption.
+   */
+  get runningTier(): ServiceTier | null {
+    return this.status === "running" ? this.startedTier : null;
+  }
+
   /** Start the onboarding (settings-only) service ONCE. Concurrent calls never double-start. */
   async start(): Promise<void> {
-    return this.invokeStart(this.startFn);
+    return this.invokeStart(this.startFn, "settings_only");
   }
 
   /** User-gated live connect: try the live path, fall back per the injected tiered seam. */
   async startLive(): Promise<void> {
-    return this.invokeStart(this.startLiveFn);
+    return this.invokeStart(this.startLiveFn, "live");
   }
 
-  private async invokeStart(fn: StartService): Promise<void> {
+  private async invokeStart(fn: StartService, fallbackTier: ServiceTier): Promise<void> {
     if (this.startPromise !== null) return this.startPromise;
     if (this.status === "running") return;
-    const run = this.runStart(fn);
+    const run = this.runStart(fn, fallbackTier);
     this.startPromise = run;
     try {
       await run;
@@ -104,13 +125,14 @@ export class ServiceController {
     }
   }
 
-  private async runStart(fn: StartService): Promise<void> {
+  private async runStart(fn: StartService, fallbackTier: ServiceTier): Promise<void> {
     this.status = "starting";
     this.failureMessage = null;
     this.log("service_starting");
     try {
       const started = await fn();
       this.started = started;
+      this.startedTier = started.tier ?? fallbackTier;
       this.status = "running";
       this.log(`service_started: ${started.baseUrl}`);
     } catch (err) {
@@ -118,6 +140,7 @@ export class ServiceController {
       // handshake and the readiness surface renders `not_connected`. Never rethrow so the
       // main lifecycle never crashes on a failed service start.
       this.started = null;
+      this.startedTier = null;
       this.status = "failed";
       this.failureMessage = messageOf(err);
       this.log(`service_start_failed: ${this.failureMessage}`);
@@ -157,6 +180,7 @@ export class ServiceController {
     }
     const started = this.started;
     this.started = null;
+    this.startedTier = null;
     if (this.status !== "failed") this.status = "stopped";
     if (started === null) return; // nothing running → idempotent no-op
     try {

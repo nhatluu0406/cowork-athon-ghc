@@ -6,6 +6,7 @@
  * service so the workspace-boundary check stays in the one place it already lives.
  */
 import type { Ms365Connector } from "./ms365-connector.js";
+import { Ms365Error } from "./ms365-errors.js";
 
 const DEFAULT_MAX_RESULTS = 25;
 const DEFAULT_MAX_SUMMARY_BYTES = 65536; // 64 KiB, matching File Review.
@@ -36,6 +37,8 @@ export interface SharePointServiceDeps {
   files: LocalFileReader;
   maxResults?: number;
   maxSummaryBytes?: number;
+  /** Optional allowlist port. When present, search drops hits whose parent site is disabled. */
+  siteFilter?: { isEnabled(siteId: string): boolean };
 }
 
 /** Minimal shape we read from a Graph `/search/query` response, everything optional. */
@@ -43,6 +46,7 @@ interface SearchResource {
   id?: unknown;
   name?: unknown;
   webUrl?: unknown;
+  parentReference?: { siteId?: unknown };
 }
 interface SearchHit {
   resource?: SearchResource;
@@ -94,21 +98,32 @@ function asArray<T>(value: T[] | undefined): T[] {
   return Array.isArray(value) ? value : [];
 }
 
-/** Defensively flattens the nested search response shape into hits, dropping malformed entries. */
-function flattenSearchHits(response: unknown): SharePointHit[] {
+interface HitWithSite {
+  hit: SharePointHit;
+  siteId: string | null;
+}
+
+/**
+ * Defensively flattens the nested search response shape into hits, dropping malformed
+ * entries, and carries each hit's parent site id along so `search` can apply the site
+ * allowlist. The site id is internal-only; the public `SharePointHit` shape has no siteId.
+ */
+function flattenSearchHitsWithSite(response: unknown): HitWithSite[] {
   if (!isSearchResponse(response)) return [];
-  const hits: SharePointHit[] = [];
+  const out: HitWithSite[] = [];
   for (const value of asArray(response.value)) {
     for (const container of asArray(value?.hitsContainers)) {
       for (const hit of asArray(container?.hits)) {
         const resource = hit?.resource;
         if (resource === undefined) continue;
         const mapped = toHit(resource.id, resource.name, resource.webUrl);
-        if (mapped !== null) hits.push(mapped);
+        if (mapped === null) continue;
+        const rawSiteId = resource.parentReference?.siteId;
+        out.push({ hit: mapped, siteId: typeof rawSiteId === "string" ? rawSiteId : null });
       }
     }
   }
-  return hits;
+  return out;
 }
 
 function flattenDriveChildren(response: unknown): SharePointHit[] {
@@ -140,11 +155,26 @@ export function createSharePointService(deps: SharePointServiceDeps): SharePoint
           ],
         },
       });
-      const hits = flattenSearchHits(response);
-      return hits.slice(0, limit ?? maxResults);
+      const filter = deps.siteFilter;
+      const kept = flattenSearchHitsWithSite(response).filter(
+        (h) => filter === undefined || (h.siteId !== null && filter.isEnabled(h.siteId)),
+      );
+      return kept.slice(0, limit ?? maxResults).map((h) => h.hit);
     },
 
     async listSiteFiles(siteId: string): Promise<SharePointHit[]> {
+      // Fail-closed: a disabled site's files must never reach the caller, even when the
+      // caller passes the site id directly (bypassing `search`'s own hit-level filter).
+      // `endpoint_blocked` is reused here (not a new kind) — it is the existing kind for
+      // "this access path is blocked by policy, not by the resource being absent."
+      if (deps.siteFilter !== undefined && !deps.siteFilter.isEnabled(siteId)) {
+        throw new Ms365Error(
+          "endpoint_blocked",
+          "Site này đã bị tắt tìm kiếm trong cài đặt.",
+          "Bật lại site trong cài đặt Microsoft 365 nếu muốn tìm trong site này.",
+          false,
+        );
+      }
       const graph = deps.connector.graph();
       const response = await graph.json<unknown>({
         method: "GET",
@@ -153,6 +183,12 @@ export function createSharePointService(deps: SharePointServiceDeps): SharePoint
       return flattenDriveChildren(response).slice(0, maxResults);
     },
 
+    // KNOWN LIMITATION (tracked, not fixed here): this method takes only a drive-item id,
+    // not a site id, so it cannot cheaply check `deps.siteFilter` without an extra Graph
+    // call to resolve the item's parent site first. That resolve-then-check is out of
+    // scope for this fix and needs its own design (see docs/product/current-status.md,
+    // MS365 site scope section). A disabled site's file content CAN still reach the
+    // caller via this method today if the caller already has a driveItemId.
     async getFileSummaryText(driveItemId: string): Promise<string> {
       const graph = deps.connector.graph();
       const bytes = await graph.bytes({

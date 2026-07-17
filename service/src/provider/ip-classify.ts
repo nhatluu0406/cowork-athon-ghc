@@ -6,7 +6,9 @@
  * The categories map 1:1 to the ADR block list: loopback (127/8, ::1), link-local
  * (169.254/16, fe80::/10), RFC-1918 private (10/8, 172.16/12, 192.168/16, IPv6 ULA
  * fc00::/7) and cloud-metadata (169.254.169.254, fd00:ec2::254 → ULA). Anything else is
- * `public`. Unspecified/broadcast/CGNAT are treated as `private` (defense in depth).
+ * `public`. CGNAT (100.64/10) is `private`; unspecified (0.0.0.0/8, `::`) and unparseable
+ * input land in the never-allowed `loopback` bucket — NOT `private`, because `private` is
+ * reachable via the explicit CGHC_SSRF_ALLOW_PRIVATE_PROVIDER opt-in.
  *
  * IPv6 is FAIL-SAFE (security review F1): every IPv4-embedding representation is decoded
  * and re-classified through the IPv4 classifier — IPv4-mapped `::ffff:a.b.c.d`,
@@ -44,14 +46,17 @@ function ipv4Octets(ip: string): [number, number, number, number] | null {
 export function classifyIpv4(ip: string): IpClass {
   if (ip === IPV4_METADATA) return "cloud_metadata";
   const octets = ipv4Octets(ip);
-  if (octets === null) return "private"; // unparseable → fail safe (block)
+  // Unparseable input goes to `loopback` — the never-allowed-in-production bucket — NOT
+  // `private`, because `private` is reachable via the explicit CGHC_SSRF_ALLOW_PRIVATE_PROVIDER
+  // opt-in and must stay reserved for genuine RFC-1918/CGNAT ranges.
+  if (octets === null) return "loopback"; // unparseable → fail safe (never allowed)
   const [a, b] = octets;
   if (a === 127) return "loopback"; // 127.0.0.0/8
+  if (a === 0) return "loopback"; // 0.0.0.0/8 "this host" — loopback-equivalent on POSIX
   if (a === 169 && b === 254) return "link_local"; // 169.254.0.0/16
   if (a === 10) return "private"; // 10.0.0.0/8
   if (a === 172 && b >= 16 && b <= 31) return "private"; // 172.16.0.0/12
   if (a === 192 && b === 168) return "private"; // 192.168.0.0/16
-  if (a === 0) return "private"; // 0.0.0.0/8 "this host"
   if (a === 100 && b >= 64 && b <= 127) return "private"; // 100.64.0.0/10 CGNAT
   return "public";
 }
@@ -118,8 +123,8 @@ function embeddedIpv4(h: V6): string | null {
 /** Classify an IPv6 literal (fail-safe against every IPv4-embedding form). */
 export function classifyIpv6(ip: string): IpClass {
   const h = expandIpv6(ip.toLowerCase());
-  if (h === null) return "private"; // unparseable → fail safe
-  if (h.every((x) => x === 0)) return "private"; // :: unspecified
+  if (h === null) return "loopback"; // unparseable → fail safe (never allowed)
+  if (h.every((x) => x === 0)) return "loopback"; // :: unspecified — loopback-equivalent
   if (h.slice(0, 7).every((x) => x === 0) && h[7] === 1) return "loopback"; // ::1
   // 1) Any recognized IPv4-embedding form → re-classify the embedded IPv4.
   const embedded = embeddedIpv4(h);
@@ -136,12 +141,12 @@ export function classifyIpv6(ip: string): IpClass {
   return "public";
 }
 
-/** Classify any IP literal. A non-IP input is treated as `private` (fail safe). */
+/** Classify any IP literal. A non-IP input lands in the never-allowed `loopback` bucket. */
 export function classifyIp(ip: string): IpClass {
   const family = net.isIP(ip);
   if (family === 4) return classifyIpv4(ip);
   if (family === 6) return classifyIpv6(ip);
-  return "private";
+  return "loopback"; // fail safe: never allowed, even under the private-network opt-in
 }
 
 /** True when a class must never be reached over the network in production. */

@@ -34,21 +34,62 @@ export function toStartedService(live: LiveCoworkService): StartedService {
   return {
     baseUrl: live.running.baseUrl,
     token: live.running.clientToken,
+    tier: "live",
     stop: () => live.stop(),
   };
+}
+
+/** Options controlling the launch retry policy. */
+export interface LiveStartOptions {
+  /** Max launch attempts before giving up (default 3). */
+  readonly maxAttempts?: number;
+  /** Non-secret log sink for retry telemetry (default: no-op). */
+  readonly log?: (line: string) => void;
+}
+
+/**
+ * A port-busy signal we may safely retry: the child OpenCode port pre-check
+ * (`runtime_port_in_use`) or the service socket bind (`EADDRINUSE`). We read `err.code`
+ * as a property — NOT `instanceof` — because the typed error crosses the service→shell
+ * package boundary. Health-timeout / spawn-fail are NOT retried: retrying them would mask
+ * a genuinely broken binary/pin and slow an honest failure by N attempts.
+ */
+function isPortInUse(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === "runtime_port_in_use" || code === "EADDRINUSE";
 }
 
 /**
  * Build the default shell StartService: resolve launch options, start the live service, and
  * normalize the handle. `startLive` defaults to the real `startLiveCoworkService`.
+ *
+ * A rare TOCTOU race exists between ephemeral-port allocation and the child/service bind: a
+ * port picked by `allocateLoopbackPort` (bind 0 → read → close) can be taken by another
+ * process before the real bind. On an unambiguous port-busy signal we re-run `resolveOptions()`
+ * (which mints a FRESH supervisor + fresh ports — the supervisor is single-shot) and retry, up
+ * to `maxAttempts`. Any other failure propagates immediately.
  */
 export function createLiveStartService(
   resolveOptions: ResolveLiveOptions,
   startLive: StartLiveService = startLiveCoworkService,
+  opts: LiveStartOptions = {},
 ): StartService {
+  const maxAttempts = opts.maxAttempts ?? 3;
+  const log = opts.log ?? ((): void => {});
   return async (): Promise<StartedService> => {
-    const options = await resolveOptions();
-    const live = await startLive(options);
-    return toStartedService(live);
+    for (let attempt = 1; ; attempt += 1) {
+      const options = await resolveOptions();
+      try {
+        const live = await startLive(options);
+        return toStartedService(live);
+      } catch (err) {
+        if (isPortInUse(err) && attempt < maxAttempts) {
+          log(`live_start_port_retry attempt=${attempt}`);
+          continue;
+        }
+        throw err;
+      }
+    }
   };
 }

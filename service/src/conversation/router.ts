@@ -65,6 +65,10 @@ function parseCreateBody(body: unknown) {
   if (parentId !== undefined && typeof parentId !== "string") {
     throw new ConversationRequestError("parentId must be a string.");
   }
+  const surface = rec["surface"];
+  if (surface !== undefined && surface !== "cowork" && surface !== "ms365") {
+    throw new ConversationRequestError('surface must be "cowork" or "ms365".');
+  }
   const snapshot = parseProviderSnapshot(rec["providerSnapshot"]);
   const input: CreateConversationInput = {
     workspacePath: workspacePath.trim(),
@@ -72,6 +76,7 @@ function parseCreateBody(body: unknown) {
     ...(typeof rec["providerId"] === "string" ? { providerId: rec["providerId"] } : {}),
     ...(typeof rec["modelId"] === "string" ? { modelId: rec["modelId"] } : {}),
     ...(typeof parentId === "string" ? { parentId } : {}),
+    ...(surface === "cowork" || surface === "ms365" ? { surface } : {}),
   };
   if (snapshot !== undefined) {
     return { ...input, providerSnapshot: snapshot };
@@ -195,7 +200,12 @@ export function createConversationRouter(
         path: CONVERSATIONS_PATH,
         handler: async (ctx: RouteContext): Promise<RouteResult> => {
           const q = ctx.url.searchParams.get("q") ?? undefined;
-          return { status: 200, data: { conversations: await store.list(q) } };
+          const surfaceParam = ctx.url.searchParams.get("surface");
+          const surface = surfaceParam === "cowork" || surfaceParam === "ms365" ? surfaceParam : undefined;
+          return {
+            status: 200,
+            data: { conversations: await store.list(q, surface !== undefined ? { surface } : undefined) },
+          };
         },
       },
       {

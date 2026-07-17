@@ -118,6 +118,8 @@ export interface ConversationSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  /** Which product surface owns this conversation. Absent in legacy records → treat as "cowork". */
+  readonly surface: "cowork" | "ms365";
 }
 
 export interface ConversationRecord extends ConversationSummary {
@@ -135,6 +137,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly surface?: "cowork" | "ms365";
   readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
