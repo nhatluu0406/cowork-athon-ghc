@@ -137,6 +137,38 @@ test("message.part.delta with field=reasoning emits NO token (thinking must not 
   assert.equal((legacy[0] as Extract<EvEvent, { kind: "token" }>).delta, "Answer");
 });
 
+test("a reasoning part's deltas emit NO token even when field='text' (thinking leak fix)", () => {
+  // Real DeepSeek/GLM sequence: the runtime creates a `reasoning` part via message.part.updated,
+  // then streams its content as message.part.delta with field:"text" (field names the part's
+  // property, not its role). The owning part's TYPE — learned from the snapshot — is what stops
+  // the leak; the field guard alone would let this through and concatenate thinking before the
+  // answer in the same bubble (the reported bug).
+  const mapper = newMapper();
+  assistantMessage(mapper, "m");
+
+  // 1) reasoning part announced by its snapshot (drops silently, records type).
+  const reasoningSnap = mapper.map(
+    partFrame({ id: "r1", sessionID: SID, messageID: "m", type: "reasoning", text: "" }),
+  );
+  assert.equal(reasoningSnap.length, 0);
+
+  // 2) reasoning streamed with field:"text" — must NOT become a visible token.
+  const reasoningDelta = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "r1", field: "text", delta: "The user greets me..." },
+  });
+  assert.equal(reasoningDelta.length, 0, "reasoning delta with field:text must not leak as a token");
+
+  // 3) the answer text part streams next and DOES produce tokens.
+  mapper.map(partFrame({ id: "t1", sessionID: SID, messageID: "m", type: "text", text: "" }));
+  const answer = mapper.map({
+    type: "message.part.delta",
+    properties: { sessionID: SID, messageID: "m", partID: "t1", field: "text", delta: "Chào bạn!" },
+  });
+  assert.equal(answer.length, 1);
+  assert.equal((answer[0] as Extract<EvEvent, { kind: "token" }>).delta, "Chào bạn!");
+});
+
 test("step-finish part → EV metrics event with token counts + cost (issue #4)", () => {
   const mapper = newMapper();
   assistantMessage(mapper, "m");
