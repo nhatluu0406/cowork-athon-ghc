@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { MS365_PLUGIN_SOURCE, seedMs365PluginDeps, writeMs365Plugin } from "../src/runtime/ms365-plugin-file.js";
 import { TOOL_NAMES } from "../src/ms365/ms365-tool-router.js";
 
-test("plugin source declares all 25 tool names exactly", () => {
+test("plugin source declares all router tool names exactly", () => {
   for (const name of TOOL_NAMES) {
     assert.ok(MS365_PLUGIN_SOURCE.includes(`${name}:`), `missing tool ${name}`);
   }

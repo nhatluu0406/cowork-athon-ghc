@@ -7,6 +7,7 @@
  * shell without this module reaching back into app-shell internals.
  */
 
+import type { TurnMetrics } from "@cowork-ghc/contracts";
 import { sanitizeAssistantForDisplay } from "../../assistant-output.js";
 import { planDispatchPrompt } from "../../dispatch-plan.js";
 import type { ConversationMessage } from "../../service-client.js";
@@ -53,10 +54,19 @@ export function buildMsChatDispatch(
   return { ok: true, text: plan.text };
 }
 
-/** Maps a raw EV `SessionView` into the controller's minimal `{text, terminal}` seam shape. */
+/**
+ * Maps a raw EV `SessionView` into the controller's `{text, terminal, metrics?}` seam shape.
+ * `metrics` (token counts + cost) is carried through so the MS365 bubble can render the same
+ * per-turn footer as Cowork; it survives on the terminal view (see `SessionView.metrics`).
+ */
 export function toMsChatStreamView(view: {
   readonly text: string;
   readonly terminal: string | null;
-}): { text: string; terminal: string | null } {
-  return { text: sanitizeAssistantForDisplay(view.text), terminal: view.terminal };
+  readonly metrics?: TurnMetrics;
+}): { text: string; terminal: string | null; metrics?: TurnMetrics } {
+  return {
+    text: sanitizeAssistantForDisplay(view.text),
+    terminal: view.terminal,
+    ...(view.metrics !== undefined ? { metrics: view.metrics } : {}),
+  };
 }

@@ -59,6 +59,15 @@ export const TOOL_NAMES: readonly Ms365ToolName[] = [
   "teams_list_members",
   "teams_get_messages",
   "teams_post_message",
+  "calendar_list_events",
+  "calendar_search_events",
+  "calendar_create_event",
+  "onedrive_search_files",
+  "onedrive_list_folder",
+  "power_automate_list_flows",
+  "power_automate_trigger_flow",
+  "resolve_user",
+  "get_me",
 ];
 
 /**

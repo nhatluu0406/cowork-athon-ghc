@@ -236,6 +236,10 @@ interface AppState {
   msChat: MsChatController;
   /** Write-mode pill relocated into the MS365 tab composer; only rendered while MS365 is connected. */
   msWriteModePill: Ms365WriteModeControl;
+  /** MS365 history-sidebar conversation list (surface "ms365"). */
+  msConversations: readonly { readonly id: string; readonly title: string; readonly meta?: string }[];
+  /** Current search query for the MS365 history sidebar. */
+  msConversationSearch: string;
 }
 
 type AppDom = AppFrameDom;
@@ -2201,6 +2205,9 @@ function ensureMs365ViewFetched(dom: AppDom, state: AppState, handlers: Paramete
     .then((view) => {
       state.msView = view;
       void refreshMsTabWriteModePill(state);
+      if (view.connectionState === "connected") {
+        void refreshMs365Conversations(state, dom, handlers);
+      }
       renderState(dom, state, handlers);
     })
     .catch(() => {
@@ -2248,15 +2255,74 @@ function renderMicrosoftSurfaceBound(dom: AppDom, state: AppState, handlers: Par
       void refreshMsTabWriteModePill(state);
       if (view.connectionState !== "connected") {
         void state.msChat.onDisconnected();
+        state.msConversations = [];
+      } else {
+        void refreshMs365Conversations(state, dom, handlers);
       }
       renderState(dom, state, handlers);
     },
     chat: state.msChat,
-    onSend: (prompt) => void state.msChat.send(prompt),
+    onSend: (prompt) => {
+      void (async () => {
+        await state.msChat.send(prompt);
+        // A first turn creates a conversation and persists messages — refresh so the sidebar
+        // shows the new/updated entry with fresh meta.
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
     onCancel: () => void state.msChat.cancel(),
+    conversations: state.msConversations,
+    activeConversationId: state.msChat.state().conversationId,
+    onSelectConversation: (id) => {
+      const client = state.client;
+      if (client === null) return;
+      void (async () => {
+        try {
+          const record = await client.getConversation(id);
+          const messages = record.messages.map((m) => ({ role: m.role, content: m.text }));
+          state.msChat.adoptConversation(id, messages);
+        } catch {
+          // Leave the current transcript in place; surface nothing beyond a no-op.
+        }
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
+    onNewConversation: () => {
+      void state.msChat.reset();
+      void refreshMs365Conversations(state, dom, handlers);
+    },
+    onSearchConversations: (query) => {
+      state.msConversationSearch = query;
+      void refreshMs365Conversations(state, dom, handlers);
+    },
     ...(connected ? { writeModePill: state.msWriteModePill.root } : {}),
   };
   renderMicrosoftSurface(dom.microsoftView, state.msView, deps);
+}
+
+/** Refreshes the MS365 history-sidebar conversation list from the service (surface "ms365"). */
+async function refreshMs365Conversations(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  const client = state.client;
+  if (client === null || state.msView.connectionState !== "connected") {
+    state.msConversations = [];
+    return;
+  }
+  const query = state.msConversationSearch.trim();
+  try {
+    const list = await client.listConversations(query.length > 0 ? query : undefined, "ms365");
+    state.msConversations = list.map((summary) => ({
+      id: summary.id,
+      title: summary.title,
+      meta: formatConversationMeta(summary),
+    }));
+  } catch {
+    state.msConversations = [];
+  }
+  renderState(dom, state, handlers);
 }
 
 /**
@@ -2306,7 +2372,22 @@ function createMsChatDeps(
       });
       return { stop: () => handle.stop() };
     },
+    createConversation: async (input) => {
+      const client = await ensureLive(state, readiness);
+      const workspacePath = state.activeWorkspace ?? input.workspaceId;
+      const record = await client.createConversation({
+        workspacePath,
+        surface: "ms365",
+        title: input.title,
+      });
+      return { id: record.id };
+    },
+    persistMessage: async (conversationId, role, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.appendConversationMessage(conversationId, role, text);
+    },
     buildDispatch: buildMsChatDispatch,
+    now: () => Date.now(),
     onStateChange: () => msChatRerender?.(),
   };
 }
@@ -2382,6 +2463,8 @@ export function mountCoworkApp(root: HTMLElement): void {
       onStateChange: () => msChatRerender?.(),
     }),
     msWriteModePill: createMs365WriteModeControl(),
+    msConversations: [],
+    msConversationSearch: "",
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);

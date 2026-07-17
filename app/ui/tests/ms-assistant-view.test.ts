@@ -83,9 +83,13 @@ test("connected + messages: renders bubbles with role classes", () => {
   const bubbles = container.querySelectorAll(".ms-bubble");
   assert.equal(bubbles.length, 2);
   assert.ok(bubbles[0]?.classList.contains("ms-bubble--user"));
-  assert.equal(bubbles[0]?.textContent, "Task trễ trên Planner");
+  // Cowork bubble structure: text lives in __text. Only the assistant carries a name label;
+  // user bubbles have no name.
+  assert.equal(bubbles[0]?.querySelector(".ms-bubble__text")?.textContent, "Task trễ trên Planner");
+  assert.equal(bubbles[0]?.querySelector(".ms-bubble__name"), null);
   assert.ok(bubbles[1]?.classList.contains("ms-bubble--assistant"));
-  assert.equal(bubbles[1]?.textContent, "Đang tra cứu Planner…");
+  assert.equal(bubbles[1]?.querySelector(".ms-bubble__text")?.textContent, "Đang tra cứu Planner…");
+  assert.ok(bubbles[1]?.querySelector(".ms-bubble__name")?.textContent?.includes("MS365"));
 });
 
 test("assistant pending message shows dang xu ly marker", () => {

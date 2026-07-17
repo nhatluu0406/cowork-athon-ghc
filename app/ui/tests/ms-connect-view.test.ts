@@ -175,6 +175,41 @@ test("manual token fallback connects and calls onViewChange", async () => {
   assert.doesNotMatch(c.innerHTML, /fake-token/);
 });
 
+test("manual token that the service rejects (state !== connected) shows an error, does NOT navigate", async () => {
+  const c = container();
+  // connectWithToken never throws — an invalid/expired token resolves to a non-"connected"
+  // view (state "error"/"needs_reconnect"), carrying an error message. The panel must surface it.
+  const rejectedView: Ms365ViewData = {
+    connectionState: "error",
+    services: [],
+    scopes: [],
+    actionHistory: [],
+    error: "Token không hợp lệ hoặc đã hết hạn.",
+  };
+  let viewChangeCalls = 0;
+  renderMsConnect(c, {
+    view: DISCONNECTED,
+    client: fakeClient({ connectMs365Token: async () => rejectedView }),
+    onViewChange: () => {
+      viewChangeCalls += 1;
+    },
+  });
+  c.querySelector<HTMLButtonElement>(".ms-connect__manual-toggle")?.click();
+  const input = c.querySelector<HTMLTextAreaElement>(".ms-connect__manual-input");
+  assert.ok(input);
+  input.value = "bad-token";
+  c.querySelector<HTMLButtonElement>(".ms-connect__manual-submit")?.click();
+  await new Promise((r) => setTimeout(r, 0));
+  const errorEl = c.querySelector<HTMLElement>(".ms-connect__manual-error");
+  assert.ok(errorEl && !errorEl.hidden, "error slot must be visible");
+  assert.match(errorEl.textContent ?? "", /hết hạn|không hợp lệ|token/i);
+  assert.equal(viewChangeCalls, 0, "must NOT navigate away on a non-connected result");
+  // The panel stays open so the user can retry.
+  const body = c.querySelector<HTMLElement>(".ms-connect__manual-body");
+  assert.equal(body?.hidden, false, "manual panel stays open after a rejected token");
+  assert.doesNotMatch(c.innerHTML, /bad-token/);
+});
+
 test("device flow: begin then poll pending -> connected calls onViewChange and stops polling", async () => {
   const c = container();
   const connectedView: Ms365ViewData = {
@@ -279,13 +314,22 @@ test("sign-in begin rejection re-enables the button and shows an error note", as
   assert.match(c.textContent ?? "", /không thể bắt đầu|thử lại/i);
 });
 
-test("sign-in card renders the scopes from view.scopes (service truth), not a hard-coded list", () => {
+test("sign-in card no longer lists requested scopes", () => {
   const c = container();
   const view = disconnectedView({ scopes: ["Files.ReadWrite.All", "Tasks.ReadWrite"] });
   renderMsConnect(c, { view, client: fakeClient(), onViewChange: () => {} });
-  const codes = [...c.querySelectorAll(".ms-scope-list__scope")].map((n) => n.textContent);
-  assert.deepEqual(codes, ["Files.ReadWrite.All", "Tasks.ReadWrite"]);
-  assert.ok(!c.textContent?.includes("Mail.Send"), "stale hard-coded scopes must be gone");
+  assert.equal(c.querySelector(".ms-scope-list"), null, "the 'quyền sẽ xin' list must be gone");
+  assert.ok(!/Quyền sẽ xin khi kết nối/i.test(c.textContent ?? ""));
+});
+
+test("manual fallback shows a Graph Explorer guide link with the correct URL", () => {
+  const c = container();
+  renderMsConnect(c, { view: disconnectedView({}), client: fakeClient(), onViewChange: () => {} });
+  const link = c.querySelector<HTMLAnchorElement>(".ms-connect__manual-guide-link");
+  assert.ok(link, "guide link present");
+  assert.equal(link.href, "https://developer.microsoft.com/en-us/graph/graph-explorer");
+  assert.equal(link.target, "_blank");
+  assert.match(link.rel, /noopener/);
 });
 
 test("storage copy says in-memory, not Windows Credential Manager", () => {

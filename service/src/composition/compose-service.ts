@@ -125,6 +125,12 @@ import {
   createPlannerService,
   createListsService,
   createTeamsService,
+  createCalendarService,
+  createOneDriveService,
+  createCommonService,
+  createPowerAutomateService,
+  createPowerAutomateStore,
+  createPowerAutomateFilePersistence,
   createMs365SessionScope,
   createDeviceCodeProvider,
   readMs365DeviceConfig,
@@ -156,11 +162,22 @@ import {
 import type { CredentialStore } from "../credential/index.js";
 
 /**
- * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
- * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
- * summary, upload). No extra scope is requested.
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11), matching the
+ * Graph operations the tool surface exposes. `Files.ReadWrite.All` covers SharePoint + OneDrive
+ * files (search/list/summary/upload, incl. `/me/drive` reads); `Sites.Read.All` the site reads;
+ * `Calendars.ReadWrite` the calendar list/search/create; `User.Read.All` the `resolve_user`
+ * `/users` lookup; `User.Read` the `get_me` `/me` identity; `MailboxSettings.Read` the best-effort
+ * `/me/mailboxSettings` time-zone read. Power Automate trigger is a plain webhook (no Graph
+ * scope). No extra scope is requested.
  */
-const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
+const MS365_SCOPES: readonly string[] = [
+  "Files.ReadWrite.All",
+  "Sites.Read.All",
+  "Calendars.ReadWrite",
+  "User.Read.All",
+  "User.Read",
+  "MailboxSettings.Read",
+];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
@@ -170,6 +187,7 @@ const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
 const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
 const DEFAULT_MS365_SITE_SCOPE_PATH = ".runtime/ms365-site-scope.json";
 const DEFAULT_MS365_WRITE_MODE_PATH = ".runtime/ms365-write-mode.json";
+const DEFAULT_MS365_POWER_AUTOMATE_PATH = ".runtime/ms365-power-automate.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -613,6 +631,15 @@ export async function createCoworkService(
       siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
     });
     const teams = createTeamsService({ connector: ms365Connector });
+    const calendar = createCalendarService({ connector: ms365Connector });
+    const onedrive = createOneDriveService({ connector: ms365Connector });
+    const common = createCommonService({ connector: ms365Connector });
+    const powerAutomateStore = await createPowerAutomateStore({
+      persistence: createPowerAutomateFilePersistence(DEFAULT_MS365_POWER_AUTOMATE_PATH),
+    });
+    // Power Automate trigger is a plain webhook POST — the SAME `ssrf` policy the provider port
+    // and Graph client use guards a user-configured flow URL before it is ever fetched.
+    const powerAutomate = createPowerAutomateService({ store: powerAutomateStore, ssrf });
     const sessionScope = createMs365SessionScope();
     return createMs365Router({
       connector: ms365Connector,
@@ -627,6 +654,10 @@ export async function createCoworkService(
         planner,
         lists,
         teams,
+        calendar,
+        onedrive,
+        powerAutomate,
+        common,
         connectionState: () => ms365Connector.connectionState(),
         gate: permissionGate,
         now,

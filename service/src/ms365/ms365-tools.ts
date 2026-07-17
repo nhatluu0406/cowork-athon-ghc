@@ -28,6 +28,10 @@ import type { OutlookService } from "./outlook-service.js";
 import type { PlannerService } from "./planner-service.js";
 import type { ListsService } from "./lists-service.js";
 import type { MessageTarget, TeamsService } from "./teams-service.js";
+import type { CalendarService, CreateEventInput } from "./calendar-service.js";
+import type { OneDriveService } from "./onedrive-service.js";
+import type { PowerAutomateService } from "./power-automate-service.js";
+import type { CommonService } from "./common-service.js";
 import { createPermissionRequest, type PermissionGate } from "../permission/index.js";
 import { handlePlannerCreateTasks } from "./ms365-batch-tools.js";
 import { awaitGateDecision, defaultWait } from "./ms365-gate-wait.js";
@@ -60,7 +64,16 @@ export type Ms365ToolName =
   | "teams_list_channels"
   | "teams_list_members"
   | "teams_get_messages"
-  | "teams_post_message";
+  | "teams_post_message"
+  | "calendar_list_events"
+  | "calendar_search_events"
+  | "calendar_create_event"
+  | "onedrive_search_files"
+  | "onedrive_list_folder"
+  | "power_automate_list_flows"
+  | "power_automate_trigger_flow"
+  | "resolve_user"
+  | "get_me";
 
 export interface ToolCall {
   name: Ms365ToolName;
@@ -80,6 +93,10 @@ export interface ToolDeps {
   planner: PlannerService;
   lists: ListsService;
   teams: TeamsService;
+  calendar: CalendarService;
+  onedrive: OneDriveService;
+  powerAutomate: PowerAutomateService;
+  common: CommonService;
   connectionState: () => Ms365ConnectionState;
   gate: PermissionGate;
   now: () => string;
@@ -283,6 +300,36 @@ function readPostMessageArgs(args: Record<string, unknown>): PostMessageArgs | n
   if (args.mentions !== undefined && !isMentionArray(args.mentions)) return null;
   const out: PostMessageArgs = { target, content: args.content };
   if (isMentionArray(args.mentions)) out.mentions = args.mentions;
+  return out;
+}
+
+/** Validates + narrows `calendar_create_event` args; null when subject/start/end are missing or
+ * an optional field is present but the wrong shape. */
+function readCreateEventArgs(args: Record<string, unknown>): CreateEventInput | null {
+  if (!nonEmptyString(args.subject)) return null;
+  if (!nonEmptyString(args.start)) return null;
+  if (!nonEmptyString(args.end)) return null;
+  if (args.attendees !== undefined && !isNonEmptyStringArray(args.attendees)) return null;
+  if (args.online !== undefined && typeof args.online !== "boolean") return null;
+  if (args.timezone !== undefined && !nonEmptyString(args.timezone)) return null;
+  const out: CreateEventInput = { subject: args.subject, start: args.start, end: args.end };
+  if (isNonEmptyStringArray(args.attendees)) out.attendees = args.attendees;
+  if (typeof args.online === "boolean") out.online = args.online;
+  if (nonEmptyString(args.timezone)) out.timezone = args.timezone;
+  return out;
+}
+
+interface TriggerFlowArgs {
+  url: string;
+  payload?: unknown;
+}
+
+/** Validates + narrows `power_automate_trigger_flow` args; null when url is not a non-empty
+ * string. `payload` is passed through unchanged (any JSON value is valid). */
+function readTriggerFlowArgs(args: Record<string, unknown>): TriggerFlowArgs | null {
+  if (!nonEmptyString(args.url)) return null;
+  const out: TriggerFlowArgs = { url: args.url };
+  if (args.payload !== undefined) out.payload = args.payload;
   return out;
 }
 
@@ -560,6 +607,72 @@ async function handleTeamsWrite(
   return { ok: true, data: await outcome.result };
 }
 
+/**
+ * The gated Calendar write (`calendar_create_event`) — mirrors {@link handleTeamsWrite}'s exact
+ * permission pattern: validate args → build the `PermissionAction` → `gate.submit` →
+ * `gate.proceed` runs the Graph create ONLY behind a recorded Allow. Resolves the created
+ * `CalendarEvent`; `ToolResult.data` carries it unchanged.
+ */
+async function handleCalendarWrite(
+  deps: ToolDeps,
+  call: ToolCall & { name: "calendar_create_event" },
+): Promise<ToolResult> {
+  const input = readCreateEventArgs(call.args);
+  if (input === null) {
+    return invalid("calendar_create_event cần subject, start và end là chuỗi không rỗng.");
+  }
+  const action: PermissionAction = {
+    kind: "ms365_write",
+    description: `Tạo sự kiện lịch "${input.subject}"`,
+  };
+  deps.gate.submit(
+    createPermissionRequest({ requestId: call.requestId, sessionId: call.sessionId, action, requestedAt: deps.now() }),
+  );
+  const decision = await awaitGateDecision(deps.gate, call.requestId, deps.wait ?? defaultWait);
+  if (decision === "denied") {
+    return deniedResult("Yêu cầu tạo sự kiện lịch chưa được cho phép.");
+  }
+  const outcome = deps.gate.proceed(call.requestId, () => deps.calendar.createEvent(input));
+  if (!outcome.performed) {
+    return deniedResult("Yêu cầu tạo sự kiện lịch chưa được cho phép.");
+  }
+  return { ok: true, data: await outcome.result };
+}
+
+/**
+ * The gated Power Automate write (`power_automate_trigger_flow`) — mirrors
+ * {@link handleTeamsWrite}'s exact permission pattern: validate args → build the
+ * `PermissionAction` → `gate.submit` → `gate.proceed` triggers the flow ONLY behind a recorded
+ * Allow. Resolves `{ status }`; `ToolResult.data` carries it unchanged.
+ */
+async function handlePowerAutomateWrite(
+  deps: ToolDeps,
+  call: ToolCall & { name: "power_automate_trigger_flow" },
+): Promise<ToolResult> {
+  const input = readTriggerFlowArgs(call.args);
+  if (input === null) {
+    return invalid("power_automate_trigger_flow cần url là chuỗi không rỗng.");
+  }
+  const action: PermissionAction = {
+    kind: "ms365_write",
+    description: `Kích hoạt Power Automate flow ${input.url}`,
+  };
+  deps.gate.submit(
+    createPermissionRequest({ requestId: call.requestId, sessionId: call.sessionId, action, requestedAt: deps.now() }),
+  );
+  const decision = await awaitGateDecision(deps.gate, call.requestId, deps.wait ?? defaultWait);
+  if (decision === "denied") {
+    return deniedResult("Yêu cầu kích hoạt flow chưa được cho phép.");
+  }
+  const outcome = deps.gate.proceed(call.requestId, () =>
+    deps.powerAutomate.triggerFlow(input.payload !== undefined ? { url: input.url, payload: input.payload } : { url: input.url }),
+  );
+  if (!outcome.performed) {
+    return deniedResult("Yêu cầu kích hoạt flow chưa được cho phép.");
+  }
+  return { ok: true, data: await outcome.result };
+}
+
 /** Dispatches one read tool; validates args, then calls the SharePoint method directly. */
 async function handleRead(deps: ToolDeps, call: ToolCall): Promise<ToolResult> {
   switch (call.name) {
@@ -643,6 +756,38 @@ async function handleRead(deps: ToolDeps, call: ToolCall): Promise<ToolResult> {
       }
       return { ok: true, data: await deps.teams.getMessages(target) };
     }
+    case "calendar_list_events": {
+      if (!nonEmptyString(call.args.start)) return invalid("calendar_list_events cần start là chuỗi.");
+      if (!nonEmptyString(call.args.end)) return invalid("calendar_list_events cần end là chuỗi.");
+      return { ok: true, data: await deps.calendar.listEvents({ start: call.args.start, end: call.args.end }) };
+    }
+    case "calendar_search_events": {
+      if (!nonEmptyString(call.args.query)) return invalid("calendar_search_events cần query là chuỗi không rỗng.");
+      return { ok: true, data: await deps.calendar.searchEvents(call.args.query) };
+    }
+    case "onedrive_search_files": {
+      if (!nonEmptyString(call.args.query)) return invalid("onedrive_search_files cần query là chuỗi không rỗng.");
+      return { ok: true, data: await deps.onedrive.searchMyFiles(call.args.query) };
+    }
+    case "onedrive_list_folder": {
+      if (call.args.itemId !== undefined && !nonEmptyString(call.args.itemId)) {
+        return invalid("onedrive_list_folder: itemId phải là chuỗi không rỗng khi có mặt.");
+      }
+      return {
+        ok: true,
+        data: await deps.onedrive.listMyFolder(nonEmptyString(call.args.itemId) ? call.args.itemId : undefined),
+      };
+    }
+    case "power_automate_list_flows": {
+      return { ok: true, data: deps.powerAutomate.listFlows() };
+    }
+    case "resolve_user": {
+      if (!nonEmptyString(call.args.query)) return invalid("resolve_user cần query là chuỗi không rỗng.");
+      return { ok: true, data: await deps.common.resolveUser(call.args.query) };
+    }
+    case "get_me": {
+      return { ok: true, data: await deps.common.getMe() };
+    }
     default: {
       const exhaustive:
         | "sharepoint_upload_file"
@@ -653,7 +798,9 @@ async function handleRead(deps: ToolDeps, call: ToolCall): Promise<ToolResult> {
         | "lists_add_item"
         | "lists_edit_item"
         | "lists_delete_item"
-        | "teams_post_message" = call.name;
+        | "teams_post_message"
+        | "calendar_create_event"
+        | "power_automate_trigger_flow" = call.name;
       return invalid(`Công cụ không được hỗ trợ: ${exhaustive}`);
     }
   }
@@ -692,6 +839,18 @@ function isPlannerBatchWrite(call: ToolCall): call is ToolCall & { name: "planne
   return call.name === "planner_create_tasks";
 }
 
+/** The Calendar write, routed through {@link handleCalendarWrite} before any read dispatch. A
+ * type-guard on the whole `call` (not just `call.name`) so the write handler narrows cleanly. */
+function isCalendarWrite(call: ToolCall): call is ToolCall & { name: "calendar_create_event" } {
+  return call.name === "calendar_create_event";
+}
+
+/** The Power Automate write, routed through {@link handlePowerAutomateWrite} before any read
+ * dispatch. A type-guard on the whole `call` so the write handler narrows cleanly. */
+function isPowerAutomateWrite(call: ToolCall): call is ToolCall & { name: "power_automate_trigger_flow" } {
+  return call.name === "power_automate_trigger_flow";
+}
+
 /**
  * Dispatch entry point. Fails closed when the connector is not `connected` (no throw), maps a
  * thrown {@link Ms365Error} to its non-secret kind/message/recovery, and routes the write
@@ -726,6 +885,8 @@ export async function handleToolCall(deps: ToolDeps, call: ToolCall): Promise<To
     if (isPlannerWrite(call)) return await handlePlannerWrite(deps, call);
     if (isListsWrite(call)) return await handleListsWrite(deps, call);
     if (isTeamsWrite(call)) return await handleTeamsWrite(deps, call);
+    if (isCalendarWrite(call)) return await handleCalendarWrite(deps, call);
+    if (isPowerAutomateWrite(call)) return await handlePowerAutomateWrite(deps, call);
     return await handleRead(deps, call);
   } catch (err) {
     if (err instanceof Ms365Error) {

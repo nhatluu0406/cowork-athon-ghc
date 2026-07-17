@@ -8,7 +8,7 @@
  * process, which the supervisor populates per-launch. This keeps the loopback boundary, the
  * token, and the tool surface entirely out of any file/log the product writes.
  *
- * The 25 tool names below MUST match `TOOL_NAMES` in `../ms365/ms365-tool-router.ts` exactly —
+ * The tool names below MUST match `TOOL_NAMES` in `../ms365/ms365-tool-router.ts` exactly —
  * `service/tests/ms365-plugin-file.test.ts` asserts this so router and plugin cannot drift.
  *
  * `writeMs365Plugin` mirrors the secret-refusal guard already used by `writeOpencodeConfig`
@@ -89,6 +89,15 @@ const MS365_TOOLS = new Set([
   "teams_list_members",
   "teams_get_messages",
   "teams_post_message",
+  "calendar_list_events",
+  "calendar_search_events",
+  "calendar_create_event",
+  "onedrive_search_files",
+  "onedrive_list_folder",
+  "power_automate_list_flows",
+  "power_automate_trigger_flow",
+  "resolve_user",
+  "get_me",
 ]);
 
 export const Ms365 = async () => ({
@@ -126,6 +135,15 @@ export const Ms365 = async () => ({
     teams_list_members: tool({ description: "List members of a chat OR a team (exactly one of chatId/teamId) — resolves userId for mentions/assignments.", args: { chatId: S.string().optional(), teamId: S.string().optional() }, async execute(args, ctx) { return call("teams_list_members", args, ctx); } }),
     teams_get_messages: tool({ description: "Get recent messages of a chat (chatId) or channel (teamId+channelId). No server-side search — filter client-side.", args: { chatId: S.string().optional(), teamId: S.string().optional(), channelId: S.string().optional() }, async execute(args, ctx) { return call("teams_get_messages", args, ctx); } }),
     teams_post_message: tool({ description: "Post a Teams message to a chat (chatId) or channel (teamId+channelId). Mentions: use @{i} placeholders in content with mentions[i]={userId,displayName}. Requires user permission approval.", args: { chatId: S.string().optional(), teamId: S.string().optional(), channelId: S.string().optional(), content: S.string(), mentions: S.array(S.object({ userId: S.string(), displayName: S.string() })).optional() }, async execute(args, ctx) { return call("teams_post_message", args, ctx); } }),
+    calendar_list_events: tool({ description: "List Outlook calendar events in a time window (ISO 8601 start/end). Read-only.", args: { start: S.string(), end: S.string() }, async execute(args, ctx) { return call("calendar_list_events", args, ctx); } }),
+    calendar_search_events: tool({ description: "Search Outlook calendar events by free-text query. Read-only.", args: { query: S.string() }, async execute(args, ctx) { return call("calendar_search_events", args, ctx); } }),
+    calendar_create_event: tool({ description: "Create an Outlook calendar event (optionally an online Teams meeting). ISO 8601 start/end; timezone defaults to UTC. Requires user permission approval.", args: { subject: S.string(), start: S.string(), end: S.string(), attendees: S.array(S.string()).optional(), online: S.boolean().optional(), timezone: S.string().optional() }, async execute(args, ctx) { return call("calendar_create_event", args, ctx); } }),
+    onedrive_search_files: tool({ description: "Search the connected account's personal OneDrive by name/content. Read-only.", args: { query: S.string() }, async execute(args, ctx) { return call("onedrive_search_files", args, ctx); } }),
+    onedrive_list_folder: tool({ description: "List children of a personal OneDrive folder (root when itemId omitted). Read-only.", args: { itemId: S.string().optional() }, async execute(args, ctx) { return call("onedrive_list_folder", args, ctx); } }),
+    power_automate_list_flows: tool({ description: "List the configured Power Automate flows (name only) available to trigger.", args: {}, async execute(args, ctx) { return call("power_automate_list_flows", args, ctx); } }),
+    power_automate_trigger_flow: tool({ description: "Trigger a Power Automate flow by its HTTP-request URL with an optional JSON payload. Requires user permission approval.", args: { url: S.string(), payload: S.unknown().optional() }, async execute(args, ctx) { return call("power_automate_trigger_flow", args, ctx); } }),
+    resolve_user: tool({ description: "Resolve people by name or email to user ids (needed before mention/assign/invite). Read-only.", args: { query: S.string() }, async execute(args, ctx) { return call("resolve_user", args, ctx); } }),
+    get_me: tool({ description: "Get the connected account's own identity (display name, mail, time zone). Read-only.", args: {}, async execute(args, ctx) { return call("get_me", args, ctx); } }),
   },
 });
 `;

@@ -8,18 +8,8 @@ import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
 import { renderDevicePendingCard } from "./ms-connect-device.js";
 
-/** Chú thích tiếng Việt cho các scope đã biết; scope lạ hiển thị không chú thích. */
-const MS365_SCOPE_NOTES: Readonly<Record<string, string>> = {
-  "Files.ReadWrite.All": "Đọc và tải tệp lên OneDrive/SharePoint",
-  "Sites.ReadWrite.All": "Site + SharePoint Lists (đọc/ghi)",
-  "Mail.Read": "Đọc thư Outlook (không gửi)",
-  "Tasks.ReadWrite": "Đọc và cập nhật task Planner",
-  "Chat.ReadWrite": "Chat Teams của bạn (đọc/gửi)",
-  "Team.ReadBasic.All": "Danh sách team đã tham gia",
-  "Channel.ReadBasic.All": "Danh sách channel",
-  "ChannelMessage.Read.All": "Đọc tin nhắn channel",
-  "ChannelMessage.Send": "Đăng tin nhắn channel (cần phê duyệt)",
-};
+/** Nơi lấy access token thủ công (Graph Explorer → "Access token"). */
+const GRAPH_EXPLORER_URL = "https://developer.microsoft.com/en-us/graph/graph-explorer";
 
 /** Minimal service-client slice the connect view needs (structural — real ServiceClient satisfies it). */
 export interface Ms365ConnectClient {
@@ -114,13 +104,6 @@ function renderSignInCard(container: HTMLElement, deps: RenderMsConnectDeps, sta
     });
   });
 
-  const scopeTitle = el("h3", "ms-section-label", "Quyền sẽ xin khi kết nối");
-  const scopeList = el("ul", "ms-scope-list");
-  for (const scope of deps.view.scopes) {
-    const li = el("li", "ms-scope-list__item");
-    li.append(el("code", "ms-scope-list__scope", scope), el("span", "ms-scope-list__note", MS365_SCOPE_NOTES[scope] ?? ""));
-    scopeList.append(li);
-  }
   const oauthNote = el(
     "p",
     "ms-connect__oauth-note",
@@ -135,8 +118,6 @@ function renderSignInCard(container: HTMLElement, deps: RenderMsConnectDeps, sta
     signIn,
     noteSlot,
     manual,
-    scopeTitle,
-    scopeList,
     oauthNote,
   );
   return card;
@@ -148,6 +129,20 @@ function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps,
   toggle.type = "button";
   const body = el("div", "ms-connect__manual-body");
   body.hidden = true;
+
+  // Hướng dẫn lấy token: mở Graph Explorer, đăng nhập, rồi copy ở tab "Access token".
+  const guide = el("p", "ms-connect__manual-guide");
+  guide.append(
+    document.createTextNode("Chưa có token? Mở "),
+  );
+  const guideLink = el("a", "ms-connect__manual-guide-link", "Microsoft Graph Explorer") as HTMLAnchorElement;
+  guideLink.href = GRAPH_EXPLORER_URL;
+  guideLink.target = "_blank";
+  guideLink.rel = "noopener noreferrer";
+  guide.append(
+    guideLink,
+    document.createTextNode(", đăng nhập tài khoản của bạn, chuyển sang tab “Access token”, sao chép rồi dán vào ô bên dưới."),
+  );
 
   // A real Graph access token is a long JWT, so use a full-width multi-line textarea rather than
   // a short single-line input. `autocomplete`/`spellcheck` off; the value is never serialized to
@@ -173,11 +168,23 @@ function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps,
     const token = input.value.trim();
     if (token.length === 0) return;
     submit.disabled = true;
+    errorSlot.hidden = true;
     void deps.client
       .connectMs365Token(token)
       .then((view) => {
         input.value = "";
-        deps.onViewChange(view);
+        // `connectWithToken` never throws: an invalid/expired token (or one lacking the verify
+        // scope) resolves to a NON-"connected" state (`error`/`needs_reconnect`) instead of a
+        // rejection. Surface that here and keep the panel open — otherwise the view silently
+        // repaints the same sign-in card and the click appears to do nothing.
+        if (view.connectionState === "connected") {
+          deps.onViewChange(view);
+          return;
+        }
+        errorSlot.textContent =
+          view.error ??
+          "Token bị Microsoft từ chối (hết hạn, sai định dạng, hoặc thiếu quyền). Lấy token mới rồi thử lại.";
+        errorSlot.hidden = false;
       })
       .catch(() => {
         input.value = "";
@@ -189,7 +196,7 @@ function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps,
       });
   });
 
-  body.append(input, submit, errorSlot);
+  body.append(guide, input, submit, errorSlot);
   wrap.append(toggle, body);
   return wrap;
 }

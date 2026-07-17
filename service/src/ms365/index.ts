@@ -82,6 +82,40 @@ export {
 } from "./teams-service.js";
 
 export {
+  createCalendarService,
+  type CalendarService,
+  type CalendarEvent,
+  type CreateEventInput,
+} from "./calendar-service.js";
+
+export {
+  createOneDriveService,
+  type OneDriveService,
+  type OneDriveItem,
+} from "./onedrive-service.js";
+
+export {
+  createCommonService,
+  type CommonService,
+  type ResolvedUser,
+  type Me,
+} from "./common-service.js";
+
+export {
+  createPowerAutomateService,
+  type PowerAutomateService,
+} from "./power-automate-service.js";
+
+export {
+  createPowerAutomateStore,
+  type PowerAutomateStore,
+  type PowerAutomatePersistence,
+  type PowerAutomateFlow,
+} from "./power-automate-store.js";
+
+export { createPowerAutomateFilePersistence } from "./power-automate-file-persistence.js";
+
+export {
   handleToolCall,
   type ToolCall,
   type ToolResult,
