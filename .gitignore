@@ -118,3 +118,6 @@ Desktop.ini
 
 # --- Local TypeScript test output ---
 **/tsc-out/
+
+# --- Local Go ---
+app/backend/vendor/*
