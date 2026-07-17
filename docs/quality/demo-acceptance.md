@@ -70,6 +70,28 @@ PO observation** gate (check only on the packaged Windows app).
 - Note: PDF/Office/ảnh trong Code hiển thị trạng thái chỉ đọc + "Xem trong Workspace" (không dựng lại
   viewer). Terminal/Git/test runner/dev-server **không** thuộc Phase 1.
 
+## Code Slice 1 demo (runtime web preview + UI redesign — ADR 0014)
+
+Code/tests/`build:app` PASS; các ô dưới là **packaged PO observation** còn lại (chỉ tích trên
+packaged Windows app). Desktop app launch **không** thuộc slice này (Slice 2).
+
+- [ ] Surface Code: không còn hai tab "Phiên làm việc/Cách hoạt động"; bố cục Explorer | Editor/
+      Preview | Agent; header gọn + workspace badge + runtime status; light/dark khớp Workspace.
+- [ ] Panel Agent dùng composer kiểu Cowork, gửi vào cùng phiên; thu gọn/mở lại được.
+- [ ] **Static:** mở workspace có `index.html` → chế độ Preview → Chạy → trang tĩnh hiển thị nhúng.
+- [ ] **Dev server:** dự án frontend → Chạy → hộp thoại **Cho phép/Từ chối** hiện đúng lệnh + cwd;
+      Cho phép → dev server chạy, phát hiện localhost, trang hiển thị trong app.
+- [ ] **Deny:** Từ chối → không có tiến trình nào chạy; trạng thái trung thực.
+- [ ] **Restart sau crash:** dừng/giết dev server → Khởi động lại hoạt động.
+- [ ] **Port đã bị chiếm / lệnh sai / package manager thiếu / package.json hỏng** → trạng thái lỗi
+      rõ ràng, không crash renderer, không giả "running".
+- [ ] **Đổi workspace khi preview đang chạy** → tiến trình bị dừng, preview reset theo workspace mới.
+- [ ] **Đóng Cowork GHC** khi preview đang chạy → xác nhận **không còn tiến trình con** (tree-kill).
+- [ ] Output log hiển thị (đã redact); Output | Problems chuyển tab được.
+- [ ] Không điều hướng ra remote origin / không popup / không download từ trang preview.
+- [ ] Agent sửa code của dự án đang preview → làm mới/không mất dirty đúng như multi-file editor.
+- Note: nhúng bằng WebContentsView (giữ CSP renderer). Desktop app launch là Slice 2.
+
 ## Settings / Skills / Inspector
 
 - [ ] Provider actions are understandable without button clutter.

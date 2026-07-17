@@ -72,9 +72,19 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   file-content` guard-confined), dirty + hộp thoại đóng-khi-chưa-lưu, syntax highlight, verified-
   mutation refresh/xung đột/deleted, handoff "Mở trong Code" ↔ "Xem trong Workspace"; label đã đổi
   "Claude Code" → "Code" và đã gỡ chip giả. Giới hạn còn lại:
-  - **Chưa phải IDE**: không terminal/PTY, Git client, dev-server, runtime web preview, embedded app
-    launch, debugger, LSP — deferred (ADR 0013). PDF/Office/ảnh trong Code hiển thị chỉ đọc + nút
-    "Xem trong Workspace" (không dựng lại viewer).
+  - **Runtime web preview (Slice 1, ADR 0014)** đã có: xem trước dự án **tĩnh** (máy chủ loopback
+    bounded) và **dev server** frontend. Giới hạn trung thực:
+    - Nhúng bằng **WebContentsView** nổi trên DOM ⇒ được **ẩn chủ động** khi có Settings/permission
+      dialog hoặc rời chế độ Preview; **không tự clip** theo bo góc/scroll như iframe (đánh đổi để
+      giữ CSP renderer). Chỉ nạp **loopback**; remote-nav/popup/download/webview bị chặn.
+    - **Dev server**: chỉ chạy `<pm> run <script>` (pm ∈ npm/pnpm/yarn) đã allowlist + **người dùng
+      phê duyệt lệnh**; không chạy lệnh tự do từ model/file. Dò port là **heuristic** (đọc URL
+      localhost từ output / dò `PORT`); framework in URL khác thường có thể không phát hiện được →
+      `failed` trung thực, không giả "running". Không đảm bảo HMR/websocket; không proxy remote/CDN.
+    - **Đổi workspace / tắt app** dừng preview (graceful-then-`taskkill /T /F`, không orphan). Output
+      đã redact + giới hạn kích thước.
+    - **Desktop app launch defer sang Slice 2**. Vẫn không terminal/PTY, Git client, debugger, LSP.
+    PDF/Office/ảnh trong Code hiển thị chỉ đọc + "Xem trong Workspace" (không dựng lại viewer).
   - **Chỉ sửa được tệp văn bản/mã** (kind `text`); spreadsheet/tài liệu vẫn xem/sửa ở Workspace.
   - **Đổi active workspace khi còn tab Code chưa lưu sẽ reset** (bỏ thay đổi chưa lưu) — giống
     companion Workspace hiện tại; hộp thoại xác nhận trước khi đổi workspace là việc sau (không nằm

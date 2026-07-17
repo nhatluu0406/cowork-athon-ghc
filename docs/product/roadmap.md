@@ -119,6 +119,30 @@ còn tab dirty sẽ **reset** (bỏ sửa chưa lưu) — như companion Workspa
 Web/App preview taxonomy (ADR 0013): **File preview** (bounded local, có thể làm Later trong Code) ≠
 **Runtime web preview** (dev-server/port, deferred) ≠ **Desktop app launch** (process riêng, deferred).
 
+## WAVE 8 — Code Slice 1: Runtime web preview + UI redesign (code/tests/build PASS — packaged PO obs pending; ADR 0014)
+
+Mở khoá phần **Runtime web preview** mà ADR 0013 defer. Giữ Hybrid (dùng chung
+workspace/backend/session/permission với Cowork); **desktop app launch defer sang Slice 2**.
+
+- [x] Thiết kế lại UI Code theo visual system Workspace (token `--cghc-*`, dark mode); bỏ hai tab
+      "Phiên làm việc/Cách hoạt động" + onboarding tab; bố cục Explorer | Editor/Preview | Agent;
+      chế độ **Code/Preview**; Output drawer (Output | Problems); panel Agent theo composer Cowork,
+      thu gọn được; header gọn + workspace badge + runtime status.
+- [x] Bounded process runner trong service (`runtime-preview/`): static loopback server (confined,
+      no-command) + dev-server (`<pm> run <script>` allowlist + validate, env curated không secret,
+      dò port, timeout, graceful-then-tree-kill, dọn khi đổi workspace/tắt service).
+- [x] **Permission bắt buộc** cho mọi lần chạy lệnh dev-server (PermissionGate riêng, chạy chỉ trong
+      `proceed` sau Allow; Deny/timeout không spawn); output redact + bounded; telemetry counters.
+- [x] Nhúng bằng **WebContentsView hardened** (giữ CSP renderer, chỉ loopback, chặn remote-nav/
+      popup/download/webview, no preload, session in-memory); IPC typed hẹp; ẩn dưới modal/Settings.
+- [x] Active preview URL vào Agent context (loopback URL, không nội dung trang).
+
+Trạng thái: focused UI + service tests + `npm run typecheck` + `npm run build:app` PASS. Còn lại
+**packaged PO observation** (xem `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
+
+Deferred (Slice 2): **Desktop app launch** (build/launch process riêng, status/output, stop/restart)
+— dùng lại runner + permission + tree-kill. Terminal/PTY, Git UI, debugger, LSP vẫn defer.
+
 ## WAITING
 
 - [ ] D1 Dispatch integration.

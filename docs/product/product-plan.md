@@ -46,8 +46,10 @@ Cowork GHC là desktop AI workspace local-first trên Windows: người dùng k�
 - [x] Verified Agent mutation refresh / conflict / deleted (dùng lại File Work Review)
 - [x] Workspace ↔ Code handoff ("Mở trong Code" / "Xem trong Workspace"); active-file làm Agent context
 - [x] Rename product label "Claude Code" → "Code"; gỡ chip giả
+- [x] Slice 1 — UI redesign theo visual system Workspace (token/dark, bỏ hai tab, Explorer|Editor/Preview|Agent, Output drawer, composer Cowork)
+- [x] Slice 1 — Runtime web preview thật: static + dev-server (bounded runner, permission bắt buộc, tree-kill, WebContentsView hardened) — ADR 0014
 - [ ] Packaged PO observation (demo-acceptance) trước khi claim WORKS
-- Deferred: terminal, Git UI, debugger, LSP, dev-server, runtime web preview, desktop app launch (no separate backend/session/runtime for Code)
+- Deferred: **desktop app launch (Slice 2)**, terminal, Git UI, debugger, LSP (no separate backend/session/runtime for Code)
 
 ### Providers
 
