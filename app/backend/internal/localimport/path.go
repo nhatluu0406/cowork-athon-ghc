@@ -8,19 +8,19 @@ import (
 
 // ValidateSourcePath validates and normalizes a user-provided folder path.
 // Returns the absolute, clean path if valid, or an error.
+// Rejects relative paths, UNC paths, and empty paths.
 func ValidateSourcePath(userInput string) (string, error) {
 	if userInput == "" {
 		return "", fmt.Errorf("path cannot be empty")
 	}
 
-	// Get absolute path
-	abs, err := filepath.Abs(userInput)
-	if err != nil {
-		return "", fmt.Errorf("invalid path: %w", err)
+	// Reject relative paths; only absolute paths are allowed
+	if !filepath.IsAbs(userInput) {
+		return "", fmt.Errorf("path must be absolute, not relative")
 	}
 
 	// Clean the path
-	clean := filepath.Clean(abs)
+	clean := filepath.Clean(userInput)
 
 	// Reject UNC paths on Windows (e.g., \\server\share)
 	if strings.HasPrefix(clean, `\\`) {

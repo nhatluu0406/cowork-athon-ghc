@@ -37,11 +37,11 @@
 
 **⚠️ CRITICAL**: No user story work begins until this phase is complete.
 
-- [ ] T005 Implement Go types in `app/backend/internal/localimport/source.go`: `LocalSource` struct, `CreateSourceRequest`, `PatchSourceRequest`, `LocalSourceStore` with `Create`, `List`, `Get`, `Update`, `Delete`, `UpdateStats`, `SetStatus` methods backed by PostgreSQL `local_sources` table
-- [ ] T006 Implement Go types in `app/backend/internal/localimport/job.go`: `ImportJob` struct, `JobStatus` constants (`queued`/`running`/`completed`/`failed`/`stale`), `JobProgress`, `ImportJobStore` with `Create`, `UpdateStatus`, `UpdateProgress`, `List`, `Get`, `MarkStaleJobs` methods backed by PostgreSQL `import_jobs` table
-- [ ] T007 Implement Go types in `app/backend/internal/localimport/file.go`: `LocalFile` struct, `ScanEntry`, `DeltaResult`, `DeltaAction` constants, `LocalFileStore` with `Upsert`, `GetByRelPath`, `ListBySource`, `Delete` methods backed by PostgreSQL `local_files` table
-- [ ] T008 Implement `app/backend/internal/localimport/path.go`: `ValidateSourcePath(userInput string) (string, error)` using `filepath.Abs` + `filepath.Clean` + UNC rejection; `RedactPath(absPath, sourceRoot string) string` returning rel_path only; `IsInsideRoot(path, root string) bool`
-- [ ] T009 [P] Write unit tests `app/backend/tests/unit/localimport/path_test.go`: valid absolute path, relative path rejected, `..` traversal rejected, UNC path rejected (`\\server\share`), Windows-style path on Linux (`C:\Users\...` rejected), symlink path accepted as-is (resolution tested separately), empty string rejected — target >90% coverage
+- [X] T005 Implement Go types in `app/backend/internal/localimport/source.go`: `LocalSource` struct, `CreateSourceRequest`, `PatchSourceRequest`, `LocalSourceStore` with `Create`, `List`, `Get`, `Update`, `Delete`, `UpdateStats`, `SetStatus` methods backed by PostgreSQL `local_sources` table
+- [X] T006 Implement Go types in `app/backend/internal/localimport/job.go`: `ImportJob` struct, `JobStatus` constants (`queued`/`running`/`completed`/`failed`/`stale`), `JobProgress`, `ImportJobStore` with `Create`, `UpdateStatus`, `UpdateProgress`, `List`, `Get`, `MarkStaleJobs` methods backed by PostgreSQL `import_jobs` table
+- [X] T007 Implement Go types in `app/backend/internal/localimport/file.go`: `LocalFile` struct, `ScanEntry`, `DeltaResult`, `DeltaAction` constants, `LocalFileStore` with `Upsert`, `GetByRelPath`, `ListBySource`, `Delete` methods backed by PostgreSQL `local_files` table
+- [X] T008 Implement `app/backend/internal/localimport/path.go`: `ValidateSourcePath(userInput string) (string, error)` using `filepath.Abs` + `filepath.Clean` + UNC rejection; `RedactPath(absPath, sourceRoot string) string` returning rel_path only; `IsInsideRoot(path, root string) bool`
+- [X] T009 [P] Write unit tests `app/backend/tests/unit/localimport/path_test.go`: valid absolute path, relative path rejected, `..` traversal rejected, UNC path rejected (`\\server\share`), Windows-style path on Linux (`C:\Users\...` rejected), symlink path accepted as-is (resolution tested separately), empty string rejected — target >90% coverage
 
 **Checkpoint**: `go test ./internal/localimport/... -run TestPath` passes; `go test ./internal/localimport/... -run TestStore` passes with test DB
 
