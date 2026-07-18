@@ -123,3 +123,6 @@ Desktop.ini
 
 # --- Local TypeScript test output ---
 **/tsc-out/
+
+# --- Local secrets (never commit) ---
+lock.MD

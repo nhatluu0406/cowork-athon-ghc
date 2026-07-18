@@ -7,6 +7,19 @@ for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 title Cowork GHC - start
 set "EXE=%ROOT%\dist-app\win-unpacked\coworkghc.exe"
 
+rem --- Remote / phone access for the live demo (agent-harness ADR 0010) ----------
+rem The phone dispatch + chat surface needs the gateway ENABLED at boot
+rem (CGHC_REMOTE_ENABLED) and bound to the LAN (CGHC_REMOTE_LAN) so the /remote QR
+rem encodes a phone-reachable URL. Leaving CGHC_REMOTE_LAN unset turns the demo ON
+rem here, so start.bat alone is enough - no extra step. To keep the app loopback-only
+rem (no Wi-Fi exposure, the shipped baseline), set CGHC_REMOTE_LAN=0 before running.
+rem NOTE: LAN mode is HTTP without TLS yet; the one-time device token travels in the
+rem clear, so only use it on a network you trust. TLS + cert pinning is a later slice.
+if not defined CGHC_REMOTE_LAN (
+  set "CGHC_REMOTE_LAN=1"
+  if not defined CGHC_REMOTE_ENABLED set "CGHC_REMOTE_ENABLED=1"
+)
+
 where node >nul 2>nul
 if errorlevel 1 goto :nonode
 

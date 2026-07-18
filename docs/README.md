@@ -29,9 +29,12 @@ updated_at: "2026-07-18"
 | `product/product-plan.md` | Tầm nhìn, phạm vi, capability sản phẩm |
 | `product/roadmap.md` | NOW / NEXT / LATER / WAITING |
 | `product/exhibition-readiness-plan.md` | Kế hoạch đưa sản phẩm thành trạng thái triển lãm (P0–P3, acceptance) |
+| `design.md` | Mô tả hệ thống diagram-ready: node/edge/boundary/layout đủ để sinh HTML & Excalidraw |
 | `architecture/system-overview.md` | Boundary + kiến trúc đang chạy |
 | `architecture/dependencies-and-services.md` | Inventory ngôn ngữ/tiến trình/DB/network/third-party (D-track truth, Docker dev-only) |
 | `architecture/local-first-strategy.md` | Phân loại dependency + KB/KG options + roadmap local hóa |
+| `architecture/ev-stream-events.md` | Định dạng EV event streaming theo turn (thinking/tool/metrics) |
+| `architecture/opencode-runtime-notes.md` | Forensic runtime OpenCode (delete/question tool, turn-perf, fix) |
 | `quality/demo-acceptance.md` | Happy path kiểm tra trên packaged app |
 | `quality/release-acceptance.md` | Acceptance có phủ negative/recovery |
 | `quality/known-limitations.md` | Giới hạn thực tế chưa xử lý |
