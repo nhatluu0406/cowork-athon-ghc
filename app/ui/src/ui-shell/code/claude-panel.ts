@@ -1,6 +1,7 @@
 import type { RuntimePhase } from "../../conversation-controller.js";
 import type { ConversationMessage } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
+import { renderAssistantMarkdown } from "../../markdown-message.js";
 
 export interface ClaudePanelDom {
   readonly root: HTMLElement;
@@ -78,7 +79,15 @@ export function renderClaudePanel(
   }
   for (const message of state.messages) {
     const node = el("div", `cc-msg cc-msg--${message.role}`);
-    node.append(el("p", "cc-msg__text", message.text));
+    const textBox = el("div", "cc-msg__text");
+    if (message.role === "assistant") {
+      // #33: render assistant answers as safe Markdown (tables/code/headings), same renderer the
+      // Cowork + MS365 surfaces use. User text stays plain.
+      renderAssistantMarkdown(textBox, message.text);
+    } else {
+      textBox.append(el("p", "cc-msg__plain", message.text));
+    }
+    node.append(textBox);
     dom.transcript.append(node);
   }
   const running = state.phase === "running" || state.phase === "starting" || state.phase === "cancelling";

@@ -187,7 +187,15 @@
 .cc-panel__empty { font-size: 12.5px; color: var(--cghc-text-subtle); }
 .cc-msg--user { align-self: flex-end; max-width: 85%; background: var(--cghc-accent-soft); border: 1px solid color-mix(in srgb, var(--cghc-accent) 30%, transparent); border-radius: 14px 14px 4px 14px; padding: 8px 12px; }
 .cc-msg--assistant { align-self: flex-start; max-width: 95%; }
-.cc-msg__text { margin: 0; font-size: 13px; line-height: 1.55; color: var(--cghc-text-primary); white-space: pre-wrap; }
+.cc-msg__text { margin: 0; font-size: 13px; line-height: 1.55; color: var(--cghc-text-primary); }
+/* #33: assistant answers render as Markdown (.md); user text stays plain with preserved wrapping. */
+.cc-msg__text.md { white-space: normal; }
+.cc-msg__plain { margin: 0; white-space: pre-wrap; }
+.cc-msg__text.md > *:first-child { margin-top: 0; }
+.cc-msg__text.md > *:last-child { margin-bottom: 0; }
+.cc-msg__text.md table { border-collapse: collapse; width: 100%; margin: 0 0 .7em; font-size: 12px; display: block; overflow-x: auto; }
+.cc-msg__text.md th, .cc-msg__text.md td { border: 1px solid var(--cghc-border); padding: 4px 8px; text-align: left; }
+.cc-msg__text.md th { background: color-mix(in srgb, var(--cghc-text-primary) 6%, transparent); font-weight: 600; }
 .cc-panel__streaming { display: flex; gap: 8px; padding: 0 14px 10px; font-size: 13px; color: var(--cghc-text-secondary); align-items: baseline; }
 .cc-panel__pulse { width: 8px; height: 8px; border-radius: 999px; background: var(--cghc-accent); animation: cghc-pulse 1.6s infinite; flex: none; }
 @keyframes cghc-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }

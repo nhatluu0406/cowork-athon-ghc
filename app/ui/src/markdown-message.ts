@@ -53,12 +53,30 @@ const PURIFY_CONFIG = {
   ALLOW_DATA_ATTR: false,
 };
 
+/**
+ * Collapse runaway vertical whitespace before parsing (#32 "xuống hàng quá nhiều"). With
+ * `breaks: true`, a model that emits three or more consecutive newlines produced stacks of empty
+ * lines/`<br>`s that made the transcript look sparse and broken up. Runs of 3+ newlines become a
+ * single paragraph break, and leading/trailing blank lines are trimmed — inside a fenced code block
+ * the original spacing is preserved (only whole-string leading/trailing trim applies).
+ */
+function normalizeVerticalWhitespace(markdown: string): string {
+  const normalized = markdown.replace(/\r\n/g, "\n");
+  // Split on fenced code blocks (kept at odd indices by the capturing group) so intentional blank
+  // lines inside code survive; collapse 3+ newlines only in the prose between fences.
+  const parts = normalized.split(/(```[\s\S]*?```|~~~[\s\S]*?~~~)/g);
+  return parts
+    .map((part, index) => (index % 2 === 1 ? part : part.replace(/\n{3,}/g, "\n\n")))
+    .join("")
+    .trim();
+}
+
 /** Parse Markdown → sanitized HTML string (no DOM side effects). Falls back to escaped text. */
 export function markdownToSafeHtml(markdown: string): string {
   ensureHooks();
   let rawHtml: string;
   try {
-    rawHtml = marked.parse(markdown, { async: false }) as string;
+    rawHtml = marked.parse(normalizeVerticalWhitespace(markdown), { async: false }) as string;
   } catch {
     return escapeHtml(markdown);
   }
