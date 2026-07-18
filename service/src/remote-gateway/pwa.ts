@@ -646,6 +646,10 @@ export const REMOTE_PWA_HTML = `<!doctype html>
           note.textContent = "Hội thoại thuộc workspace khác — mở đúng workspace trên desktop.";
           return;
         }
+        if (r.s === 409 && code === "turn_in_progress") {
+          note.textContent = "Lượt trước đang chạy — đợi phản hồi xong rồi gửi tiếp.";
+          return;
+        }
         if (r.s === 503 && code === "no_active_workspace") {
           note.textContent = "Chưa mở workspace nào trên desktop.";
           return;

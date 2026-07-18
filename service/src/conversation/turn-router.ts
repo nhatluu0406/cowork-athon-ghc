@@ -169,17 +169,28 @@ export function createConversationTurnRouter(
    * Persist the assistant summary + complete the runtime turn once the session goes terminal.
    * Runs exactly once per turn (guarded), tears down the subscription + backstop timer, and never
    * throws into the request path — persistence failures are logged, not surfaced as a fake reply.
+   *
+   * Returns a `cancel()` the caller MUST invoke if the prompt never dispatched: otherwise the
+   * 15-minute backstop timer would later fire `finalize` and inject a phantom "an error occurred"
+   * assistant message long after the client already saw an honest 503 (review #21, finding 1).
    */
-  function bindTerminalPersistence(conversationId: string, sessionId: string): void {
+  function bindTerminalPersistence(
+    conversationId: string,
+    sessionId: string,
+  ): { cancel(): void } {
     let done = false;
     let unsub: { close(): void } | undefined;
     let timer: { unref?: () => void } | undefined;
 
+    const teardown = (): void => {
+      unsub?.close();
+      if (timer !== undefined) clearTimer(timer);
+    };
+
     const finalize = (fallbackTerminal?: string): void => {
       if (done) return;
       done = true;
-      unsub?.close();
-      if (timer !== undefined) clearTimer(timer);
+      teardown();
       const view = session.view(sessionId);
       const terminal = view?.terminal ?? fallbackTerminal ?? "completed";
       const text = assistantSummary(view, terminal);
@@ -187,8 +198,14 @@ export function createConversationTurnRouter(
       void (async () => {
         try {
           await store.appendMessage(conversationId, { role: "assistant", text });
+          // Only move the CONVERSATION status if this turn is still the active one — an overlapping
+          // later turn may have re-bound `runtimeSessionId`, and a stale turn's terminal must not
+          // clobber a live turn's "running" status (review #21, finding 2). The turn's own
+          // `runtimeTurns` entry is always completed (it is keyed by this sessionId).
+          const current = await store.get(conversationId);
+          const stillActive = current?.runtimeSessionId === sessionId;
           await store.patch(conversationId, {
-            status,
+            ...(stillActive ? { status } : {}),
             completeRuntimeTurn: { runtimeSessionId: sessionId, completedAt: now(), status },
           });
         } catch (err) {
@@ -209,10 +226,17 @@ export function createConversationTurnRouter(
     const immediate = session.view(sessionId);
     if (unsub === undefined || (immediate !== undefined && immediate.terminal !== null)) {
       finalize();
-      return;
+      return { cancel: teardown };
     }
     timer = setTimer(() => finalize("errored"), TURN_PERSIST_TTL_MS);
     timer.unref?.();
+    // cancel() marks done so a later backstop/terminal event is a no-op, and tears down resources.
+    return {
+      cancel: () => {
+        done = true;
+        teardown();
+      },
+    };
   }
 
   return {
@@ -253,6 +277,21 @@ export function createConversationTurnRouter(
             };
           }
 
+          // Reject an overlapping turn (review #21, finding 2): if this conversation already has a
+          // live (non-terminal) runtime session, starting another would clobber its status and race
+          // its persistence. A completed/absent session's view is terminal/undefined → allowed.
+          const priorSessionId = conversation.runtimeSessionId;
+          if (priorSessionId !== null && session.view(priorSessionId)?.terminal === null) {
+            return {
+              status: 409,
+              data: {
+                accepted: false,
+                code: "turn_in_progress",
+                message: "Lượt trước đang chạy — đợi phản hồi xong rồi gửi tiếp.",
+              },
+            };
+          }
+
           // Create a fresh single-turn session bound to the active workspace (the ONE mechanism).
           let sessionId: string;
           try {
@@ -280,14 +319,17 @@ export function createConversationTurnRouter(
 
           // Watch the live stream so the assistant reply is persisted server-side (the remote
           // client only observes the stream; nobody else drives persistence for this turn).
-          bindTerminalPersistence(conversationId, sessionId);
+          const persistence = bindTerminalPersistence(conversationId, sessionId);
           // Bind a stream handle keyed by the session so a later cancel aborts the run at source.
           session.bindStream(sessionId, { id: sessionId });
 
           try {
             await prompt.send(sessionId, text);
           } catch (err) {
-            // The prompt never dispatched: mark the turn errored honestly (the user message stays).
+            // The prompt never dispatched: cancel the terminal watcher (no frames will ever arrive,
+            // so its 15-min backstop would otherwise inject a phantom reply — review #21, finding 1)
+            // and mark the turn errored honestly (the user message stays).
+            persistence.cancel();
             await store
               .patch(conversationId, {
                 status: "errored",

@@ -196,3 +196,73 @@ test("web turn: a failed dispatch marks the turn errored and returns 503", async
     await rm(fx.dir, { recursive: true, force: true });
   }
 });
+
+test("web turn: a failed dispatch does NOT inject a phantom assistant message later (review #21)", async () => {
+  // The backstop timer must be cancelled when the prompt never dispatched, or it would fire
+  // finalize() and append "an error occurred" as an assistant message 15 minutes later.
+  const timers: Array<() => void> = [];
+  const dir = await mkdtemp(join(tmpdir(), "cghc-turn-phantom-"));
+  const store = createConversationStore({ rootDir: dir, now: NOW });
+  const conv = await store.create({ workspacePath: WS, title: "x" });
+  const session: TurnSessionPort = {
+    create: async () => ({ id: "sess-1" }),
+    view: () => ({ terminal: null, text: "" }),
+    bindStream: () => {},
+  };
+  const prompt: TurnPromptPort = {
+    send: async () => {
+      throw { code: "runtime_not_attached" };
+    },
+  };
+  const stream: TurnStreamPort = { subscribe: () => ({ close: () => {} }) };
+  const router = createConversationTurnRouter({
+    store,
+    session,
+    prompt,
+    stream,
+    activeWorkspaceRoot: () => WS,
+    now: NOW,
+    // Capture the backstop timer callback so we can prove firing it is a no-op after cancel.
+    setTimer: (fn) => {
+      timers.push(fn);
+      return { unref: () => {} };
+    },
+    clearTimer: () => {},
+  });
+  const route = router.routes[0]!;
+  try {
+    await route.handler({
+      method: "POST",
+      url: new URL(`http://127.0.0.1${CONVERSATION_TURN_PATH}`),
+      params: { id: conv.id },
+      body: { text: "hi" },
+    });
+    // Fire every captured backstop timer — cancel() marked the persistence done, so this is inert.
+    for (const fire of timers) fire();
+    await new Promise((r) => setTimeout(r, 20));
+    const after = await store.get(conv.id);
+    // Exactly one message (the user's); NO phantom assistant reply appended.
+    assert.equal(after?.messages.length, 1);
+    assert.equal(after?.messages[0]?.role, "user");
+    assert.equal(after?.status, "errored");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("web turn: an overlapping turn on a live session is refused with 409 turn_in_progress", async () => {
+  const fx = await fixture();
+  try {
+    // First turn goes live (session created, terminal === null) but never completes.
+    const first = await fx.handler({ text: "one" });
+    assert.equal(first.status, 202);
+    // A second turn while the first session is still live must be refused, not clobber it.
+    const second = await fx.handler({ text: "two" });
+    assert.equal(second.status, 409);
+    assert.equal((second.data as { code: string }).code, "turn_in_progress");
+    // Only the first prompt was dispatched.
+    assert.deepEqual(fx.prompts, [{ sessionId: "sess-1", text: "one" }]);
+  } finally {
+    await rm(fx.dir, { recursive: true, force: true });
+  }
+});
