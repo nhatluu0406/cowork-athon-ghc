@@ -75,3 +75,16 @@ test("MS365 tools are allowed at both permission surfaces (bridge is the real ga
   assert.equal(permission.bash, "deny");
   assert.equal(permission.edit, "ask");
 });
+
+test("agent web tools are gated with ask, not deny or allow (#29)", () => {
+  // "ask" routes OpenCode's permission.asked through the bridge → ToolPermissionProxy (web_access,
+  // elevated, SSRF-guarded). "deny" would block them outright (the original bug); "allow" would let
+  // the child fetch arbitrary URLs with no gate.
+  const config = buildOpencodeConfig();
+  const permission = config["permission"] as Record<string, string>;
+  const agent = config["agent"] as { build: { permission: Record<string, string> } };
+  assert.equal(permission["webfetch"], "ask");
+  assert.equal(permission["websearch"], "ask");
+  assert.equal(agent.build.permission["webfetch"], "ask");
+  assert.equal(agent.build.permission["websearch"], "ask");
+});

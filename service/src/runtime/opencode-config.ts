@@ -69,8 +69,13 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   task: "deny",
   external_directory: "deny",
   doom_loop: "allow",
-  webfetch: "deny",
-  websearch: "deny",
+  // Agent web access (#29): "ask" so OpenCode emits `permission.asked` → the permission bridge →
+  // ToolPermissionProxy maps it to the `web_access` action kind (elevated). Every fetch surfaces a
+  // card with the target URL (explicit approval, human-in-the-loop SSRF mitigation) and the proxy
+  // refuses private/loopback/metadata targets before the gate. Never "allow": that would let the
+  // OpenCode child fetch arbitrary (incl. internal) URLs with no gate.
+  webfetch: "ask",
+  websearch: "ask",
 });
 
 function assertSafeBaseUrl(baseUrl: string): void {

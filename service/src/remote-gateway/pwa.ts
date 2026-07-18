@@ -157,6 +157,7 @@ export const REMOTE_PWA_HTML = `<!doctype html>
   var token = sessionStorage.getItem("cowork-remote-token") || "";
   var streamAbort = null;
   var currentSessionId = null;
+  var currentConversationId = null;
 
   function el(id) { return document.getElementById(id); }
   function show(id) {
@@ -446,12 +447,12 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     el("detail-title").textContent = conv.title || "(chưa đặt tên)";
     el("detail-error").textContent = "";
     el("composer-note").textContent = "";
+    // #21: the composer starts a NEW turn on this conversation via the server-side orchestrator, so
+    // it no longer requires a pre-existing live runtime session — it is always available here.
     currentSessionId = conv.runtimeSessionId || null;
-    el("composer-input").disabled = !currentSessionId;
-    el("composer-send").disabled = !currentSessionId;
-    if (!currentSessionId) {
-      el("composer-note").textContent = "Hội thoại chưa có phiên runtime — tạo lượt mới trên desktop.";
-    }
+    currentConversationId = conv.id;
+    el("composer-input").disabled = false;
+    el("composer-send").disabled = false;
     var stream = el("stream");
     stream.textContent = "";
 
@@ -609,35 +610,59 @@ export const REMOTE_PWA_HTML = `<!doctype html>
     }).catch(function () {});
   }
 
-  function sendPrompt() {
+  // #21: start a NEW turn on the conversation. The service creates a session bound to the active
+  // workspace, links it, dispatches the prompt, and persists the reply — so the web can chat with
+  // Cowork without a pre-existing desktop session. Honest errors surface for a workspace mismatch
+  // or an unready runtime; nothing is faked.
+  function sendTurn() {
     var text = el("composer-input").value.trim();
     var note = el("composer-note");
-    if (!text || !currentSessionId) return;
+    if (!text || !currentConversationId) return;
     el("composer-send").disabled = true;
-    note.textContent = "";
-    fetch("/api/sessions/" + encodeURIComponent(currentSessionId) + "/message", {
+    note.textContent = "Đang gửi...";
+    // Echo the user's message immediately so the transcript reads naturally.
+    var stream = el("stream");
+    var mine = document.createElement("div");
+    mine.className = "ev";
+    mine.textContent = "Bạn: " + text;
+    stream.appendChild(mine);
+    fetch("/api/conversations/" + encodeURIComponent(currentConversationId) + "/turn", {
       method: "POST",
       headers: Object.assign({ "content-type": "application/json" }, authHeaders()),
       body: JSON.stringify({ text: text }),
     })
       .then(function (res) { return res.json().then(function (j) { return { s: res.status, j: j }; }); })
       .then(function (r) {
-        if (r.s === 202 && r.j.ok) {
+        var data = r.j && r.j.data;
+        if (r.s === 202 && r.j.ok && data && data.accepted) {
           el("composer-input").value = "";
           note.textContent = "Đã gửi — phản hồi sẽ hiện trong stream.";
+          currentSessionId = data.sessionId || currentSessionId;
           if (currentSessionId) followStream(currentSessionId);
           return;
         }
-        var code = (r.j.error && r.j.error.code) || "";
-        if (r.s === 409) { note.textContent = "Phiên đã kết thúc — tạo lượt mới trên desktop."; return; }
-        if (r.s === 503) { note.textContent = "Runtime chưa sẵn sàng."; return; }
+        var code = (data && data.code) || (r.j.error && r.j.error.code) || "";
+        if (r.s === 409 && code === "workspace_mismatch") {
+          note.textContent = "Hội thoại thuộc workspace khác — mở đúng workspace trên desktop.";
+          return;
+        }
+        if (r.s === 409 && code === "turn_in_progress") {
+          note.textContent = "Lượt trước đang chạy — đợi phản hồi xong rồi gửi tiếp.";
+          return;
+        }
+        if (r.s === 503 && code === "no_active_workspace") {
+          note.textContent = "Chưa mở workspace nào trên desktop.";
+          return;
+        }
+        if (r.s === 503) { note.textContent = "Runtime chưa sẵn sàng — thử lại sau."; return; }
+        if (r.s === 404) { note.textContent = "Hội thoại không còn tồn tại."; return; }
         note.textContent = "Gửi thất bại" + (code ? " (" + code + ")" : "") + ".";
       })
       .catch(function () { note.textContent = "Không gọi được gateway."; })
-      .finally(function () { el("composer-send").disabled = !currentSessionId; });
+      .finally(function () { el("composer-send").disabled = false; });
   }
 
-  el("composer-send").addEventListener("click", sendPrompt);
+  el("composer-send").addEventListener("click", sendTurn);
   el("pair-btn").addEventListener("click", pair);
   el("refresh-btn").addEventListener("click", loadConversations);
   el("logout-btn").addEventListener("click", logout);

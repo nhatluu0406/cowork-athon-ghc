@@ -77,6 +77,7 @@ import { createSessionService, createSessionRouter, SessionRequestError } from "
 import {
   createConversationStore,
   createConversationRouter,
+  createConversationTurnRouter,
   createSqliteConversationStore,
   migrateJsonConversationsToSqlite,
 } from "../conversation/index.js";
@@ -397,7 +398,6 @@ export async function createCoworkService(
           ...(activeProfile !== undefined ? { providerType: activeProfile.providerType } : {}),
           ...(accountId !== undefined ? { accountId } : {}),
           ...(outcome.modelId !== undefined ? { modelId: outcome.modelId } : {}),
-          ...(outcome.promptPreview !== undefined ? { promptPreview: outcome.promptPreview } : {}),
           ...(outcome.errorMessage !== undefined ? { reason: outcome.errorMessage } : {}),
         })
         .catch(() => undefined);
@@ -843,6 +843,7 @@ export async function createCoworkService(
       siteScope,
       writeMode: writeModeStore,
       sessionScope,
+      powerAutomateStore,
       tools: {
         sharepoint,
         siteScope: { listJoinedSites: () => siteScope.listJoinedSites() },
@@ -937,6 +938,19 @@ export async function createCoworkService(
       },
     }),
     createConversationRouter(conversationStore, providerProfileStore, credentialService),
+    // Server-side "start a turn on this conversation" (#21) — lets the remote/web PWA actually
+    // chat with Cowork by running the same create-session → link → dispatch → persist dance the
+    // desktop owns. Uses the ONE session mechanism; with the not-attached SendPrompt (Tier 1) it
+    // honestly returns 503 instead of a fake 202.
+    createConversationTurnRouter({
+      store: conversationStore,
+      session: sessionService,
+      prompt: options.sendPrompt ?? notAttachedSendPrompt(),
+      stream: streamHub,
+      activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+      now,
+      log: (line) => logger.info(line),
+    }),
     createSkillRouter(skillCatalog),
     createAgentRouter(agentCatalog),
     createTaskRouter(taskStore),

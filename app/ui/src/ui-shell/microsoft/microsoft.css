@@ -310,3 +310,95 @@
 .ms-sites__row:last-child { border-bottom: 0; }
 .ms-sites__name { font-size: 13px; color: var(--cghc-text-primary); }
 .ms-sites__toggle { width: 16px; height: 16px; cursor: pointer; accent-color: var(--cghc-accent); }
+
+/* Power Automate custom flow management (CGHC MS365 Power Automate). Read-only list + dialog. */
+.ms-flows { margin-top: 18px; }
+.ms-flows__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ms-flows__header .ms-section-label { margin: 18px 0 8px; }
+.ms-flows__add-btn { font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--cghc-border); background: transparent; color: var(--cghc-text-primary); cursor: pointer; }
+.ms-flows__add-btn:hover:not(:disabled) { background: var(--cghc-surface-hover); border-color: var(--cghc-border-strong); }
+.ms-flows__status { font-size: 12px; color: var(--cghc-text-muted); margin: 4px 0; }
+.ms-flows__list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
+.ms-flows__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cghc-border);
+}
+.ms-flows__row:last-child { border-bottom: 0; }
+.ms-flows__info { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.ms-flows__name { font-size: 13px; font-weight: 600; color: var(--cghc-text-primary); }
+.ms-flows__desc { font-size: 12px; color: var(--cghc-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 320px; }
+.ms-flows__timeout-badge, .ms-flows__schema-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-secondary, #4b5565);
+  white-space: nowrap;
+}
+.ms-flows__controls { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.ms-flows__toggle { width: 16px; height: 16px; cursor: pointer; accent-color: var(--cghc-accent); }
+.ms-flows__edit, .ms-flows__delete { font-size: 12px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--cghc-border); background: transparent; color: var(--cghc-text-primary); cursor: pointer; }
+.ms-flows__edit:hover:not(:disabled), .ms-flows__delete:hover:not(:disabled) { background: var(--cghc-surface-hover); }
+.ms-flows__edit:disabled, .ms-flows__delete:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* Add/Edit flow modal — mirrors .permission-backdrop/.permission-dialog. */
+.ms-flow-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(13, 17, 23, 0.18);
+}
+.ms-flow-dialog {
+  width: min(480px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 18px;
+  background: var(--cghc-surface-solid, #fff);
+  box-shadow: var(--cghc-shadow-md, 0 4px 16px rgba(16,24,40,.08));
+}
+.ms-flow-dialog__title { margin: 0 0 12px; color: var(--cghc-text-primary); font-size: 16px; font-weight: 600; }
+.ms-flow-dialog__field { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.ms-flow-dialog__field-label { font-size: 12px; font-weight: 600; color: var(--cghc-text-muted); }
+.ms-flow-dialog__field input, .ms-flow-dialog__field textarea {
+  font: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 8px;
+  color: var(--cghc-text-primary);
+  background: var(--cghc-surface);
+  box-sizing: border-box;
+  width: 100%;
+}
+.ms-flow-dialog__field textarea { resize: vertical; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; }
+.ms-flow-dialog__field input:focus, .ms-flow-dialog__field textarea:focus {
+  outline: none;
+  border-color: var(--cghc-accent);
+  box-shadow: 0 0 0 3px var(--cghc-accent-soft);
+}
+.ms-flow-dialog__field input[readonly] { opacity: 0.65; cursor: not-allowed; }
+.ms-flow-dialog__error { font-size: 12px; color: var(--cghc-error, #c0392b); margin: 0 0 10px; }
+.ms-flow-dialog__schema-error { font-size: 12px; color: var(--cghc-error, #c0392b); margin: -6px 0 10px; }
+.ms-flow-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+.ms-flow-dialog__cancel, .ms-flow-dialog__save {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.ms-flow-dialog__cancel { border: 1px solid var(--cghc-border); background: transparent; color: var(--cghc-text-primary); }
+.ms-flow-dialog__cancel:hover:not(:disabled) { background: var(--cghc-surface-hover); }
+.ms-flow-dialog__save { border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); }
+.ms-flow-dialog__save:hover:not(:disabled) { background: var(--cghc-accent-hover); }
+.ms-flow-dialog__cancel:disabled, .ms-flow-dialog__save:disabled { opacity: 0.55; cursor: not-allowed; }

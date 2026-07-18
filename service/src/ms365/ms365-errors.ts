@@ -11,6 +11,7 @@ export type Ms365ErrorKind =
   | "rate_limited"
   | "not_found"
   | "endpoint_blocked"
+  | "timeout"
   | "graph_error";
 
 export class Ms365Error extends Error {

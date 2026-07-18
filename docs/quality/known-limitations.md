@@ -65,7 +65,8 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   connect, preview kind) là mở rộng tương lai (bảng đếm là name→value dạng generic, không cần migration
   mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
-  (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
+  (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork). UI đã nâng lên catalog compact (#28,
+  xem mục "Sửa lỗi đợt issues" bên dưới); **agent chưa gọi được tool MCP** → theo dõi ở #30.
 - **Surface `Code` (Hybrid, ADR 0013 — Phase 1):** **renderer surface dùng chung backend Cowork**
   (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session — không backend/session/
   runtime riêng). Code Phase 1 đã có editor nhiều tab **sửa + lưu** (Ctrl+S, `PUT /v1/workspace/
@@ -231,8 +232,78 @@ no-op for all sessions — no action needed, and adding a gate here today would 
 checks `deps.sessionAllowed(sessionId)` first, before any tool-specific logic. This is the
 production authorization boundary.
 
+## Sửa lỗi đợt issues (2026-07-18, đợt 2) — giới hạn còn lại
+
+- **Chat từ web/điện thoại không gửi được cho Cowork (#21, core FIXED, để OPEN):** root cause =
+  OpenCode session **single-turn**; PWA (web local hoặc điện thoại) chỉ POST được vào một session
+  đang sống nên hầu hết hội thoại để composer bị khoá / trả 409 → **cả chat từ web local cũng
+  fail**, không riêng mobile. Fix: route server-side **`POST /v1/conversations/{id}/turn`** chạy
+  đúng vũ điệu của desktop (tạo session bound **active workspace** → link → lưu tin nhắn người dùng →
+  dispatch → **lưu tóm tắt trả lời khi terminal** qua subscribe streamHub), tái dùng cơ chế session
+  duy nhất. Trung thực: 409 `workspace_mismatch` (hội thoại khác workspace — runtime bound 1 cwd),
+  409 `turn_in_progress` (đang có lượt chạy), 503 khi runtime chưa sẵn sàng — **không giả 202**.
+  Gateway allowlist route; PWA composer tạo lượt mới thay vì đòi session sống. **Independent security
+  review** sửa 2 lỗi: backstop timer treo → phantom assistant message (nay cancel khi dispatch fail);
+  lượt chồng lượt ghi đè status (nay chặn + chỉ đổi status khi còn là lượt active). **Còn lại:** một
+  **round-trip web/điện thoại chạy thật** trên bản đóng gói (theo đúng chỉ đạo "để #21 open tới khi
+  phone/web-initiated turn chạy thật"). Issue **để mở**.
+- **Đổi workspace → cây workspace fetch fail, phải reload tay (#31, FIXED):** đổi workspace buộc
+  OpenCode stop+restart (#26) → đổi baseURL/token loopback; navigator được refresh **trước** restart
+  (nhắm service sắp chết) nên "fetch fail". Fix: refresh workspace + code navigator **sau khi**
+  `ensureLive` nhận bootstrap mới; bỏ refresh trước-restart.
+- **Gateway lưu prompt của Agent (#38, FIXED):** Gateway (proxy định tuyến API key) từng trích + lưu
+  prompt người dùng vào `gateway.json` (`promptPreview`) và hiển thị lại — nhân đôi nội dung chat ra
+  ngoài kho hội thoại. Fix: gỡ `promptPreview` end-to-end; chỉ parse **model id** + ghi metric định
+  tuyến. Nội dung chat chỉ nằm trong kho hội thoại.
+- **Tab Code không render Markdown/bảng (#33) + xuống hàng quá nhiều (#32, FIXED):** panel Agent tab
+  Code render text bằng `<p>` thuần → bảng không hiện; nay dùng **MarkdownView chung**. Renderer
+  chung nay **gộp 3+ dòng mới thành 1 ngắt đoạn** (giữ code fenced) → hết dòng trống thừa.
+- **Tab Workspace+Code thiếu điều khiển phiên (#35, FIXED):** thêm **thanh phiên dùng chung** (nút
+  Phiên mới + dropdown chọn phiên cũ) vào header tab Code và tab Workspace, nối vào luồng hội thoại
+  Cowork (không tạo hệ session riêng — vẫn một session dùng chung theo ADR 0013).
+- **Tab Code — khung chat nhỏ + AI miss tạo .py (#36, PARTIAL, để OPEN):** **đã sửa layout** (panel
+  Agent 372px → `clamp(420px,30vw,560px)`, ô soạn lớn hơn). **Chưa xử lý:** "AI bị miss việc tạo file
+  .py" là vấn đề **agent chọn/gọi tool tạo file**, phụ thuộc độ tin cậy tool của bản OpenCode pin
+  (xem mục "Xoá file không đáng tin" + tool coverage ở trên) — cần quan sát trên bản đóng gói; giữ
+  issue **mở** cho phần này.
+
 ## Sửa lỗi đợt issues (2026-07-18) — giới hạn còn lại
 
+- **Chatbox disable sau khi tạo/chuyển cuộc trò chuyện (#27, FIXED):** root cause = nút tạo/chuyển
+  dùng `window.confirm` gốc; trên Electron/Chromium, sau khi `confirm()` đóng, ô soạn
+  `contentEditable` mất khả năng focus → "chatbox disable không nhập được". Fix: **modal xác nhận
+  commercial dùng chung** (DOM, không blocking; Hủy / hành động chính; Esc/backdrop = hủy; Enter =
+  xác nhận; focus nút chính rồi trả focus về composer; light/dark). State reset + `.focus()` hoạt
+  động bình thường, không tạo cuộc trò chuyện trùng. Đã có test.
+- **UI MCP (#28, FIXED):** panel MCP redesign thành **hàng compact giống danh sách Skill** — toggle
+  Bật/Tắt **ngoài hàng** (role=switch), menu tràn (Sửa / Kiểm tra / Xóa), health badge
+  (Sẵn sàng/Không kết nối/Chưa kiểm tra/Đang tắt), tool count, last-checked; **combobox preset stdio
+  dựng sẵn** (filesystem/git/fetch/memory/sequential-thinking/everything); stdio tùy chỉnh + URL vẫn
+  sửa được. Secret vẫn **chỉ trong vault** (UI chỉ thấy `hasHeaderSecret`). Đây là phần **UI**; khả
+  năng agent thực sự gọi tool MCP vẫn theo dõi ở #30 (chưa fix). Đã có test.
+- **Agent web access — WebFetch/WebSearch (#29, core FIXED, OPEN chờ smoke):** root cause =
+  `LIVE_SESSION_PERMISSION_POLICY` **deny cứng** `webfetch`/`websearch` → agent không bao giờ gọi
+  được (đổi sang `ask` vẫn fail vì proxy fail-closed cho tool chưa map). Fix: định tuyến qua quyền
+  mới **`web_access`** (phân loại **elevated** → luôn hiện thẻ xin phép kể cả chế độ Tự động; Chỉ đọc
+  từ chối), kèm **SSRF guard trước cổng** (`web-access-guard.ts`, FETCH-STRICT/fail-closed: chặn
+  loopback/private/link-local/cloud-metadata + `localhost`/`metadata*` hostname + non-https; webfetch
+  fail-closed khi URL rỗng/thiếu scheme; websearch query đưa vào thẻ dưới dạng text đã cắt, không tạo
+  URL giả). `webfetch`/`websearch` = `ask` (không bao giờ `allow`). **Independent security review
+  2026-07-18** tìm 2 lỗi thật đã sửa: (1) fail-OPEN critical — guard cũ trả `allowed:true` +
+  placeholder cho mọi chuỗi thiếu scheme (kể cả `127.0.0.1:8080/admin`), bỏ qua SSRF check; (2)
+  bypass hostname có dấu chấm cuối (`localhost.`/`metadata.google.internal.`). **Còn lại trước khi
+  close:** **một network smoke tương tác thật** trên bản đóng gói (webfetch tới URL công khai → thẻ
+  xin phép → agent nhận nội dung) — sẽ chạy trong đợt audit đóng gói. Issue **để mở**.
+- **MCP agent-invocation (#30, OPEN, đang xử lý):** xác nhận đúng tiêu đề — hiện **chỉ CRUD + probe
+  reachability** (adapter Phase 1), `toolCount` luôn 0, agent **chưa gọi** được tool MCP. Đã research
+  hướng fix đúng: nạp MCP server đã bật vào **khối `mcp` native của OpenCode** (`opencode.json`:
+  local stdio `{type:"local",command:[...]}` / remote `{type:"remote",url,headers}`), để OpenCode tự
+  kết nối + expose tool + invoke; lấy tool count/health thật qua `GET /mcp` + `/experimental/tool/ids`.
+  **Chưa triển khai** vì cần verify an toàn trước: (1) OpenCode 1.18.1 có nội suy `{env:VAR}` trong
+  `mcp.headers` không — nếu không, header secret có nguy cơ nằm plaintext trong `opencode.json` (vi
+  phạm bất biến no-plaintext-secret; sẽ cần forbidden-secret write guard); (2) **quan sát invoke thật**
+  trên bản đóng gói với một MCP server thật. **Không claim WORKS** tới khi tool count thật > 0 và agent
+  gọi được tool. Defer, issue để mở.
 - **Dispatch — không gửi được từ điện thoại (#21, PARTIAL, defer):** nguyên nhân gốc là ràng buộc
   session, không phải bug UI. PWA điện thoại chỉ POST được vào **một runtime session đang sống**
   (`/api/sessions/{id}/message` → `/v1/session/{id}/message`); OpenCode session **single-turn** nên

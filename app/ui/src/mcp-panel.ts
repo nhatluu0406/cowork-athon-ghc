@@ -1,11 +1,17 @@
 /**
- * MCP management panel — Phase 1 stub (Wave 2B).
+ * MCP management panel (#28) — compact catalog rows matching the Skill list.
  *
- * ServiceClient does not yet expose MCP methods. Callbacks are injectable so the backend
- * team can wire real `list/create/update/delete/setEnabled` MCP methods once available
- * without another UI change. Until then this renders an honest empty state instead of
- * fake data (no health/tool-count fabrication).
+ * Each server is a compact row: name + transport/status meta, a health badge, a tool-count chip,
+ * an ON/OFF toggle OUTSIDE the row, and an overflow menu (Sửa / Kiểm tra / Xóa). A detail editor
+ * opens below/beside for add + edit. Built-in stdio servers are offered as a combobox of presets;
+ * a custom stdio command or a remote URL stays fully editable. Secrets go to the encrypted vault
+ * (never local storage); the panel only ever sees `hasHeaderSecret`.
+ *
+ * Backend note: CRUD + enable/disable + health are live (issue #30 tracks agent-side tool
+ * invocation separately). `toolCount`/`health` reflect the backend's honest values — never faked.
  */
+
+import { el, icon } from "./ui-shell/dom-utils.js";
 
 export type McpTransport = "stdio" | "url";
 
@@ -19,6 +25,8 @@ export interface McpServerView {
   readonly enabled: boolean;
   readonly health: "unknown" | "ok" | "error";
   readonly toolCount: number;
+  /** ISO timestamp of the last status refresh (updatedAt), shown as "kiểm tra lần cuối". */
+  readonly lastChecked?: string;
 }
 
 export interface McpServerWriteInput {
@@ -33,39 +41,63 @@ export interface McpServerCreateInput extends McpServerWriteInput {
   readonly id?: string;
 }
 
-/**
- * Wave 2 Phase 1 TODO: wire to real ServiceClient MCP methods once the backend adds them
- * (assumed shape: `listMcpServers`, `createMcpServer`, `updateMcpServer`, `deleteMcpServer`,
- * `setMcpServerEnabled`). Left undefined here — panel renders a truthful "not available yet"
- * state instead of fabricating servers/health.
- */
 export interface McpPanelCallbacks {
   readonly listMcpServers?: () => Promise<readonly McpServerView[]>;
   readonly createMcpServer?: (input: McpServerCreateInput) => Promise<McpServerView>;
   readonly updateMcpServer?: (id: string, input: McpServerWriteInput) => Promise<McpServerView>;
   readonly deleteMcpServer?: (id: string) => Promise<void>;
   readonly setMcpServerEnabled?: (id: string, enabled: boolean) => Promise<McpServerView>;
+  /** Re-probe reachability/health for one server (GET /v1/mcp/servers/{id}/health). */
+  readonly checkMcpServerHealth?: (id: string) => Promise<McpServerView>;
 }
 
 export interface McpPanelHandle {
   refresh(): Promise<void>;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
+/** Built-in stdio server presets offered as a combobox (issue #28). Command is non-secret. */
+interface McpPreset {
+  readonly id: string;
+  readonly label: string;
+  readonly command: string;
 }
+
+const STDIO_PRESETS: readonly McpPreset[] = [
+  { id: "filesystem", label: "Filesystem — đọc/ghi tệp cục bộ", command: "npx -y @modelcontextprotocol/server-filesystem" },
+  { id: "git", label: "Git — thao tác kho Git", command: "npx -y @modelcontextprotocol/server-git" },
+  { id: "fetch", label: "Fetch — tải nội dung web", command: "npx -y @modelcontextprotocol/server-fetch" },
+  { id: "memory", label: "Memory — bộ nhớ tri thức", command: "npx -y @modelcontextprotocol/server-memory" },
+  {
+    id: "sequential-thinking",
+    label: "Sequential Thinking — suy luận theo bước",
+    command: "npx -y @modelcontextprotocol/server-sequential-thinking",
+  },
+  { id: "everything", label: "Everything — máy chủ demo MCP", command: "npx -y @modelcontextprotocol/server-everything" },
+];
 
 function field(label: string, input: HTMLElement): HTMLElement {
   const wrap = el("label", "mcp-panel__field");
   wrap.append(el("span", "mcp-panel__label", label), input);
   return wrap;
+}
+
+function healthLabel(view: McpServerView): { text: string; tone: string } {
+  if (!view.enabled) return { text: "Đang tắt", tone: "off" };
+  switch (view.health) {
+    case "ok":
+      return { text: "Sẵn sàng", tone: "ok" };
+    case "error":
+      return { text: "Không kết nối", tone: "error" };
+    default:
+      return { text: "Chưa kiểm tra", tone: "unknown" };
+  }
+}
+
+function formatLastChecked(iso: string | undefined): string {
+  if (iso === undefined) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `kiểm tra: ${d.toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}`;
 }
 
 export function mountMcpSettingsPanel(
@@ -76,51 +108,57 @@ export function mountMcpSettingsPanel(
   const backendAvailable = callbacks.listMcpServers !== undefined;
 
   const toolbar = el("div", "mcp-panel__toolbar");
-  const createButton = el("button", "label-btn", "Thêm MCP") as HTMLButtonElement;
+  const createButton = el("button", "label-btn mcp-panel__add", "Thêm MCP") as HTMLButtonElement;
   createButton.type = "button";
   toolbar.append(createButton);
 
   const layout = el("div", "mcp-panel__layout");
   const list = el("div", "mcp-panel__list");
-  list.setAttribute("role", "listbox");
+  list.setAttribute("role", "list");
   const editor = el("section", "mcp-panel__editor");
   editor.setAttribute("aria-label", "Chi tiết MCP");
+  editor.hidden = true;
   const status = el("p", "mcp-panel__status");
   status.setAttribute("role", "status");
   layout.append(list, editor);
 
-  root.replaceChildren(
-    el("h2", "mcp-panel__title", "MCP"),
-    el(
-      "p",
-      "mcp-panel__intro",
-      "Kết nối MCP cục bộ (stdio) hoặc máy chủ remote (URL). Secret được lưu trong vault mã hoá — không lưu trong local storage.",
-    ),
-    toolbar,
-    layout,
-    status,
-  );
+  root.replaceChildren(toolbar, layout, status);
 
   let servers: readonly McpServerView[] = [];
-  let selectedId: string | null = null;
+  let editingId: string | null = null;
   let creating = false;
+  let busyId: string | null = null;
 
+  // --- Editor fields ---
   const idInput = el("input", "mcp-panel__input") as HTMLInputElement;
   idInput.setAttribute("aria-label", "MCP id");
   const nameInput = el("input", "mcp-panel__input") as HTMLInputElement;
   nameInput.setAttribute("aria-label", "Tên MCP");
   const transportSelect = el("select", "mcp-panel__input") as HTMLSelectElement;
   transportSelect.setAttribute("aria-label", "Loại kết nối");
-  const stdioOption = document.createElement("option");
-  stdioOption.value = "stdio";
-  stdioOption.textContent = "Lệnh cục bộ (stdio)";
-  const urlOption = document.createElement("option");
-  urlOption.value = "url";
-  urlOption.textContent = "Máy chủ remote (URL)";
-  transportSelect.append(stdioOption, urlOption);
+  for (const [value, text] of [["stdio", "Lệnh cục bộ (stdio)"], ["url", "Máy chủ remote (URL)"]] as const) {
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = text;
+    transportSelect.append(opt);
+  }
+  const presetSelect = el("select", "mcp-panel__input") as HTMLSelectElement;
+  presetSelect.setAttribute("aria-label", "Máy chủ MCP dựng sẵn");
+  {
+    const custom = document.createElement("option");
+    custom.value = "";
+    custom.textContent = "Tùy chỉnh (nhập lệnh)";
+    presetSelect.append(custom);
+    for (const preset of STDIO_PRESETS) {
+      const opt = document.createElement("option");
+      opt.value = preset.id;
+      opt.textContent = preset.label;
+      presetSelect.append(opt);
+    }
+  }
   const commandInput = el("input", "mcp-panel__input") as HTMLInputElement;
   commandInput.setAttribute("aria-label", "Lệnh khởi động MCP");
-  commandInput.placeholder = "vd: npx my-mcp-server";
+  commandInput.placeholder = "vd: npx -y @modelcontextprotocol/server-filesystem /duong/dan";
   const urlInput = el("input", "mcp-panel__input") as HTMLInputElement;
   urlInput.type = "url";
   urlInput.setAttribute("aria-label", "URL máy chủ MCP");
@@ -128,90 +166,215 @@ export function mountMcpSettingsPanel(
   const headerSecretInput = el("input", "mcp-panel__input") as HTMLInputElement;
   headerSecretInput.type = "password";
   headerSecretInput.setAttribute("aria-label", "Header/API key secret (tuỳ chọn)");
-  headerSecretInput.placeholder = "Để trống nếu không cần";
   const errorBox = el("p", "mcp-panel__error");
   errorBox.hidden = true;
   errorBox.setAttribute("role", "alert");
-  const meta = el("p", "mcp-panel__meta");
-  const saveButton = el("button", "label-btn", "Lưu") as HTMLButtonElement;
+  const saveButton = el("button", "label-btn mcp-panel__primary", "Lưu") as HTMLButtonElement;
   saveButton.type = "button";
-  const deleteButton = el("button", "label-btn mcp-panel__delete", "Xóa") as HTMLButtonElement;
-  deleteButton.type = "button";
-  const toggleButton = el("button", "label-btn", "Bật/Tắt") as HTMLButtonElement;
-  toggleButton.type = "button";
+  const cancelButton = el("button", "label-btn", "Hủy") as HTMLButtonElement;
+  cancelButton.type = "button";
 
-  function commandFieldsFor(transport: McpTransport): void {
-    commandInput.closest("label")?.toggleAttribute("hidden", transport !== "stdio");
-    urlInput.closest("label")?.toggleAttribute("hidden", transport !== "url");
+  const presetField = field("Máy chủ dựng sẵn", presetSelect);
+  const commandField = field("Lệnh (stdio)", commandInput);
+  const urlField = field("URL (remote)", urlInput);
+
+  function transportFieldsFor(transport: McpTransport): void {
+    presetField.hidden = transport !== "stdio";
+    commandField.hidden = transport !== "stdio";
+    urlField.hidden = transport !== "url";
   }
 
   transportSelect.addEventListener("change", () => {
-    commandFieldsFor(transportSelect.value === "url" ? "url" : "stdio");
+    transportFieldsFor(transportSelect.value === "url" ? "url" : "stdio");
+  });
+  presetSelect.addEventListener("change", () => {
+    const preset = STDIO_PRESETS.find((p) => p.id === presetSelect.value);
+    if (preset !== undefined) {
+      commandInput.value = preset.command;
+      if (nameInput.value.trim().length === 0) nameInput.value = preset.label.split(" — ")[0] ?? preset.id;
+    }
   });
 
-  function renderEditorEmpty(): void {
-    editor.replaceChildren(
-      el("p", "mcp-panel__placeholder", "Chọn một kết nối MCP để xem chi tiết, hoặc thêm mới."),
-    );
+  function closeEditor(): void {
+    creating = false;
+    editingId = null;
+    editor.hidden = true;
+    editor.replaceChildren();
+    renderList();
   }
 
-  function loadEditor(server: McpServerView | null, createMode: boolean): void {
+  function openEditor(server: McpServerView | null): void {
+    creating = server === null;
+    editingId = server?.id ?? null;
     errorBox.hidden = true;
-    if (server === null && !createMode) {
-      renderEditorEmpty();
-      return;
-    }
-    editor.replaceChildren();
-    idInput.value = createMode ? "" : server!.id;
-    idInput.readOnly = !createMode;
+    idInput.value = server?.id ?? "";
+    idInput.readOnly = server !== null;
     nameInput.value = server?.name ?? "";
     transportSelect.value = server?.transport ?? "stdio";
+    presetSelect.value = "";
     commandInput.value = server?.command ?? "";
     urlInput.value = server?.url ?? "";
     headerSecretInput.value = "";
     headerSecretInput.placeholder = server?.hasHeaderSecret === true ? "Đã lưu — nhập để đổi" : "Để trống nếu không cần";
-    meta.textContent =
-      server === null
-        ? "Kết nối MCP mới cho phiên chat."
-        : `${server.health === "ok" ? "Khỏe mạnh" : server.health === "error" ? "Lỗi" : "Chưa kiểm tra"} · ${server.toolCount} tool`;
     saveButton.disabled = !backendAvailable;
-    saveButton.dataset["tooltip"] = backendAvailable ? "" : "Chưa khả dụng — chờ backend MCP Phase 1.";
-    deleteButton.hidden = createMode;
-    deleteButton.disabled = !backendAvailable;
-    toggleButton.hidden = createMode;
-    toggleButton.disabled = !backendAvailable;
-    toggleButton.textContent = server?.enabled === true ? "Tắt MCP" : "Bật MCP";
+
     const actions = el("div", "mcp-panel__actions");
-    actions.append(saveButton, deleteButton, toggleButton);
-    editor.append(
+    actions.append(saveButton, cancelButton);
+    editor.replaceChildren(
+      el("h3", "mcp-panel__editor-title", server === null ? "Thêm kết nối MCP" : `Sửa: ${server.name}`),
       field("ID", idInput),
       field("Tên", nameInput),
       field("Loại kết nối", transportSelect),
-      field("Lệnh (stdio)", commandInput),
-      field("URL (remote)", urlInput),
+      presetField,
+      commandField,
+      urlField,
       field("Header/API key secret", headerSecretInput),
-      meta,
       errorBox,
       actions,
     );
-    commandFieldsFor(transportSelect.value === "url" ? "url" : "stdio");
-    if (!backendAvailable) {
-      editor.append(
-        el(
-          "p",
-          "mcp-panel__note",
-          "MCP Phase 1 chưa được backend triển khai. Biểu mẫu sẵn sàng cho team backend; hành động lưu/xóa/bật-tắt sẽ hoạt động khi ServiceClient thêm phương thức MCP.",
-        ),
-      );
+    transportFieldsFor(transportSelect.value === "url" ? "url" : "stdio");
+    editor.hidden = false;
+    renderList();
+    nameInput.focus();
+  }
+
+  function makeRow(srv: McpServerView): HTMLElement {
+    const row = el("div", "mcp-row");
+    row.dataset["mcpId"] = srv.id;
+    row.setAttribute("role", "listitem");
+    if (srv.id === editingId) row.classList.add("mcp-row--active");
+
+    const main = el("button", "mcp-row__main") as HTMLButtonElement;
+    main.type = "button";
+    main.dataset["mcpId"] = srv.id;
+    main.append(icon(srv.transport === "url" ? "gateway" : "code"));
+    const text = el("div", "mcp-row__text");
+    text.append(el("span", "mcp-row__name", srv.name));
+    const health = healthLabel(srv);
+    const metaParts = [
+      srv.transport === "url" ? "URL" : "stdio",
+      `${srv.toolCount} tool`,
+      formatLastChecked(srv.lastChecked),
+    ].filter((s) => s.length > 0);
+    text.append(el("span", "mcp-row__meta", metaParts.join(" · ")));
+    main.append(text);
+    main.addEventListener("click", () => openEditor(srv));
+
+    const badge = el("span", "mcp-row__badge", health.text);
+    badge.dataset["tone"] = health.tone;
+
+    const controls = el("div", "mcp-row__controls");
+    const toggle = el("button", "mcp-row__toggle") as HTMLButtonElement;
+    toggle.type = "button";
+    toggle.setAttribute("role", "switch");
+    toggle.dataset["on"] = srv.enabled ? "true" : "false";
+    toggle.setAttribute("aria-checked", srv.enabled ? "true" : "false");
+    toggle.setAttribute("aria-label", srv.enabled ? `Tắt ${srv.name}` : `Bật ${srv.name}`);
+    toggle.disabled = !backendAvailable || busyId === srv.id;
+    toggle.append(el("span", "mcp-row__toggle-knob"));
+    toggle.addEventListener("click", () => void applyToggle(srv));
+
+    const menuBtn = el("button", "mcp-row__menu-btn") as HTMLButtonElement;
+    menuBtn.type = "button";
+    menuBtn.setAttribute("aria-label", `Tùy chọn cho ${srv.name}`);
+    menuBtn.append(icon("more"));
+    menuBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openRowMenu(srv, menuBtn);
+    });
+
+    controls.append(badge, toggle, menuBtn);
+    row.append(main, controls);
+    return row;
+  }
+
+  let openMenu: HTMLElement | null = null;
+  function closeRowMenu(): void {
+    openMenu?.remove();
+    openMenu = null;
+  }
+  function openRowMenu(srv: McpServerView, anchor: HTMLElement): void {
+    closeRowMenu();
+    const menu = el("div", "mcp-row__menu");
+    menu.setAttribute("role", "menu");
+    const mk = (label: string, fn: () => void): HTMLButtonElement => {
+      const b = el("button", "mcp-row__menu-item", label) as HTMLButtonElement;
+      b.type = "button";
+      b.setAttribute("role", "menuitem");
+      b.disabled = !backendAvailable;
+      b.addEventListener("click", () => {
+        closeRowMenu();
+        fn();
+      });
+      return b;
+    };
+    menu.append(mk("Sửa", () => openEditor(srv)));
+    if (callbacks.checkMcpServerHealth !== undefined) {
+      menu.append(mk("Kiểm tra", () => void checkHealth(srv)));
+    }
+    const del = mk("Xóa", () => void applyDelete(srv));
+    del.classList.add("mcp-row__menu-item--danger");
+    menu.append(del);
+    const rect = anchor.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${Math.max(12, rect.right - 160)}px`;
+    document.body.append(menu);
+    openMenu = menu;
+    setTimeout(() => {
+      const onDoc = (e: MouseEvent): void => {
+        if (!menu.contains(e.target as Node)) {
+          closeRowMenu();
+          document.removeEventListener("pointerdown", onDoc, true);
+        }
+      };
+      document.addEventListener("pointerdown", onDoc, true);
+    }, 0);
+  }
+
+  async function applyToggle(srv: McpServerView): Promise<void> {
+    if (!backendAvailable || callbacks.setMcpServerEnabled === undefined) return;
+    busyId = srv.id;
+    renderList();
+    try {
+      await callbacks.setMcpServerEnabled(srv.id, !srv.enabled);
+      await refresh();
+      status.textContent = srv.enabled ? "Đã tắt MCP." : "Đã bật MCP.";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Không cập nhật được trạng thái.";
+    } finally {
+      busyId = null;
+      renderList();
     }
   }
 
-  function selectServer(id: string): void {
-    selectedId = id;
-    creating = false;
-    const server = servers.find((entry) => entry.id === id) ?? null;
+  async function applyDelete(srv: McpServerView): Promise<void> {
+    if (!backendAvailable || callbacks.deleteMcpServer === undefined) return;
+    if (!window.confirm(`Xóa kết nối MCP “${srv.name}”?`)) return;
+    try {
+      await callbacks.deleteMcpServer(srv.id);
+      if (editingId === srv.id) closeEditor();
+      await refresh();
+      status.textContent = "Đã xóa MCP.";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Không xóa được MCP.";
+    }
+  }
+
+  async function checkHealth(srv: McpServerView): Promise<void> {
+    if (callbacks.checkMcpServerHealth === undefined) return;
+    busyId = srv.id;
+    status.textContent = `Đang kiểm tra ${srv.name}…`;
     renderList();
-    loadEditor(server, false);
+    try {
+      await callbacks.checkMcpServerHealth(srv.id);
+      await refresh();
+      status.textContent = "Đã kiểm tra kết nối.";
+    } catch (error) {
+      status.textContent = error instanceof Error ? error.message : "Không kiểm tra được kết nối.";
+    } finally {
+      busyId = null;
+      renderList();
+    }
   }
 
   function renderList(): void {
@@ -223,29 +386,12 @@ export function mountMcpSettingsPanel(
           "mcp-panel__empty",
           backendAvailable
             ? "Chưa có kết nối MCP. Nhấn Thêm MCP để bắt đầu."
-            : "Chưa có kết nối MCP — MCP Phase 1 sẽ khả dụng sau khi backend triển khai.",
+            : "Chưa có kết nối MCP — MCP sẽ khả dụng sau khi backend triển khai.",
         ),
       );
       return;
     }
-    for (const srv of servers) {
-      const item = el("button", "mcp-panel__item") as HTMLButtonElement;
-      item.type = "button";
-      item.dataset["mcpId"] = srv.id;
-      item.setAttribute("role", "option");
-      item.setAttribute("aria-selected", srv.id === selectedId ? "true" : "false");
-      if (srv.id === selectedId) item.classList.add("mcp-panel__item--active");
-      item.append(
-        el("span", "mcp-panel__item-name", srv.name),
-        el(
-          "span",
-          "mcp-panel__item-meta",
-          `${srv.transport === "stdio" ? "stdio" : "URL"} · ${srv.enabled ? "Đang bật" : "Đang tắt"}`,
-        ),
-      );
-      item.addEventListener("click", () => selectServer(srv.id));
-      list.append(item);
-    }
+    for (const srv of servers) list.append(makeRow(srv));
   }
 
   async function refresh(): Promise<void> {
@@ -253,27 +399,13 @@ export function mountMcpSettingsPanel(
       servers = [];
       onChanged?.(servers);
       renderList();
-      if (creating) {
-        loadEditor(null, true);
-      } else {
-        renderEditorEmpty();
-      }
-      status.textContent = "MCP Phase 1: chờ tích hợp backend.";
+      status.textContent = "MCP: chờ tích hợp backend.";
       return;
     }
-    status.textContent = "Đang tải MCP…";
     try {
       servers = await callbacks.listMcpServers!();
       onChanged?.(servers);
       renderList();
-      if (creating) {
-        loadEditor(null, true);
-      } else if (selectedId !== null && servers.some((s) => s.id === selectedId)) {
-        loadEditor(servers.find((s) => s.id === selectedId) ?? null, false);
-      } else {
-        selectedId = null;
-        renderEditorEmpty();
-      }
       status.textContent = `${servers.length} MCP được cấu hình.`;
     } catch (error) {
       status.textContent = error instanceof Error ? error.message : "Không tải được MCP.";
@@ -295,15 +427,14 @@ export function mountMcpSettingsPanel(
           ...(headerSecretInput.value.length > 0 ? { headerSecret: headerSecretInput.value } : {}),
         };
         if (creating) {
-          const created = await callbacks.createMcpServer!({
+          await callbacks.createMcpServer!({
             ...input,
             ...(idInput.value.trim().length > 0 ? { id: idInput.value.trim() } : {}),
           });
-          creating = false;
-          selectedId = created.id;
-        } else if (selectedId !== null) {
-          await callbacks.updateMcpServer!(selectedId, input);
+        } else if (editingId !== null) {
+          await callbacks.updateMcpServer!(editingId, input);
         }
+        closeEditor();
         await refresh();
         status.textContent = "Đã lưu MCP.";
       } catch (error) {
@@ -315,48 +446,8 @@ export function mountMcpSettingsPanel(
     })();
   });
 
-  deleteButton.addEventListener("click", () => {
-    if (!backendAvailable || selectedId === null) return;
-    if (!window.confirm("Xóa kết nối MCP này?")) return;
-    void (async () => {
-      deleteButton.disabled = true;
-      try {
-        await callbacks.deleteMcpServer!(selectedId!);
-        selectedId = null;
-        await refresh();
-        status.textContent = "Đã xóa MCP.";
-      } catch (error) {
-        errorBox.hidden = false;
-        errorBox.textContent = error instanceof Error ? error.message : "Không xóa được MCP.";
-      } finally {
-        deleteButton.disabled = !backendAvailable;
-      }
-    })();
-  });
-
-  toggleButton.addEventListener("click", () => {
-    if (!backendAvailable || selectedId === null) return;
-    const server = servers.find((entry) => entry.id === selectedId);
-    if (server === undefined) return;
-    toggleButton.disabled = true;
-    void callbacks
-      .setMcpServerEnabled!(selectedId, !server.enabled)
-      .then(() => refresh())
-      .catch((error) => {
-        errorBox.hidden = false;
-        errorBox.textContent = error instanceof Error ? error.message : "Không cập nhật được trạng thái.";
-      })
-      .finally(() => {
-        toggleButton.disabled = !backendAvailable;
-      });
-  });
-
-  createButton.addEventListener("click", () => {
-    creating = true;
-    selectedId = null;
-    renderList();
-    loadEditor(null, true);
-  });
+  cancelButton.addEventListener("click", () => closeEditor());
+  createButton.addEventListener("click", () => openEditor(null));
 
   void refresh();
   return { refresh };

@@ -36,6 +36,10 @@ export function classifyApprovalLevel(kind: PermissionActionKind): ApprovalLevel
     case "ms365_write":
       // ms365_write — bounded external mutation (SharePoint upload); treat as elevated.
       return "elevated";
+    case "web_access":
+      // web_access — agent-chosen arbitrary web fetch/search (#29). Elevated so it ALWAYS shows a
+      // permission card (explicit network approval) even in workspace-auto mode, and read-only denies.
+      return "elevated";
     case "file_create":
     case "file_edit":
     case "network_access":

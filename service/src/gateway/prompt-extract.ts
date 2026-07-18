@@ -1,39 +1,23 @@
 /**
- * Mirrors `app/ui/src/transcript-context.ts`'s `USER_REQUEST_START`/`END` — the renderer wraps
- * the user's own typed message in these markers before appending system framing, prior-turn
- * context, attachments, and skills onto the same string it ultimately sends as chat content.
- * The Gateway log should show what the person actually typed, not the whole assembled payload.
+ * Gateway request-body parsing — the model id ONLY.
+ *
+ * Privacy (#38): the Gateway is an API-key routing proxy, not a prompt logger. It deliberately
+ * does NOT extract, mask, store, or display the user's prompt text — persisting chat content to
+ * the gateway log (a separate file from the conversation store) surprised users and duplicated
+ * their messages outside the one place they live. Only the non-sensitive model id is read, so the
+ * request log can still show which model each routed request used.
  */
-const USER_REQUEST_START = "<<<CGHC_CURRENT_USER_REQUEST>>>";
-const USER_REQUEST_END = "<<<END_CGHC_CURRENT_USER_REQUEST>>>";
-
-/** Best-effort: pull just the user's own message out of the fully-assembled dispatch text. */
-export function extractUserRequestPreview(rawText: string): string {
-  const start = rawText.indexOf(USER_REQUEST_START);
-  const end = rawText.indexOf(USER_REQUEST_END);
-  if (start === -1 || end === -1 || end <= start) return rawText;
-  return rawText.slice(start + USER_REQUEST_START.length, end).trim();
-}
 
 interface ChatCompletionBody {
   readonly model?: unknown;
-  readonly messages?: readonly { readonly role?: unknown; readonly content?: unknown }[];
 }
 
-/** Parse an OpenAI-compat chat-completions request body; never throws. */
-export function parseChatCompletionRequest(
-  raw: string,
-): { readonly modelId?: string; readonly promptPreview?: string } {
+/** Parse an OpenAI-compat chat-completions request body for the model id; never throws. */
+export function parseChatCompletionRequest(raw: string): { readonly modelId?: string } {
   try {
     const body = JSON.parse(raw) as ChatCompletionBody;
     const modelId = typeof body.model === "string" ? body.model : undefined;
-    const lastUser = [...(body.messages ?? [])].reverse().find((m) => m.role === "user");
-    const content = typeof lastUser?.content === "string" ? lastUser.content : undefined;
-    const promptPreview = content !== undefined ? extractUserRequestPreview(content) : undefined;
-    return {
-      ...(modelId !== undefined ? { modelId } : {}),
-      ...(promptPreview !== undefined ? { promptPreview } : {}),
-    };
+    return modelId !== undefined ? { modelId } : {};
   } catch {
     return {};
   }

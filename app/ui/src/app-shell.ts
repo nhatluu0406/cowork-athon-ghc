@@ -75,6 +75,7 @@ import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
 import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
+import { confirmModal } from "./ui-shell/confirm-modal.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
@@ -177,6 +178,12 @@ const NULL_MS365_CLIENT: Ms365ConnectClient = {
   disconnectMs365: () => Promise.reject(new Error("service_not_ready")),
   listMs365Sites: () => Promise.reject(new Error("service_not_ready")),
   setMs365SiteEnabled: () => Promise.reject(new Error("service_not_ready")),
+  listMs365Flows: () => Promise.reject(new Error("service_not_ready")),
+  addMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  updateMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  deleteMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  setMs365FlowEnabled: () => Promise.reject(new Error("service_not_ready")),
+  setMs365FlowTimeout: () => Promise.reject(new Error("service_not_ready")),
 };
 
 interface RuntimeSessionReady {
@@ -299,6 +306,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
     state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
   // The editor is a persistent controller; keep its open diff tabs in sync with the reviews.
   codeEditor?.setReviews(reviews);
+  const workspaceConversations = state.conv.state.summaries
+    .filter((summary) => summary.workspacePath === state.activeWorkspace && (summary.surface ?? "cowork") === "cowork")
+    .map((summary) => ({ id: summary.id, title: summary.title }));
   renderClaudeCodeSurface(
     dom.codeView,
     {
@@ -309,6 +319,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       phase: state.conv.state.runtimePhase,
       composerDisabled: !preflight.canSend || isComposerLocked(state),
       composerDisabledReason: preflight.canSend ? null : preflight.message,
+      conversations: workspaceConversations,
+      activeConversationId: state.conv.state.activeConversationId,
+      sessionControlsDisabled: state.activeWorkspace === null || isComposerLocked(state),
     },
     {
       onOpenReview: (review) => {
@@ -1015,6 +1028,14 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
   dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
   dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
+  // Session control (#35) in the Workspace tab — shares the ONE Cowork conversation.
+  dom.workspaceView.sessionBar.render({
+    activeId: state.conv.state.activeConversationId,
+    conversations: state.conv.state.summaries
+      .filter((s) => s.workspacePath === state.activeWorkspace && (s.surface ?? "cowork") === "cowork")
+      .map((s) => ({ id: s.id, title: s.title })),
+    disabled: state.activeWorkspace === null || isComposerLocked(state),
+  });
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden =
     settingsOpen ||
@@ -1719,7 +1740,11 @@ async function switchConversation(
   if (currentId === id) return;
   const unsent = textFromComposer(dom.composerInput);
   if (unsent.length > 0 && currentId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và chuyển cuộc trò chuyện?");
+    const ok = await confirmModal({
+      title: "Chuyển cuộc trò chuyện?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Chuyển",
+    });
     if (!ok) return;
   }
   saveComposerDraft(state, dom);
@@ -1814,7 +1839,11 @@ async function newConversation(
     return;
   }
   if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
+    const ok = await confirmModal({
+      title: "Tạo cuộc trò chuyện mới?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Tạo cuộc trò chuyện mới",
+    });
     if (!ok) return;
   }
 
@@ -2824,6 +2853,12 @@ export function mountCoworkApp(root: HTMLElement): void {
               await ensureLive(state, readiness).catch(() => undefined);
               if (generation !== workspaceSwitchGeneration) return;
               renderState(dom, state, handlers);
+              // Issue #31: the forced restart swapped the loopback baseURL/token, but the navigators
+              // were refreshed in onActivated BEFORE the restart — against the old (dying) service —
+              // so the tree "fetch fail"s and the user had to click reload. Re-fetch now that the
+              // fresh bootstrap is adopted (dynamicClient reads the new state.client).
+              void workspaceNavigator?.refresh();
+              void codeNavigator?.refresh();
             };
             workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
               bridge: getShellBridge(),
@@ -2840,8 +2875,6 @@ export function mountCoworkApp(root: HTMLElement): void {
                 }
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
-                void workspaceNavigator?.refresh();
-                void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
                 // Issue #26: the supervised OpenCode child is bound to ONE workspace via its launch
                 // cwd (see runtime/session-store-adapter). Persisting the new active workspace is
@@ -2851,8 +2884,15 @@ export function mountCoworkApp(root: HTMLElement): void {
                 // cwd. The initial restore (null → first workspace) is skipped: the child already
                 // launched on that folder. The next turn plans a fresh session (planRuntimeTurn
                 // falls back to new_turn when the pre-restart session is gone).
-                if (workspaceChanged && previousWorkspace !== null && state.liveAttached) {
+                const willRelaunch =
+                  workspaceChanged && previousWorkspace !== null && state.liveAttached;
+                if (willRelaunch) {
+                  // Refresh happens AFTER the restart adopts the new bootstrap (issue #31) — a
+                  // refresh here would race the dying service and fail until a manual reload.
                   void relaunchRuntimeForWorkspaceSwitch();
+                } else {
+                  void workspaceNavigator?.refresh();
+                  void codeNavigator?.refresh();
                 }
               },
               onDeactivated: () => {
@@ -3083,6 +3123,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                   ? "error"
                   : "unknown",
             toolCount: server.toolCount,
+            ...(server.updatedAt !== undefined ? { lastChecked: server.updatedAt } : {}),
           });
           const mcpCallbacks: McpPanelCallbacks = {
             listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
@@ -3123,6 +3164,14 @@ export function mountCoworkApp(root: HTMLElement): void {
             deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
             setMcpServerEnabled: async (id, enabled) =>
               toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+            checkMcpServerHealth: async (id) => {
+              // Re-probe reachability, then return the refreshed row (the panel re-lists after).
+              await dynamicClient.mcpServerHealth(id);
+              const rows = await dynamicClient.listMcpServers();
+              const updated = rows.find((s) => s.id === id);
+              if (updated === undefined) throw new Error("MCP không còn tồn tại.");
+              return toMcpView(updated);
+            },
           };
           mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
@@ -3340,6 +3389,20 @@ export function mountCoworkApp(root: HTMLElement): void {
         renderState(dom, state, handlers);
       },
     );
+  };
+
+  // Session controls in the Code surface (#35) reuse the shared Cowork conversation flow.
+  dom.onCodeNewSession = (): void => {
+    void newConversation(state, dom, handlers).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
+  };
+  dom.onCodePickSession = (conversationId: string): void => {
+    void switchConversation(state, dom, handlers, conversationId).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
   };
 
   dom.sendButton.addEventListener("click", () => {

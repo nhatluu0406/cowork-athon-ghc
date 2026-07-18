@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-17"
+updated_at: "2026-07-18"
 ---
 
 # Roadmap V2 — basic-first, one wave at a time
@@ -44,6 +44,17 @@ updated_at: "2026-07-17"
 - [x] Use OpenCode native Skill load-on-demand.
 - [x] Add persistent MCP config and live adapter.
 - [x] Phase 1 MCP: local/remote + static encrypted API headers, no OAuth.
+- [x] Redesign MCP panel as compact catalog rows (external toggle/menu/health/tool count/preset) (#28).
+- [ ] MCP Phase 2 — agent tool invocation via OpenCode native `mcp` block (#30, researched, deferred).
+- [x] Enable gated agent web access (`web_access` elevated + SSRF guard) — WebFetch/WebSearch (#29).
+- [ ] #29 interactive packaged network smoke before claiming WORKS.
+- [x] Fix new/switch-conversation chatbox focus loss via commercial confirm modal (#27).
+- [x] Enable chat from web/phone via server-side conversation turn (#21, core; open until live round-trip).
+- [x] Refresh workspace navigators after workspace-switch runtime relaunch (#31).
+- [x] Stop storing the user's prompt in the Gateway request log (#38, privacy).
+- [x] Render Code-panel answers as Markdown + collapse excess blank lines (#33, #32).
+- [x] Shared session controls (new/pick) in Code + Workspace tabs; roomier Code chat (#35, #36 layout).
+- [ ] #36 remaining: agent reliably creating `.py` (OpenCode pin tool coverage) — packaged obs.
 
 ## WAVE 3 — Provider model discovery
 

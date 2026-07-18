@@ -155,6 +155,13 @@ function resolvePostProxyTarget(pathname: string): string | undefined {
     // Exactly one inert path segment (the session id) between the fixed prefix and suffix.
     if (isInertIdSegment(middle)) return `/v1/session/${middle}/message`;
   }
+  // Start a NEW turn on an existing conversation (#21): the service creates a session bound to
+  // the active workspace, links it, and dispatches — so a phone/browser can chat with Cowork
+  // without a pre-existing live session. One inert conversation-id segment only.
+  if (pathname.startsWith("/api/conversations/") && pathname.endsWith("/turn")) {
+    const middle = pathname.slice("/api/conversations/".length, -"/turn".length);
+    if (isInertIdSegment(middle)) return `/v1/conversations/${middle}/turn`;
+  }
   // Dispatch (Task 5.3 phone slice): 1-touch run of a SAVED task, and cancel of a run. No
   // task write route (create/update/delete/instantiate) is ever allowlisted here.
   if (pathname.startsWith("/api/dispatch/tasks/") && pathname.endsWith("/run")) {
