@@ -303,11 +303,17 @@ export function mountKnowledgeLocalPanel(
       status.sources.forEach((src, i) => {
         const item = el("span", `klp-status__source klp-status__source--${src.type}`);
         item.append(sourceBadge({ type: src.type, detail: null, label: src.label }));
+        // Honest readiness (issue #19): connected-with-docs shows the count; connected-but-no-docs
+        // (e.g. Microsoft 365 linked, but no importer yet) shows "Đã kết nối"; otherwise "Chưa kết nối".
         item.append(
           el(
             "span",
             "klp-status__source-note",
-            src.connected ? `${src.documentCount} tài liệu` : "Chưa kết nối",
+            src.connected
+              ? src.documentCount > 0
+                ? `${src.documentCount} tài liệu`
+                : "Đã kết nối"
+              : "Chưa kết nối",
           ),
         );
         sources.append(item);
@@ -515,7 +521,11 @@ export function mountKnowledgeLocalPanel(
     // (Microsoft 365 in the MVP) is shown but disabled — honest readiness, never a fake selectable count.
     if (sourceSelect !== null) {
       const summaries = status?.sources ?? [];
-      const selectable = new Set<string>([SOURCE_FILTER_ALL, ...summaries.filter((s) => s.connected).map((s) => s.type)]);
+      // A source is only a *selectable filter* when it is connected AND actually has documents —
+      // a connected-but-empty source (MS365 linked with no importer yet) must not offer an empty
+      // filter (issue #19).
+      const hasData = (s: (typeof summaries)[number]): boolean => s.connected && s.documentCount > 0;
+      const selectable = new Set<string>([SOURCE_FILTER_ALL, ...summaries.filter(hasData).map((s) => s.type)]);
       if (!selectable.has(sourceFilter)) sourceFilter = SOURCE_FILTER_ALL;
       sourceSelect.replaceChildren();
       const allOpt = document.createElement("option");
@@ -525,8 +535,12 @@ export function mountKnowledgeLocalPanel(
       for (const src of summaries) {
         const opt = document.createElement("option");
         opt.value = src.type;
-        opt.textContent = src.connected ? src.label : `${src.label} · Chưa kết nối`;
-        opt.disabled = !src.connected;
+        opt.textContent = !src.connected
+          ? `${src.label} · Chưa kết nối`
+          : src.documentCount > 0
+            ? src.label
+            : `${src.label} · chưa đồng bộ`;
+        opt.disabled = !hasData(src);
         sourceSelect.append(opt);
       }
       sourceSelect.value = sourceFilter;

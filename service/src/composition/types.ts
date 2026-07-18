@@ -44,6 +44,7 @@ import type { McpStore } from "../db/index.js";
 import type { ProviderProfileStore } from "../provider-profiles/provider-profile-store.js";
 import type { ProfileRuntimeBridge } from "../provider-profiles/profile-runtime-bridge.js";
 import type { LocalAuthService, SqliteDatabase } from "../db/index.js";
+import type { GatewayService } from "../gateway/index.js";
 
 export interface CoworkServiceOptions extends ServiceOptions {
   // ---- Tier 1 seams (default: real in-process implementations) ----
@@ -105,6 +106,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    */
   readonly autoUnlock?: { readonly username: string; readonly password: string };
   /**
+   * Device-bound auto-unlock secret (shell main only): the plaintext deviceSecret the shell just
+   * decrypted from its safeStorage-sealed blob. When set (and no password autoUnlock), composition
+   * unwraps the vault from the app_meta envelope. Never log or persist; the shell holds it sealed.
+   */
+  readonly autoUnlockDeviceSecret?: string;
+  /**
    * Called after a successful setup/unlock with the plaintext password (shell main only).
    * Used to re-unlock after live restart. Never log or persist to disk.
    */
@@ -122,6 +129,13 @@ export interface CoworkServiceOptions extends ServiceOptions {
 
   /** Allow POST /v1/credentials/import-env (development / verification only). Default: false. */
   readonly allowEnvCredentialImport?: boolean;
+  /**
+   * Port for the Gateway's real HTTP proxy (`gateway/proxy-server.ts`). Default: an ephemeral
+   * OS-assigned port (0) — safe for parallel tests. Production (the shell) passes the fixed
+   * `DEFAULT_GATEWAY_PROXY_PORT` so a persisted, gateway-swapped profile baseUrl keeps resolving
+   * across restarts and settings-only → live tier transitions.
+   */
+  readonly gatewayProxyPort?: number;
 
   // ---- Tier 2 seams (default: honest not-attached doubles; CGHC-028 fills these) ----
   /**
@@ -229,6 +243,7 @@ export interface CoworkServiceDeps {
    * shares the ONE permission gate + runtime-reply port so a Deny blocks at the boundary.
    */
   buildToolPermissionProxy(guard: WorkspaceGuard): ToolPermissionProxy;
+  readonly gatewayService: GatewayService;
 }
 
 /** A fully-wired but not-yet-listening service: its routers, its deps, and a start seam. */

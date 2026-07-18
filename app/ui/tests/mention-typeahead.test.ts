@@ -88,3 +88,24 @@ test("buildMentionIndex caps the file count", async () => {
   });
   assert.equal(files.length, MENTION_INDEX_MAX_FILES);
 });
+
+test("a rebuild reflects newly added files (issue #24 — @ cache invalidation)", async () => {
+  // The typeahead caches the file index; invalidate() drops it so the NEXT scan rebuilds. Prove the
+  // rebuild actually surfaces a file added after the first scan (the reported bug: added file, but
+  // `@` still didn't list it).
+  let current = ["a.md"];
+  const source = {
+    listWorkspaceChildren: async () => ({
+      entries: current.map((relativePath) => ({
+        name: relativePath,
+        relativePath,
+        kind: "file" as const,
+      })),
+    }),
+  };
+  const first = await buildMentionIndex(source);
+  assert.deepEqual([...first], ["a.md"]);
+  current = ["a.md", "notes/new.md"]; // user adds a file into the same workspace
+  const rebuilt = await buildMentionIndex(source);
+  assert.deepEqual([...rebuilt].sort(), ["a.md", "notes/new.md"]);
+});

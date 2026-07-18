@@ -35,6 +35,10 @@ export interface SurfaceRegistryEnv {
   readonly onlyAvailable?: boolean;
 }
 
+// Rail order follows the product flow (Phase 3): work surfaces first (Cowork, Code, Knowledge),
+// then external connections (Microsoft 365, Dispatch), then capability surfaces (Skill & MCP,
+// Gateway). Settings ("Cấu hình") is a separate full-screen, not a rail surface. "Workspace" is a
+// mode inside Cowork, not its own surface.
 const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
   {
     id: "cowork",
@@ -47,39 +51,15 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     component: "CoworkShellSurface",
   },
   {
-    id: "skills-mcp",
-    label: "Skill & MCP",
-    icon: "skills",
-    featureFlag: "core.skills_mcp",
-    requiredCapability: "skills_mcp_hub",
+    id: "code",
+    label: "Code",
+    icon: "code",
+    featureFlag: "code.workspace",
+    requiredCapability: "workspace_code_surface",
     availability: "available",
     description:
-      "Quản lý Skill local và kết nối MCP (Phase 1: stdio hoặc remote URL, secret trong vault mã hoá).",
-    component: "SkillsMcpHubSurface",
-  },
-  {
-    id: "dispatch",
-    label: "Dispatch",
-    icon: "dispatch",
-    featureFlag: "d1.dispatch",
-    requiredCapability: "external_dispatch_backend",
-    availability: "awaiting_integration",
-    dependency: "D1",
-    description:
-      "Điều phối fan-out agent và theo dõi tác vụ con. Backend D1 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
-    component: "DispatchIntegrationSlot",
-  },
-  {
-    id: "gateway",
-    label: "Gateway",
-    icon: "gateway",
-    featureFlag: "d4.gateway",
-    requiredCapability: "advanced_gateway_backend",
-    availability: "awaiting_integration",
-    dependency: "D4",
-    description:
-      "Gateway đa provider, failover và key pool. Backend D4 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
-    component: "GatewayIntegrationSlot",
+      "Surface project-centric: Project Explorer, editor nhiều tab (sửa + lưu) và panel Agent dùng chung phiên/backend với Cowork.",
+    component: "ClaudeCodeSurface",
   },
   {
     id: "knowledge",
@@ -105,15 +85,39 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
     component: "MicrosoftSurfaceView",
   },
   {
-    id: "code",
-    label: "Code",
-    icon: "code",
-    featureFlag: "code.workspace",
-    requiredCapability: "workspace_code_surface",
+    id: "dispatch",
+    label: "Dispatch",
+    icon: "dispatch",
+    featureFlag: "d1.dispatch",
+    requiredCapability: "external_dispatch_backend",
+    availability: "awaiting_integration",
+    dependency: "D1",
+    description:
+      "Điều phối fan-out agent và theo dõi tác vụ con. Backend D1 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
+    component: "DispatchIntegrationSlot",
+  },
+  {
+    id: "skills-mcp",
+    label: "Skill & MCP",
+    icon: "skills",
+    featureFlag: "core.skills_mcp",
+    requiredCapability: "skills_mcp_hub",
     availability: "available",
     description:
-      "Surface project-centric: Project Explorer, editor nhiều tab (sửa + lưu) và panel Agent dùng chung phiên/backend với Cowork.",
-    component: "ClaudeCodeSurface",
+      "Quản lý Skill local và kết nối MCP (Phase 1: stdio hoặc remote URL, secret trong vault mã hoá).",
+    component: "SkillsMcpHubSurface",
+  },
+  {
+    id: "gateway",
+    label: "Gateway",
+    icon: "gateway",
+    featureFlag: "d4.gateway",
+    requiredCapability: "advanced_gateway_backend",
+    availability: "available",
+    dependency: "D4",
+    description:
+      "Gateway đa provider, failover và key pool. Quản lý API key và kích hoạt tài khoản theo provider.",
+    component: "GatewayIntegrationSlot",
   },
 ]);
 

@@ -4,9 +4,11 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { LocalUserRepository, VaultKeyRepository } from "./repositories.js";
+import type { AppMetaRepository, LocalUserRepository, VaultKeyRepository } from "./repositories.js";
 import {
+  decryptSecret,
   deriveKeyFromPassword,
+  encryptSecret,
   generateMasterKey,
   generateSalt,
   hashPassword,
@@ -14,6 +16,39 @@ import {
   verifyPassword,
   wrapMasterKey,
 } from "./vault-crypto.js";
+
+/**
+ * app_meta key holding the DEVICE-BOUND auto-unlock envelope: the vault master key wrapped a SECOND
+ * time (AES-256-GCM, independent salt) under a key derived from a random `deviceSecret`. The
+ * deviceSecret itself never lives here — the shell keeps it sealed with Electron safeStorage (DPAPI)
+ * on disk. Neither the envelope nor the sealed secret alone can unwrap the vault; both, on the same
+ * device+user, are required. The password-wrapped `vault_keys` row is never touched, so the password
+ * path and recovery always keep working.
+ */
+const AUTO_UNLOCK_META_KEY = "auto_unlock_envelope_v1";
+/** AAD isolates the auto-unlock wrap from the password wrap ("cowork-ghc-vault-master"). */
+const AUTO_UNLOCK_AAD = "cowork-ghc-vault-autounlock";
+
+interface AutoUnlockEnvelope {
+  readonly v: 1;
+  readonly userId: string;
+  readonly kdfSalt: string; // base64
+  readonly ciphertext: string; // base64 (AES-256-GCM of the master key, base64-encoded)
+  readonly nonce: string; // base64
+  readonly tag: string; // base64
+}
+
+function readEnvelope(appMeta: AppMetaRepository): AutoUnlockEnvelope | null {
+  const raw = appMeta.get(AUTO_UNLOCK_META_KEY);
+  if (raw === null || raw.trim().length === 0) return null;
+  try {
+    const parsed = JSON.parse(raw) as AutoUnlockEnvelope;
+    if (parsed.v !== 1 || typeof parsed.ciphertext !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
 export type AuthStatus =
   | { readonly state: "needs_setup" }
@@ -28,11 +63,30 @@ export interface LocalAuthService {
   /** In-memory master key after unlock; null when locked. Never serialize. */
   masterKey(): Buffer | null;
   userId(): string | null;
+  /** Verify a password against the stored local account without changing lock state. */
+  verifyCurrentPassword(password: string): boolean;
+  /** Whether a device-bound auto-unlock envelope is currently persisted. */
+  hasAutoUnlockEnvelope(): boolean;
+  /**
+   * Persist a device-bound auto-unlock envelope: re-wrap the in-memory master key under a key derived
+   * from `deviceSecret`. Requires the vault to be unlocked. Never stores the deviceSecret.
+   */
+  enableAutoUnlock(deviceSecret: string): void;
+  /** Remove the device-bound auto-unlock envelope (returns the vault to password-only startup). */
+  disableAutoUnlock(): void;
+  /**
+   * Unlock the vault from the device-bound envelope using `deviceSecret` (no password). Returns the
+   * userId on success, or null when there is no envelope / the secret does not authenticate it
+   * (a different device/user or a corrupted envelope) — the caller falls back to the password gate.
+   */
+  unlockWithAutoUnlock(deviceSecret: string): { readonly userId: string } | null;
 }
 
 export interface LocalAuthDeps {
   readonly users: LocalUserRepository;
   readonly vaultKeys: VaultKeyRepository;
+  /** app_meta store for the device-bound auto-unlock envelope (never holds the deviceSecret). */
+  readonly appMeta: AppMetaRepository;
   readonly now?: () => string;
   readonly id?: () => string;
 }
@@ -146,6 +200,75 @@ export function createLocalAuthService(deps: LocalAuthDeps): LocalAuthService {
 
     userId() {
       return unlockedUserId;
+    },
+
+    verifyCurrentPassword(password) {
+      const user = deps.users.getFirst();
+      if (user === null) return false;
+      return verifyPassword(password, user.passwordSalt, user.passwordHash);
+    },
+
+    hasAutoUnlockEnvelope() {
+      return readEnvelope(deps.appMeta) !== null;
+    },
+
+    enableAutoUnlock(deviceSecret) {
+      if (masterKeyMemory === null || unlockedUserId === null) {
+        throw new AuthError("Vault must be unlocked to enable auto-unlock.");
+      }
+      if (typeof deviceSecret !== "string" || deviceSecret.length < 16) {
+        throw new AuthError("Device secret is too weak for auto-unlock.");
+      }
+      const kdfSalt = generateSalt();
+      const deviceKey = deriveKeyFromPassword(deviceSecret, kdfSalt);
+      // Second, independent wrap (distinct AAD) of the master key; the password wrap is untouched.
+      const enc = encryptSecret(deviceKey, masterKeyMemory.toString("base64"), AUTO_UNLOCK_AAD);
+      deviceKey.fill(0);
+      const envelope: AutoUnlockEnvelope = {
+        v: 1,
+        userId: unlockedUserId,
+        kdfSalt: kdfSalt.toString("base64"),
+        ciphertext: enc.ciphertext.toString("base64"),
+        nonce: enc.nonce.toString("base64"),
+        tag: enc.tag.toString("base64"),
+      };
+      deps.appMeta.set(AUTO_UNLOCK_META_KEY, JSON.stringify(envelope));
+    },
+
+    disableAutoUnlock() {
+      // Empty value = "no envelope" (readEnvelope treats blank as absent); AppMetaRepository has no
+      // delete, and an empty string is inert.
+      deps.appMeta.set(AUTO_UNLOCK_META_KEY, "");
+    },
+
+    unlockWithAutoUnlock(deviceSecret) {
+      const envelope = readEnvelope(deps.appMeta);
+      if (envelope === null) return null;
+      const user = deps.users.getFirst();
+      if (user === null || user.id !== envelope.userId) return null;
+      let deviceKey: Buffer;
+      try {
+        deviceKey = deriveKeyFromPassword(deviceSecret, Buffer.from(envelope.kdfSalt, "base64"));
+      } catch {
+        return null;
+      }
+      const decoded = decryptSecret(
+        deviceKey,
+        {
+          ciphertext: Buffer.from(envelope.ciphertext, "base64"),
+          nonce: Buffer.from(envelope.nonce, "base64"),
+          tag: Buffer.from(envelope.tag, "base64"),
+        },
+        AUTO_UNLOCK_AAD,
+      );
+      deviceKey.fill(0);
+      if (decoded === null) return null; // wrong secret / different device / corrupted → password gate
+      const masterKey = Buffer.from(decoded, "base64");
+      if (masterKey.length !== 32) return null;
+      unlockedUserId = user.id;
+      unlockedUsername = user.username;
+      masterKeyMemory = masterKey;
+      return { userId: user.id };
     },
   };
 }

@@ -58,4 +58,12 @@ export interface HealthData {
   readonly service: typeof SERVICE_NAME;
   readonly startedAt: string; // ISO-8601
   readonly uptimeMs: number;
+  /**
+   * Whether the supervised OpenCode runtime is attached + alive (Tier 2). Absent/`false` means the
+   * live runtime is not ready to serve a prompt yet (settings-only tier, or the child is still
+   * starting) — the renderer uses this to gate the first send and to time a single safe retry rather
+   * than sleeping blindly. The socket answering `/v1/health` at all only proves the LOCAL service is
+   * up, not the runtime.
+   */
+  readonly runtimeReady?: boolean;
 }

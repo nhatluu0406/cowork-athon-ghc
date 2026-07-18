@@ -12,6 +12,9 @@ interface WorkspaceNavigatorOptions {
   readonly getWorkspaceRoot: () => string | null;
   readonly onFileSelected: (relativePath: string) => void;
   readonly onChooseWorkspace?: () => void;
+  /** Called after each successful tree (re)load — lets the composer drop its stale @-mention cache
+   *  when the user manually refreshes to pick up externally added files (issue #24). */
+  readonly onRefreshed?: () => void;
 }
 
 interface TreeNode {
@@ -241,6 +244,7 @@ export function mountWorkspaceNavigator(
     } finally {
       state.loading = false;
       render();
+      options.onRefreshed?.();
     }
   };
 

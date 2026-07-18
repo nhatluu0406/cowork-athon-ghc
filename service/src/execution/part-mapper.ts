@@ -47,6 +47,7 @@ const APPLY_PATCH_TOOL_NAMES = new Set(["patch", "apply_patch"]);
 /** File-writing tools → the EV file-mutation op they represent (create vs in-place edit). */
 const FILE_TOOL_OPS: Readonly<Record<string, FileMutationOp>> = {
   write: "create",
+  create_docx: "create",
   edit: "edit",
   patch: "edit",
   apply_patch: "edit",

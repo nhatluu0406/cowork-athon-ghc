@@ -15,10 +15,11 @@ rem here, so start.bat alone is enough - no extra step. To keep the app loopback
 rem (no Wi-Fi exposure, the shipped baseline), set CGHC_REMOTE_LAN=0 before running.
 rem NOTE: LAN mode is HTTP without TLS yet; the one-time device token travels in the
 rem clear, so only use it on a network you trust. TLS + cert pinning is a later slice.
-if not defined CGHC_REMOTE_LAN (
-  set "CGHC_REMOTE_LAN=1"
-  if not defined CGHC_REMOTE_ENABLED set "CGHC_REMOTE_ENABLED=1"
-)
+rem Enable the gateway EXPLICITLY (not only when a wrapper set the vars): set
+rem CGHC_REMOTE_ENABLED unconditionally so a stale/pre-set CGHC_REMOTE_LAN can never leave
+rem the gateway off. CGHC_REMOTE_LAN defaults to 1 but honors a pre-set 0 (loopback-only).
+set "CGHC_REMOTE_ENABLED=1"
+if not defined CGHC_REMOTE_LAN set "CGHC_REMOTE_LAN=1"
 
 where node >nul 2>nul
 if errorlevel 1 goto :nonode

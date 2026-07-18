@@ -33,6 +33,10 @@ export const IpcChannel = {
   PreviewReload: "cowork:preview-reload",
   /** Renderer tears down the embedded preview surface. */
   PreviewClose: "cowork:preview-close",
+  /** Renderer asks whether device-bound secure auto-unlock is available (safeStorage/DPAPI). */
+  IsSecureAutoUnlockAvailable: "cowork:is-secure-auto-unlock-available",
+  /** Renderer asks the shell to flip the "Require login at startup" mode (safeStorage-owned). */
+  SetStartupAuthMode: "cowork:set-startup-auth-mode",
 } as const;
 
 /** Union of the allowed channel name literals. */

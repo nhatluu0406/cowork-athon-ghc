@@ -18,12 +18,20 @@ import type {
   RendererBootstrap,
   SaveTextFileRequest,
   SaveTextFileResult,
+  StartupAuthModeResult,
   WindowTheme,
 } from "@cowork-ghc/contracts";
 
 import { IpcChannel } from "./channels.js";
 import type { ShellBootstrap } from "../bootstrap.js";
 import { createPreviewViewController, type PreviewViewController } from "../preview/preview-view.js";
+import {
+  clearSealedDeviceSecret,
+  generateDeviceSecret,
+  isSecureAutoUnlockAvailable,
+  sealDeviceSecret,
+} from "../service/device-unlock.js";
+import { applyStartupAuthMode } from "../service/startup-auth-mode.js";
 
 /** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
 let e2eAttachmentQueue: string[] | null = null;
@@ -60,6 +68,33 @@ function consumeE2eAttachmentPath(): string | undefined {
 export interface IpcHandlerDeps {
   readonly getBootstrap: () => ShellBootstrap;
   readonly connectLive: (force: boolean) => Promise<ConnectLiveResult>;
+  /** Writable app-data root where the safeStorage-sealed deviceSecret lives (auto-unlock.seal). */
+  readonly appDataRoot: string;
+}
+
+/** One authenticated call to the loopback service; returns the parsed envelope. */
+async function serviceCall(
+  bootstrap: ShellBootstrap,
+  method: string,
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean }> {
+  const base = bootstrap.serviceBaseUrl;
+  const token = bootstrap.clientToken;
+  if (base === undefined || base === "" || token === undefined || token === "") {
+    return { ok: false };
+  }
+  try {
+    const res = await fetch(new URL(path, base), {
+      method,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const env = (await res.json()) as { ok?: boolean };
+    return { ok: res.ok && env?.ok === true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /** Lazily-created embedded preview controller, one per owning window. */
@@ -83,7 +118,37 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
-  const { getBootstrap, connectLive } = deps;
+  const { getBootstrap, connectLive, appDataRoot } = deps;
+
+  ipcMain.handle(IpcChannel.IsSecureAutoUnlockAvailable, (): boolean => isSecureAutoUnlockAvailable());
+
+  ipcMain.handle(
+    IpcChannel.SetStartupAuthMode,
+    async (
+      _event: IpcMainInvokeEvent,
+      arg: unknown,
+    ): Promise<StartupAuthModeResult> => {
+      const requireLogin = (arg as { requireLogin?: unknown })?.requireLogin === true;
+      const password = (arg as { password?: unknown })?.password;
+      const bootstrap = getBootstrap();
+      // The two-step orchestration (envelope in the service ↔ seal in the shell) with its rollback
+      // lives in `applyStartupAuthMode` so the interruption behaviour is unit-tested; here we only
+      // bind the real seams (loopback call + safeStorage device-unlock).
+      return applyStartupAuthMode(
+        {
+          serviceCall: (method, path, body) => serviceCall(bootstrap, method, path, body),
+          isSecureAvailable: isSecureAutoUnlockAvailable,
+          generateDeviceSecret,
+          sealDeviceSecret: (secret) => sealDeviceSecret(appDataRoot, secret),
+          clearSealedDeviceSecret: () => clearSealedDeviceSecret(appDataRoot),
+        },
+        requireLogin,
+        typeof password === "string" ? password : "",
+      );
+    },
+  );
+
+
   ipcMain.handle(IpcChannel.GetBootstrap, (): RendererBootstrap => {
     const bootstrap = getBootstrap();
     return {

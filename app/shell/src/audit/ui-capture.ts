@@ -13,7 +13,7 @@
  * `COWORK_GHC_UI_AUDIT_OUT` and quits the app (so `before-quit` stops the service + child cleanly).
  */
 
-import { app, screen, type BrowserWindow } from "electron";
+import { app, screen, WebContentsView, type BrowserWindow } from "electron";
 import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -175,6 +175,88 @@ async function runAudit(window: BrowserWindow): Promise<void> {
       30_000,
     );
     check("renderer-mounted", mounted, mounted ? "" : "#app never populated");
+
+    // Phase 2 (device-bound auto-unlock verify): relaunched over the SAME data root after auth was
+    // turned OFF. The app MUST boot straight into Cowork with no lock screen (safeStorage decrypts the
+    // sealed deviceSecret → the service unwraps the vault at composition). Verifies the OFF path.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 4_000);
+      const railReady = await waitFor(
+        "document.querySelector('.product-rail') && !document.querySelector('.app-lock')",
+        20_000,
+      );
+      check(
+        "auth-off-auto-unlock-boots-to-cowork",
+        !lockAppeared && railReady,
+        lockAppeared ? "lock screen appeared (auto-unlock failed)" : railReady ? "" : "rail not ready",
+      );
+      if (railReady) {
+        await capture({ id: "51-auth-off-autounlock-cowork", title: "Auth OFF — auto-unlock boots straight to Cowork", theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
+      }
+      return; // finally writes the sentinel + quits
+    }
+
+    // Phase C (device-bound auto-unlock, corrupt-seal fallback): the launcher CORRUPTED the sealed
+    // deviceSecret before this relaunch. safeStorage can no longer decrypt it → the vault must NOT
+    // auto-unlock; the password gate MUST take over (no bricked vault). We then unlock with the
+    // password (proving the untouched password path still works) and re-enable "Require login" ON
+    // (deletes the envelope + clears the seal) so Phase D can confirm the ON boot.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify_fallback") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 20_000);
+      check(
+        "corrupt-seal-falls-back-to-password",
+        lockAppeared,
+        lockAppeared ? "" : "no lock screen — auto-unlock unexpectedly succeeded with a corrupt seal",
+      );
+      if (lockAppeared) {
+        await capture({ id: "52-corrupt-seal-fallback-login", title: "Auth OFF — corrupt seal falls back to the password gate", theme: "light", viewport: "desktop", expectSelector: ".app-lock__card" });
+        const submitted = await evalJs<boolean>(`(() => {
+          const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+          const user = document.querySelector('.app-lock input[type=text]');
+          const pass = document.querySelector('.app-lock input[type=password]');
+          if (!user || !pass) return false;
+          setVal(user, ${JSON.stringify(SYNTH_USER)});
+          setVal(pass, ${JSON.stringify(SYNTH_PASS)});
+          const btn = document.querySelector('.app-lock__submit');
+          if (!btn) return false;
+          btn.click();
+          return true;
+        })()`);
+        const unlocked = submitted && (await waitFor("!document.querySelector('.app-lock')", 20_000));
+        check(
+          "password-still-unlocks-after-corrupt-seal",
+          unlocked,
+          unlocked ? "" : "the password path failed after a corrupt seal (would be a bricked vault)",
+        );
+        if (unlocked) {
+          const onRes = await evalJs<{ ok?: boolean; requireLogin?: boolean; reason?: string }>(
+            `(async () => { try { return await window.coworkShell.setStartupAuthMode(true, ${JSON.stringify(SYNTH_PASS)}); } catch (e) { return { ok: false, reason: String(e) }; } })()`,
+          );
+          check(
+            "re-enable-require-login",
+            onRes?.ok === true && onRes?.requireLogin === true,
+            JSON.stringify(onRes),
+          );
+          await capture({ id: "53-require-login-re-enabled", title: "Auth — Require login at startup re-enabled (ON)", theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
+        }
+      }
+      return; // finally writes the sentinel + quits
+    }
+
+    // Phase D (re-enabled ON boot): after Phase C turned "Require login" back ON, a fresh relaunch
+    // MUST show the password gate again — no envelope/seal remain to auto-unlock from.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify_on") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 20_000);
+      check(
+        "re-enabled-on-shows-login",
+        lockAppeared,
+        lockAppeared ? "" : "no lock screen after re-enabling Require login (auto-unlock envelope/seal not cleared)",
+      );
+      if (lockAppeared) {
+        await capture({ id: "54-auth-on-login-after-reenable", title: "Auth ON — password gate returns after re-enable", theme: "light", viewport: "desktop", expectSelector: ".app-lock__card" });
+      }
+      return; // finally writes the sentinel + quits
+    }
 
     // 1) First-run lock/setup screen (honest onboarding evidence — ER-002).
     const lockShown = await waitFor("document.querySelector('.app-lock')", 10_000);
@@ -395,6 +477,204 @@ async function runAudit(window: BrowserWindow): Promise<void> {
       await clickSel('button[data-surface-id="code"]');
       await delay(400);
       await capture({ id: "31-code-large-light", title: "Code — large", theme: "light", viewport: "large", expectSelector: ".product-rail" });
+
+      // 5b) Code runtime panels — the exact surfaces the exhibition evaluation must see: the right-of-
+      // editor "Xem trước" (web) pane + its "Kết quả"/"Vấn đề" drawer, the "Ứng dụng" (desktop) pane,
+      // and a collapsed Explorer+Agent layout. No workspace is a web/app project here, so the panes
+      // render their honest empty/unsupported overlays — that is the layout under evaluation, captured
+      // packaged. Nothing is launched (no process, no floating view when not running).
+      await clickSel('button[data-surface-id="code"]');
+      await delay(300);
+      if (await clickSel('.code-mode__item[data-mode="preview"]')) {
+        await waitFor("document.querySelector('.code-preview-host:not([hidden]) .code-preview__bar')", 6_000);
+        await capture({ id: "32-code-preview-web-light", title: "Code — Xem trước (web) + Kết quả/Vấn đề", theme: "light", viewport: "desktop", expectSelector: ".code-preview-host:not([hidden]) .code-preview__bar" });
+        // Switch the output drawer to the "Vấn đề" (Problems) tab — honest empty state, packaged.
+        await evalJs(`(() => { const t = document.querySelectorAll('.code-preview-host:not([hidden]) .code-preview__drawer-tab'); if (t[1]) t[1].click(); })()`);
+        await delay(250);
+        await capture({ id: "33-code-preview-problems-light", title: "Code — tab Vấn đề (trống, trung thực)", theme: "light", viewport: "desktop", expectSelector: ".code-preview-host:not([hidden]) .code-preview__problems" });
+        // Ứng dụng (desktop app) runtime pane.
+        if (await clickSel('.code-runtime-mode .code-mode__item[data-runtime-mode="app"]')) {
+          await waitFor("document.querySelector('.code-app-host:not([hidden]).code-app')", 6_000);
+          await capture({ id: "34-code-app-light", title: "Code — Ứng dụng (desktop) trạng thái trung thực", theme: "light", viewport: "desktop", expectSelector: ".code-app-host:not([hidden]).code-app" });
+        }
+        // Collapse Explorer + Agent → the compact editor-forward layout (resize/collapse evidence).
+        await clickSel('.code-explorer__collapse');
+        await clickSel('.cc-surface__panel-toggle');
+        await delay(300);
+        await capture({ id: "35-code-collapsed-light", title: "Code — thu gọn Explorer + Agent", theme: "light", viewport: "desktop", expectSelector: ".cc-surface--panel-collapsed" });
+        // Restore a clean Code state for any later steps.
+        await clickSel('.cc-surface__panel-toggle');
+        await clickSel('.code-mode__item[data-mode="code"]');
+        await delay(200);
+      } else {
+        check("nav:code-panels", false, "preview mode button missing");
+      }
+
+      // 5c) Code Web Preview LIVE-RUN over a REAL fixture workspace (the deliverable of this slice).
+      // Point the app at the isolated copy of the committed zero-dep web fixture, then drive the exact
+      // user flow packaged: detect the dev-server target, approve the command_exec permission, spawn a
+      // real `npm run dev` process, embed the real loopback page, read real output, parse a real build
+      // error into "Vấn đề", and stop cleanly. The embedded page is a SEPARATE WebContentsView, so its
+      // real content is captured from that view's own webContents (the main capturePage cannot see it).
+      const previewWs = process.env.COWORK_GHC_UI_AUDIT_PREVIEW_WORKSPACE?.trim();
+      if (previewWs !== undefined && previewWs.length > 0) {
+        log(`code web preview: activating fixture workspace ${previewWs}`);
+        const setWs = await svc<{ __error?: unknown }>("PUT", "/v1/settings/active-workspace", { rootPath: previewWs });
+        check("preview-set-workspace", !setWs?.__error, setWs?.__error ? JSON.stringify(setWs.__error) : "");
+
+        const waitSel = (sel: string, ms = 8_000): Promise<boolean> =>
+          waitFor(`document.querySelector(${JSON.stringify(sel)})`, ms);
+        const waitEnabled = (sel: string, ms = 12_000): Promise<boolean> =>
+          waitFor(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); return !!n && !n.disabled; })()`, ms);
+        const START = 'button[aria-label="Chạy preview"]';
+        const STOP = 'button[aria-label="Dừng preview"]';
+
+        // Capture the embedded preview's OWN WebContentsView (real served content) + assert the marker.
+        // Its webContents is a separate process the main-window capturePage cannot see. Background
+        // paint throttling can make an off-focus capturePage return an empty frame, so bring the
+        // window forward and retry until a real (non-trivial) PNG lands.
+        const capturePreviewContent = async (id: string, title: string): Promise<void> => {
+          const child = window.contentView.children.find((v): v is WebContentsView => v instanceof WebContentsView);
+          if (child === undefined) {
+            check(`preview-embed:${id}`, false, "no embedded WebContentsView found");
+            return;
+          }
+          try {
+            window.show();
+            window.moveTop();
+            window.focus();
+            child.setVisible(true);
+          } catch {
+            /* best effort */
+          }
+          let text = "";
+          let png: Buffer = Buffer.alloc(0);
+          for (let i = 0; i < 8; i += 1) {
+            try {
+              text = await child.webContents.executeJavaScript("document.body.innerText", true);
+            } catch {
+              /* preview page not ready */
+            }
+            try {
+              png = (await child.webContents.capturePage()).toPNG();
+            } catch {
+              /* not paintable yet */
+            }
+            if (png.length >= 2000 && /COWORK-GHC-PREVIEW-FIXTURE-LIVE/.test(text)) break;
+            await delay(500);
+          }
+          const hasMarker = /COWORK-GHC-PREVIEW-FIXTURE-LIVE/.test(text);
+          // Acceptance = the marker is really present in the EMBEDDED view's own DOM (proof the real
+          // fixture page is served + loaded into the hardened WebContentsView). The pixel screenshot is
+          // supplementary: child-view capturePage can return an empty frame when the audit window is not
+          // the OS-foreground window, so we only add it to the contact sheet when a real frame lands.
+          if (png.length >= 2000) {
+            writeFileSync(join(shotsDir, `${id}.png`), png);
+            steps.push({
+              id, title, theme: "light", viewport: "desktop", size: "embedded",
+              file: `screenshots/${id}.png`, bytes: png.length, selectorFound: true, contentOk: true,
+            });
+          }
+          check(`preview-embed-content:${id}`, hasMarker, `marker=${hasMarker} png=${png.length}B`);
+          log(`captured embedded preview ${id} ${png.length}B marker=${hasMarker}`);
+        };
+
+        await clickSel('button[data-surface-id="code"]');
+        await delay(300);
+        await clickSel('.code-mode__item[data-mode="preview"]');
+        // 5b may have left the runtime mode on "Ứng dụng"; switch to Web → activates the web preview
+        // controller, which re-detects the now-active fixture workspace (dev-server).
+        await clickSel('.code-runtime-mode .code-mode__item[data-runtime-mode="web"]');
+        const detected = await waitEnabled(START, 15_000);
+        check("preview-detect-devserver", detected, detected ? "" : "Start never enabled (fixture dev-server not detected)");
+        if (detected) {
+          await capture({ id: "36-code-preview-ready-light", title: "Code — Xem trước sẵn sàng (dev-server phát hiện)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+          await capture({ id: "37-code-preview-ready-dark", title: "Code — Xem trước sẵn sàng (dark)", theme: "dark", viewport: "desktop", expectSelector: ".code-preview__bar" });
+
+          // Start (dev) → explicit permission confirm → capture → Allow.
+          await clickSel(START);
+          const confirmShown = await waitSel(".code-confirm", 6_000);
+          check("preview-permission-confirm", confirmShown, confirmShown ? "" : "no permission confirm dialog");
+          if (confirmShown) {
+            await capture({ id: "38-code-preview-permission-light", title: "Code — xác nhận chạy lệnh preview (permission)", theme: "light", viewport: "desktop", expectSelector: ".code-confirm" });
+            await clickSel(".code-confirm__btn--primary"); // Allow
+          }
+
+          const running = await waitSel(".code-preview__status--running", 60_000);
+          check("preview-running", running, running ? "" : "dev server never reached running");
+          if (running) {
+            await delay(2_500); // let the poller embed the URL + pull the first output lines
+            await capture({ id: "39-code-preview-running-light", title: "Code — Xem trước đang chạy + Kết quả (log thật)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            await capture({ id: "60-code-preview-running-dark", title: "Code — Xem trước đang chạy (dark)", theme: "dark", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            const outLines = await evalJs<number>("document.querySelectorAll('.code-preview__line').length");
+            check("preview-output-lines", outLines > 0, `${outLines} captured output lines`);
+            await capturePreviewContent("61-code-preview-embedded", "Code — nội dung web thật hiển thị trong Xem trước");
+          }
+
+          // Stop → port closes; the pane returns to a stopped state.
+          await clickSel(STOP);
+          const stopped = await waitSel(".code-preview__status--stopped", 15_000);
+          check("preview-stopped", stopped, stopped ? "" : "did not report stopped");
+          if (stopped) {
+            await capture({ id: "62-code-preview-stopped-light", title: "Code — Xem trước đã dừng", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+          }
+
+          // Deliberate error mode: pick the `serve` script → Start → Allow → failed → parsed problem.
+          const pickedErr = await evalJs<boolean>(`(() => {
+            const s = document.querySelector('.code-preview__script');
+            if (!s) return false;
+            s.value = 'serve';
+            s.dispatchEvent(new Event('change', { bubbles: true }));
+            return s.value === 'serve';
+          })()`);
+          check("preview-select-error-script", pickedErr, pickedErr ? "" : "serve script not selectable");
+          if (pickedErr) {
+            await clickSel(START);
+            if (await waitSel(".code-confirm", 6_000)) await clickSel(".code-confirm__btn--primary");
+            const failed = await waitSel(".code-preview__status--failed", 30_000);
+            check("preview-error-failed", failed, failed ? "" : "error-mode run did not fail");
+            await evalJs(`(() => { const t = document.querySelectorAll('.code-preview__drawer-tab'); if (t[1]) t[1].click(); })()`);
+            const problem = await waitSel(".code-preview__problem", 8_000);
+            check("preview-problem-parsed", problem, problem ? "" : "no parsed problem row");
+            const loc = await evalJs<string>("document.querySelector('.code-preview__problem-loc')?.textContent || ''");
+            check("preview-problem-location", /src\/app\.tsx:12:7/.test(loc), loc || "(no location)");
+            await capture({ id: "63-code-preview-problems-light", title: "Code — Vấn đề: lỗi build thật (file:line:col)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            await clickSel(STOP);
+            await delay(300);
+          }
+
+          // Restore a clean Code state for the auth-OFF step that follows.
+          await clickSel('.code-mode__item[data-mode="code"]');
+          await delay(200);
+        }
+      }
+
+      // 6) Auth OFF enable (phase 1 of the auth-OFF packaged smoke). Turn the requirement OFF via the
+      // real bridge (safeStorage seal + service envelope), capture the Settings toggle, and LEAVE it
+      // OFF so the phase-2 relaunch (COWORK_GHC_UI_AUDIT_AUTOUNLOCK=verify) can prove straight-to-Cowork.
+      if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "enable") {
+        const secureAvail = await evalJs<boolean>(
+          `(async () => { try { return await window.coworkShell.isSecureAutoUnlockAvailable(); } catch { return false; } })()`,
+        );
+        check("secure-auto-unlock-available", secureAvail, secureAvail ? "" : "safeStorage unavailable on host");
+        const enableRes = await evalJs<{ ok?: boolean; reason?: string; requireLogin?: boolean }>(
+          `(async () => { try { return await window.coworkShell.setStartupAuthMode(false, ${JSON.stringify(SYNTH_PASS)}); } catch (e) { return { ok: false, reason: String(e) }; } })()`,
+        );
+        check(
+          "auth-off-enable",
+          enableRes?.ok === true && enableRes?.requireLogin === false,
+          JSON.stringify(enableRes),
+        );
+        await clickSel('button[data-surface-id="cowork"]');
+        await delay(200);
+        if (await clickSel(".topbar__settings")) {
+          await waitFor("document.querySelector('.settings-surface')", 6_000);
+          await evalJs("(() => { const tabs = document.querySelectorAll('.settings-surface__tab'); if (tabs[1]) tabs[1].click(); })()");
+          await delay(300);
+          await capture({ id: "50-auth-off-settings-light", title: "Auth — Yêu cầu đăng nhập khi khởi động (OFF)", theme: "light", viewport: "desktop", expectSelector: ".settings-surface" });
+          await evalJs("(() => { const b = document.querySelector('.settings-surface__close'); if (b) b.click(); })()");
+        }
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);

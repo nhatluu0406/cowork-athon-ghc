@@ -75,7 +75,7 @@ export interface KnowledgeIntegrationView {
   readonly staleReason?: string;
 }
 
-export type GatewayHealth = "unknown" | "healthy" | "degraded" | "down";
+export type GatewayHealth = "off" | "unknown" | "healthy" | "degraded" | "down";
 
 export interface GatewayRouteView {
   readonly id: string;

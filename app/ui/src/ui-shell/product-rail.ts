@@ -38,6 +38,11 @@ export function createProductRail(): ProductRailDom {
 }
 
 function railTooltip(surface: ProductSurfaceDefinition): string {
-  if (surface.dependency !== undefined) return `${surface.label} — Chờ tích hợp ${surface.dependency}`;
+  // Only surfaces still awaiting their backend show the "Chờ tích hợp Dx" hint. An integrated
+  // surface keeps its D-origin tag in the registry but must NOT read as awaiting (e.g. Gateway
+  // after PR #16) — key the tooltip off availability, not the mere presence of a dependency.
+  if (surface.availability === "awaiting_integration" && surface.dependency !== undefined) {
+    return `${surface.label} — Chờ tích hợp ${surface.dependency}`;
+  }
   return surface.label;
 }

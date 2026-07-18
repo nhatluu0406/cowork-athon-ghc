@@ -41,7 +41,8 @@ test("a remote gateway that is off is reported honestly, not as a pairing screen
     client({ remoteStatus: async () => ({ enabled: false, url: null, lanUrls: [], devices: [] }) }),
     body,
   );
-  assert.match(body.textContent ?? "", /chưa chạy/i);
+  assert.match(body.textContent ?? "", /chưa bật/i);
+  assert.doesNotMatch(body.textContent ?? "", /CGHC_REMOTE/);
   assert.equal(body.querySelector("button"), null, "must not offer pairing when the gateway is off");
 });
 
@@ -55,7 +56,9 @@ test("an unreachable service does not render a broken pairing screen", async () 
     }),
     body,
   );
-  assert.match(body.textContent ?? "", /CGHC_REMOTE_ENABLED/);
+  // Honest, non-technical copy — no developer env-var/restart instructions (F2).
+  assert.match(body.textContent ?? "", /Điều phối từ xa chưa sẵn sàng/);
+  assert.doesNotMatch(body.textContent ?? "", /CGHC_REMOTE_ENABLED/);
 });
 
 test("issuing a code renders the code and adopts the QR svg", async () => {

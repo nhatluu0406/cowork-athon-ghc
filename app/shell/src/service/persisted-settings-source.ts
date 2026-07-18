@@ -7,12 +7,14 @@
  */
 
 import { existsSync, statSync } from "node:fs";
+import { dirname } from "node:path";
 
 import { credential, db, diagnostics, readE2eMockLlmBaseUrl } from "@cowork-ghc/service";
 import type { CredentialRef, ModelRef } from "@cowork-ghc/contracts";
 
 import type { LiveLaunchConfig, LiveLaunchSource } from "./live-launch-resolver.js";
 import { peekRememberedUnlock, rememberUnlock } from "./session-unlock.js";
+import { readSealedDeviceSecret } from "./device-unlock.js";
 
 /** The minimal read surface this source needs from the persistent settings store (testable seam). */
 export interface PersistedSettingsReader {
@@ -54,6 +56,8 @@ export interface PersistedSettingsSourceOptions {
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
   /** Open the persistent settings reader (default: the real Node settings store). Injectable. */
   readonly makeSettingsReader?: () => Promise<PersistedSettingsReader>;
+  /** Fixed port for the Gateway proxy (default: an ephemeral bind). */
+  readonly gatewayProxyPort?: number;
 }
 
 /**
@@ -86,6 +90,8 @@ export function createPersistedSettingsSource(
 
     const e2eMockBaseUrl = readE2eMockLlmBaseUrl();
     const autoUnlock = peekRememberedUnlock();
+    const autoUnlockDeviceSecret =
+      autoUnlock === null ? readSealedDeviceSecret(dirname(options.settingsFilePath)) : null;
     const injectedStore = options.makeCredentialStore
       ? await options.makeCredentialStore()
       : undefined;
@@ -108,6 +114,7 @@ export function createPersistedSettingsSource(
         settingsFilePath: options.settingsFilePath,
         ...(injectedStore !== undefined ? { credentialStore: injectedStore } : {}),
         ...(autoUnlock !== null ? { autoUnlock } : {}),
+        ...(autoUnlockDeviceSecret !== null ? { autoUnlockDeviceSecret } : {}),
         rememberUnlock,
         ...(options.conversationsDir !== undefined
           ? { conversationsDir: options.conversationsDir }
@@ -117,6 +124,9 @@ export function createPersistedSettingsSource(
           ? { skillsStateFilePath: options.skillsStateFilePath }
           : {}),
         ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
+        ...(options.gatewayProxyPort !== undefined
+          ? { gatewayProxyPort: options.gatewayProxyPort }
+          : {}),
       },
       ...(options.binPath !== undefined ? { binPath: options.binPath } : {}),
       ...(options.appRoot !== undefined ? { appRoot: options.appRoot } : {}),

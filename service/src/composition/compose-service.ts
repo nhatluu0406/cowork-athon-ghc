@@ -150,6 +150,7 @@ import {
   createDeviceCodeProvider,
   readMs365DeviceConfig,
 } from "../ms365/index.js";
+import { createDocxRouter } from "../documents/docx-tool-router.js";
 import {
   closeSqliteDatabase,
   collectCredentialAccounts,
@@ -175,6 +176,14 @@ import {
   type VaultCredentialStore,
 } from "../db/index.js";
 import type { CredentialStore } from "../credential/index.js";
+import {
+  createGatewayService,
+  createGatewayRouter,
+  createNodeGatewayStoreFs,
+  openGatewayStore,
+  createGatewayProxyServer,
+  type ProxyRequestOutcome,
+} from "../gateway/index.js";
 
 /**
  * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11), matching the
@@ -282,7 +291,12 @@ export async function createCoworkService(
       });
     }
 
-    localAuth = createLocalAuthService({ users: usersRepo, vaultKeys: vaultKeysRepo, now });
+    localAuth = createLocalAuthService({
+      users: usersRepo,
+      vaultKeys: vaultKeysRepo,
+      appMeta,
+      now,
+    });
     vaultStore = createVaultCredentialStore({ auth: localAuth, secrets: secretsRepo, now });
 
     if (options.autoUnlock !== undefined) {
@@ -290,6 +304,16 @@ export async function createCoworkService(
         await localAuth.unlock(options.autoUnlock.username, options.autoUnlock.password);
       } catch {
         // Leave locked; renderer lock gate will prompt again.
+      }
+    } else if (options.autoUnlockDeviceSecret !== undefined) {
+      // Device-bound auto-unlock (login-not-required mode): unwrap the vault from the app_meta
+      // envelope using the shell's safeStorage-sealed deviceSecret. Failure leaves the vault locked
+      // so the renderer lock gate prompts for the password (recovery on a different device / corrupt
+      // envelope).
+      try {
+        localAuth.unlockWithAutoUnlock(options.autoUnlockDeviceSecret);
+      } catch {
+        // Leave locked; recovery via the password gate.
       }
     }
 
@@ -310,6 +334,87 @@ export async function createCoworkService(
   const credentialStore: CredentialStore =
     options.credentialStore ?? vaultStore ?? createMemoryStore();
   const credentialService = createCredentialService({ store: credentialStore, scrubber });
+
+  // --- Gateway service: manages named API-key accounts across providers. ---
+  // `gateway.json` lives next to `settings.json` — NOT a hardcoded relative ".runtime", which
+  // would resolve against whatever `process.cwd()` happens to be for a given composition
+  // (Tier 1 settings-only vs Tier 2 live can differ), silently splitting reads/writes across
+  // two different files. Settings' path is already resolved to an absolute, packaged-safe
+  // location by the shell (see main.ts) — anchor to the SAME directory for consistency.
+  const gatewayDataDir = dirname(options.settingsFilePath ?? DEFAULT_SETTINGS_PATH);
+  const gatewayStoreFs = createNodeGatewayStoreFs(gatewayDataDir);
+  const gatewayStore = await openGatewayStore(gatewayStoreFs);
+  // Set once the proxy below has actually bound (or failed to). Read by `gatewayService` via
+  // closure — declared before assignment is safe since `isProxyAvailable` is only ever CALLED
+  // from a later user action (setEnabled), never during this synchronous setup.
+  let gatewayProxyAvailable = false;
+  const gatewayService = createGatewayService({
+    store: gatewayStore,
+    storeCredential: (account, key) =>
+      credentialService.store({ providerId: "gateway", account, secret: key }),
+    removeCredential: (ref) => credentialService.remove(ref).then(() => undefined),
+    hasCredential: (ref) => credentialService.has(ref),
+    generateId: () => crypto.randomUUID(),
+    now,
+    // `providerProfileStore` is declared further below in this same function — safe via
+    // closure since none of these are CALLED until well after that line has run.
+    getProfileBaseUrl: (profileId) => providerProfileStore.get(profileId)?.baseUrl,
+    setProfileBaseUrl: async (profileId, baseUrl) => {
+      await providerProfileStore.update(profileId, { baseUrl });
+    },
+    getActiveProfileId: () => providerProfileStore.activeProfileId(),
+    isProxyAvailable: () => gatewayProxyAvailable,
+  });
+
+  // --- Gateway proxy: the REAL interception point (service/src/gateway/proxy-server.ts).
+  // OpenCode's opencode.json baseURL points here for any profile the Gateway checklist has
+  // routed — this process, not a bolted-on session-boundary check, is what "Gateway" means.
+  // Bound to a fixed loopback port regardless of enabled state; it simply never receives
+  // traffic for a profile that hasn't been routed to it (see gateway-service.ts's baseUrl swap).
+  const gatewayProxy = createGatewayProxyServer({
+    resolveUpstream: () => gatewayService.resolveProxyUpstream(),
+    ...(options.gatewayProxyPort !== undefined ? { port: options.gatewayProxyPort } : {}),
+    onRequestComplete: (outcome: ProxyRequestOutcome) => {
+      // The proxy still FORWARDS this request when the master switch is OFF (a stale,
+      // already-proxy-pointed OpenCode child keeps working without a restart — see
+      // `resolveProxyUpstream`), but OFF means Gateway is not managing/observing traffic
+      // anymore, only transparently passing it through. Logging it would contradict that: no
+      // bookkeeping while OFF, matching the master toggle's own contract.
+      if (!gatewayService.isEnabled()) return;
+      const activeProfile = providerProfileStore.activeProfile();
+      const profileId = activeProfile?.id;
+      const accountId =
+        profileId !== undefined ? gatewayService.getStatus().activeByProvider[profileId] : undefined;
+      void gatewayService
+        .recordRequest({
+          gatewayEnabled: gatewayService.isEnabled(),
+          outcome: outcome.httpStatus < 400 ? "allowed" : "blocked",
+          httpStatus: outcome.httpStatus,
+          ttfbMs: outcome.ttfbMs,
+          totalMs: outcome.totalMs,
+          ...(profileId !== undefined ? { profileId } : {}),
+          ...(activeProfile !== undefined ? { profileLabel: activeProfile.displayName } : {}),
+          ...(activeProfile !== undefined ? { providerType: activeProfile.providerType } : {}),
+          ...(accountId !== undefined ? { accountId } : {}),
+          ...(outcome.modelId !== undefined ? { modelId: outcome.modelId } : {}),
+          ...(outcome.promptPreview !== undefined ? { promptPreview: outcome.promptPreview } : {}),
+          ...(outcome.errorMessage !== undefined ? { reason: outcome.errorMessage } : {}),
+        })
+        .catch(() => undefined);
+    },
+  });
+  // Start the proxy NOW (before `seedFromSettings`/`syncActiveProfile` below re-apply a persisted,
+  // possibly gateway-swapped baseUrl through the SSRF-gated provider port) rather than deferring to
+  // the returned `start()`. A bind failure degrades honestly (Gateway proxy stays unavailable;
+  // `gatewayService`/the UI can surface it) instead of aborting the whole composition — this is an
+  // optional subsystem, not a hard boot dependency.
+  try {
+    await gatewayProxy.start();
+    gatewayProxyAvailable = true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    bootDiagnostic(`gateway_proxy_start_failed: ${message}`);
+  }
 
   // --- Settings store (persistent SD1 source of truth), loaded through the fs seam. ---
   let baseSettingsStore = await openSettingsStore({ fs: settingsFs });
@@ -454,9 +559,12 @@ export async function createCoworkService(
   };
 
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
+  // Resolve the runtime-health seam once so the built-in /v1/health route can honestly report
+  // `runtimeReady` (Tier 1 → downRuntimeHealth → false; live → supervisor.isAlive()).
+  const runtimeHealthSeam = options.runtimeHealth ?? downRuntimeHealth();
   const sessionService = createSessionService({
     store: options.sessionStore ?? notAttachedSessionStore(),
-    health: options.runtimeHealth ?? downRuntimeHealth(),
+    health: runtimeHealthSeam,
     canceller: providerPort,
     now,
     redactError,
@@ -669,6 +777,10 @@ export async function createCoworkService(
   // `CGHC_MS365_ENABLED` env gate has been removed; there is no default-OFF switch. NOTE: this is a
   // local flag-removal only — it is NOT the team-level D2 boundary merge described in CLAUDE.md.
   // The SAME `ssrf` policy instance built above is reused here; no second SsrfPolicy is created.
+  // Hoisted so the Knowledge service can honestly reflect the MS365 connection state in its source
+  // summary (issue #19) without reaching the dormant backend. Defaults to false until the connector
+  // below is built; the IIFE runs+awaits before the Knowledge service is created, so it is set by then.
+  let ms365Connected: () => boolean = () => false;
   const ms365Router = await (async () => {
     const ms365Manual = createManualTokenProvider();
     const ms365DeviceConfig = readMs365DeviceConfig(process.env);
@@ -688,6 +800,8 @@ export async function createCoworkService(
       makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
       ...(ms365Device !== undefined ? { device: ms365Device } : {}),
     });
+    // Expose the live connection state to the Knowledge source summary (issue #19).
+    ms365Connected = () => ms365Connector.connectionState() === "connected";
     const siteScopeStore = await createSiteScopeStore({
       persistence: createSiteScopeFilePersistence(DEFAULT_MS365_SITE_SCOPE_PATH),
     });
@@ -756,6 +870,7 @@ export async function createCoworkService(
       ? createKnowledgeLocalService({
           repo: createKnowledgeLocalRepository(sqliteDatabase),
           activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+          microsoft365Connected: ms365Connected,
           now,
         })
       : undefined;
@@ -814,6 +929,11 @@ export async function createCoworkService(
         if (!result.ok) {
           throw new SessionRequestError(result.message);
         }
+        // Gateway enforcement + logging happen for real now, in the Gateway HTTP proxy itself
+        // (service/src/gateway/proxy-server.ts) — the actual point every routed profile's
+        // traffic physically passes through. There is no session-boundary shortcut check here
+        // anymore: a profile that hasn't been routed to the proxy was never gated by Gateway in
+        // the first place, so a check at this layer would gate traffic Gateway never even sees.
       },
     }),
     createConversationRouter(conversationStore, providerProfileStore, credentialService),
@@ -844,6 +964,14 @@ export async function createCoworkService(
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
     ...(ms365Router !== undefined ? [ms365Router] : []),
+    // Docx document-generation tool bridge — mounted next to MS365, sharing the SAME permission
+    // gate so a create_docx write runs only behind a recorded Allow (File Work Review).
+    createDocxRouter({
+      gate: permissionGate,
+      workspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+      now,
+    }),
+    createGatewayRouter(gatewayService),
     ...(options.extraRouters ?? []),
   ];
 
@@ -885,6 +1013,7 @@ export async function createCoworkService(
         now,
         branchPreset: (sessionId) => branchPermissionBindings.presetFor(sessionId),
       }),
+    gatewayService,
   };
 
   return {
@@ -892,7 +1021,24 @@ export async function createCoworkService(
     deps,
     // The service auto-mounts the (token-guarded) health router itself; we never re-mount it.
     start: async (): Promise<RunningService> => {
-      const running = await startService({ ...options, routers });
+      const running = await startService({
+        ...options,
+        routers,
+        runtimeReady: () => runtimeHealthSeam.isAlive(),
+      });
+      // The gateway proxy is a SEPARATE loopback server (not one of `routers`, since OpenCode —
+      // not the renderer — is its caller), already started above (before `seedFromSettings` /
+      // `syncActiveProfile` could re-validate a persisted, gateway-swapped baseUrl through the
+      // SSRF-gated provider port). Tied to the SAME start/stop lifecycle so a settings-only →
+      // live tier transition releases the port before the next tier binds it.
+      const originalStopForProxy = running.service.stop.bind(running.service);
+      Object.defineProperty(running.service, "stop", {
+        configurable: true,
+        value: async () => {
+          await originalStopForProxy();
+          await gatewayProxy.stop().catch(() => undefined);
+        },
+      });
       if (!ownsSqlite || sqliteDatabase === undefined) return running;
       const db = sqliteDatabase;
       const originalStop = running.service.stop.bind(running.service);

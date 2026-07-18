@@ -19,7 +19,7 @@
  */
 
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,6 +34,11 @@ const OUT_DIR = join(REPO_ROOT, "reports", "ui-audit", RUN_ID); // COWORK_GHC_UI
 // It holds real Markdown/text/code with cross-links so the packaged index/search/graph show honest,
 // non-fabricated data. The shell (audit mode) sets it active + drives the real index over it.
 const SEED_WORKSPACE = join(RUN_DATA_ROOT, "seed-workspace");
+// Code Web Preview live-run uses a SEPARATE isolated workspace: a copy of the committed, zero-dep
+// web fixture (`tools/ui-audit/fixtures/web-preview`). The shell (audit mode) makes it active and
+// drives a REAL dev-server launch over it (permission → spawn → loopback HTTP → embed → stop).
+const FIXTURE_SRC = join(REPO_ROOT, "tools", "ui-audit", "fixtures", "web-preview");
+const PREVIEW_WORKSPACE = join(RUN_DATA_ROOT, "preview-workspace");
 const LAUNCH_TIMEOUT_MS = 240_000;
 
 /**
@@ -130,24 +135,9 @@ async function main() {
   mkdirSync(SEED_WORKSPACE, { recursive: true });
   seedWorkspace(SEED_WORKSPACE);
   note(`seeded data-rich knowledge workspace at ${SEED_WORKSPACE}`);
-
-  const preOpencode = imagePids("opencode.exe");
-  const preApp = imagePids("coworkghc.exe");
-  note(`pre-existing pids — coworkghc: ${[...preApp].join(",") || "(none)"}; opencode: ${[...preOpencode].join(",") || "(none)"}`);
-
-  const child = spawn(EXE, [], {
-    env: {
-      ...process.env,
-      COWORK_GHC_UI_AUDIT: "1",
-      COWORK_GHC_UI_AUDIT_OUT: OUT_DIR,
-      COWORK_GHC_UI_AUDIT_WORKSPACE: SEED_WORKSPACE,
-      COWORK_GHC_RUNTIME_ROOT: RUN_DATA_ROOT,
-      COWORK_GHC_ALLOW_ENV_IMPORT: "0",
-    },
-    stdio: "ignore",
-    windowsHide: false,
-  });
-  note(`launched coworkghc.exe pid=${child.pid} (audit mode) runtimeRoot=${RUN_DATA_ROOT}`);
+  mkdirSync(PREVIEW_WORKSPACE, { recursive: true });
+  cpSync(FIXTURE_SRC, PREVIEW_WORKSPACE, { recursive: true });
+  note(`copied web-preview fixture to isolated workspace ${PREVIEW_WORKSPACE}`);
 
   const checks = [];
   const check = (name, ok, detail = "") => {
@@ -155,44 +145,94 @@ async function main() {
     note(`${ok ? "PASS" : "FAIL"} check:${name}${detail ? ` — ${detail}` : ""}`);
   };
 
-  // The spawned launcher pid can exit early (packaged bootstrap), so completion is detected by the
-  // shell's own output sentinel (audit-shell.log is written LAST in the audit finally block), not by
-  // the child exit event. This tolerates the launcher process detaching from the real app.
-  const sentinel = join(OUT_DIR, "audit-shell.log");
-  const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
-  let completed = false;
-  while (Date.now() < deadline) {
-    if (existsSync(sentinel) && existsSync(join(OUT_DIR, "steps.json"))) {
-      completed = true;
-      break;
+  // One packaged launch: spawn the audit exe, wait for its own sentinel (audit-shell.log is written
+  // LAST), then assert no orphaned coworkghc/opencode PID appeared. Returns whether it completed.
+  async function launch(label, outDir, extraEnv) {
+    mkdirSync(outDir, { recursive: true });
+    const preOpencode = imagePids("opencode.exe");
+    const preApp = imagePids("coworkghc.exe");
+    const child = spawn(EXE, [], {
+      env: {
+        ...process.env,
+        COWORK_GHC_UI_AUDIT: "1",
+        COWORK_GHC_UI_AUDIT_OUT: outDir,
+        COWORK_GHC_UI_AUDIT_WORKSPACE: SEED_WORKSPACE,
+        COWORK_GHC_UI_AUDIT_PREVIEW_WORKSPACE: PREVIEW_WORKSPACE,
+        COWORK_GHC_RUNTIME_ROOT: RUN_DATA_ROOT,
+        COWORK_GHC_ALLOW_ENV_IMPORT: "0",
+        ...extraEnv,
+      },
+      stdio: "ignore",
+      windowsHide: false,
+    });
+    note(`[${label}] launched coworkghc.exe pid=${child.pid}`);
+    const sentinel = join(outDir, "audit-shell.log");
+    const deadline = Date.now() + LAUNCH_TIMEOUT_MS;
+    let completed = false;
+    while (Date.now() < deadline) {
+      if (existsSync(sentinel) && existsSync(join(outDir, "steps.json"))) {
+        completed = true;
+        break;
+      }
+      await delay(1000);
     }
-    await delay(1000);
+    await delay(1500);
+    check(`${label}:app-captured`, completed, completed ? "" : `no sentinel within ${LAUNCH_TIMEOUT_MS}ms`);
+    // Kill + poll: app.quit() tears the process tree down asynchronously, so re-kill and re-check a
+    // few times before asserting an orphan (avoids flagging a process that is mid-exit).
+    const survivors = (image, pre) => [...imagePids(image)].filter((p) => !pre.has(p));
+    let orphanApp = survivors("coworkghc.exe", preApp);
+    let orphanOpencode = survivors("opencode.exe", preOpencode);
+    for (let i = 0; i < 8 && (orphanApp.length > 0 || orphanOpencode.length > 0); i++) {
+      for (const p of orphanApp) killTree(p);
+      for (const p of orphanOpencode) killTree(p);
+      await delay(800);
+      orphanApp = survivors("coworkghc.exe", preApp);
+      orphanOpencode = survivors("opencode.exe", preOpencode);
+    }
+    check(`${label}:no-orphan-app`, orphanApp.length === 0, orphanApp.length ? `pids ${orphanApp.join(",")}` : "");
+    check(`${label}:no-orphan-opencode`, orphanOpencode.length === 0, orphanOpencode.length ? `pids ${orphanOpencode.join(",")}` : "");
+    return completed;
   }
-  await delay(1500); // let the app finish app.quit() after writing the sentinel
-  check("app-captured", completed, completed ? "" : `no sentinel within ${LAUNCH_TIMEOUT_MS}ms`);
 
-  // Orphan assertion: any coworkghc/opencode PID that appeared during this run and is still alive.
-  const newApp = [...imagePids("coworkghc.exe")].filter((p) => !preApp.has(p));
-  if (newApp.length > 0) {
-    note(`killing leftover coworkghc pids from this run: ${newApp.join(",")}`);
-    for (const p of newApp) killTree(p);
-  }
-  const newOpencode = [...imagePids("opencode.exe")].filter((p) => !preOpencode.has(p));
-  if (newOpencode.length > 0) {
-    note(`killing leftover opencode pids from this run: ${newOpencode.join(",")}`);
-    for (const p of newOpencode) killTree(p);
-  }
-  await delay(700);
-  const orphanApp = [...imagePids("coworkghc.exe")].filter((p) => !preApp.has(p));
-  const orphanOpencode = [...imagePids("opencode.exe")].filter((p) => !preOpencode.has(p));
-  check("no-orphan-app", orphanApp.length === 0, orphanApp.length ? `pids ${orphanApp.join(",")}` : "");
-  check("no-orphan-opencode", orphanOpencode.length === 0, orphanOpencode.length ? `pids ${orphanOpencode.join(",")}` : "");
+  // Phase A: full audit over a fresh isolated profile; also turns auth OFF (device-bound auto-unlock)
+  // and leaves it OFF. Phase B: RELAUNCH over the SAME data root and prove the app boots straight into
+  // Cowork with no lock screen — the auth-OFF acceptance. Auth ON is exercised by Phase A's unlock.
+  await launch("phaseA", OUT_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "enable" });
+  const PHASE_B_DIR = join(OUT_DIR, "phase2-autounlock");
+  await launch("phaseB", PHASE_B_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify" });
 
-  // ---- aggregate the shell's capture results ----
+  // Phase C — corrupt the safeStorage-sealed deviceSecret, then relaunch: the vault MUST fall back
+  // to the password gate (never brick), the password must still unlock, and we re-enable "Require
+  // login" ON. The seal lives at <appDataRoot>/auto-unlock.seal, where appDataRoot === RUN_DATA_ROOT
+  // (COWORK_GHC_RUNTIME_ROOT → <root>/data; appDataRoot = dirname(dataRoot) = <root>).
+  const sealFile = join(RUN_DATA_ROOT, "auto-unlock.seal");
+  let sealCorrupted = false;
+  if (existsSync(sealFile)) {
+    writeFileSync(sealFile, Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 255, 254]));
+    sealCorrupted = true;
+  }
+  check("seal-present-to-corrupt", sealCorrupted, sealCorrupted ? sealFile : "no auto-unlock.seal was written by phase A");
+  const PHASE_C_DIR = join(OUT_DIR, "phase3-corrupt-seal");
+  await launch("phaseC", PHASE_C_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify_fallback" });
+  const PHASE_D_DIR = join(OUT_DIR, "phase4-reenabled-on");
+  await launch("phaseD", PHASE_D_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify_on" });
+
+  // ---- aggregate the shell's capture results from every phase ----
   const steps = readJson(join(OUT_DIR, "steps.json"), []);
+  const stepsB = readJson(join(PHASE_B_DIR, "steps.json"), []);
+  const stepsC = readJson(join(PHASE_C_DIR, "steps.json"), []);
+  const stepsD = readJson(join(PHASE_D_DIR, "steps.json"), []);
   const shellChecks = readJson(join(OUT_DIR, "checks.json"), []);
-  check("screenshots-captured", steps.length > 0, `${steps.length} screenshots`);
-  const allChecks = [...shellChecks, ...checks];
+  const shellChecksB = readJson(join(PHASE_B_DIR, "checks.json"), []);
+  const shellChecksC = readJson(join(PHASE_C_DIR, "checks.json"), []);
+  const shellChecksD = readJson(join(PHASE_D_DIR, "checks.json"), []);
+  check(
+    "screenshots-captured",
+    steps.length > 0,
+    `${steps.length} (A) + ${stepsB.length} (B) + ${stepsC.length} (C) + ${stepsD.length} (D)`,
+  );
+  const allChecks = [...shellChecks, ...shellChecksB, ...shellChecksC, ...shellChecksD, ...checks];
 
   writeReports(steps, allChecks);
 

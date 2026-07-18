@@ -68,6 +68,10 @@ function coerceGeneral(raw: unknown): GeneralSettings {
       typeof raw.devtoolsEnabled === "boolean"
         ? raw.devtoolsEnabled
         : DEFAULT_GENERAL_SETTINGS.devtoolsEnabled,
+    requireLoginOnStartup:
+      typeof raw.requireLoginOnStartup === "boolean"
+        ? raw.requireLoginOnStartup
+        : DEFAULT_GENERAL_SETTINGS.requireLoginOnStartup,
   };
 }
 
