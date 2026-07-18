@@ -36,6 +36,7 @@
 
 import path from "node:path";
 import { presetKeyForActionKind, type PermissionActionKind, type PermissionPreset } from "@cowork-ghc/contracts";
+import { evaluateWebAccess } from "./web-access-guard.js";
 import type { WorkspaceGuard } from "../workspace/index.js";
 import { WorkspaceBoundaryError } from "../workspace/index.js";
 import {
@@ -55,10 +56,16 @@ export interface OpencodeToolPermissionEvent {
   readonly path?: string;
   /** Destination path for a move/rename tool. */
   readonly destinationPath?: string;
+  /** Target URL / query for an agent web-access tool (webfetch/websearch, #29). */
+  readonly url?: string;
 }
 
 /** Why the proxy refused an event before it ever reached the gate. */
-export type ProxyRefusalReason = "path_escape" | "missing_path" | "unmappable_tool";
+export type ProxyRefusalReason =
+  | "path_escape"
+  | "missing_path"
+  | "unmappable_tool"
+  | "web_target_blocked";
 
 /** Result of proxying one event. `submitted` handed a live request to the gate. */
 export type ProxyOutcome =
@@ -114,6 +121,12 @@ export function mapToolToActionKind(tool: string): PermissionActionKind | undefi
     case "command":
     case "run":
       return "command_exec";
+    case "webfetch":
+    case "web_fetch":
+    case "websearch":
+    case "web_search":
+      // Agent web access (#29): elevated, URL surfaced in the card, SSRF-guarded pre-gate.
+      return "web_access";
     default:
       return undefined;
   }
@@ -153,6 +166,14 @@ export class ToolPermissionProxy {
 
     if (kind === "command_exec") {
       return this.submit(event, kind, undefined);
+    }
+
+    // Agent web access (#29): SSRF-guard the target BEFORE the gate so an internal/loopback URL
+    // never even reaches an Allow prompt. On block, refuse (explicit deny reply → runtime unstuck).
+    if (kind === "web_access") {
+      const decision = evaluateWebAccess(event.url ?? "");
+      if (!decision.allowed) return this.refuse(event.requestId, "web_target_blocked");
+      return this.submitWeb(event, decision.url.href);
     }
 
     // File tools: when OpenCode omits a concrete path (glob-only permission.asked), still surface
@@ -199,6 +220,24 @@ export class ToolPermissionProxy {
     });
     this.gate.submit(request);
     return { outcome: "submitted", requestId: event.requestId, actionKind: kind };
+  }
+
+  /**
+   * Submit an agent web-access request (#29). The card shows the target URL (non-secret; already
+   * SSRF-validated) in the description rather than a `targetPath`, which is filesystem-only.
+   */
+  private submitWeb(event: OpencodeToolPermissionEvent, safeUrl: string): ProxyOutcome {
+    const request = createPermissionRequest({
+      requestId: event.requestId,
+      sessionId: event.sessionId,
+      action: {
+        kind: "web_access",
+        description: `Tool ${event.tool} muốn truy cập web: ${safeUrl}`,
+      },
+      requestedAt: this.now(),
+    });
+    this.gate.submit(request);
+    return { outcome: "submitted", requestId: event.requestId, actionKind: "web_access" };
   }
 
   /**

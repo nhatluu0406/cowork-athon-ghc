@@ -144,3 +144,34 @@ test("a move tool confines BOTH ends: an escaping destination is refused", async
   assert.equal(outcome.outcome, "refused");
   assert.equal(fx.gate.pending().length, 0);
 });
+
+test("webfetch to a public URL is submitted as an ELEVATED web_access with the URL in the card (#29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "web-1",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "https://example.com/article",
+  });
+  assert.deepEqual(outcome, { outcome: "submitted", requestId: "web-1", actionKind: "web_access" });
+  const pending = fx.gate.pending();
+  assert.equal(pending.length, 1);
+  // Always elevated → always shows a card even in workspace-auto mode.
+  assert.equal(pending[0]?.approvalLevel, "elevated");
+  assert.match(pending[0]?.action.description ?? "", /example\.com\/article/);
+  // No filesystem targetPath for a web fetch.
+  assert.equal(pending[0]?.action.targetPath, undefined);
+});
+
+test("webfetch to a loopback URL is refused pre-gate (SSRF), never shown, runtime denied (#29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "web-ssrf",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "https://127.0.0.1/admin",
+  });
+  assert.deepEqual(outcome, { outcome: "refused", requestId: "web-ssrf", reason: "web_target_blocked" });
+  assert.equal(fx.gate.pending().length, 0);
+  assert.deepEqual(fx.reply.replies, [{ requestId: "web-ssrf", decision: "deny" }]);
+});
