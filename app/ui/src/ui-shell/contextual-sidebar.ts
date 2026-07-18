@@ -43,7 +43,6 @@ export function createContextualSidebar(): ContextualSidebarDom {
   const newConversationButton = el("button", "icon-btn icon-btn--sm cowork-sidebar__new") as HTMLButtonElement;
   newConversationButton.type = "button";
   newConversationButton.dataset["tooltip"] = "Cuộc trò chuyện mới";
-  newConversationButton.dataset["tooltip"] = "Cuộc trò chuyện mới";
   newConversationButton.setAttribute("aria-label", "Cuộc trò chuyện mới");
   newConversationButton.append(icon("square-pen", "Cuộc trò chuyện mới"));
 

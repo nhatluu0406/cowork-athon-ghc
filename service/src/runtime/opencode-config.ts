@@ -12,6 +12,8 @@ import { join } from "node:path";
 import { OPENAI_COMPATIBLE_NPM, isValidEnvName } from "@cowork-ghc/runtime";
 import { isE2eMockLlmUrl } from "../provider/e2e-mock-llm.js";
 import { TOOL_NAMES as MS365_TOOL_NAMES } from "../ms365/ms365-tool-router.js";
+import { DOCX_TOOL_NAME } from "../documents/docx-tool-router.js";
+import { isGatewayProxyUrl } from "../gateway/gateway-proxy-url.js";
 
 /** Non-secret provider definition for the child's `opencode.json`. */
 export interface OpencodeProviderConfig {
@@ -67,12 +69,18 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
   task: "deny",
   external_directory: "deny",
   doom_loop: "allow",
-  webfetch: "deny",
-  websearch: "deny",
+  // Agent web access (#29): "ask" so OpenCode emits `permission.asked` → the permission bridge →
+  // ToolPermissionProxy maps it to the `web_access` action kind (elevated). Every fetch surfaces a
+  // card with the target URL (explicit approval, human-in-the-loop SSRF mitigation) and the proxy
+  // refuses private/loopback/metadata targets before the gate. Never "allow": that would let the
+  // OpenCode child fetch arbitrary (incl. internal) URLs with no gate.
+  webfetch: "ask",
+  websearch: "ask",
 });
 
 function assertSafeBaseUrl(baseUrl: string): void {
   if (isE2eMockLlmUrl(baseUrl)) return;
+  if (isGatewayProxyUrl(baseUrl)) return;
   let url: URL;
   try {
     url = new URL(baseUrl);
@@ -162,6 +170,10 @@ export function buildOpencodeConfig(
   for (const name of MS365_TOOL_NAMES) {
     permission[name] = "allow";
   }
+  // The create_docx tool is an OpenCode plugin tool whose REAL gate is the docx bridge (every call
+  // routes through /v1/documents/create-docx and requires a file_create permission card). Mark it
+  // "allow" here so OpenCode's "*":"ask" wildcard does not double-prompt on top of the bridge gate.
+  permission[DOCX_TOOL_NAME] = "allow";
 
   return {
     $schema: "https://opencode.ai/config.json",

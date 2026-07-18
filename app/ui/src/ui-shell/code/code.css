@@ -163,11 +163,18 @@
 .code-preview__drawer-head { display: flex; align-items: center; gap: 4px; padding: 4px 12px; border-bottom: 1px solid var(--cghc-border-subtle); }
 .code-preview__drawer-tab { border: 0; background: transparent; padding: 6px 8px; font-size: 11.5px; font-weight: 650; letter-spacing: .03em; color: var(--cghc-text-muted); cursor: pointer; border-bottom: 2px solid transparent; }
 .code-preview__drawer-tab--active { color: var(--cghc-text-primary); border-bottom-color: var(--cghc-accent); }
+.code-preview__drawer-tab--has-problems { color: var(--cghc-error); }
 .code-preview__drawer-toggle { border: 0; background: transparent; color: var(--cghc-text-muted); cursor: pointer; font-size: 13px; }
 .code-preview__output { flex: 1; margin: 0; overflow: auto; padding: 8px 12px; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 12px; line-height: 1.6; color: var(--cghc-text-secondary); white-space: pre-wrap; }
 .code-preview__line--stderr { color: var(--cghc-error); }
 .code-preview__line--system { color: var(--cghc-text-muted); font-style: italic; }
-.code-preview__problems { flex: 1; padding: 12px; font-size: 12.5px; color: var(--cghc-text-muted); }
+.code-preview__problems { flex: 1; overflow: auto; padding: 8px 0; font-size: 12.5px; color: var(--cghc-text-secondary); }
+.code-preview__problems-empty { padding: 12px; color: var(--cghc-text-muted); }
+.code-preview__problem { display: flex; gap: 8px; align-items: baseline; padding: 5px 12px; border-left: 2px solid transparent; }
+.code-preview__problem--error { border-left-color: var(--cghc-error); }
+.code-preview__problem--warning { border-left-color: var(--cghc-warning, #c98a00); }
+.code-preview__problem-loc { flex: none; font-family: "Cascadia Code", ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--cghc-text-muted); }
+.code-preview__problem-msg { flex: 1; white-space: pre-wrap; word-break: break-word; }
 
 /* --- Agent panel (Cowork-composer visual parity) --- */
 .cc-panel { border-left: 1px solid var(--cghc-border-subtle); background: var(--cghc-surface-solid); display: flex; flex-direction: column; min-height: 0; }

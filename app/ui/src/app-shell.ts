@@ -63,6 +63,7 @@ import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { createMentionTypeahead } from "./mention-typeahead.js";
+import { mountGatewayIntegrationSlot } from "./gateway-surface.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -74,6 +75,7 @@ import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
 import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
+import { confirmModal } from "./ui-shell/confirm-modal.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
@@ -750,6 +752,7 @@ async function capturePermissionBeforeSnapshot(
 
 const FILE_MUTATION_TOOL_NAMES = new Set([
   "write",
+  "create_docx",
   "edit",
   "patch",
   "apply_patch",
@@ -854,7 +857,10 @@ async function finalizeFileMutationReview(
     refreshActivityUi(state, dom);
     void persistActivity(state);
     // Wave 4 — reflect the verified mutation in the workspace surface.
-    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
+    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload. The
+    // workspace navigator's onRefreshed hook also drops the composer's @-mention cache, so a newly
+    // created/renamed file shows up in `@` suggestions immediately, not only after a workspace
+    // switch (issue #24).
     void workspaceNavigator?.refresh();
     void codeNavigator?.refresh();
     // Code Phase 1 — update any open Code editor tab for this file (reload clean, conflict if dirty,
@@ -992,6 +998,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const isMicrosoftSurface = state.activeSurface === "microsoft";
   const isCodeSurface = state.activeSurface === "code";
   const isSkillsMcpSurface = state.activeSurface === "skills-mcp";
+  const isGatewaySurface = state.activeSurface === "gateway";
   const settingsOpen = !dom.settingsSurface.hidden;
   const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
   const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
@@ -1016,10 +1023,12 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     isKnowledgeSurface ||
     isMicrosoftSurface ||
     isCodeSurface ||
-    isSkillsMcpSurface;
+    isSkillsMcpSurface ||
+    isGatewaySurface;
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
+  dom.gatewayView.hidden = settingsOpen || !isGatewaySurface;
   // Drive the runtime panes: only in Code surface + Preview mode; Web drives the embedded preview,
   // Ứng dụng drives the desktop-app pane. Exactly one is active at a time.
   const codePreviewActive = isCodeSurface && !settingsOpen && dom.codeView.mode === "preview";
@@ -1036,7 +1045,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
-  } else if (!isCoworkSurface) {
+  } else if (!isCoworkSurface && !isGatewaySurface) {
     // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
     // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
     const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
@@ -1552,8 +1561,13 @@ async function ensureLive(
     state.bootstrap.clientToken
   ) {
     try {
-      await state.client.health();
-      return state.client;
+      const health = await state.client.health();
+      if (health.runtimeReady === true) return state.client;
+      state.liveAttached = false;
+      // Fall through: the boundary answers but the supervised runtime is not attached yet
+      // (e.g. the OpenCode child is still starting) — never trust health() alone (see
+      // HealthData.runtimeReady doc comment: the socket answering only proves the LOCAL
+      // service is up, not the runtime).
     } catch {
       state.liveAttached = false;
       // Fall through to a real reconnect.
@@ -1589,7 +1603,11 @@ async function ensureLive(
         }
         const client = state.client;
         if (client === null) throw new Error("client missing");
-        await client.health();
+        const health = await client.health();
+        // Require the supervised runtime itself, not just the boundary — health() can answer
+        // OK (service up) before the OpenCode child is ready to accept `POST /session`, which
+        // otherwise surfaces "Runtime chưa sẵn sàng" on the very first send after a reconnect.
+        if (health.runtimeReady !== true) throw new Error("runtime not ready yet");
         state.liveAttached = true;
         return client;
       } catch {
@@ -1660,11 +1678,26 @@ async function ensureRuntimeSession(
     await state.conv.startContinuation();
   }
 
-  const meta = await client.createSession({
+  const createSessionInput = {
     workspaceId: state.activeWorkspace,
     title: (state.conv.state.activeRecord ?? record).title,
     model,
-  });
+  };
+  let meta;
+  try {
+    meta = await client.createSession(createSessionInput);
+  } catch (error) {
+    // The supervised OpenCode child can report itself alive/healthy just before its own
+    // `/session` endpoint is truly serving (an internal startup race `ensureLive`'s
+    // `runtimeReady` check cannot fully close) — wait for a fresh readiness signal and
+    // retry ONCE before surfacing the honest "Runtime chưa sẵn sàng" failure to the user.
+    const retriable =
+      error instanceof ServiceClientError &&
+      (error.code === "runtime_not_attached" || error.code === "runtime_unavailable");
+    if (!retriable) throw error;
+    await awaitRuntimeReady(state, 12_000);
+    meta = await client.createSession(createSessionInput);
+  }
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
   // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
@@ -1687,7 +1720,11 @@ async function switchConversation(
   if (currentId === id) return;
   const unsent = textFromComposer(dom.composerInput);
   if (unsent.length > 0 && currentId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và chuyển cuộc trò chuyện?");
+    const ok = await confirmModal({
+      title: "Chuyển cuộc trò chuyện?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Chuyển",
+    });
     if (!ok) return;
   }
   saveComposerDraft(state, dom);
@@ -1782,7 +1819,11 @@ async function newConversation(
     return;
   }
   if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
+    const ok = await confirmModal({
+      title: "Tạo cuộc trò chuyện mới?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Tạo cuộc trò chuyện mới",
+    });
     if (!ok) return;
   }
 
@@ -2765,13 +2806,43 @@ export function mountCoworkApp(root: HTMLElement): void {
           // cannot leave Settings → Nhà cung cấp permanently empty.
           if (!featuresMounted) {
             featuresMounted = true;
+            // Relaunch the supervised runtime against a newly selected workspace (issue #26): a
+            // FORCED connectLive stop+restarts the live service so OpenCode re-reads the persisted
+            // active workspace as its launch cwd (an un-forced connectLive is idempotent and would
+            // keep the old child). Then re-adopt the fresh bootstrap via ensureLive.
+            //
+            // A monotonic generation guards against overlapping switches (user clicks the wrong
+            // recent workspace, then the right one, before the first restart finishes): only the
+            // newest relaunch drives bootstrap re-adoption; superseded ones bail out so two
+            // ensureLive/permission-poll cycles never run concurrently.
+            let workspaceSwitchGeneration = 0;
+            const relaunchRuntimeForWorkspaceSwitch = async (): Promise<void> => {
+              const generation = (workspaceSwitchGeneration += 1);
+              // End the current turn's stream cleanly before the child dies, so the switch reads as
+              // an intentional cancellation instead of a "Mất kết nối luồng sự kiện." error injected
+              // by the dropped connection.
+              stopStream(state);
+              try {
+                await getShellBridge().connectLive({ force: true });
+              } catch {
+                // Restart failed — the next send surfaces an honest "Runtime chưa sẵn sàng" via
+                // ensureLive rather than silently pretending the old workspace is still active.
+              }
+              if (generation !== workspaceSwitchGeneration) return; // superseded by a newer switch
+              state.liveAttached = false;
+              await ensureLive(state, readiness).catch(() => undefined);
+              if (generation !== workspaceSwitchGeneration) return;
+              renderState(dom, state, handlers);
+            };
             workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
               bridge: getShellBridge(),
               client: dynamicClient,
               onActivated: (rootPath) => {
                 // A different active workspace resets the Code editor (its tabs pointed at the old
                 // project). "reset đúng" per ADR 0013; unsaved Code edits are discarded on switch.
-                if (state.activeWorkspace !== rootPath) {
+                const previousWorkspace = state.activeWorkspace;
+                const workspaceChanged = previousWorkspace !== rootPath;
+                if (workspaceChanged) {
                   codeEditor?.reset();
                   previewController?.reset();
                   appController?.reset();
@@ -2781,6 +2852,17 @@ export function mountCoworkApp(root: HTMLElement): void {
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
+                // Issue #26: the supervised OpenCode child is bound to ONE workspace via its launch
+                // cwd (see runtime/session-store-adapter). Persisting the new active workspace is
+                // not enough — the RUNNING child keeps operating in the OLD folder, so the agent
+                // "chỉ nhớ link workspace cũ". On a real switch BETWEEN two workspaces with a live
+                // runtime, force a stop+restart so OpenCode relaunches with the new workspace as its
+                // cwd. The initial restore (null → first workspace) is skipped: the child already
+                // launched on that folder. The next turn plans a fresh session (planRuntimeTurn
+                // falls back to new_turn when the pre-restart session is gone).
+                if (workspaceChanged && previousWorkspace !== null && state.liveAttached) {
+                  void relaunchRuntimeForWorkspaceSwitch();
+                }
               },
               onDeactivated: () => {
                 state.activeWorkspace = null;
@@ -2803,6 +2885,9 @@ export function mountCoworkApp(root: HTMLElement): void {
               void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
+            // A manual tree refresh (e.g. after adding files outside the app) also refreshes the
+            // composer's @-mention file cache (issue #24).
+            onRefreshed: () => mentionTypeahead.invalidate(),
           });
           codeNavigator = mountWorkspaceNavigator(dom.codeView.explorer.treeSlot, {
             client: dynamicClient,
@@ -3007,6 +3092,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                   ? "error"
                   : "unknown",
             toolCount: server.toolCount,
+            ...(server.updatedAt !== undefined ? { lastChecked: server.updatedAt } : {}),
           });
           const mcpCallbacks: McpPanelCallbacks = {
             listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
@@ -3047,10 +3133,40 @@ export function mountCoworkApp(root: HTMLElement): void {
             deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
             setMcpServerEnabled: async (id, enabled) =>
               toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+            checkMcpServerHealth: async (id) => {
+              // Re-probe reachability, then return the refreshed row (the panel re-lists after).
+              await dynamicClient.mcpServerHealth(id);
+              const rows = await dynamicClient.listMcpServers();
+              const updated = rows.find((s) => s.id === id);
+              if (updated === undefined) throw new Error("MCP không còn tồn tại.");
+              return toMcpView(updated);
+            },
           };
           mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
             updateSkillsMcpChip();
+          });
+          // Read `state.bootstrap` fresh on every call, not a snapshot captured at mount time:
+          // a tier transition (settings-only → live) REPLACES `state.bootstrap` with a new
+          // object on a new port (see `readiness`'s `createClient` above) — a captured `const`
+          // here would keep pointing at the old, now-dead port forever ("Failed to fetch").
+          mountGatewayIntegrationSlot(dom.gatewayView, {
+            getBaseUrl: () => state.bootstrap?.serviceBaseUrl ?? "",
+            getClientToken: () => state.bootstrap?.clientToken ?? "",
+            listProfiles: async () => (await dynamicClient.listProviderProfiles()).profiles,
+            // Reuse the SAME reconnect flow the chat composer uses (`ensureLive`): restarts the
+            // live service (fresh OpenCode child, re-reads `opencode.json`) and polls until
+            // `state.bootstrap`/`state.client` actually reflect the new session — a bare
+            // `connectLive()` IPC call resolves once the SERVICE has restarted, but the
+            // renderer's own bootstrap adoption is a separate step this also waits out.
+            // `ensureLive`'s FAST PATH skips reconnecting entirely when the existing client
+            // already health-checks OK — exactly the common case here (a healthy session that
+            // just needs its OpenCode child respawned for the new Gateway config) — so force past
+            // it by marking the current attachment stale first.
+            reconnectLive: async () => {
+              state.liveAttached = false;
+              await ensureLive(state, readiness).catch(() => undefined);
+            },
           });
           const permissions = createPermissionController({
             client: dynamicClient,

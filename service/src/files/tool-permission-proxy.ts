@@ -36,6 +36,7 @@
 
 import path from "node:path";
 import { presetKeyForActionKind, type PermissionActionKind, type PermissionPreset } from "@cowork-ghc/contracts";
+import { evaluateWebAccess } from "./web-access-guard.js";
 import type { WorkspaceGuard } from "../workspace/index.js";
 import { WorkspaceBoundaryError } from "../workspace/index.js";
 import {
@@ -55,10 +56,16 @@ export interface OpencodeToolPermissionEvent {
   readonly path?: string;
   /** Destination path for a move/rename tool. */
   readonly destinationPath?: string;
+  /** Target URL / query for an agent web-access tool (webfetch/websearch, #29). */
+  readonly url?: string;
 }
 
 /** Why the proxy refused an event before it ever reached the gate. */
-export type ProxyRefusalReason = "path_escape" | "missing_path" | "unmappable_tool";
+export type ProxyRefusalReason =
+  | "path_escape"
+  | "missing_path"
+  | "unmappable_tool"
+  | "web_target_blocked";
 
 /** Result of proxying one event. `submitted` handed a live request to the gate. */
 export type ProxyOutcome =
@@ -114,9 +121,27 @@ export function mapToolToActionKind(tool: string): PermissionActionKind | undefi
     case "command":
     case "run":
       return "command_exec";
+    case "webfetch":
+    case "web_fetch":
+    case "websearch":
+    case "web_search":
+      // Agent web access (#29): elevated, URL surfaced in the card, SSRF-guarded pre-gate.
+      return "web_access";
     default:
       return undefined;
   }
+}
+
+/** True when the web-access tool is a search (query string) rather than a fetch (URL). */
+function isWebSearchTool(tool: string): boolean {
+  const t = tool.trim().toLowerCase();
+  return t === "websearch" || t === "web_search";
+}
+
+/** Bound a search query for the permission card (non-secret display, avoid an unbounded card). */
+function truncateQuery(query: string): string {
+  const oneLine = query.replace(/\s+/gu, " ").trim();
+  return oneLine.length > 120 ? `${oneLine.slice(0, 117)}…` : oneLine;
 }
 
 export class ToolPermissionProxy {
@@ -153,6 +178,20 @@ export class ToolPermissionProxy {
 
     if (kind === "command_exec") {
       return this.submit(event, kind, undefined);
+    }
+
+    // Agent web access (#29). websearch = a query string (no host to probe) → surface the raw text
+    // on the card. webfetch = a URL → SSRF-guard it BEFORE the gate so an internal/loopback target
+    // never even reaches an Allow prompt. On block, refuse (explicit deny reply → runtime unstuck).
+    if (kind === "web_access") {
+      const raw = (event.url ?? "").trim();
+      if (isWebSearchTool(event.tool)) {
+        if (raw.length === 0) return this.refuse(event.requestId, "web_target_blocked");
+        return this.submitWeb(event, `truy vấn: ${truncateQuery(raw)}`);
+      }
+      const decision = evaluateWebAccess(raw);
+      if (!decision.allowed) return this.refuse(event.requestId, "web_target_blocked");
+      return this.submitWeb(event, decision.url.href);
     }
 
     // File tools: when OpenCode omits a concrete path (glob-only permission.asked), still surface
@@ -199,6 +238,25 @@ export class ToolPermissionProxy {
     });
     this.gate.submit(request);
     return { outcome: "submitted", requestId: event.requestId, actionKind: kind };
+  }
+
+  /**
+   * Submit an agent web-access request (#29). The card shows the target (an SSRF-validated https
+   * URL for webfetch, or the raw search query for websearch) in the description rather than a
+   * `targetPath`, which is filesystem-only.
+   */
+  private submitWeb(event: OpencodeToolPermissionEvent, safeTarget: string): ProxyOutcome {
+    const request = createPermissionRequest({
+      requestId: event.requestId,
+      sessionId: event.sessionId,
+      action: {
+        kind: "web_access",
+        description: `Tool ${event.tool} muốn truy cập web (${safeTarget})`,
+      },
+      requestedAt: this.now(),
+    });
+    this.gate.submit(request);
+    return { outcome: "submitted", requestId: event.requestId, actionKind: "web_access" };
   }
 
   /**

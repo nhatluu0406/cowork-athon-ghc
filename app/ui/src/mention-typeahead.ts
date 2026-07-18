@@ -150,6 +150,12 @@ export interface MentionTypeahead {
   /** Returns true when the event drove the popup and must not reach other handlers. */
   handleKeydown(event: KeyboardEvent): boolean;
   hide(): void;
+  /**
+   * Drop the cached file index so the NEXT `@` rebuilds it (issue #24). Call after a verified file
+   * mutation (create/delete/rename) or a manual workspace-tree refresh, so newly added files appear
+   * in the suggestions without switching workspace. If the popup is open, it re-scans immediately.
+   */
+  invalidate(): void;
 }
 
 function caretOffset(input: HTMLElement): number | null {
@@ -325,5 +331,12 @@ export function createMentionTypeahead(options: MentionTypeaheadOptions): Mentio
     return false;
   }
 
-  return { refresh, handleKeydown, hide };
+  function invalidate(): void {
+    index = null;
+    indexWorkspace = null;
+    // If the popup is currently open, rebuild right away so the user sees the fresh list.
+    if (!popup.hidden) refresh();
+  }
+
+  return { refresh, handleKeydown, hide, invalidate };
 }

@@ -16,6 +16,7 @@ import type {
 } from "@cowork-ghc/contracts";
 import type { ServiceClient } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
+import { renderProblems } from "./problems-view.js";
 
 export interface AppControllerCallbacks {
   /** Return true when a modal/permission dialog would obstruct the pane. */
@@ -64,8 +65,8 @@ export function mountAppController(
   // --- Output drawer (shared visual with the web preview) ---
   const drawer = el("div", "code-preview__drawer");
   const drawerHead = el("div", "code-preview__drawer-head");
-  const tabOutput = drawerTab("Output", true);
-  const tabProblems = drawerTab("Problems", false);
+  const tabOutput = drawerTab("Kết quả", true);
+  const tabProblems = drawerTab("Vấn đề", false);
   const drawerToggle = el("button", "code-preview__drawer-toggle") as HTMLButtonElement;
   drawerToggle.type = "button";
   drawerToggle.setAttribute("aria-expanded", "true");
@@ -73,7 +74,8 @@ export function mountAppController(
   drawerHead.append(tabOutput, tabProblems, el("span", "code-preview__spacer"), drawerToggle);
   const outputBody = el("pre", "code-preview__output");
   outputBody.setAttribute("aria-live", "polite");
-  const problemsBody = el("div", "code-preview__problems", "Không có problem nào (Slice 2 chưa có phân tích lỗi).");
+  const problemsBody = el("div", "code-preview__problems");
+  problemsBody.append(el("div", "code-preview__problems-empty", "Không có vấn đề nào."));
   problemsBody.hidden = true;
   drawer.append(drawerHead, outputBody, problemsBody);
 
@@ -87,6 +89,8 @@ export function mountAppController(
   let lastSeq = 0;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let confirmOpen = false;
+  // Accumulated captured output, reduced to the "Vấn đề" (Problems) tab (redacted upstream).
+  const outputLines: RuntimePreviewOutputLine[] = [];
 
   function emptyState(): RuntimeAppState {
     return { status: "stopped", kind: null, action: null, command: null, script: null, startedAt: null, error: null, exitCode: null, outputSeq: 0 };
@@ -167,15 +171,19 @@ export function mountAppController(
     const s = state.status;
     pill.className = `cc-surface__runtime cc-surface__runtime--${appPillClass(s)}`;
     pill.textContent =
-      s === "running" ? "App: đang chạy" : s === "building" ? "App: đang build" : s === "starting" ? "App: khởi động" : s === "failed" ? "App: lỗi" : "App: tắt";
+      s === "running" ? "Ứng dụng: đang chạy" : s === "building" ? "Ứng dụng: đang build" : s === "starting" ? "Ứng dụng: khởi động" : s === "failed" ? "Ứng dụng: lỗi" : "Ứng dụng: tắt";
   }
 
   function appendOutput(lines: readonly RuntimePreviewOutputLine[]): void {
     for (const line of lines) {
       outputBody.append(el("span", `code-preview__line code-preview__line--${line.stream}`, line.text + "\n"));
+      outputLines.push(line);
       lastSeq = Math.max(lastSeq, line.seq);
     }
-    if (lines.length > 0) outputBody.scrollTop = outputBody.scrollHeight;
+    if (lines.length > 0) {
+      outputBody.scrollTop = outputBody.scrollHeight;
+      renderProblems(problemsBody, tabProblems, outputLines);
+    }
   }
 
   async function poll(): Promise<void> {
@@ -336,6 +344,8 @@ export function mountAppController(
       info = null;
       state = emptyState();
       outputBody.replaceChildren();
+      outputLines.length = 0;
+      renderProblems(problemsBody, tabProblems, outputLines);
       renderStatus();
     },
     dispose() {

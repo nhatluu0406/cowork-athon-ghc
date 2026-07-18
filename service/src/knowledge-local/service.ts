@@ -24,6 +24,12 @@ export type { KnowledgeIndexView, KnowledgeGraphApiResult } from "./types.js";
 export interface KnowledgeLocalServiceOptions {
   readonly repo: KnowledgeLocalRepository;
   readonly activeWorkspaceRoot: () => string | undefined;
+  /**
+   * Live Microsoft 365 connection state (issue #19). When true, the MS365 Knowledge source is
+   * reported as `connected` so the source summary reflects the Microsoft tab's real state — but its
+   * `documentCount` stays 0 because no MS365→Knowledge importer exists yet (honest, no fake data).
+   */
+  readonly microsoft365Connected?: () => boolean;
   /** Override index bounds (tests use small caps). */
   readonly indexOptions?: Omit<IndexOptions, "signal" | "onProgress">;
   readonly now?: () => string;
@@ -54,12 +60,21 @@ interface ActiveJob {
  * reported as a real-but-not-connected source so the renderer can show honest readiness and offer a
  * (disabled) source filter option without ever faking a count or reaching the dormant backend.
  */
-const buildSources = (workspaceDocumentCount: number): readonly KnowledgeSourceSummary[] => [
+const buildSources = (
+  workspaceDocumentCount: number,
+  microsoft365Connected: boolean,
+): readonly KnowledgeSourceSummary[] => [
   { type: "workspace", label: "Workspace", connected: true, documentCount: workspaceDocumentCount },
-  { type: "microsoft365", label: "Microsoft 365", connected: false, documentCount: 0 },
+  // MS365 `connected` now mirrors the Microsoft tab's live state (issue #19); `documentCount` stays
+  // 0 until an MS365→Knowledge importer exists (no fabricated counts).
+  { type: "microsoft365", label: "Microsoft 365", connected: microsoft365Connected, documentCount: 0 },
 ];
 
-const EMPTY_STATUS = (hasWorkspace: boolean, status: KnowledgeIndexStatus): KnowledgeIndexView => ({
+const EMPTY_STATUS = (
+  hasWorkspace: boolean,
+  status: KnowledgeIndexStatus,
+  microsoft365Connected: boolean,
+): KnowledgeIndexView => ({
   status,
   hasWorkspace,
   documentCount: 0,
@@ -69,7 +84,7 @@ const EMPTY_STATUS = (hasWorkspace: boolean, status: KnowledgeIndexStatus): Know
   lastIndexedAt: null,
   error: null,
   indexing: null,
-  sources: buildSources(0),
+  sources: buildSources(0, microsoft365Connected),
 });
 
 export function createKnowledgeLocalService(
@@ -77,13 +92,14 @@ export function createKnowledgeLocalService(
 ): KnowledgeLocalService {
   const { repo, activeWorkspaceRoot } = options;
   const now = options.now ?? (() => new Date().toISOString());
+  const ms365Connected = (): boolean => options.microsoft365Connected?.() ?? false;
   let job: ActiveJob | null = null;
 
   const statusFor = (workspaceRoot: string): KnowledgeIndexView => {
     const state = repo.getState(workspaceRoot);
     const running = job !== null && job.workspaceRoot === workspaceRoot;
     if (state === null) {
-      return { ...EMPTY_STATUS(true, running ? "indexing" : "not_initialized"), indexing: running ? job!.progress : null };
+      return { ...EMPTY_STATUS(true, running ? "indexing" : "not_initialized", ms365Connected()), indexing: running ? job!.progress : null };
     }
     return {
       status: running ? "indexing" : state.status,
@@ -95,13 +111,13 @@ export function createKnowledgeLocalService(
       lastIndexedAt: state.lastIndexedAt,
       error: state.error,
       indexing: running ? job!.progress : null,
-      sources: buildSources(state.documentCount),
+      sources: buildSources(state.documentCount, ms365Connected()),
     };
   };
 
   const status = (): KnowledgeIndexView => {
     const ws = activeWorkspaceRoot();
-    if (ws === undefined) return EMPTY_STATUS(false, "not_initialized");
+    if (ws === undefined) return EMPTY_STATUS(false, "not_initialized", ms365Connected());
     return statusFor(ws);
   };
 
@@ -109,7 +125,7 @@ export function createKnowledgeLocalService(
     status,
     sync(): KnowledgeIndexView {
       const ws = activeWorkspaceRoot();
-      if (ws === undefined) return EMPTY_STATUS(false, "not_initialized");
+      if (ws === undefined) return EMPTY_STATUS(false, "not_initialized", ms365Connected());
       if (job !== null) return statusFor(job.workspaceRoot); // already running
       const controller = new AbortController();
       const active: ActiveJob = {
@@ -167,10 +183,10 @@ export function createKnowledgeLocalService(
     },
     clear(): KnowledgeIndexView {
       const ws = activeWorkspaceRoot();
-      if (ws === undefined) return EMPTY_STATUS(false, "not_initialized");
+      if (ws === undefined) return EMPTY_STATUS(false, "not_initialized", ms365Connected());
       if (job !== null && job.workspaceRoot === ws) job.controller.abort();
       repo.clearWorkspace(ws);
-      return EMPTY_STATUS(true, "not_initialized");
+      return EMPTY_STATUS(true, "not_initialized", ms365Connected());
     },
     search(query, limit = KNOWLEDGE_SEARCH_DEFAULT_LIMIT): readonly KnowledgeSearchHitView[] {
       const ws = activeWorkspaceRoot();

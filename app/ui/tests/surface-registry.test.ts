@@ -20,14 +20,15 @@ import { renderIntegrationSurface } from "../src/ui-shell/integration-view.js";
 test("surface registry declares the seven top-level product surfaces", () => {
   const registry = createSurfaceRegistry();
   const ids = registry.map((surface) => surface.id);
+  // Product-flow rail order (Phase 3): work → external connections → capability.
   assert.deepEqual(ids, [
     "cowork",
-    "skills-mcp",
-    "dispatch",
-    "gateway",
+    "code",
     "knowledge",
     "microsoft",
-    "code",
+    "dispatch",
+    "skills-mcp",
+    "gateway",
   ] satisfies ProductSurfaceId[]);
   for (const surface of registry) {
     assert.ok(surface.label.length > 0);
@@ -42,26 +43,31 @@ test("production default exposes all navigable product rail surfaces", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
     ["cowork", "available"],
-    ["skills-mcp", "available"],
-    ["dispatch", "awaiting_integration"],
-    ["gateway", "awaiting_integration"],
+    ["code", "available"],
     ["knowledge", "awaiting_integration"],
     ["microsoft", "awaiting_integration"],
-    ["code", "available"],
+    ["dispatch", "awaiting_integration"],
+    ["skills-mcp", "available"],
+    // Gateway backend (PR #16 multi-account proxy) is now integrated — no longer a mount boundary.
+    ["gateway", "available"],
   ]);
 });
 
-test("skills-mcp surface sits directly below Cowork in the rail", () => {
+test("work surfaces lead the rail: Code sits directly below Cowork", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.equal(visible[0]?.id, "cowork");
-  assert.equal(visible[1]?.id, "skills-mcp");
-  assert.equal(visible[1]?.label, "Skill & MCP");
-  assert.equal(visible[1]?.icon, "skills");
+  assert.equal(visible[1]?.id, "code");
+  assert.equal(visible[2]?.id, "knowledge");
 });
 
 test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
-  assert.deepEqual(visible.map((surface) => surface.id), ["cowork", "skills-mcp", "code"]);
+  assert.deepEqual(visible.map((surface) => surface.id), [
+    "cowork",
+    "code",
+    "skills-mcp",
+    "gateway",
+  ]);
 });
 
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
@@ -69,16 +75,22 @@ test("external surfaces carry dependency-specific awaiting integration copy", ()
   assert.equal(visible.find((surface) => surface.id === "dispatch")?.dependency, "D1");
   assert.equal(visible.find((surface) => surface.id === "microsoft")?.dependency, "D2");
   assert.equal(visible.find((surface) => surface.id === "knowledge")?.dependency, "D3");
-  assert.equal(visible.find((surface) => surface.id === "gateway")?.dependency, "D4");
-  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /D4/u);
+  // Gateway keeps its D4 origin tag, but PR #16's backend is integrated so it is now `available`
+  // and no longer carries "chưa được tích hợp" copy.
+  const gateway = visible.find((surface) => surface.id === "gateway");
+  assert.equal(gateway?.dependency, "D4");
+  assert.equal(gateway?.availability, "available");
+  assert.doesNotMatch(gateway?.description ?? "", /chưa được tích hợp/u);
 });
 
 test("integration adapters declare stable mount boundaries", () => {
   assert.equal(getIntegrationSurfaceAdapter("dispatch")?.statusLabel, "Chờ tích hợp D1");
-  assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Chờ tích hợp D4");
+  // Gateway backend is integrated (PR #16); its adapter fallback no longer reads "chờ tích hợp".
+  assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Đã tích hợp");
   assert.equal(getIntegrationSurfaceAdapter("knowledge")?.statusLabel, "Chờ tích hợp D3");
   assert.equal(getIntegrationSurfaceAdapter("microsoft")?.statusLabel, "Chờ tích hợp D2");
-  assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã lên kế hoạch");
+  // Code is a fully implemented surface; its adapter fallback is no longer "planned".
+  assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã tích hợp");
   assert.equal(getIntegrationSurfaceAdapter("dispatch")?.mountId, "d1-dispatch-root");
   assert.equal(getIntegrationSurfaceAdapter("cowork"), null);
 });

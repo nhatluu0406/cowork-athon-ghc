@@ -53,7 +53,7 @@ Acceptance (observable) · Verification · Complexity · Status.
 | ER-010 | P2 | UI system | Tokens exist but consistency unaudited across surfaces | Consolidate design tokens/components; keep Cowork+Workspace as bar | ER-013 (audit) | ux | Cross-surface consistency findings resolved | ui-ux-audit | L | TODO |
 | ER-011 | P1 | MS365 (D2) | Not live-verified; OAuth gated | Decide device-code vs manual for demo; honest disconnected states | — | ext | Demo path documented; no fake connected state | manual | M | TODO |
 | ER-012 | P1 | Dispatch (D1) | No packaged/live fan-out (Checkpoint 5) | Packaged golden-path fan-out with mock or real LLM | ER-001 | med | One packaged fan-out with one permission gate, verified results | packaged | L | TODO |
-| ER-013 | P1 | Visual audit | No automated packaged UI capture exists | Build the UI-capture tool + run it (see §4) | ER-001 | med | Screenshots for all surfaces/states; checks pass | audit run | M | DONE (2026-07-18): `tools/ui-audit` + `npm run audit:ui`; **33 shots, 21/21 checks** incl. **data-rich Knowledge** (isolated seed workspace: index/list/detail/search/graph/node-select/prune/clear); findings in ui-ux-audit.md. Other live/error/DPI states pending (see that doc's Gaps) |
+| ER-013 | P1 | Visual audit | No automated packaged UI capture exists | Build the UI-capture tool + run it (see §4) | ER-001 | med | Screenshots for all surfaces/states; checks pass | audit run | M | DONE (2026-07-18): `tools/ui-audit` + `npm run audit:ui`; **45 shots, 52/52 checks** incl. **data-rich Knowledge** (isolated seed workspace: index/list/detail/search/graph/node-select/prune/clear), the Code runtime empty-state panels (shots 32–35), **and a real Code Web Preview LIVE-RUN** over a committed web fixture (`tools/ui-audit/fixtures/web-preview`): detect `dev` → permission → running on a real loopback → embedded real content (marker) → Kết quả real log → stop (no orphan) → error mode → Vấn đề `src/app.tsx:12:7` (shots 36–39/60/62/63). F2/F3/F4 resolved in shipped build; F10/F11/F12 (Code preview labels, re-run output cursor, stale re-detect) fixed. Findings in ui-ux-audit.md. Live provider / Desktop-App live-run / error / DPI states remain PO-manual (see that doc's Gaps) |
 | ER-014 | P1 | Acceptance | Release acceptance is happy-path (demo-acceptance) | Author `release-acceptance.md` with negative/recovery coverage (§8.3) | ER-008 | — | Negative scenarios enumerated + owned | doc + tests | M | TODO |
 | ER-015 | P2 | Data/recovery | DB corruption/migration failure behavior unspecified | Define backup/restore/migration-failure handling | — | data | Corrupt/locked DB → recoverable, no silent loss | tests | M | TODO |
 | ER-016 | P3 | Performance | Startup/streaming/large-file cost unmeasured | Measure + bound startup, streaming, large preview | — | perf | Documented budgets; no UI stall on large files | manual | M | TODO |
@@ -84,6 +84,15 @@ it as the **immediate next slice**:
 
 **Scope.** `tools/ui-audit/` + `npm run audit:ui`. Drive the packaged `coworkghc.exe` and capture
 every surface/state; then a human UI/UX review against `ui-ux-audit.md`.
+
+**Latest run (2026-07-18, PR #16 Gateway + issue-fixes + rail/sidebar + docx pass).** `audit:ui`
+**52/52 checks PASS, 45 screenshots, exit 0, no orphan** (app + opencode across phases A–D) on the
+packaged build that includes: Gateway integrated, product-flow rail reorder, shared sidebar tokens,
+Skill row toggle/delete, MS365 shared MarkdownView, MS365↔Knowledge source reflect, @mention refresh,
+workspace-switch runtime relaunch, and the `create_docx` document tool. This confirms the packaged app
+launches and every surface mounts with all changes and cleans up processes. **Still PO-pending
+(harness not yet extended):** driving Gateway ON/OFF/account/metrics, an agent `create_docx` round-trip
+(permission card → Word opens), and DPI 125/150% — recommended next audit extensions.
 
 **Approach (built 2026-07-18).** In-process `webContents.capturePage` + `executeJavaScript`, gated by
 `COWORK_GHC_UI_AUDIT=1` (`app/shell/src/audit/ui-capture.ts`). CDP/Playwright was rejected: this

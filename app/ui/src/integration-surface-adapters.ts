@@ -34,9 +34,12 @@ const ADAPTERS: Readonly<Record<ExternalSurfaceId, IntegrationSurfaceAdapter>> =
     surfaceId: "gateway",
     mountId: "d4-gateway-root",
     component: "GatewayIntegrationSlot",
-    statusLabel: "Chờ tích hợp D4",
+    // PR #16 integrated the Gateway backend, so the running app renders the real Gateway surface
+    // (mountGatewayIntegrationSlot) — this adapter's fallback copy is never shown for gateway. Keep
+    // it honest anyway: no "chưa tích hợp".
+    statusLabel: "Đã tích hợp",
     description:
-      "Gateway đa provider, failover và key pool. Backend D4 chưa được tích hợp; mount boundary sẵn sàng cho team UI.",
+      "Gateway đa provider, failover và key pool. Quản lý API key và kích hoạt tài khoản theo provider.",
   },
   knowledge: {
     surfaceId: "knowledge",
@@ -58,9 +61,12 @@ const ADAPTERS: Readonly<Record<ExternalSurfaceId, IntegrationSurfaceAdapter>> =
     surfaceId: "code",
     mountId: "code-surface-root",
     component: "CodeIntegrationSlot",
-    statusLabel: "Đã lên kế hoạch",
+    // Code is a fully implemented surface (Project Explorer, multi-tab editor, Web Preview); the
+    // running app renders the real ClaudeCodeSurface, so this adapter fallback is never user-visible.
+    // Kept honest: no longer "planned".
+    statusLabel: "Đã tích hợp",
     description:
-      "Surface làm việc mã nguồn nâng cao. Đã lên kế hoạch sau navigator/preview; chưa có backend hay dữ liệu giả.",
+      "Surface project-centric: Project Explorer, editor nhiều tab (sửa + lưu), Web Preview và panel Agent dùng chung phiên với Cowork.",
   },
 });
 

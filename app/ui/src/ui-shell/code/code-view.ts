@@ -69,7 +69,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   logoChip.append(icon("code", "Code"));
   const repoChip = el("span", "cc-surface__repo");
   repoChip.append(icon("folder", ""), el("span", "cc-surface__repo-name", "Chưa chọn workspace"));
-  const runtimeStatus = el("span", "cc-surface__runtime cc-surface__runtime--idle", "Preview: tắt");
+  const runtimeStatus = el("span", "cc-surface__runtime cc-surface__runtime--idle", "Xem trước: tắt");
   runtimeStatus.setAttribute("role", "status");
   titleWrap.append(logoChip, el("h1", "cc-surface__title", "Code"), repoChip, runtimeStatus);
 
@@ -90,7 +90,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   segmented.setAttribute("role", "tablist");
   segmented.setAttribute("aria-label", "Chế độ hiển thị");
   const modeCode = modeButton("code", "Code", true);
-  const modePreview = modeButton("preview", "Preview", false);
+  const modePreview = modeButton("preview", "Xem trước", false);
   segmented.append(modeCode, modePreview);
 
   // Web / Ứng dụng segmented — only meaningful in Preview mode (hidden otherwise).

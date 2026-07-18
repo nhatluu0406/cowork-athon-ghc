@@ -54,6 +54,7 @@ import { loadProjectEnvFile } from "./load-project-env.js";
 import { clearRememberedUnlock } from "./service/session-unlock.js";
 import { resolveM365KGStackPaths } from "./service/m365kg-stack-paths.js";
 import { createM365KGStackLaunch, type M365KGStackLaunch } from "./service/m365kg-stack-launch.js";
+import { gateway } from "@cowork-ghc/service";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -192,6 +193,18 @@ function resolveRuntimePaths() {
   };
 }
 
+/**
+ * Peek the user's saved Gateway proxy port from `gateway.json` (same directory as
+ * `settingsFilePath`) BEFORE any composition happens, so a value the user saved in Settings →
+ * Gateway on a PRIOR run actually takes effect on this restart. Falls back to
+ * `DEFAULT_GATEWAY_PROXY_PORT` when nothing was ever saved. A raw peek (no store construction,
+ * no write lock held) — `createCoworkService` opens its own `GatewayStore` from the same file.
+ */
+async function resolveGatewayProxyPort(settingsFilePath: string): Promise<number> {
+  const fs = gateway.createNodeGatewayStoreFs(dirname(settingsFilePath));
+  return gateway.readGatewayServerPort(fs);
+}
+
 function createShellController(
   settingsFilePath: string,
   conversationsDir: string,
@@ -203,6 +216,7 @@ function createShellController(
     readonly createIfMissing?: boolean;
   }[],
   packaged: ReturnType<typeof resolvePackagedPaths>,
+  gatewayProxyPort: number,
 ) {
   const liveSource = createFirstConfiguredSource([
     createPersistedSettingsSource({
@@ -215,6 +229,7 @@ function createShellController(
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
       skillsStateFilePath,
       skillRoots,
+      gatewayProxyPort,
     }),
     createEnvLaunchSource({
       appRoot: DEV_APP_ROOT,
@@ -226,6 +241,7 @@ function createShellController(
       ...(packaged.runtimeRoot !== undefined ? { runtimeRoot: packaged.runtimeRoot } : {}),
       skillsStateFilePath,
       skillRoots,
+      gatewayProxyPort,
     }),
   ]);
 
@@ -237,6 +253,7 @@ function createShellController(
     skillRoots,
     allowedOrigins: [APP_ORIGIN] as const,
     allowEnvCredentialImport: envCredentialImportEnabled(),
+    gatewayProxyPort,
   };
   const settingsOnlyStart = createSettingsOnlyStartService(settingsOnlyOptions);
   // Route the remote gateway's diagnostics (LAN URL, "gateway ready", Discord-on) into the
@@ -360,7 +377,7 @@ void runShellLifecycle({
     return shellController;
   },
   trace: writeStartupTrace,
-  prepare: () => {
+  prepare: async () => {
     if (envCredentialImportEnabled()) {
       loadProjectEnvFile(DEV_APP_ROOT);
     }
@@ -374,6 +391,7 @@ void runShellLifecycle({
         skillRoots,
       } = resolveRuntimePaths();
       shellAppDataRoot = dirname(settingsFilePath);
+      const gatewayProxyPort = await resolveGatewayProxyPort(settingsFilePath);
       shellController = createShellController(
         settingsFilePath,
         conversationsDir,
@@ -381,6 +399,7 @@ void runShellLifecycle({
         dbPath,
         skillRoots,
         packaged,
+        gatewayProxyPort,
       );
       // Additive M365KG stack — created here so paths are stable; started (non-blocking) in onReady.
       const m365kgPaths = resolveM365KGStackPaths({

@@ -1,7 +1,27 @@
 import type { Ms365ViewData } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
+import { renderAssistantMarkdown } from "../../markdown-message.js";
 import type { MsChatController, MsChatMessage } from "./ms-chat-controller.js";
+
+/**
+ * MS365 assistant answers now render through Cowork's shared sanitized Markdown pipeline
+ * (issue #20) — same renderer, sanitizer, and `.md` styling as the Cowork chat, so headings,
+ * lists, tables, links, and fenced code all display consistently. User prompts and error text
+ * stay plain (never parse user/untrusted content as Markdown).
+ */
+function renderBubbleBody(body: HTMLElement, message: MsChatMessage): void {
+  if (message.error !== undefined) {
+    body.textContent = message.error;
+    return;
+  }
+  if (message.role === "assistant") {
+    // Streaming-safe: re-parses the full accumulated text on every patch (see markdown-message).
+    renderAssistantMarkdown(body, message.content);
+    return;
+  }
+  body.textContent = message.content;
+}
 
 const SUGGESTIONS = [
   "Task trễ trên Planner",
@@ -40,10 +60,9 @@ function patchLastBubble(container: HTMLElement, message: MsChatMessage): boolea
   if (last === undefined) return false;
   const body = last.querySelector<HTMLElement>(".ms-bubble__text");
   if (body === null) return false;
-  const text = message.error ? message.error : message.content;
   // Rebuild only the text body's content (cheap; the bubble element itself is untouched so its
   // mount animation does not replay). Re-add thinking-dots while still pending.
-  body.replaceChildren(document.createTextNode(text));
+  renderBubbleBody(body, message);
   last.classList.toggle("ms-bubble--pending", message.pending === true);
   if (message.pending) body.append(buildThinking(), el("span", "ms-bubble__pending-marker", " (đang xử lý…)"));
 
@@ -161,8 +180,7 @@ function renderBubble(message: MsChatMessage): HTMLElement {
   }
 
   const body = el("div", "ms-bubble__text");
-  const text = message.error ? message.error : message.content;
-  body.textContent = text;
+  renderBubbleBody(body, message);
   if (message.pending) {
     // Cowork thinking-dots while the turn streams, plus the (đang xử lý…) marker for a11y/state.
     body.append(buildThinking(), el("span", "ms-bubble__pending-marker", " (đang xử lý…)"));

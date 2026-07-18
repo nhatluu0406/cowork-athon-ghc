@@ -28,6 +28,7 @@ import {
 import type { CredentialService, CredentialInjectionRequest } from "../credential/index.js";
 import { resolveInjections } from "../credential/index.js";
 import { MS365_TOOL_CALL_PATH } from "../ms365/index.js";
+import { DOCX_TOOL_CALL_PATH } from "../documents/docx-tool-router.js";
 import { generateClientToken } from "../server/token.js";
 import {
   createSsrfPolicy,
@@ -194,10 +195,18 @@ export async function buildLiveCoworkOptions(
   // else on the boundary. Minted with the SAME generator as clientToken (never persisted).
   const ms365ToolToken = generateClientToken();
   const ms365Endpoint = `http://${formatHostForUrl(serviceHost)}:${servicePort}${MS365_TOOL_CALL_PATH}`;
+  // Docx tool bridge: a DISTINCT scoped token + endpoint, mirroring the MS365 bridge exactly. The
+  // child gets a token scoped to ONLY DOCX_TOOL_CALL_PATH (registered in pathScopedTokens below) —
+  // never the full client token — so a leaked/compromised child cannot call anything else on the
+  // boundary. Minted with the SAME generator as clientToken (never persisted).
+  const docxToolToken = generateClientToken();
+  const docxEndpoint = `http://${formatHostForUrl(serviceHost)}:${servicePort}${DOCX_TOOL_CALL_PATH}`;
   const baseEnv = {
     ...(input.baseEnv ?? {}),
     CGHC_MS365_TOOL_ENDPOINT: ms365Endpoint,
     CGHC_MS365_TOKEN: ms365ToolToken,
+    CGHC_DOCX_TOOL_ENDPOINT: docxEndpoint,
+    CGHC_DOCX_TOKEN: docxToolToken,
   };
 
   const startSpec: SupervisorStartSpec = {
@@ -213,7 +222,7 @@ export async function buildLiveCoworkOptions(
     // The scoped MS365 tool token is baked into baseEnv above as CGHC_MS365_TOKEN — it must ALSO
     // be masked in the log-safe spawn snapshot, same as any provider key. One source of truth:
     // `secretValues`/`redactedEnvSnapshot` in `@cowork-ghc/runtime` (never a second ad-hoc list).
-    extraSecretValues: [ms365ToolToken],
+    extraSecretValues: [ms365ToolToken, docxToolToken],
   };
 
   // FIX-6: seed the SHARED value-scrubber via deps.credentialService (which registers the resolved
@@ -238,6 +247,7 @@ export async function buildLiveCoworkOptions(
     pathScopedTokens: [
       ...(input.service?.pathScopedTokens ?? []),
       { token: ms365ToolToken, paths: [MS365_TOOL_CALL_PATH] },
+      { token: docxToolToken, paths: [DOCX_TOOL_CALL_PATH] },
     ],
   };
 

@@ -144,3 +144,62 @@ test("a move tool confines BOTH ends: an escaping destination is refused", async
   assert.equal(outcome.outcome, "refused");
   assert.equal(fx.gate.pending().length, 0);
 });
+
+test("webfetch to a public URL is submitted as an ELEVATED web_access with the URL in the card (#29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "web-1",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "https://example.com/article",
+  });
+  assert.deepEqual(outcome, { outcome: "submitted", requestId: "web-1", actionKind: "web_access" });
+  const pending = fx.gate.pending();
+  assert.equal(pending.length, 1);
+  // Always elevated → always shows a card even in workspace-auto mode.
+  assert.equal(pending[0]?.approvalLevel, "elevated");
+  assert.match(pending[0]?.action.description ?? "", /example\.com\/article/);
+  // No filesystem targetPath for a web fetch.
+  assert.equal(pending[0]?.action.targetPath, undefined);
+});
+
+test("webfetch to a loopback URL is refused pre-gate (SSRF), never shown, runtime denied (#29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "web-ssrf",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "https://127.0.0.1/admin",
+  });
+  assert.deepEqual(outcome, { outcome: "refused", requestId: "web-ssrf", reason: "web_target_blocked" });
+  assert.equal(fx.gate.pending().length, 0);
+  assert.deepEqual(fx.reply.replies, [{ requestId: "web-ssrf", decision: "deny" }]);
+});
+
+test("webfetch with a missing/schemeless URL is refused (fail-closed, review #29)", async () => {
+  const fx = await makeFixture();
+  const empty = await fx.proxy.handle({ requestId: "web-empty", sessionId: "s", tool: "webfetch" });
+  assert.deepEqual(empty, { outcome: "refused", requestId: "web-empty", reason: "web_target_blocked" });
+  const schemeless = await fx.proxy.handle({
+    requestId: "web-schemeless",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "169.254.169.254/latest/meta-data",
+  });
+  assert.equal(schemeless.outcome, "refused");
+  assert.equal(fx.gate.pending().length, 0);
+});
+
+test("websearch surfaces the raw query on an elevated card (no SSRF host to probe, #29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "search-1",
+    sessionId: "s",
+    tool: "websearch",
+    url: "latest typescript release notes",
+  });
+  assert.deepEqual(outcome, { outcome: "submitted", requestId: "search-1", actionKind: "web_access" });
+  const pending = fx.gate.pending();
+  assert.equal(pending[0]?.approvalLevel, "elevated");
+  assert.match(pending[0]?.action.description ?? "", /latest typescript release notes/);
+});

@@ -141,6 +141,28 @@ test("Build shows a confirm labelled for build and resolves the build action", a
   controller.dispose();
 });
 
+test("captured app error output surfaces in the Vấn đề (Problems) tab with a localized label", async () => {
+  const host = document.createElement("div");
+  const controller = mountAppController(host, fakeClient({
+    detectRuntimeApp: async () => ELECTRON,
+    getRuntimeAppOutput: async () => ({
+      state: runningState(),
+      lines: [
+        { seq: 1, stream: "system" as const, text: "▶ npm run start" },
+        { seq: 2, stream: "stderr" as const, text: "Error: Cannot find module 'electron-store'" },
+      ],
+      truncated: false,
+    }),
+  }));
+  controller.setActive(true);
+  await flush();
+  const tabs = host.querySelectorAll(".code-preview__drawer-tab");
+  assert.equal(tabs[0]?.textContent, "Kết quả");
+  assert.match(tabs[1]?.textContent ?? "", /^Vấn đề \(1\)$/);
+  assert.match(host.querySelector(".code-preview__problem-msg")?.textContent ?? "", /Cannot find module 'electron-store'/);
+  controller.dispose();
+});
+
 test("running state shows the running overlay and a Stop button", async () => {
   const host = document.createElement("div");
   const controller = mountAppController(host, fakeClient({

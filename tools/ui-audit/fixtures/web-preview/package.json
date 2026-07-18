@@ -1,0 +1,10 @@
+{
+  "name": "cghc-web-preview-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic, zero-dependency web project used ONLY by the packaged UI audit to exercise the Code Web Preview live-run. Not a product feature; never bundled in the app.",
+  "scripts": {
+    "dev": "node server.mjs",
+    "serve": "node build-fail.mjs"
+  }
+}
