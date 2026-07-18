@@ -48,8 +48,6 @@ export function presetKeyForActionKind(kind: PermissionActionKind): string {
       return "edit";
     case "command_exec":
       return "bash";
-    case "network_access":
-      return "network";
     default: {
       const exhaustive: never = kind;
       return exhaustive;

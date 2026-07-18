@@ -183,3 +183,18 @@ export function readMs365DeviceConfig(
   const tenant = env.CGHC_MS365_TENANT;
   return { clientId, tenant: tenant !== undefined && tenant !== "" ? tenant : "common" };
 }
+
+/**
+ * Pure env-flag reader for the optional M365 Knowledge Graph subsystem (PR #13 preservation
+ * branch). OFF unless the value is EXACTLY `"1"` or `"true"`; every other value — `undefined`,
+ * `"0"`, `"false"`, `""`, or any arbitrary string — is OFF. Mirrors the SSRF-flag style.
+ *
+ * NOTE: on `main` the SharePoint/Graph MS365 *router* mounts unconditionally (the runtime gate
+ * was removed). This helper gates the heavier, optional KG stack (Go backend + PostgreSQL +
+ * Neo4j + llm-svc) on this experimental branch; it is a pure reader with no side effects, so it
+ * changes no composition behaviour on its own.
+ */
+export function isMs365Enabled(env: Record<string, string | undefined>): boolean {
+  const raw = env.CGHC_MS365_ENABLED;
+  return raw === "1" || raw === "true";
+}
