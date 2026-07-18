@@ -134,3 +134,65 @@ test("Dò model fills a searchable datalist and keeps manual entry available", a
   assert.equal(modelInput.value, "hand-typed-model");
   root.remove();
 });
+
+test("discovered model options have both value and textContent for browser autocomplete display", async () => {
+  const root = document.createElement("div");
+  document.body.append(root);
+  const custom = profile({
+    id: "c1",
+    displayName: "Custom",
+    providerType: "custom-openai-compat",
+    baseUrl: "https://api.example.com/v1",
+    modelId: "gpt-3.5-turbo",
+    credentialConfigured: true,
+    credentialAccount: "profile:c1",
+    isActive: true,
+  });
+  const other = profile({ id: "p2", displayName: "DeepSeek", isActive: false });
+  const listed = [custom, other];
+  const client = {
+    getSettings: async () => settings(listed),
+    listProviderProfiles: async () => ({ profiles: listed, activeProfileId: "c1" }),
+    createProviderProfile: async () => listed[0]!,
+    updateProviderProfile: async () => listed[0]!,
+    deleteProviderProfile: async () => undefined,
+    setActiveProviderProfile: async () => settings(listed),
+    storeProfileCredential: async () => settings(listed),
+    removeProfileCredential: async () => settings(listed),
+    testProfileConnection: async () => ({ ok: true }),
+    discoverProfileModels: async () => {
+      return { ok: true, models: ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"] };
+    },
+  } as unknown as ServiceClient;
+
+  mountProviderProfilesPanel(root, { client });
+  await new Promise((r) => setTimeout(r, 0));
+
+  root.querySelector<HTMLButtonElement>(".provider-profiles__edit")!.click();
+
+  const discoverBtn = root.querySelector<HTMLButtonElement>(".provider-profiles__discover");
+  assert.ok(discoverBtn);
+  discoverBtn.click();
+  await new Promise((r) => setTimeout(r, 0));
+
+  // Verify both value and textContent are set on each option for browser autocomplete display
+  const optionElements = root.querySelectorAll("datalist#provider-profiles-model-options option");
+  assert.ok(optionElements.length > 0, "should have discovered model options");
+
+  const expectedModels = ["gpt-4", "gpt-3.5-turbo", "gpt-4-turbo"];
+  optionElements.forEach((opt, i) => {
+    const option = opt as HTMLOptionElement;
+    assert.equal(option.value, expectedModels[i], `option ${i} value should match expected model`);
+    assert.equal(
+      option.textContent,
+      expectedModels[i],
+      `option ${i} textContent should match value for browser autocomplete display`,
+    );
+    assert.ok(
+      option.textContent && option.textContent.length > 0,
+      `option ${i} should have non-empty textContent for visibility in dropdown`,
+    );
+  });
+
+  root.remove();
+});

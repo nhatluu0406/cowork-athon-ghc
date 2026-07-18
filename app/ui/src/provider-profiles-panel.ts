@@ -281,6 +281,7 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     for (const id of models) {
       const opt = document.createElement("option");
       opt.value = id;
+      opt.textContent = id;
       modelDatalist.append(opt);
     }
   };
