@@ -40,6 +40,8 @@ export interface RenderMsConnectDeps {
   readonly onViewChange: (view: Ms365ViewData) => void;
   /** Poll interval in ms; defaults to 5000. Injectable so tests don't wait on a real 5s timer. */
   readonly pollIntervalMs?: number;
+  /** PHASE 3: open the detected LOCAL OneDrive folder as a workspace (local files, not Graph). */
+  readonly onUseLocalOneDrive?: (path: string) => void;
 }
 
 type LocalMode = "idle" | "device_pending";
@@ -81,6 +83,10 @@ function paint(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewSta
   } else {
     wrap.append(renderSignInCard(container, deps, state));
   }
+  // Local OneDrive folder fallback (PHASE 3): available regardless of cloud connection state —
+  // it is plain LOCAL filesystem access, clearly labelled, never Graph/cloud.
+  const oneDriveCard = renderLocalOneDriveCard(deps);
+  if (oneDriveCard !== null) wrap.append(oneDriveCard);
   container.append(wrap);
 }
 
@@ -272,6 +278,32 @@ function stopPolling(state: ViewState): void {
     clearInterval(state.pollTimer);
     state.pollTimer = null;
   }
+}
+
+/**
+ * PHASE 3 OneDrive fallback: when the OneDrive client has synced a LOCAL folder on this machine,
+ * offer to open it as a workspace. This is plain local filesystem access (indexed by the existing
+ * local Workspace Knowledge) — explicitly NOT Microsoft Graph/cloud, and never claims to be.
+ */
+function renderLocalOneDriveCard(deps: RenderMsConnectDeps): HTMLElement | null {
+  const local = deps.view.localOneDrive;
+  if (local === undefined || deps.onUseLocalOneDrive === undefined) return null;
+  const onUse = deps.onUseLocalOneDrive;
+  const card = el("section", "ms-card ms-connect__onedrive-local");
+  card.append(el("h3", "ms-section-label", "OneDrive trên máy (cục bộ)"));
+  card.append(
+    el(
+      "p",
+      "ms-connect__onedrive-note",
+      "Truy cập tệp OneDrive đã đồng bộ trong thư mục cục bộ trên máy này — không qua Microsoft Graph/đám mây.",
+    ),
+  );
+  card.append(el("code", "ms-connect__onedrive-path", local.path));
+  const useBtn = el("button", "ms-connect__onedrive-use", "Dùng thư mục OneDrive trên máy") as HTMLButtonElement;
+  useBtn.type = "button";
+  useBtn.addEventListener("click", () => onUse(local.path));
+  card.append(useBtn);
+  return card;
 }
 
 function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {

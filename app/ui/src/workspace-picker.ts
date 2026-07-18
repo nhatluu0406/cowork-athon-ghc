@@ -37,6 +37,12 @@ export interface WorkspacePickerDeps {
 
 export interface WorkspacePickerHandle {
   choose(): Promise<void>;
+  /**
+   * Activate a specific folder path as the workspace (validate + grant + persist + notify), without
+   * opening the native dialog. Used by the MS365 "Dùng thư mục OneDrive trên máy" action so a
+   * detected local folder flows through the exact same grant/onActivated path as a manual pick.
+   */
+  activate(rootPath: string): Promise<void>;
 }
 
 type Status =
@@ -226,5 +232,5 @@ export function mountWorkspacePicker(container: HTMLElement, deps: WorkspacePick
     await refreshRecent();
   })();
 
-  return { choose };
+  return { choose, activate: (rootPath: string) => grant(rootPath) };
 }

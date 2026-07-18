@@ -193,6 +193,11 @@
 .ms-pill--warn { background: #fdf0e3; color: #b3641a; }
 .ms-connect__account { margin: 6px 0 2px; font-size: 13px; color: var(--cghc-text-primary); font-weight: 600; }
 .ms-connect__expiry { margin: 0 0 8px; font-size: 12px; color: var(--cghc-text-secondary); }
+.ms-connect__onedrive-local { margin-top: 12px; }
+.ms-connect__onedrive-note { margin: 4px 0 8px; font-size: 12px; color: var(--cghc-text-secondary); }
+.ms-connect__onedrive-path { display: block; font-size: 12px; color: var(--cghc-text-primary); background: color-mix(in srgb, var(--cghc-text-primary) 6%, transparent); padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; word-break: break-all; }
+.ms-connect__onedrive-use { padding: 8px 14px; border-radius: 8px; border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); font-weight: 600; cursor: pointer; }
+.ms-connect__onedrive-use:hover { background: var(--cghc-accent-hover); }
 .ms-service-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 12px; }
 .ms-service-card { border: 1px solid #eceff3; border-radius: 10px; padding: 12px; }
 .ms-service-card__name { font-size: 13px; font-weight: 600; color: #1a2332; }

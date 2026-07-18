@@ -456,6 +456,8 @@ export interface Ms365ViewData {
   readonly account?: { readonly name?: string; readonly username?: string };
   /** Active token expiry as epoch milliseconds, when known. */
   readonly expiresAtMs?: number;
+  /** Local OneDrive sync folder on this machine (LOCAL filesystem, not Graph/cloud), when present. */
+  readonly localOneDrive?: { readonly path: string; readonly kind: string };
   readonly error?: string;
 }
 
