@@ -60,6 +60,9 @@
 }
 .ms-bubble__name { margin: 0 0 6px; padding-left: 3px; color: var(--cghc-text-muted, #9aa4b2); font-size: 12px; font-weight: 650; letter-spacing: 0.02em; }
 .ms-bubble__text { font-size: 15px; line-height: 1.72; color: var(--cghc-text-primary, #1a2332); white-space: pre-wrap; }
+/* Assistant answers rendered through the shared Markdown pipeline (issue #20) manage their own
+   block whitespace — pre-wrap would double every gap. The shared `.md` rules supply the rest. */
+.ms-bubble__text.md { white-space: normal; }
 
 .ms-bubble--assistant { align-self: flex-start; max-width: min(820px, 92%); }
 .ms-bubble--assistant .ms-bubble__name { display: flex; align-items: center; gap: 6px; width: fit-content; color: color-mix(in srgb, var(--cghc-text-secondary, #4b5565) 88%, var(--cghc-accent, #e85d1a) 12%); }

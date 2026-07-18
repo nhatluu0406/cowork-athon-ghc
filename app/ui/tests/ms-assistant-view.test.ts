@@ -88,8 +88,41 @@ test("connected + messages: renders bubbles with role classes", () => {
   assert.equal(bubbles[0]?.querySelector(".ms-bubble__text")?.textContent, "Task trễ trên Planner");
   assert.equal(bubbles[0]?.querySelector(".ms-bubble__name"), null);
   assert.ok(bubbles[1]?.classList.contains("ms-bubble--assistant"));
-  assert.equal(bubbles[1]?.querySelector(".ms-bubble__text")?.textContent, "Đang tra cứu Planner…");
+  // Assistant text now flows through the shared Markdown renderer (issue #20), which wraps prose in
+  // a <p> (trailing newline from marked) — trim before comparing the plain text.
+  assert.equal(bubbles[1]?.querySelector(".ms-bubble__text")?.textContent?.trim(), "Đang tra cứu Planner…");
   assert.ok(bubbles[1]?.querySelector(".ms-bubble__name")?.textContent?.includes("MS365"));
+});
+
+test("assistant answers render through the shared Markdown pipeline; user text stays plain (#20)", () => {
+  const container = document.createElement("div");
+  const state: MsChatState = {
+    messages: [
+      // A user prompt containing Markdown syntax must NOT be parsed as Markdown.
+      { role: "user", content: "**không phải markdown**" },
+      {
+        role: "assistant",
+        content: "Kết quả **quan trọng**:\n\n| Tên | Số |\n| --- | --- |\n| A | 1 |\n",
+      },
+    ],
+    phase: "idle",
+    sessionId: "sess-1",
+    errorMessage: null,
+  };
+  const chat = fakeChat(state);
+  renderMsAssistant(container, connectedView() as never, baseHandlers(chat));
+  const bubbles = container.querySelectorAll(".ms-bubble");
+
+  const userBody = bubbles[0]?.querySelector(".ms-bubble__text");
+  assert.equal(userBody?.classList.contains("md"), false, "user bubble must stay plain");
+  assert.equal(userBody?.querySelector("strong"), null, "user Markdown must not be parsed");
+  assert.equal(userBody?.textContent, "**không phải markdown**");
+
+  const assistantBody = bubbles[1]?.querySelector(".ms-bubble__text");
+  assert.ok(assistantBody?.classList.contains("md"), "assistant bubble uses the shared .md renderer");
+  assert.ok(assistantBody?.querySelector("strong"), "assistant Markdown emphasis is rendered");
+  assert.ok(assistantBody?.querySelector("table"), "assistant Markdown table is rendered as a real table");
+  assert.ok(assistantBody?.querySelector("th"), "the table has header cells");
 });
 
 test("assistant pending message shows dang xu ly marker", () => {
