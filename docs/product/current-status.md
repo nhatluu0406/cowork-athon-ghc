@@ -15,7 +15,8 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 
 | Capability | Status | Note |
 |---|---|---|
-| Cowork chat | WORKS | Streaming tiến trình, history, bounded context; Skills native OpenCode on-demand. Markdown assistant: bảng GFM có khung/zebra/scroll ngang (#17), renderer chia sẻ dùng chung `.md` cho cả MS365. **@mention** refresh sau mutation/đổi cây (#24). |
+| Cowork chat | WORKS | Streaming tiến trình, history, bounded context; Skills native OpenCode on-demand. Markdown assistant: bảng GFM có khung/zebra/scroll ngang (#17), renderer chia sẻ dùng chung `.md` cho cả MS365. **@mention** refresh sau mutation/đổi cây (#24). Tạo/chuyển cuộc trò chuyện dùng **modal xác nhận commercial** (DOM, không blocking) — sửa lỗi chatbox mất focus sau `window.confirm` gốc (#27). |
+| Agent web access (WebFetch/WebSearch) | INTEGRATED (code+security-review PASS); **live network smoke pending** | `webfetch`/`websearch` mở qua quyền mới **`web_access`** (phân loại **elevated** → luôn hiện thẻ xin phép kể cả chế độ Tự động; Chỉ đọc từ chối), có **SSRF guard trước cổng** (chặn loopback/private/link-local/cloud-metadata + `localhost`/metadata hostname + non-https; webfetch fail-closed khi URL rỗng/thiếu scheme). Independent security review 2026-07-18 tìm + sửa 2 lỗi thật (fail-open target thiếu scheme; bypass hostname dấu chấm cuối). Còn lại trước khi claim WORKS: **một network smoke tương tác** trên bản đóng gói (#29). |
 | Tạo tài liệu .docx | INTEGRATED (code+tests+build PASS); **packaged PO obs pending** | Công cụ agent `create_docx` (#25): agent gọi tool → **PermissionGate** (thẻ Tạo tệp Word) → service dựng **.docx OOXML thật** (docx-js, trong service) từ spec có cấu trúc (title/heading/đoạn/list/bảng), path-safe (chỉ trong workspace, chỉ `.docx`, không macro), size-capped, **verified** (mở lại đúng gói OOXML mới báo thành công). File Work Review ghi nhận create. Trước đây agent chỉ ghi text đổi đuôi → Word không mở được. Unit tests PASS; **packaged/live PO observation pending**. |
 | Workspace | WORKS (Wave 4) | Xem/sửa text+code; PDF (PDFium packaged); Office read-only DOCX/XLSX đa sheet/PPTX high-fidelity; live-refresh + dirty-conflict. Không có Office editor; không đảm bảo mọi file malformed/encrypted. |
 | Provider profiles | WORKS (basic) | DeepSeek preset + custom OpenAI-compatible; verified fingerprint + status bar. Model discovery `GET /models` chưa làm (Wave 3). |
@@ -24,7 +25,7 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 | Auth ON/OFF khởi động | WORKS | Setting **Yêu cầu đăng nhập khi khởi động** (Cấu hình → Chung). **Mặc định BẬT** (hỏi mật khẩu — giữ hành vi hiện tại; fresh + existing installs đều ON đến khi user tự tắt). TẮT = mở thẳng Cowork qua **auto-unlock gắn thiết bị** (Electron safeStorage/DPAPI): wrap thứ hai của master key trong `app_meta`, deviceSecret seal bằng safeStorage ở `<appData>/auto-unlock.seal`; **không lưu key thô, không dùng Windows Credential Manager**, vault vẫn mã hoá, `vault_keys` (password wrap) không bị đụng → recovery bằng mật khẩu luôn còn. Independent security review (2026-07-18, `review/auth-auto-unlock-security`) PASS: envelope/seal đều bất khả dụng nếu chỉ copy DB hoặc chỉ copy seal; interruption giữa envelope↔seal có rollback (test `startup-auth-mode`); packaged smoke ON+OFF + **seal hỏng → fallback mật khẩu (không brick vault)** + **bật lại ON → hiện login, mật khẩu vẫn dùng được** (audit 41/41). |
 | Conversations | WORKS | SQLite (Wave 0B); user-visible messages + durable turn summaries. |
 | Skills | WORKS (hub) | Rail `Kỹ năng & MCP`; catalog là hệ Skill duy nhất; extension registry deprecated. Bật/tắt + xóa **ngay trên từng dòng** danh sách (#18; built-in read-only không có xóa). |
-| MCP | WORKS (Phase 1) | SQLite config + vault header secrets; stdio/URL; no OAuth; reachability adapter (`toolCount` 0). |
+| MCP | WORKS (Phase 1 UI); **agent-invocation open (#30)** | SQLite config + vault header secrets; stdio/URL; no OAuth; reachability adapter (`toolCount` 0). Panel là **catalog compact giống danh sách Skill** (#28): toggle Bật/Tắt **ngoài hàng** (role=switch), menu tràn (Sửa / Kiểm tra / Xóa), **health badge** (Sẵn sàng/Không kết nối/Chưa kiểm tra/Đang tắt), tool count, last-checked, combobox preset stdio dựng sẵn; custom stdio/URL sửa được; secret chỉ trong vault. Agent **chưa gọi** được tool MCP → #30 (known-limitations, đã research hướng fix native OpenCode, defer tới khi verify an toàn + observe invoke thật). |
 | Permission + File Work Review | WORKS | Hỏi trước / Tự động / Chỉ đọc; mutation phải có verified tool result. |
 | Inspector | WORKS (Phase 1) | Kế hoạch/Hoạt động/Tệp từ normalized EV events; PO-observed 2026-07-17. |
 | Logging/telemetry | WORKS (Wave 6) | Local rotating redacted logs + SQLite counters; no network egress; PO-observed 2026-07-17. |
@@ -45,6 +46,8 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 - Renderer không truy cập DB/secret bytes; chỉ qua typed preload + capability IPC.
 - Outbound qua SSRF policy (HTTPS-only; private/loopback/link-local/metadata blocked). Dev opt-in:
   `COWORK_GHC_DEV_ALLOW_LOOPBACK_HTTP`, `COWORK_GHC_E2E_MOCK_LLM_BASE_URL`.
+- Agent web access (`web_access`) là quyền **elevated**: luôn qua PermissionGate (thẻ xin phép) + SSRF
+  guard trước cổng; không cho fetch URL tuỳ ý, không rò payload thô/thinking. Xem #29.
 
 ## Đính chính so với docs cũ
 

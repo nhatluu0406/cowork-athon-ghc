@@ -65,7 +65,8 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   connect, preview kind) là mở rộng tương lai (bảng đếm là name→value dạng generic, không cần migration
   mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
-  (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
+  (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork). UI đã nâng lên catalog compact (#28,
+  xem mục "Sửa lỗi đợt issues" bên dưới); **agent chưa gọi được tool MCP** → theo dõi ở #30.
 - **Surface `Code` (Hybrid, ADR 0013 — Phase 1):** **renderer surface dùng chung backend Cowork**
   (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session — không backend/session/
   runtime riêng). Code Phase 1 đã có editor nhiều tab **sửa + lưu** (Ctrl+S, `PUT /v1/workspace/
@@ -233,6 +234,41 @@ production authorization boundary.
 
 ## Sửa lỗi đợt issues (2026-07-18) — giới hạn còn lại
 
+- **Chatbox disable sau khi tạo/chuyển cuộc trò chuyện (#27, FIXED):** root cause = nút tạo/chuyển
+  dùng `window.confirm` gốc; trên Electron/Chromium, sau khi `confirm()` đóng, ô soạn
+  `contentEditable` mất khả năng focus → "chatbox disable không nhập được". Fix: **modal xác nhận
+  commercial dùng chung** (DOM, không blocking; Hủy / hành động chính; Esc/backdrop = hủy; Enter =
+  xác nhận; focus nút chính rồi trả focus về composer; light/dark). State reset + `.focus()` hoạt
+  động bình thường, không tạo cuộc trò chuyện trùng. Đã có test.
+- **UI MCP (#28, FIXED):** panel MCP redesign thành **hàng compact giống danh sách Skill** — toggle
+  Bật/Tắt **ngoài hàng** (role=switch), menu tràn (Sửa / Kiểm tra / Xóa), health badge
+  (Sẵn sàng/Không kết nối/Chưa kiểm tra/Đang tắt), tool count, last-checked; **combobox preset stdio
+  dựng sẵn** (filesystem/git/fetch/memory/sequential-thinking/everything); stdio tùy chỉnh + URL vẫn
+  sửa được. Secret vẫn **chỉ trong vault** (UI chỉ thấy `hasHeaderSecret`). Đây là phần **UI**; khả
+  năng agent thực sự gọi tool MCP vẫn theo dõi ở #30 (chưa fix). Đã có test.
+- **Agent web access — WebFetch/WebSearch (#29, core FIXED, OPEN chờ smoke):** root cause =
+  `LIVE_SESSION_PERMISSION_POLICY` **deny cứng** `webfetch`/`websearch` → agent không bao giờ gọi
+  được (đổi sang `ask` vẫn fail vì proxy fail-closed cho tool chưa map). Fix: định tuyến qua quyền
+  mới **`web_access`** (phân loại **elevated** → luôn hiện thẻ xin phép kể cả chế độ Tự động; Chỉ đọc
+  từ chối), kèm **SSRF guard trước cổng** (`web-access-guard.ts`, FETCH-STRICT/fail-closed: chặn
+  loopback/private/link-local/cloud-metadata + `localhost`/`metadata*` hostname + non-https; webfetch
+  fail-closed khi URL rỗng/thiếu scheme; websearch query đưa vào thẻ dưới dạng text đã cắt, không tạo
+  URL giả). `webfetch`/`websearch` = `ask` (không bao giờ `allow`). **Independent security review
+  2026-07-18** tìm 2 lỗi thật đã sửa: (1) fail-OPEN critical — guard cũ trả `allowed:true` +
+  placeholder cho mọi chuỗi thiếu scheme (kể cả `127.0.0.1:8080/admin`), bỏ qua SSRF check; (2)
+  bypass hostname có dấu chấm cuối (`localhost.`/`metadata.google.internal.`). **Còn lại trước khi
+  close:** **một network smoke tương tác thật** trên bản đóng gói (webfetch tới URL công khai → thẻ
+  xin phép → agent nhận nội dung) — sẽ chạy trong đợt audit đóng gói. Issue **để mở**.
+- **MCP agent-invocation (#30, OPEN, đang xử lý):** xác nhận đúng tiêu đề — hiện **chỉ CRUD + probe
+  reachability** (adapter Phase 1), `toolCount` luôn 0, agent **chưa gọi** được tool MCP. Đã research
+  hướng fix đúng: nạp MCP server đã bật vào **khối `mcp` native của OpenCode** (`opencode.json`:
+  local stdio `{type:"local",command:[...]}` / remote `{type:"remote",url,headers}`), để OpenCode tự
+  kết nối + expose tool + invoke; lấy tool count/health thật qua `GET /mcp` + `/experimental/tool/ids`.
+  **Chưa triển khai** vì cần verify an toàn trước: (1) OpenCode 1.18.1 có nội suy `{env:VAR}` trong
+  `mcp.headers` không — nếu không, header secret có nguy cơ nằm plaintext trong `opencode.json` (vi
+  phạm bất biến no-plaintext-secret; sẽ cần forbidden-secret write guard); (2) **quan sát invoke thật**
+  trên bản đóng gói với một MCP server thật. **Không claim WORKS** tới khi tool count thật > 0 và agent
+  gọi được tool. Defer, issue để mở.
 - **Dispatch — không gửi được từ điện thoại (#21, PARTIAL, defer):** nguyên nhân gốc là ràng buộc
   session, không phải bug UI. PWA điện thoại chỉ POST được vào **một runtime session đang sống**
   (`/api/sessions/{id}/message` → `/v1/session/{id}/message`); OpenCode session **single-turn** nên
