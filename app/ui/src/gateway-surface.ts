@@ -94,6 +94,8 @@ function healthLabel(health: GatewayHealth): string {
       return "Suy giảm";
     case "down":
       return "Ngừng hoạt động";
+    case "off":
+      return "Đang tắt";
     default:
       return "Không rõ";
   }

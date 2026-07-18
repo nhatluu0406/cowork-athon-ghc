@@ -225,7 +225,19 @@ test("stale traffic forwarded while OFF is NOT written to the request log", asyn
       label: "Test upstream",
       credentialAccount: credentialRef.account!,
     });
+    // Master switch still OFF (the shipped default): an account is linked and the proxy is bound,
+    // but no traffic is observed/routed — health must read "off", NEVER "healthy" (honest signal).
+    assert.equal(
+      composed.deps.gatewayService.getStatus().health,
+      "off",
+      "a linked account with the master switch OFF must report health 'off', not 'healthy'",
+    );
     await composed.deps.gatewayService.setEnabled(true);
+    assert.equal(
+      composed.deps.gatewayService.getStatus().health,
+      "healthy",
+      "ON with a linked account and a bound proxy must report health 'healthy'",
+    );
 
     const proxyBaseUrl = composed.deps.gatewayService.getStatus().serverAddress;
     const logsBeforeOn = composed.deps.gatewayService.listLogs().length;
@@ -241,6 +253,11 @@ test("stale traffic forwarded while OFF is NOT written to the request log", asyn
     assert.equal(typeof loggedEntry?.totalMs, "number", "the real total-duration measurement must be persisted");
 
     await composed.deps.gatewayService.setEnabled(false);
+    assert.equal(
+      composed.deps.gatewayService.getStatus().health,
+      "off",
+      "turning the master switch OFF must return health to 'off'",
+    );
     const logsBeforeOff = composed.deps.gatewayService.listLogs().length;
     const res = await fetch(`${proxyBaseUrl}/chat/completions`, {
       method: "POST",

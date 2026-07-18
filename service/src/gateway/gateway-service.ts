@@ -259,14 +259,19 @@ export function createGatewayService(options: GatewayServiceOptions): GatewaySer
         ...a,
         isActive: activeByProvider[a.providerId] === a.id,
       }));
-      // Proxy unavailable overrides account count: a linked account is meaningless if there is
-      // nowhere for its traffic to be forwarded (the `serverWarning` banner in the UI shows the
-      // same signal — this badge must never contradict it by reporting "healthy" underneath).
-      const health: GatewayStatus["health"] = !isProxyAvailable()
-        ? "down"
-        : accounts.length > 0
-          ? "healthy"
-          : "unknown";
+      // Master switch OFF (the shipped default) takes precedence: the gateway is pure bookkeeping
+      // then — no traffic is observed, logged, or routed — so it must never claim "healthy". Only
+      // once ON do proxy availability and account count decide the real health. Proxy unavailable
+      // overrides account count: a linked account is meaningless if there is nowhere for its
+      // traffic to be forwarded (the `serverWarning` banner in the UI shows the same signal — this
+      // badge must never contradict it by reporting "healthy" underneath).
+      const health: GatewayStatus["health"] = !store.isEnabled()
+        ? "off"
+        : !isProxyAvailable()
+          ? "down"
+          : accounts.length > 0
+            ? "healthy"
+            : "unknown";
       return {
         health,
         accounts,

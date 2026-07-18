@@ -1,6 +1,6 @@
 import type { CredentialRef } from "@cowork-ghc/contracts";
 
-export type GatewayHealth = "unknown" | "healthy" | "degraded" | "down";
+export type GatewayHealth = "off" | "unknown" | "healthy" | "degraded" | "down";
 
 export interface GatewayAccount {
   readonly id: string;
