@@ -49,6 +49,12 @@ vendor/*.zip
 vendor/**/*.zip
 vendor/postgresql-*/
 vendor/neo4j-*/
+# Build-time vendor trees (see electron-builder.yml extraResources + docs/architecture/adr-0010)
+vendors/postgresql/
+vendors/neo4j/
+vendors/jre/
+# BGE-M3 int8 ONNX model (~130 MB) — fetch with `npm run fetch:model` before packaging.
+vendors/bge-m3/
 
 # --- Runtime / process state (PID, port, temp, logs) ---
 .runtime/

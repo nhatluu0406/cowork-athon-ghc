@@ -63,6 +63,7 @@ export interface LocalUserRepository {
   getFirst(): LocalUserRecord | null;
   insert(user: LocalUserRecord): void;
   count(): number;
+  updatePassword(userId: string, newSalt: Buffer, newHash: Buffer, updatedAt: string): void;
 }
 
 export interface VaultKeyRecord {
@@ -78,4 +79,8 @@ export interface VaultKeyRecord {
 export interface VaultKeyRepository {
   getByUserId(userId: string): VaultKeyRecord | null;
   insert(record: VaultKeyRecord): void;
+  updateByUserId(
+    userId: string,
+    update: Pick<VaultKeyRecord, "kdfSalt" | "wrappedMasterKey" | "wrapNonce" | "wrapTag">,
+  ): void;
 }

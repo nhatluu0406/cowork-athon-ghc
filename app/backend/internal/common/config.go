@@ -45,7 +45,7 @@ func LoadConfig() (*Config, error) {
 		M365ClientID:      getEnv("M365_CLIENT_ID", ""),
 		M365ClientSecret:  getEnv("M365_CLIENT_SECRET", ""),
 		M365AuthMode:      getEnv("M365_AUTH_MODE", "entra_id"),
-		LLMModel:          getEnv("LLM_MODEL", "gpt-4o-mini"),
+		LLMModel:          getEnv("LLM_MODEL", "claude-haiku-4-5-20251001"),
 		LLMEmbedModel:     getEnv("LLM_EMBED_MODEL", "text-embedding-3-small"),
 		LLMSvcAddr:        getEnv("LLMSVC_ADDR", ""),           // T175: optional gRPC address
 		LLMSvcTLS:         getEnv("LLMSVC_TLS", "false") == "true",

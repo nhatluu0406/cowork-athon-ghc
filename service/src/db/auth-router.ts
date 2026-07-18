@@ -11,6 +11,7 @@ export const AUTH_STATUS_PATH = "/v1/auth/status";
 export const AUTH_SETUP_PATH = "/v1/auth/setup";
 export const AUTH_UNLOCK_PATH = "/v1/auth/unlock";
 export const AUTH_LOCK_PATH = "/v1/auth/lock";
+export const AUTH_CHANGE_PASSWORD_PATH = "/v1/auth/change-password";
 export const AUTH_AUTO_UNLOCK_STATUS_PATH = "/v1/auth/auto-unlock";
 export const AUTH_AUTO_UNLOCK_ENABLE_PATH = "/v1/auth/auto-unlock/enable";
 export const AUTH_AUTO_UNLOCK_DISABLE_PATH = "/v1/auth/auto-unlock/disable";
@@ -142,6 +143,17 @@ export function createAuthRouter(options: AuthRouterOptions): BoundaryRouter {
     }
   };
 
+  const changePassword = (ctx: RouteContext): RouteResult => {
+    try {
+      const currentPassword = requireField(ctx.body, "currentPassword");
+      const newPassword = requireField(ctx.body, "newPassword");
+      auth.changePassword(currentPassword, newPassword);
+      return { status: 200, data: { ok: true } };
+    } catch (err) {
+      rethrowAuth(err);
+    }
+  };
+
   return {
     name: "auth",
     routes: [
@@ -149,6 +161,7 @@ export function createAuthRouter(options: AuthRouterOptions): BoundaryRouter {
       { method: "POST", path: AUTH_SETUP_PATH, handler: setup },
       { method: "POST", path: AUTH_UNLOCK_PATH, handler: unlock },
       { method: "POST", path: AUTH_LOCK_PATH, handler: lock },
+      { method: "POST", path: AUTH_CHANGE_PASSWORD_PATH, handler: changePassword },
       { method: "GET", path: AUTH_AUTO_UNLOCK_STATUS_PATH, handler: autoUnlockStatus },
       { method: "POST", path: AUTH_AUTO_UNLOCK_ENABLE_PATH, handler: enableAutoUnlock },
       { method: "POST", path: AUTH_AUTO_UNLOCK_DISABLE_PATH, handler: disableAutoUnlock },

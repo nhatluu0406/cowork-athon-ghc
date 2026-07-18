@@ -228,6 +228,16 @@ CREATE TABLE IF NOT EXISTS knowledge_edges (
 CREATE INDEX IF NOT EXISTS idx_knowledge_edges_ws ON knowledge_edges(workspace_root);
 `,
   },
+  {
+    // BGE-M3 int8 embedding column — nullable so existing chunks stay valid; populated
+    // incrementally by the indexer when the llm-svc embedding backend is available.
+    // 1024-dimensional float32 vectors stored as little-endian BLOB (1024 * 4 = 4096 bytes).
+    id: 5,
+    name: "knowledge_chunks_embedding",
+    sql: `
+ALTER TABLE knowledge_chunks ADD COLUMN embedding BLOB;
+`,
+  },
 ];
 
 export function appliedMigrationIds(db: SqliteDatabase): readonly number[] {

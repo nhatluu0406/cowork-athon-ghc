@@ -1,6 +1,6 @@
 // service.rs: LlmSvc trait implementation for all RPCs
 
-use crate::cloud_proxy::{cosine_similarity, CloudProxyClient};
+use crate::cloud_proxy::{cosine_similarity, CloudProxyClient, EmbedProxyClient};
 use crate::config::Config;
 use crate::llmsvc::{
     llm_svc_server::LlmSvc, CompressRequest, CompressResponse, Entity,
@@ -30,6 +30,8 @@ pub struct LlmSvcImpl {
     config: Config,
     router: Router,
     cloud_proxy: Option<CloudProxyClient>,
+    /// Separate OpenAI-compatible embedding client (used when cloud_proxy is Anthropic).
+    embed_proxy: Option<EmbedProxyClient>,
 }
 
 impl LlmSvcImpl {
@@ -37,19 +39,21 @@ impl LlmSvcImpl {
     pub async fn new(config: Config) -> anyhow::Result<Self> {
         let has_local_models = true; // TODO: Check if local models are actually available
         let cloud_proxy = CloudProxyClient::from_env().ok().flatten();
+        let embed_proxy = EmbedProxyClient::from_env().ok().flatten();
         let has_cloud_config = cloud_proxy.is_some();
 
         let router = Router::new(config.nlp_mode, has_local_models, has_cloud_config);
 
         info!(
-            "LlmSvcImpl initialized: mode={:?}, has_local={}, has_cloud={}",
-            config.nlp_mode, has_local_models, has_cloud_config
+            "LlmSvcImpl initialized: mode={:?}, has_local={}, has_cloud={}, has_embed_proxy={}",
+            config.nlp_mode, has_local_models, has_cloud_config, embed_proxy.is_some()
         );
 
         Ok(LlmSvcImpl {
             config,
             router,
             cloud_proxy,
+            embed_proxy,
         })
     }
 }
@@ -68,29 +72,97 @@ impl LlmSvc for LlmSvcImpl {
             if req.model_name.is_empty() { "default" } else { req.model_name.as_str() }
         );
 
-        // Route decision: embed should prefer local ONNX, fallback to cloud
+        // Route decision: embed should prefer local ONNX, fallback to cloud.
+        // When cloud_proxy is Anthropic (no embedding API), use embed_proxy if configured,
+        // else fall through to local ONNX.
         match self.router.route("embed") {
             RouteDecision::Cloud => {
-                if let Some(proxy) = &self.cloud_proxy {
-                    match proxy.embed(&req.texts, Some(&req.model_name)).await {
+                // Try dedicated embed proxy first (works with any primary LLM provider)
+                if let Some(embed_proxy) = &self.embed_proxy {
+                    let model = if req.model_name.is_empty() { "text-embedding-3-small" } else { &req.model_name };
+                    match embed_proxy.embed(&req.texts, model).await {
                         Ok(vectors) => {
                             let dimensions = vectors.first().map(|v| v.len()).unwrap_or(0) as i32;
-                            let embeddings =
-                                vectors.iter().map(|v| encode_embedding(v)).collect();
-                            Ok(Response::new(EmbedResponse {
+                            let embeddings = vectors.iter().map(|v| encode_embedding(v)).collect();
+                            return Ok(Response::new(EmbedResponse {
                                 embeddings,
                                 model_name: req.model_name,
                                 dimensions,
                                 error: String::new(),
-                            }))
+                            }));
                         }
                         Err(e) => {
-                            warn!("Cloud embedding failed: {}", e);
-                            Err(Status::internal(format!("Embedding failed: {}", e)))
+                            warn!("Embed proxy failed, falling back to local: {}", e);
+                            // Fall through to local ONNX below
                         }
                     }
+                }
+                // Use cloud_proxy embed only when NOT Anthropic (Anthropic has no embedding API)
+                if let Some(proxy) = &self.cloud_proxy {
+                    if !proxy.is_anthropic() {
+                        match proxy.embed(&req.texts, Some(&req.model_name)).await {
+                            Ok(vectors) => {
+                                let dimensions = vectors.first().map(|v| v.len()).unwrap_or(0) as i32;
+                                let embeddings =
+                                    vectors.iter().map(|v| encode_embedding(v)).collect();
+                                return Ok(Response::new(EmbedResponse {
+                                    embeddings,
+                                    model_name: req.model_name,
+                                    dimensions,
+                                    error: String::new(),
+                                }));
+                            }
+                            Err(e) => {
+                                warn!("Cloud embedding failed: {}", e);
+                                return Err(Status::internal(format!("Embedding failed: {}", e)));
+                            }
+                        }
+                    }
+                }
+                // Anthropic + no embed_proxy: degrade to local ONNX
+                warn!("No embedding provider configured (Anthropic has no embedding API); falling back to local ONNX");
+                // Fall through to local ONNX path by re-routing
+                let model = if req.model_name.is_empty() {
+                    self.config
+                        .models_registry
+                        .get_default(crate::models::ModelKind::Embedding)
                 } else {
-                    Err(Status::unavailable("No cloud proxy configured"))
+                    self.config.models_registry.get(&req.model_name)
+                };
+                let Some(model) = model else {
+                    return Err(Status::failed_precondition(
+                        "No local embedding model configured. Set EMBED_API_BASE_URL+EMBED_API_KEY for cloud embeddings, or configure a local ONNX model.",
+                    ));
+                };
+                if model.format != crate::models::ModelFormat::Onnx {
+                    return Err(Status::failed_precondition(format!(
+                        "Model '{}' is not ONNX; cannot use for local embedding fallback",
+                        model.name
+                    )));
+                }
+                let model_dir = model.path.clone();
+                let texts: Vec<String> = req.texts.clone();
+                let result = tokio::task::spawn_blocking(move || {
+                    let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+                    crate::models::onnx::embed(&model_dir, &text_refs)
+                })
+                .await
+                .map_err(|e| Status::internal(format!("embedding task panicked: {}", e)))?;
+                match result {
+                    Ok(vectors) => {
+                        let dimensions = vectors.first().map(|v| v.len()).unwrap_or(0) as i32;
+                        let embeddings = vectors.iter().map(|v| encode_embedding(v)).collect();
+                        Ok(Response::new(EmbedResponse {
+                            embeddings,
+                            model_name: model.name,
+                            dimensions,
+                            error: String::new(),
+                        }))
+                    }
+                    Err(e) => {
+                        warn!("Local ONNX embedding failed: {}", e);
+                        Err(Status::internal(format!("Local embedding failed: {}", e)))
+                    }
                 }
             }
             RouteDecision::Local => {

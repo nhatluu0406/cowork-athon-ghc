@@ -64,6 +64,7 @@ import {
 } from "../remote-gateway/discord/index.js";
 import { createLiveBranchRunner } from "../dispatchers/index.js";
 import { RuntimeNotAttachedError } from "./tier2-seams.js";
+import { createM365KGCredentialsRouter } from "../knowledge/m365kg-credentials-router.js";
 
 /**
  * The narrow supervisor surface the live wire consumes (satisfied by {@link
@@ -184,8 +185,20 @@ export async function startLiveCoworkService(
     ? createPairingRegistry()
     : undefined;
   let remoteGatewayInfo: RemoteGatewayInfo | null = null;
-  const extraRouters =
-    remotePairing !== undefined
+
+  // M365KG credentials router: late-binding closures — deps are null until createCoworkService
+  // returns, but the socket only opens in composed.start(), so every real request sees live deps.
+  let m365kgCredServiceRef: CoworkServiceDeps["credentialService"] | null = null;
+  let m365kgProfileStoreRef: CoworkServiceDeps["providerProfileStore"] | null = null;
+  let m365kgSettingsStoreRef: CoworkServiceDeps["settingsStore"] | null = null;
+  const m365kgCredentialsRouter = createM365KGCredentialsRouter(
+    () => m365kgCredServiceRef,
+    () => m365kgProfileStoreRef,
+    () => m365kgSettingsStoreRef,
+  );
+
+  const extraRouters = [
+    ...(remotePairing !== undefined
       ? [
           createRemoteRouter({
             pairing: remotePairing,
@@ -195,7 +208,9 @@ export async function startLiveCoworkService(
             },
           }),
         ]
-      : [];
+      : []),
+    m365kgCredentialsRouter,
+  ];
 
   // Real dispatch branch runner (Task 5.2 wiring): one fan-out branch = one REAL child session
   // through the SAME session service, prompt seam, and permission gate as the desktop UI. The
@@ -238,7 +253,7 @@ export async function startLiveCoworkService(
   const composed = await createCoworkService({
     ...(options.service ?? {}),
     ...(options.now !== undefined ? { now: options.now } : {}),
-    ...(extraRouters.length > 0 ? { extraRouters } : {}),
+    extraRouters,
     runtimeHealth: supervisor,
     sessionStore,
     runtimeReply,
@@ -247,6 +262,12 @@ export async function startLiveCoworkService(
     branchRunner,
   });
   liveDeps = composed.deps;
+
+  // Bind late-binding M365KG credentials router deps now that the service is assembled.
+  // The socket opens in composed.start() below — all requests see the real deps.
+  m365kgCredServiceRef = composed.deps.credentialService;
+  m365kgProfileStoreRef = composed.deps.providerProfileStore;
+  m365kgSettingsStoreRef = composed.deps.settingsStore;
 
   const workspaceGrant = grantWorkspace({ rootPath: workspaceId });
   const permissionProxy = composed.deps.buildToolPermissionProxy(createWorkspaceGuard(workspaceGrant));

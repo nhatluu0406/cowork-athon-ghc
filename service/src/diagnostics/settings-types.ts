@@ -20,6 +20,9 @@ export const SETTINGS_SCHEMA_VERSION = 3;
 /** UI theme preference. Non-secret. */
 export type ThemePreference = "system" | "light" | "dark";
 
+/** Embedding backend mode: "cloud" uses the provider's embedding API; "local" uses the shipped BGE-M3 ONNX model. */
+export type EmbeddingMode = "cloud" | "local";
+
 /** General (non-provider) settings. All non-secret. */
 export interface GeneralSettings {
   readonly theme: ThemePreference;
@@ -36,6 +39,17 @@ export interface GeneralSettings {
    * this (it owns safeStorage); the toggle is refused when secure auto-unlock is unavailable.
    */
   readonly requireLoginOnStartup: boolean;
+  /**
+   * Embedding backend: "cloud" = use the provider's embedding API (default, e.g. text-embedding-3-small);
+   * "local" = use the shipped BGE-M3 int8 ONNX model (requires `npm run fetch:model` before packaging).
+   */
+  readonly embeddingMode: EmbeddingMode;
+  /**
+   * Model ID used for embedding. For cloud mode this is passed as LLM_EMBED_MODEL to the Go backend
+   * (e.g. "text-embedding-3-small"). For local mode this is the llm-svc model name (e.g. "bge-m3-int8").
+   * Non-secret — it is a model identifier, not a key.
+   */
+  readonly embeddingModelId: string;
 }
 
 /**
@@ -115,6 +129,8 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = Object.freeze({
   // Safe canonical default: existing + fresh installs require the password at startup until the user
   // explicitly turns it off (documented in current-status). Preserves current behavior.
   requireLoginOnStartup: true,
+  embeddingMode: "cloud",
+  embeddingModelId: "text-embedding-3-small",
 });
 
 /** A fresh, valid settings document. Used on first run and as the SD5 safe default. */

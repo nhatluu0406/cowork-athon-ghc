@@ -25,9 +25,17 @@ pub struct Config {
     #[allow(dead_code)]
     pub llm_api_key: Option<String>,
 
-    /// llm_model: Cloud model name (e.g., "gpt-4o-mini")
+    /// llm_model: Cloud model name (default: "claude-haiku-4-5-20251001")
     #[allow(dead_code)]
     pub llm_model: String,
+
+    /// embed_api_base_url: Separate OpenAI-compatible embedding endpoint (for when primary LLM is Anthropic)
+    #[allow(dead_code)]
+    pub embed_api_base_url: Option<String>,
+
+    /// embed_api_key: API key for the separate embedding endpoint
+    #[allow(dead_code)]
+    pub embed_api_key: Option<String>,
 
     /// brain_local_provider: Local model identifier (modes 2/3)
     #[allow(dead_code)]
@@ -62,10 +70,25 @@ impl Config {
         let nlp_mode = NlpMode::from_env(&nlp_mode_str)
             .map_err(|e| anyhow!("Invalid NLP_MODE: {}", e))?;
 
-        let llm_api_base_url = std::env::var("LLM_API_BASE_URL").ok();
-        let llm_api_key = std::env::var("LLM_API_KEY").ok();
+        // Default to Anthropic endpoint when ANTHROPIC_API_KEY is set but no base URL specified
+        let llm_api_base_url = std::env::var("LLM_API_BASE_URL")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| {
+                if std::env::var("ANTHROPIC_API_KEY").is_ok() {
+                    Some("https://api.anthropic.com".to_string())
+                } else {
+                    None
+                }
+            });
+        let llm_api_key = std::env::var("LLM_API_KEY")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok().filter(|s| !s.is_empty()));
         let llm_model = std::env::var("LLM_MODEL")
-            .unwrap_or_else(|_| "gpt-4o-mini".to_string());
+            .unwrap_or_else(|_| "claude-haiku-4-5-20251001".to_string());
+        let embed_api_base_url = std::env::var("EMBED_API_BASE_URL").ok().filter(|s| !s.is_empty());
+        let embed_api_key = std::env::var("EMBED_API_KEY").ok().filter(|s| !s.is_empty());
 
         let brain_local_provider = std::env::var("BRAIN_LOCAL_PROVIDER")
             .unwrap_or_else(|_| "qwen3-8b-q4".to_string());
@@ -96,6 +119,8 @@ impl Config {
             llm_api_base_url,
             llm_api_key,
             llm_model,
+            embed_api_base_url,
+            embed_api_key,
             brain_local_provider,
             brain_fallback_to_cloud,
             models,
@@ -264,6 +289,8 @@ mod tests {
             llm_api_base_url: None,
             llm_api_key: None,
             llm_model: "test-model".to_string(),
+            embed_api_base_url: None,
+            embed_api_key: None,
             brain_local_provider: "test".to_string(),
             brain_fallback_to_cloud: true,
             models: initial_configs,

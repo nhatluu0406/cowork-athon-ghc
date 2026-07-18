@@ -16,7 +16,12 @@ import { getShellBridge } from "./bridge.js";
 export interface SettingsViewDeps {
   readonly client: Pick<
     ServiceClient,
-    "getSettings" | "updateGeneral" | "getDiagnostics" | "clearDiagnostics" | "exportDiagnostics"
+    | "getSettings"
+    | "updateGeneral"
+    | "getDiagnostics"
+    | "clearDiagnostics"
+    | "exportDiagnostics"
+    | "authChangePassword"
   >;
 }
 
@@ -189,9 +194,16 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
       "Bảo mật",
       "Kiểm soát việc hỏi mật khẩu mỗi khi mở ứng dụng.",
     );
-    security.body.append(authToggleRow(view.general.requireLoginOnStartup));
+    security.body.append(authToggleRow(view.general.requireLoginOnStartup), changePasswordRow());
 
-    generalBox.append(appearance.root, security.root, diagnostics.root);
+    // --- Embedding: local (BGE-M3 ONNX) vs cloud (provider embedding API). ---
+    const embedding = settingSection(
+      "Embedding",
+      "Chọn backend tạo vector embedding: cloud dùng API nhà cung cấp; local dùng model BGE-M3 int8 tích hợp sẵn.",
+    );
+    embedding.body.append(embeddingSection(view.general.embeddingMode, view.general.embeddingModelId));
+
+    generalBox.append(appearance.root, security.root, embedding.root, diagnostics.root);
     void refreshDiagnostics(diagnosticsPanel);
   }
 
@@ -217,6 +229,100 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
    * current password and delegates the safeStorage work to the shell (setStartupAuthMode), reverting
    * the switch on any failure. `current` tracks the last-confirmed state for honest reverts.
    */
+  function changePasswordRow(): HTMLElement {
+    const wrapper = el("div", "settings-change-password");
+    let open = false;
+    const toggle = el("button", "settings-change-password__toggle", "Đổi mật khẩu") as HTMLButtonElement;
+    toggle.type = "button";
+
+    const form = el("form", "settings-change-password__form");
+    form.hidden = true;
+
+    const mkField = (labelText: string, id: string, autocomplete: AutoFill): HTMLInputElement => {
+      const lbl = el("label", "settings-change-password__label", labelText) as HTMLLabelElement;
+      lbl.htmlFor = id;
+      const inp = el("input", "settings-change-password__input app-lock__input") as HTMLInputElement;
+      inp.type = "password";
+      inp.id = id;
+      inp.autocomplete = autocomplete;
+      inp.required = true;
+      inp.minLength = 8;
+      const wrap = el("div", "settings-change-password__field");
+      wrap.append(lbl, inp);
+      form.append(wrap);
+      return inp;
+    };
+
+    const currentInp = mkField("Mật khẩu hiện tại", "chg-current", "current-password");
+    const newInp = mkField("Mật khẩu mới (≥ 8 ký tự)", "chg-new", "new-password");
+    const confirmInp = mkField("Xác nhận mật khẩu mới", "chg-confirm", "new-password");
+
+    const errMsg = el("p", "settings-change-password__error");
+    errMsg.setAttribute("role", "alert");
+    errMsg.hidden = true;
+
+    const actions = el("div", "settings-change-password__actions");
+    const submitBtn = el("button", "settings-change-password__submit app-lock__btn", "Đổi mật khẩu") as HTMLButtonElement;
+    submitBtn.type = "submit";
+    const cancelBtn = el("button", "settings-change-password__cancel", "Huỷ") as HTMLButtonElement;
+    cancelBtn.type = "button";
+    actions.append(submitBtn, cancelBtn);
+    form.append(errMsg, actions);
+
+    const showErr = (msg: string): void => {
+      errMsg.textContent = msg;
+      errMsg.hidden = false;
+    };
+    const clearErr = (): void => { errMsg.hidden = true; errMsg.textContent = ""; };
+
+    toggle.addEventListener("click", () => {
+      open = !open;
+      form.hidden = !open;
+      toggle.textContent = open ? "Ẩn form đổi mật khẩu" : "Đổi mật khẩu";
+      clearErr();
+      if (open) currentInp.focus();
+    });
+
+    cancelBtn.addEventListener("click", () => {
+      open = false;
+      form.hidden = true;
+      form.reset();
+      clearErr();
+      toggle.textContent = "Đổi mật khẩu";
+    });
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      clearErr();
+      if (newInp.value !== confirmInp.value) {
+        showErr("Mật khẩu mới và xác nhận không khớp.");
+        confirmInp.focus();
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Đang đổi…";
+      void (async () => {
+        try {
+          await deps.client.authChangePassword(currentInp.value, newInp.value);
+          open = false;
+          form.hidden = true;
+          form.reset();
+          toggle.textContent = "Đổi mật khẩu";
+          setStatus("Đã đổi mật khẩu thành công.");
+          window.setTimeout(() => setStatus(""), 2500);
+        } catch (error) {
+          showErr(error instanceof Error ? error.message : "Không đổi được mật khẩu.");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Đổi mật khẩu";
+        }
+      })();
+    });
+
+    wrapper.append(toggle, form);
+    return wrapper;
+  }
+
   function authToggleRow(initial: boolean): HTMLElement {
     let current = initial;
     const row = el("label", "settings-switch-row");
@@ -267,6 +373,74 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
     });
     row.append(text, input, visual);
     return row;
+  }
+
+  function embeddingSection(initialMode: "cloud" | "local", initialModelId: string): HTMLElement {
+    const wrapper = el("div", "settings-embedding");
+    let mode = initialMode;
+    let modelId = initialModelId;
+
+    const cloudBtn = el("button", "settings-embedding__mode-btn", "Cloud") as HTMLButtonElement;
+    cloudBtn.type = "button";
+    const localBtn = el("button", "settings-embedding__mode-btn", "Local (BGE-M3)") as HTMLButtonElement;
+    localBtn.type = "button";
+
+    const modeGroup = el("div", "settings-embedding__mode-group");
+    modeGroup.setAttribute("role", "radiogroup");
+    modeGroup.setAttribute("aria-label", "Chế độ embedding");
+    modeGroup.append(cloudBtn, localBtn);
+
+    const modelRow = el("div", "settings-embedding__model-row");
+    const modelLabel = el("label", "settings-embedding__model-label", "Model ID") as HTMLLabelElement;
+    modelLabel.htmlFor = "embedding-model-id";
+    const modelInput = el("input", "settings-embedding__model-input") as HTMLInputElement;
+    modelInput.id = "embedding-model-id";
+    modelInput.value = modelId;
+    modelInput.placeholder = "bge-m3-int8";
+    modelRow.append(modelLabel, modelInput);
+
+    const applyMode = (newMode: "cloud" | "local"): void => {
+      mode = newMode;
+      cloudBtn.classList.toggle("is-active", mode === "cloud");
+      cloudBtn.setAttribute("aria-pressed", mode === "cloud" ? "true" : "false");
+      localBtn.classList.toggle("is-active", mode === "local");
+      localBtn.setAttribute("aria-pressed", mode === "local" ? "true" : "false");
+      modelRow.hidden = mode === "cloud";
+    };
+    applyMode(mode);
+
+    const saveEmbedding = (): void => {
+      const patch: { embeddingMode: "cloud" | "local"; embeddingModelId?: string } = {
+        embeddingMode: mode,
+      };
+      if (mode === "local") {
+        const trimmed = modelInput.value.trim();
+        patch.embeddingModelId = trimmed.length > 0 ? trimmed : "bge-m3-int8";
+      }
+      void run("Đang lưu embedding", () => deps.client.updateGeneral(patch));
+    };
+
+    cloudBtn.addEventListener("click", () => {
+      applyMode("cloud");
+      saveEmbedding();
+    });
+    localBtn.addEventListener("click", () => {
+      applyMode("local");
+      saveEmbedding();
+    });
+    modelInput.addEventListener("change", () => {
+      modelId = modelInput.value.trim();
+      saveEmbedding();
+    });
+
+    const note = el(
+      "p",
+      "settings-embedding__note",
+      "Local cần chạy \"npm run fetch:model\" để tải model BGE-M3 int8 (~130 MB) trước khi đóng gói. Cloud dùng API của nhà cung cấp (cần API key hỗ trợ embedding).",
+    );
+
+    wrapper.append(modeGroup, modelRow, note);
+    return wrapper;
   }
 
   async function refreshDiagnostics(panel: HTMLElement): Promise<void> {

@@ -14,6 +14,7 @@
     "./execution": "./src/execution/index.ts",
     "./file-review": "./src/file-review/index.ts",
     "./knowledge/types": "./src/knowledge/types.ts",
+    "./knowledge/stack": "./src/knowledge/stack/index.ts",
     "./knowledge-local/types": "./src/knowledge-local/types.ts"
   },
   "scripts": {

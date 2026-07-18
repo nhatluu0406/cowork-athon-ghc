@@ -49,11 +49,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const THEMES: readonly ThemePreference[] = ["system", "light", "dark"];
 
+const EMBEDDING_MODES: readonly string[] = ["cloud", "local"];
+
 function coerceGeneral(raw: unknown): GeneralSettings {
   if (!isRecord(raw)) return { ...DEFAULT_GENERAL_SETTINGS };
   const theme = THEMES.includes(raw.theme as ThemePreference)
     ? (raw.theme as ThemePreference)
     : DEFAULT_GENERAL_SETTINGS.theme;
+  const embeddingMode = EMBEDDING_MODES.includes(raw.embeddingMode as string)
+    ? (raw.embeddingMode as "cloud" | "local")
+    : DEFAULT_GENERAL_SETTINGS.embeddingMode;
+  const embeddingModelId =
+    typeof raw.embeddingModelId === "string" && raw.embeddingModelId.trim().length > 0
+      ? raw.embeddingModelId.trim()
+      : DEFAULT_GENERAL_SETTINGS.embeddingModelId;
   return {
     theme,
     verboseLogging:
@@ -72,6 +81,8 @@ function coerceGeneral(raw: unknown): GeneralSettings {
       typeof raw.requireLoginOnStartup === "boolean"
         ? raw.requireLoginOnStartup
         : DEFAULT_GENERAL_SETTINGS.requireLoginOnStartup,
+    embeddingMode,
+    embeddingModelId,
   };
 }
 

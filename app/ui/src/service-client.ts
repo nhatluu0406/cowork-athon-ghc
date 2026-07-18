@@ -215,6 +215,10 @@ export interface GeneralSettingsView {
   readonly devtoolsEnabled: boolean;
   /** Require the local password at startup (false = device-bound secure auto-unlock). */
   readonly requireLoginOnStartup: boolean;
+  /** Embedding backend: "cloud" uses the provider's API; "local" uses the shipped BGE-M3 ONNX model. */
+  readonly embeddingMode: "cloud" | "local";
+  /** Model ID for embedding: cloud model name or local model name (e.g. "bge-m3-int8"). Non-secret. */
+  readonly embeddingModelId: string;
 }
 
 /**
@@ -782,6 +786,8 @@ export interface ServiceClient {
     readonly username: string;
     readonly userId: string;
   }>;
+  /** Change the local vault password. Vault must be unlocked; current password must be correct. */
+  authChangePassword(currentPassword: string, newPassword: string): Promise<void>;
   /**
    * Knowledge (M365 Knowledge-Graph) settings surface (REQ-205): read status, configure a source
    * (the raw token crosses the boundary inbound only — every response is the secret-free
@@ -1383,6 +1389,12 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         "/v1/auth/unlock",
         { method: "POST", body: JSON.stringify({ username, password }) },
       ),
+    authChangePassword: async (currentPassword, newPassword) => {
+      await call<{ ok: boolean }>("/v1/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+    },
 
     getKnowledgeStatus: () => call<KnowledgeStatusView>("/v1/knowledge/status"),
     configureKnowledgeSource: (baseUrl, token) =>

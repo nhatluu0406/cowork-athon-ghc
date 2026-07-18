@@ -79,6 +79,43 @@ extraResources:
     to: "agents-skills"
   - from: "app/shell/assets/cowork-ghc.ico"
     to: "branding/cowork-ghc.ico"
+  # M365 Knowledge Graph stack (ADR 0010).
+  #
+  # Vendor binaries (postgresql, neo4j, jre) are large and NOT committed to git. Populate
+  # the `vendors/` directory before packaging:
+  #   vendors/postgresql/   ← extracted PostgreSQL-<ver>-windows-x64-binaries.zip
+  #   vendors/neo4j/        ← extracted neo4j-community-<ver>-windows.zip (top-level dir flattened)
+  #   vendors/jre/          ← extracted Eclipse Temurin JRE (jdk-<ver>-jre-win_x64 ZIP, flattened)
+  #
+  # All five component dirs (postgresql, neo4j, jre, llm-svc, backend) are shipped under the
+  # same read-only `resources/m365kg-stack/` prefix so `isAlreadyProvisioned` finds them all
+  # and the stack auto-starts after `onReady` without any first-launch download.
+  - from: "vendors/postgresql"
+    to: "m365kg-stack/postgresql"
+  - from: "vendors/neo4j"
+    to: "m365kg-stack/neo4j"
+  - from: "vendors/jre"
+    to: "m365kg-stack/jre"
+  - from: "app/backend/bin/m365-knowledge-graph.exe"
+    to: "m365kg-stack/backend/m365-knowledge-graph.exe"
+    filter:
+      - "**"
+  - from: "app/llm-svc/target/release/llm-svc.exe"
+    to: "m365kg-stack/llm-svc/llm-svc.exe"
+    filter:
+      - "**"
+  - from: "app/backend/migrations"
+    to: "m365kg-migrations"
+    filter:
+      - "**"
+  # BGE-M3 quantized (int8) ONNX embedding model for the llm-svc.
+  # Populated by `npm run fetch:model` (git-ignored; ~130 MB). Absent if not fetched —
+  # llm-svc degrades to cloud embedding or default_models() when this directory is missing.
+  - from: "vendors/bge-m3"
+    to: "m365kg-stack/llm-svc/models/bge-m3"
+  # llm-svc model registry pointing to the BGE-M3 model (committed, uses relative path).
+  - from: "vendors/bge-m3-config/models.yaml"
+    to: "m365kg-stack/llm-svc/models.yaml"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
 # cleanly when no cert env/opts are present; these flags make that explicit and non-fatal.

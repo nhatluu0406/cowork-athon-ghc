@@ -107,5 +107,17 @@ export function parseGeneralPatch(record: Record<string, unknown>): Partial<Gene
     }
     patch.requireLoginOnStartup = record.requireLoginOnStartup;
   }
+  if (record.embeddingMode !== undefined) {
+    if (record.embeddingMode !== "cloud" && record.embeddingMode !== "local") {
+      throw new SettingsRequestError("embeddingMode must be one of cloud|local.");
+    }
+    patch.embeddingMode = record.embeddingMode;
+  }
+  if (record.embeddingModelId !== undefined) {
+    if (typeof record.embeddingModelId !== "string" || record.embeddingModelId.trim().length === 0) {
+      throw new SettingsRequestError("embeddingModelId must be a non-empty string.");
+    }
+    patch.embeddingModelId = record.embeddingModelId.trim();
+  }
   return patch;
 }

@@ -197,6 +197,9 @@ export function createLocalUserRepository(db: SqliteDatabase): LocalUserReposito
   const insert = db.prepare(
     "INSERT INTO local_users (id, username, password_salt, password_hash, created_at, updated_at) VALUES (@id, @username, @passwordSalt, @passwordHash, @createdAt, @updatedAt)",
   );
+  const updatePwStmt = db.prepare(
+    "UPDATE local_users SET password_salt = @salt, password_hash = @hash, updated_at = @updatedAt WHERE id = @id",
+  );
   const countStmt = db.prepare("SELECT COUNT(*) AS n FROM local_users");
   const mapRow = (row: {
     id: string;
@@ -236,6 +239,9 @@ export function createLocalUserRepository(db: SqliteDatabase): LocalUserReposito
       const row = countStmt.get() as { n: number };
       return row.n;
     },
+    updatePassword(userId, newSalt, newHash, updatedAt) {
+      updatePwStmt.run({ id: userId, salt: newSalt, hash: newHash, updatedAt });
+    },
   };
 }
 
@@ -247,6 +253,10 @@ export function createVaultKeyRepository(db: SqliteDatabase): VaultKeyRepository
   const insert = db.prepare(
     "INSERT INTO vault_keys (id, user_id, kdf_salt, wrapped_master_key, wrap_nonce, wrap_tag, created_at) " +
       "VALUES (@id, @userId, @kdfSalt, @wrappedMasterKey, @wrapNonce, @wrapTag, @createdAt)",
+  );
+  const updateKeyStmt = db.prepare(
+    "UPDATE vault_keys SET kdf_salt = @kdfSalt, wrapped_master_key = @wrappedMasterKey, " +
+      "wrap_nonce = @wrapNonce, wrap_tag = @wrapTag WHERE user_id = @userId",
   );
   return {
     getByUserId(userId) {
@@ -281,6 +291,15 @@ export function createVaultKeyRepository(db: SqliteDatabase): VaultKeyRepository
         wrapNonce: record.wrapNonce,
         wrapTag: record.wrapTag,
         createdAt: record.createdAt,
+      });
+    },
+    updateByUserId(userId, update) {
+      updateKeyStmt.run({
+        userId,
+        kdfSalt: update.kdfSalt,
+        wrappedMasterKey: update.wrappedMasterKey,
+        wrapNonce: update.wrapNonce,
+        wrapTag: update.wrapTag,
       });
     },
   };

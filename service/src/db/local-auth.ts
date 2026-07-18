@@ -65,6 +65,12 @@ export interface LocalAuthService {
   userId(): string | null;
   /** Verify a password against the stored local account without changing lock state. */
   verifyCurrentPassword(password: string): boolean;
+  /**
+   * Change the local account password. Vault must be unlocked; current password must be correct.
+   * Re-wraps the in-memory master key under the new password and updates both `local_users` and
+   * `vault_keys`. The auto-unlock envelope (wrapped under `deviceSecret`) is unaffected.
+   */
+  changePassword(currentPassword: string, newPassword: string): void;
   /** Whether a device-bound auto-unlock envelope is currently persisted. */
   hasAutoUnlockEnvelope(): boolean;
   /**
@@ -206,6 +212,33 @@ export function createLocalAuthService(deps: LocalAuthDeps): LocalAuthService {
       const user = deps.users.getFirst();
       if (user === null) return false;
       return verifyPassword(password, user.passwordSalt, user.passwordHash);
+    },
+
+    changePassword(currentPassword, newPassword) {
+      if (masterKeyMemory === null || unlockedUserId === null) {
+        throw new AuthError("Vault must be unlocked to change the password.");
+      }
+      if (newPassword.length < 8) {
+        throw new AuthError("New password must be at least 8 characters.");
+      }
+      const user = deps.users.getFirst();
+      if (user === null) throw new AuthError("No local account found.");
+      if (!verifyPassword(currentPassword, user.passwordSalt, user.passwordHash)) {
+        throw new AuthError("Current password is incorrect.");
+      }
+      const newPasswordSalt = generateSalt();
+      const newPasswordHash = hashPassword(newPassword, newPasswordSalt);
+      const newKdfSalt = generateSalt();
+      const newPasswordKey = deriveKeyFromPassword(newPassword, newKdfSalt);
+      const wrapped = wrapMasterKey(masterKeyMemory, newPasswordKey);
+      newPasswordKey.fill(0);
+      deps.users.updatePassword(unlockedUserId, newPasswordSalt, newPasswordHash, now());
+      deps.vaultKeys.updateByUserId(unlockedUserId, {
+        kdfSalt: newKdfSalt,
+        wrappedMasterKey: wrapped.wrappedMasterKey,
+        wrapNonce: wrapped.wrapNonce,
+        wrapTag: wrapped.wrapTag,
+      });
     },
 
     hasAutoUnlockEnvelope() {

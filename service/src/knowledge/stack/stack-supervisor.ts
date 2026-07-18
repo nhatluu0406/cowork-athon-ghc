@@ -21,6 +21,14 @@ const STACK_ROLE = "m365kg-stack" as const;
 export interface StackSupervisorSecrets {
   readonly pgPassword: string;
   readonly jwtSecret: string;
+  /** Claude API key passed to llm-svc for cloud generation (optional — degrades to ONNX if absent). */
+  readonly claudeApiKey?: string;
+  /** Claude API base URL (default: https://api.anthropic.com). */
+  readonly claudeBaseUrl?: string;
+  /** Embedding backend: "cloud" uses provider embedding API; "local" uses BGE-M3 ONNX. Default: "cloud". */
+  readonly embeddingMode?: "cloud" | "local";
+  /** Model ID for embedding — cloud model name or local ONNX model name. Default: "text-embedding-3-small". */
+  readonly embeddingModelId?: string;
 }
 
 export interface StackSupervisorOptions {
@@ -107,7 +115,7 @@ export class M365KGStackSupervisor {
 
     const pg = postgresRole(paths, ports, secrets.pgPassword);
     const neo = neo4jRole(paths, ports);
-    const llm = llmSvcRole(paths, ports);
+    const llm = llmSvcRole(paths, ports, secrets);
 
     this.postgres = this.newSupervisor(pg.readinessProbe);
     this.neo4j = this.newSupervisor(neo.readinessProbe);

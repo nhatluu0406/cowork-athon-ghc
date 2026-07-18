@@ -52,8 +52,67 @@ import {
 } from "./service/persisted-settings-source.js";
 import { loadProjectEnvFile } from "./load-project-env.js";
 import { clearRememberedUnlock } from "./service/session-unlock.js";
+import { resolveM365KGStackPaths } from "./service/m365kg-stack-paths.js";
+import { createM365KGStackLaunch, type M365KGStackLaunch } from "./service/m365kg-stack-launch.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/** M365 Knowledge Graph additive stack — null until `prepare` resolves successfully. */
+let m365kgStack: M365KGStackLaunch | null = null;
+
+export interface ResolvedM365KGConfig {
+  apiKey: string;
+  baseUrl?: string;
+  embeddingMode?: "cloud" | "local";
+  embeddingModelId?: string;
+}
+
+/**
+ * Read the Claude API key and embedding settings for M365KG llm-svc at stack-launch time:
+ *  1. Env var fast path (dev / CI): `ANTHROPIC_API_KEY` or `LLM_API_KEY`.
+ *  2. Production vault path: calls the live loopback service's `/api/m365kg/credentials`
+ *     endpoint (token-guarded, 127.0.0.1 only) which resolves the active provider's
+ *     credential and embedding settings from the vault-backed service store.
+ *
+ * Returns undefined on any failure — llm-svc degrades to local ONNX (no crash, no block).
+ * The key is never logged (writeLifecycleLog redacts ≥32-char strings) and never persisted.
+ */
+async function resolveClaude(): Promise<ResolvedM365KGConfig | undefined> {
+  const envKey = (process.env["ANTHROPIC_API_KEY"] ?? process.env["LLM_API_KEY"] ?? "").trim();
+  if (envKey) {
+    return { apiKey: envKey, baseUrl: process.env["LLM_API_BASE_URL"] || "https://api.anthropic.com" };
+  }
+
+  // Production: read from the active provider profile via the live service loopback.
+  const bootstrap = shellController?.getBootstrap();
+  const svcBaseUrl = bootstrap?.serviceBaseUrl;
+  const svcToken = bootstrap?.clientToken;
+  if (!svcBaseUrl || !svcToken) return undefined;
+
+  try {
+    const res = await fetch(new URL("/api/m365kg/credentials", svcBaseUrl), {
+      headers: { authorization: `Bearer ${svcToken}` },
+    });
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as Record<string, unknown>;
+    const claudeApiKey = typeof body["claudeApiKey"] === "string" ? body["claudeApiKey"].trim() : "";
+    if (!claudeApiKey) return undefined;
+    const claudeBaseUrl =
+      typeof body["claudeBaseUrl"] === "string" && body["claudeBaseUrl"].trim()
+        ? body["claudeBaseUrl"].trim()
+        : "https://api.anthropic.com";
+    const result: ResolvedM365KGConfig = { apiKey: claudeApiKey, baseUrl: claudeBaseUrl };
+    if (body["embeddingMode"] === "local" || body["embeddingMode"] === "cloud") {
+      result.embeddingMode = body["embeddingMode"];
+    }
+    if (typeof body["embeddingModelId"] === "string" && body["embeddingModelId"].trim()) {
+      result.embeddingModelId = body["embeddingModelId"].trim();
+    }
+    return result;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * App install root (dev): `app/shell/dist/main.cjs` → three levels up is the repo root, where
@@ -284,6 +343,8 @@ const lifecycleApp: LifecycleApp = {
   onBeforeQuit: (listener) => {
     app.on("before-quit", (event) => {
       clearRememberedUnlock();
+      // Best-effort additive stop — runs in parallel with the main controller stop.
+      void m365kgStack?.stop();
       listener(event);
     });
   },
@@ -321,6 +382,18 @@ void runShellLifecycle({
         skillRoots,
         packaged,
       );
+      // Additive M365KG stack — created here so paths are stable; started (non-blocking) in onReady.
+      const m365kgPaths = resolveM365KGStackPaths({
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+        userData: app.getPath("userData"),
+        devAppRoot: DEV_APP_ROOT,
+      });
+      m365kgStack = createM365KGStackLaunch({
+        paths: m365kgPaths,
+        log: writeLifecycleLog,
+        resolveClaude,
+      });
     } catch (error) {
       if (error instanceof CoworkDataPathError) {
         writeStartupTrace(`data_path_error:${error.message}`);
@@ -345,11 +418,23 @@ void runShellLifecycle({
     // forces a stop+restart (re-resolving the persisted config) when the renderer explicitly asks
     // for it — the settings-only → live transition, and after a provider-config change. Stop+start
     // are each idempotent + own the child.
+    const baseConnectLive = createConnectLive(shellController!);
     registerIpcHandlers({
       getBootstrap: () => shellController!.getBootstrap(),
-      connectLive: createConnectLive(shellController),
+      connectLive: async (force: boolean) => {
+        const result = await baseConnectLive(force);
+        // After a new live connection the vault is unlocked → restart M365KG so
+        // resolveClaude can now read the active provider credential from the service.
+        if (result.restarted) {
+          void m365kgStack?.stop().then(() => m365kgStack?.start());
+        }
+        return result;
+      },
       appDataRoot: shellAppDataRoot,
     });
+    // Start the M365KG additive stack at launch (uses env-var credential if set; vault
+    // credential is resolved on the first connectLive restart above).
+    void m365kgStack?.start();
     const mainWindow = createMainWindow();
     // Off by default; only the ER-013 UI-audit tool sets COWORK_GHC_UI_AUDIT=1. When enabled it
     // drives capture in-process then quits the app; skip normal activate wiring in that mode.
