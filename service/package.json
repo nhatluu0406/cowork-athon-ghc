@@ -13,7 +13,8 @@
     },
     "./execution": "./src/execution/index.ts",
     "./file-review": "./src/file-review/index.ts",
-    "./knowledge/types": "./src/knowledge/types.ts"
+    "./knowledge/types": "./src/knowledge/types.ts",
+    "./knowledge-local/types": "./src/knowledge-local/types.ts"
   },
   "scripts": {
     "typecheck": "tsc -b",

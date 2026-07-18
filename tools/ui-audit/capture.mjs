@@ -30,7 +30,54 @@ const EXE = join(REPO_ROOT, "dist-app", "win-unpacked", "coworkghc.exe");
 const RUN_ID = new Date().toISOString().replace(/[:.]/g, "-");
 const RUN_DATA_ROOT = join(REPO_ROOT, ".runtime", "ui-audit", RUN_ID); // COWORK_GHC_RUNTIME_ROOT
 const OUT_DIR = join(REPO_ROOT, "reports", "ui-audit", RUN_ID); // COWORK_GHC_UI_AUDIT_OUT
-const LAUNCH_TIMEOUT_MS = 180_000;
+// Data-rich Knowledge acceptance uses an ISOLATED seed workspace (never the user's real workspace).
+// It holds real Markdown/text/code with cross-links so the packaged index/search/graph show honest,
+// non-fabricated data. The shell (audit mode) sets it active + drives the real index over it.
+const SEED_WORKSPACE = join(RUN_DATA_ROOT, "seed-workspace");
+const LAUNCH_TIMEOUT_MS = 240_000;
+
+/**
+ * Write a small, real, offline document set for the Knowledge index to chew on: Markdown files that
+ * link to each other (→ graph `links_to` edges), a subfolder (→ folder node + `contains` edges), a
+ * plain-text file and a code file (multiple document kinds), a standalone no-link Markdown, and an
+ * unsupported binary (must be skipped, never crash). No secrets — secret-like names are excluded by
+ * the indexer anyway, and none are created here.
+ */
+function seedWorkspace(root) {
+  const files = {
+    "README.md":
+      "# Cowork GHC workspace\n\nThis workspace demonstrates the local **knowledge** base.\n\n" +
+      "See [the overview](docs/overview.md) and [the user guide](docs/guide.md).\n",
+    "architecture.md":
+      "# Architecture\n\nThe knowledge index is workspace-scoped and fully local.\n\n" +
+      "Back to [overview](docs/overview.md).\n",
+    "docs/overview.md":
+      "# Overview\n\nThe knowledge store indexes every document in the active workspace and builds\n" +
+      "a graph from folder structure and Markdown links. Provenance is always the workspace.\n\n" +
+      "Related: [guide](guide.md) and [architecture](../architecture.md).\n",
+    "docs/guide.md":
+      "# User guide\n\nSearch the knowledge base with keywords; results show a highlighted snippet\n" +
+      "and their source document. Open the graph to explore how documents link together.\n\n" +
+      "Related: [overview](overview.md).\n",
+    "notes.txt":
+      "Plain text note. No Markdown links here — this document stays a leaf node in the graph.\n" +
+      "It still participates in keyword search over the knowledge index.\n",
+    "src/sample.ts":
+      "// Sample code file indexed as a code document.\n" +
+      "export function knowledgeGreeting(name: string): string {\n" +
+      "  return `Knowledge ready for ${name}`;\n}\n",
+    "standalone.md":
+      "# Standalone\n\nA Markdown document with no outgoing links — useful to show a node whose\n" +
+      "only relationship is the folder that contains it.\n",
+  };
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = join(root, rel);
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, content, "utf8");
+  }
+  // Unsupported/binary payload — the indexer must skip it without failing the run.
+  writeFileSync(join(root, "data.bin"), Buffer.from([0, 1, 2, 3, 255, 254, 253, 0, 42]));
+}
 
 const log = [];
 function note(line) {
@@ -80,6 +127,9 @@ async function main() {
   }
   mkdirSync(OUT_DIR, { recursive: true });
   mkdirSync(RUN_DATA_ROOT, { recursive: true });
+  mkdirSync(SEED_WORKSPACE, { recursive: true });
+  seedWorkspace(SEED_WORKSPACE);
+  note(`seeded data-rich knowledge workspace at ${SEED_WORKSPACE}`);
 
   const preOpencode = imagePids("opencode.exe");
   const preApp = imagePids("coworkghc.exe");
@@ -90,6 +140,7 @@ async function main() {
       ...process.env,
       COWORK_GHC_UI_AUDIT: "1",
       COWORK_GHC_UI_AUDIT_OUT: OUT_DIR,
+      COWORK_GHC_UI_AUDIT_WORKSPACE: SEED_WORKSPACE,
       COWORK_GHC_RUNTIME_ROOT: RUN_DATA_ROOT,
       COWORK_GHC_ALLOW_ENV_IMPORT: "0",
     },

@@ -128,11 +128,13 @@ import { renderSkillsMcpTab, type SkillsMcpTab } from "./ui-shell/skills-mcp-vie
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { mountKnowledgeLocalPanel, type KnowledgeLocalPanelHandle } from "./knowledge-local-panel.js";
 import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+let knowledgeLocalPanel: KnowledgeLocalPanelHandle | null = null;
 // Module-level so the verified-mutation handler (finalizeFileMutationReview) can auto-refresh the
 // file trees after an agent create/modify/delete, not just the mount closure.
 let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
@@ -1021,6 +1023,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+    knowledgeLocalPanel?.show(state.knowledgeTab);
   } else if (isMicrosoftSurface) {
     renderMicrosoftSurfaceBound(dom, state, handlers);
   } else if (isCodeSurface) {
@@ -2792,6 +2795,19 @@ export function mountCoworkApp(root: HTMLElement): void {
               onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
             },
           );
+          knowledgeLocalPanel = mountKnowledgeLocalPanel(dom.knowledgeView, dynamicClient, {
+            // Knowledge result → Workspace (open the source file) using the shared active workspace.
+            onOpenSource: (relativePath) => {
+              state.activeSurface = "cowork";
+              state.workMode = "workspace";
+              workspaceNavigator?.selectPath(relativePath);
+              void workspaceCompanionHandle?.open(relativePath);
+              renderState(dom, state, handlers);
+            },
+            // Knowledge result → Cowork (ask about the source file).
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
+            onChooseWorkspace: () => void workspacePicker?.choose(),
+          });
           mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             onSettingsUpdated: (view) => {

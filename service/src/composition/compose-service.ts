@@ -91,6 +91,11 @@ import {
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import {
+  createKnowledgeLocalRepository,
+  createKnowledgeLocalRouter,
+  createKnowledgeLocalService,
+} from "../knowledge-local/index.js";
+import {
   createPreviewGate,
   createPreviewService,
   createRuntimePreviewRouter,
@@ -718,6 +723,17 @@ export async function createCoworkService(
     });
   })();
 
+  // Local Knowledge Base + Graph (MVP) — only when the SQLite DB is present. Scoped to the active
+  // workspace; purely local (no network, no embeddings).
+  const knowledgeLocalService =
+    sqliteDatabase !== undefined
+      ? createKnowledgeLocalService({
+          repo: createKnowledgeLocalRepository(sqliteDatabase),
+          activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+          now,
+        })
+      : undefined;
+
   const routers = [
     ...(localAuth !== undefined
       ? [
@@ -786,6 +802,9 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(knowledgeLocalService !== undefined
+      ? [createKnowledgeLocalRouter(knowledgeLocalService)]
+      : []),
     createRuntimePreviewRouter(previewService),
     createRuntimeAppRouter(appService),
     createDiagnosticsRouter({

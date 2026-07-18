@@ -115,6 +115,34 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
   cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
 
+## Local Knowledge Base/Graph MVP (D3 local, 2026-07-18) — giới hạn
+
+Đây là hệ Knowledge **local mới** (`service/src/knowledge-local` + `/v1/knowledge-local` + surface
+Knowledge thật), **tách biệt** với Go backend/M365KG bên dưới. Đây là **một kho tri thức thống nhất
+theo active Workspace** — chỉ hai tab `Kho tri thức` / `Đồ thị`, **không** có tab nguồn tách biệt.
+Code+tests+build PASS; **data-rich packaged acceptance PASS** (UI audit 21/21, 33 ảnh) qua seed
+workspace cô lập trong audit mode (không dùng workspace thật, không fake data): index status=ready,
+document list, chi tiết + provenance, FTS search có snippet, đồ thị nút/cạnh + chọn nút, đồng bộ lại
+prune, xóa chỉ mục an toàn giữ file gốc. Giới hạn có chủ ý của MVP:
+
+- **Chỉ keyword FTS5 — không semantic/vector/embedding.** Không gọi LLM để index; `llm-svc` (LF-3)
+  chưa bundle. Không bịa "semantic similarity". Tìm kiếm là prefix AND trên token.
+- **Microsoft 365 là nguồn bổ sung tương lai, chưa kết nối.** Provenance có mặt hôm nay (mỗi tài
+  liệu/kết quả/node mang badge nguồn = **Workspace**); bộ lọc nguồn hiện `Microsoft 365` dạng option
+  **disabled** + tóm tắt readiness trung thực ("Chưa kết nối"). **Không fake count/data MS365**, không
+  gọi backend, không phát network request từ Knowledge khi MS365 chưa bật (có test proxy khẳng định
+  renderer chỉ gọi route `knowledgeLocal*`). Contracts (`KnowledgeSourceRef`) sẵn sàng ingest MS365
+  vào cùng kho sau này, không cần migration lớn. M365 KG backend nâng cao vẫn bảo tồn off-main (dưới).
+- **Không trích text PDF.** PDF được Workspace hiển thị dạng bytes; indexer **không** đọc text PDF nên
+  PDF không vào chỉ mục (md/text/code/docx/xlsx/pptx thì có).
+- **Đồ thị chỉ deterministic:** workspace→folder→file (`contains`) + link Markdown đã resolve
+  (`links_to`). Không suy diễn quan hệ bằng LLM.
+- **Bounded:** mặc định ≤1500 file, ≤2 MiB/file, depth ≤12, ≤400 chunk/tài liệu; vượt thì bỏ qua
+  (skip đếm được). Mỗi lần sync **đọc lại** mọi file để hash (incremental chỉ tiết kiệm re-chunk/FTS,
+  không tiết kiệm I/O đọc); enumerate + read re-validate workspace mỗi thư mục/tệp (chi phí chấp nhận
+  được cho MVP).
+- **Không watch file real-time:** thay đổi trên đĩa cần bấm "Đồng bộ" lại.
+
 ## Tích hợp gần đây — giới hạn còn tồn (PR #11 MS365, PR #12 Local import)
 
 Ghi lại các phần **đã merge nhưng còn giới hạn/POC** sau khi tích hợp PR #11 (MS365) và PR #12

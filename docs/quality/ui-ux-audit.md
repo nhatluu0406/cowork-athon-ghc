@@ -10,13 +10,14 @@ owner: "quality"
 Findings from reviewing **real screenshots of the packaged app**, against
 `.agents/skills/cowork-ghc-commercial-ui/SKILL.md` and the current design tokens.
 
-> **Status: first evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
-> `tools/ui-audit/`) captured 21 screenshots of the packaged `coworkghc.exe` across every rail
-> surface, both themes, plus the first-run and Settings states. Raw output is git-ignored under
-> `reports/ui-audit/<run-id>/` (contact sheet: `contact-sheet.html`). Findings below are from that
-> first pass on a **fresh, unconfigured** profile (no provider, no workspace) — the honest cold-start
-> a newcomer sees. States requiring a live provider / a loaded workspace / error injection are not
-> yet covered (see Gaps).
+> **Status: evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
+> `tools/ui-audit/`) captured **33 screenshots** of the packaged `coworkghc.exe` across every rail
+> surface, both themes, first-run and Settings states, **plus data-rich Knowledge** (an isolated
+> seed workspace indexed in audit mode: document list, detail, FTS search, graph node/edge + select,
+> re-sync prune, safe clear). Raw output is git-ignored under `reports/ui-audit/<run-id>/` (contact
+> sheet: `contact-sheet.html`). The cold-start findings below are from a **fresh, unconfigured**
+> profile (no provider) — the honest cold-start a newcomer sees. States requiring a live provider /
+> Cowork streaming / error injection are not yet covered (see Gaps).
 
 ## Quality bar to preserve
 
@@ -60,7 +61,7 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 | F3 | Dispatch | 07-surface-dispatch | MEDIUM | Built-in dispatch tasks show active **Chạy** buttons while `Provider · Chưa cấu hình`. | Running a task with no provider will fail; the enabled button implies readiness it lacks. | Gate the actions on provider-ready; show a disabled state with a "configure a provider" reason. | dispatch | Actions disabled + explained until a provider is configured. |
 | F4 | Cowork / all | 03-surface-cowork, status bar | MEDIUM | Status bar reads green **Sẵn sàng** while `Provider · Chưa cấu hình` (orange) and chat is impossible. | Mixed readiness signal — "Ready" contradicts "provider not configured". | Make the readiness chip reflect the blocking dependency (needs-config) per the ER-007 model. | shared status bar | Readiness chip never shows "Ready" when a required dependency is missing. |
 | F5 | Microsoft 365 | 09-surface-microsoft | LOW | Suggestion chips + composer are interactive while `Chưa kết nối` and no provider is set. | Inviting input that cannot succeed yet; click leads to failure/no-op. | Disable chips/composer until connected + provider-ready, or route them to the connect flow. | microsoft | Input gated until prerequisites met. |
-| F6 | Knowledge / Gateway | 06 / 08 | LOW | The same semantic "awaiting integration" state is laid out differently — Knowledge = left block + Kho/Đồ thị tabs; Gateway = centered hero + pill. | Cross-surface inconsistency for identical status. | Converge pure-placeholder surfaces on one "awaiting integration" template (ER-010). | shared placeholder | D3/D4 placeholders share one layout. |
+| F6 | Gateway | 08 | LOW | Gateway remains a pure "awaiting integration" placeholder (centered hero + pill). Knowledge (D3) is now a real unified-store surface, no longer a placeholder — this finding no longer applies to it. | Placeholder-only concern for D4. | Keep the honest "awaiting integration" template for D4 Gateway (ER-010). | shared placeholder | Only D4 remains a placeholder surface. |
 | F7 | Cowork | 03-surface-cowork | LOW | Provider-not-configured is stated twice (composer "Provider chưa cấu hình" + status bar "Provider · Chưa cấu hình"). | Minor redundancy/visual noise. | Keep one primary indicator + one actionable CTA. | cowork | Single clear provider-config affordance. |
 | F8 | Settings · Chung | 22-settings-general | LOW | "Giao diện" column is sparse (control at top, large empty area) while "Chẩn đoán" is full — unbalanced. | Wasted whitespace; asymmetric density. | Balance the two-column layout or add theme-preview/description to the left column. | settings | Columns visually balanced. |
 | F9 | Top bar | 03 vs 05 vs 06/08/09 | LOW | Top-right controls vary by surface (Cowork: inspector-toggle + settings; Code: sparkle + settings; placeholders: settings only). | Slightly inconsistent affordance placement. | Standardise the top-bar control set / order across surfaces. | shared topbar | Consistent top-bar controls. |
@@ -75,7 +76,7 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 | Code (Workspace) | 5 | Reference bar — three-pane Explorer/editor/Agent, honest empty states. **Preserve.** |
 | Skill & MCP | 4 | Clear catalog, create/detail flow, honest "Đang tắt" state. |
 | Settings (Nhà cung cấp / Chung) | 4 | Clean; minor whitespace balance (F8). |
-| Knowledge (D3) | 4 | Honest "sẽ bật khi backend D3 sẵn sàng"; no fake data. |
+| Knowledge (D3) | 4.5 | Real unified store (2 tabs `Kho tri thức`/`Đồ thị`, no source tabs); status/doc list/search/graph + provenance badges + source filter; Microsoft 365 = honest readiness (no fake, no network). **Data-rich packaged states captured** (audit 21/21, 33 shots via isolated seed workspace: index ready 7 docs/10 nodes/15 edges, list/detail/FTS snippet/graph node-select/prune/safe clear). |
 | Gateway (D4) | 4 | Honest "không hiển thị dữ liệu giả trước khi team tích hợp". |
 | Microsoft 365 (D2) | 3.5 | Good connect card; interactive-while-disconnected (F5). |
 | First-run lock | 3.5 | Clear + localized; dark-in-light-theme (F1). |
