@@ -50,3 +50,12 @@ export {
   TASK_DRAFT_CONFIRM_PATH,
   type WorkflowRouterOptions,
 } from "./workflow-router.js";
+export {
+  createLlmWorkflowDraftGenerator,
+  WorkflowGenerationError,
+  buildInstruction,
+  extractCompletionContent,
+  parseDraftCandidate,
+  type WorkflowGenTarget,
+  type WorkflowGeneratorOptions,
+} from "./workflow-draft-generator.js";

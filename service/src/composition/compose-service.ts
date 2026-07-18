@@ -45,6 +45,8 @@ import {
   readDevLoopbackHttpEscape,
   DEV_LOOPBACK_HTTP_WARNING,
   SsrfBlockedError,
+  CUSTOM_OPENAI_COMPAT_ID,
+  providerEnvSpec,
 } from "../provider/index.js";
 import {
   createProviderConnectionTester,
@@ -87,6 +89,8 @@ import {
   createFileEvidenceVerificationHook,
   createWorkflowBuilder,
   createWorkflowRouter,
+  createLlmWorkflowDraftGenerator,
+  type WorkflowGenTarget,
 } from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
@@ -117,7 +121,6 @@ import {
   notAttachedRuntimeReplyPort,
   notAttachedSendPrompt,
   notAttachedSessionStore,
-  notAttachedWorkflowDraftGenerator,
 } from "./tier2-seams.js";
 import { createDispatchRunRegistry, createDispatchRouter } from "../dispatchers/index.js";
 import type { CoworkService, CoworkServiceDeps, CoworkServiceOptions } from "./types.js";
@@ -630,11 +633,34 @@ export async function createCoworkService(
   });
 
   // Workflow builder from prompt (Task 4.3): draft-only, MANDATORY contract validation, never
-  // auto-run. Tier 1 wires the honest not-attached generator (a draft request rejects rather than
-  // fabricating a TaskDefinition); the confirm route re-validates through the SAME agent
-  // catalog / task store boundaries used by every other write path.
+  // auto-run. The default generator asks the ACTIVE provider profile for one JSON completion (same
+  // SSRF/IP-pin/credential-injection primitives as model discovery); it needs only the vault key +
+  // profile, not a live OpenCode child, so it works in settings-only too. When no provider profile
+  // is configured, `resolveTarget` returns null and the generator surfaces an honest refusal. Tests
+  // inject `options.workflowDraftGenerator`; when absent AND no profile exists it stays not-attached.
+  const llmWorkflowDraftGenerator = createLlmWorkflowDraftGenerator({
+    ssrf,
+    credentials: credentialService,
+    resolveTarget: async (): Promise<WorkflowGenTarget | null> => {
+      const profile = providerProfileStore.activeProfile();
+      if (
+        profile === undefined ||
+        profile.credentialRef === undefined ||
+        profile.baseUrl.trim().length === 0 ||
+        profile.modelId.trim().length === 0
+      ) {
+        return null;
+      }
+      return {
+        baseUrl: profile.baseUrl,
+        credentialRef: profile.credentialRef,
+        envSpec: providerEnvSpec(CUSTOM_OPENAI_COMPAT_ID, profile.envVar),
+        modelId: profile.modelId,
+      };
+    },
+  });
   const workflowBuilder = createWorkflowBuilder({
-    generate: options.workflowDraftGenerator ?? notAttachedWorkflowDraftGenerator(),
+    generate: options.workflowDraftGenerator ?? llmWorkflowDraftGenerator,
     knownAgentIds: () => agentCatalog.knownIds(),
     basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
