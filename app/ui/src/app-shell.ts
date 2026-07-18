@@ -300,6 +300,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
     state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
   // The editor is a persistent controller; keep its open diff tabs in sync with the reviews.
   codeEditor?.setReviews(reviews);
+  const workspaceConversations = state.conv.state.summaries
+    .filter((summary) => summary.workspacePath === state.activeWorkspace && (summary.surface ?? "cowork") === "cowork")
+    .map((summary) => ({ id: summary.id, title: summary.title }));
   renderClaudeCodeSurface(
     dom.codeView,
     {
@@ -310,6 +313,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       phase: state.conv.state.runtimePhase,
       composerDisabled: !preflight.canSend || isComposerLocked(state),
       composerDisabledReason: preflight.canSend ? null : preflight.message,
+      conversations: workspaceConversations,
+      activeConversationId: state.conv.state.activeConversationId,
+      sessionControlsDisabled: state.activeWorkspace === null || isComposerLocked(state),
     },
     {
       onOpenReview: (review) => {
@@ -1016,6 +1022,14 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
   dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
   dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
+  // Session control (#35) in the Workspace tab — shares the ONE Cowork conversation.
+  dom.workspaceView.sessionBar.render({
+    activeId: state.conv.state.activeConversationId,
+    conversations: state.conv.state.summaries
+      .filter((s) => s.workspacePath === state.activeWorkspace && (s.surface ?? "cowork") === "cowork")
+      .map((s) => ({ id: s.id, title: s.title })),
+    disabled: state.activeWorkspace === null || isComposerLocked(state),
+  });
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden =
     settingsOpen ||
@@ -3369,6 +3383,20 @@ export function mountCoworkApp(root: HTMLElement): void {
         renderState(dom, state, handlers);
       },
     );
+  };
+
+  // Session controls in the Code surface (#35) reuse the shared Cowork conversation flow.
+  dom.onCodeNewSession = (): void => {
+    void newConversation(state, dom, handlers).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
+  };
+  dom.onCodePickSession = (conversationId: string): void => {
+    void switchConversation(state, dom, handlers, conversationId).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
   };
 
   dom.sendButton.addEventListener("click", () => {

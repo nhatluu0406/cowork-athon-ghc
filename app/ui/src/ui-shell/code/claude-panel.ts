@@ -33,7 +33,7 @@ export function createClaudePanel(handlers: { readonly onSend: (text: string) =>
   const composer = el("div", "cc-composer");
   const row = el("div", "cc-composer__row");
   const input = el("textarea", "cc-composer__input") as HTMLTextAreaElement;
-  input.rows = 2;
+  input.rows = 3;
   input.placeholder = "Yêu cầu Agent về tệp đang mở…";
   input.setAttribute("aria-label", "Soạn yêu cầu cho Agent");
   const send = el("button", "cc-composer__send") as HTMLButtonElement;

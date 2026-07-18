@@ -103,6 +103,8 @@ export interface AppFrameDom {
   onCodePanelSend: (text: string) => void;
   onCodeModeChange: (mode: CodeMode) => void;
   onCodeRuntimeModeChange: (mode: RuntimeMode) => void;
+  onCodeNewSession: () => void;
+  onCodePickSession: (conversationId: string) => void;
 }
 
 export function createAppFrame(root: HTMLElement): AppFrameDom {
@@ -113,7 +115,10 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const rail = createProductRail();
   const sidebar = createContextualSidebar();
   const cowork = createCoworkView(DEFAULT_TITLE);
-  const workspaceView = createWorkspaceView();
+  const workspaceView = createWorkspaceView({
+    onNewSession: () => dom.onCodeNewSession(),
+    onPickSession: (id) => dom.onCodePickSession(id),
+  });
   const knowledgeView = createKnowledgeView();
   const integrationSurface = createIntegrationView();
   const microsoftView = createMicrosoftView();
@@ -121,6 +126,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     onSendPrompt: (text) => dom.onCodePanelSend(text),
     onModeChange: (mode) => dom.onCodeModeChange(mode),
     onRuntimeModeChange: (mode) => dom.onCodeRuntimeModeChange(mode),
+    onNewSession: () => dom.onCodeNewSession(),
+    onPickSession: (id) => dom.onCodePickSession(id),
   });
   const skillsMcpView = createSkillsMcpView();
   const gatewayView = el("section", "view view--gateway");
@@ -234,6 +241,8 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     onCodePanelSend: () => undefined,
     onCodeModeChange: () => undefined,
     onCodeRuntimeModeChange: () => undefined,
+    onCodeNewSession: () => undefined,
+    onCodePickSession: () => undefined,
   };
 
   const closeSettings = (): void => {

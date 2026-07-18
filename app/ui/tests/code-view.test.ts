@@ -11,6 +11,9 @@ const EMPTY_INPUT = {
   phase: "idle",
   composerDisabled: false,
   composerDisabledReason: null,
+  conversations: [],
+  activeConversationId: null,
+  sessionControlsDisabled: false,
 } as const;
 
 const NOOP = { onOpenReview: () => undefined };
@@ -84,4 +87,35 @@ test("panel toggle collapses the Agent panel; explorer collapse toggles a class"
   assert.equal(dom.root.classList.contains("cc-surface--panel-collapsed"), true);
   dom.explorer.collapseButton.click();
   assert.equal(dom.root.classList.contains("cc-surface--explorer-collapsed"), true);
+});
+
+test("session controls (#35): new-session button + pick from the dropdown fire handlers", () => {
+  let created = 0;
+  const picked: string[] = [];
+  const dom = createClaudeCodeView({
+    onSendPrompt: () => undefined,
+    onNewSession: () => { created += 1; },
+    onPickSession: (id) => picked.push(id),
+  });
+  renderClaudeCodeSurface(
+    dom,
+    {
+      ...EMPTY_INPUT,
+      conversations: [
+        { id: "c1", title: "Phiên A" },
+        { id: "c2", title: "Phiên B" },
+      ],
+      activeConversationId: "c1",
+    },
+    NOOP,
+  );
+  const select = dom.root.querySelector<HTMLSelectElement>(".session-bar__select");
+  assert.ok(select);
+  assert.equal(select!.options.length, 2);
+  assert.equal(select!.value, "c1");
+  select!.value = "c2";
+  select!.dispatchEvent(new Event("change", { bubbles: true }));
+  assert.deepEqual(picked, ["c2"]);
+  dom.root.querySelector<HTMLButtonElement>(".session-bar__new")!.click();
+  assert.equal(created, 1);
 });
