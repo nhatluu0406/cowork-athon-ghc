@@ -395,7 +395,6 @@ export async function createCoworkService(
           ...(activeProfile !== undefined ? { providerType: activeProfile.providerType } : {}),
           ...(accountId !== undefined ? { accountId } : {}),
           ...(outcome.modelId !== undefined ? { modelId: outcome.modelId } : {}),
-          ...(outcome.promptPreview !== undefined ? { promptPreview: outcome.promptPreview } : {}),
           ...(outcome.errorMessage !== undefined ? { reason: outcome.errorMessage } : {}),
         })
         .catch(() => undefined);

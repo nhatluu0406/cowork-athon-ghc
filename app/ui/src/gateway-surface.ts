@@ -63,7 +63,6 @@ interface GatewayRequestLogEntry {
   gatewayEnabled: boolean;
   outcome: GatewayRequestOutcome;
   reason?: string;
-  promptPreview?: string;
   modelId?: string;
   providerType?: string;
   /** REAL metrics from the proxy round-trip — present only for requests that flowed through it. */
@@ -530,15 +529,7 @@ export function mountGatewayIntegrationSlot(
       );
       detail.append(line);
     }
-    const promptBlock = el("div", "gateway-surface__log-detail-prompt-wrap");
-    promptBlock.append(el("span", "gateway-surface__log-detail-key", "Prompt"));
-    const promptText = el(
-      "pre",
-      "gateway-surface__log-detail-prompt",
-      entry.promptPreview ?? "(không ghi nhận nội dung)",
-    );
-    promptBlock.append(promptText);
-    detail.append(promptBlock);
+    // Privacy (#38): the Gateway records routing metrics only — never the user's prompt text.
     return detail;
   }
 
@@ -575,12 +566,8 @@ export function mountGatewayIntegrationSlot(
         outcomeBadge.dataset["outcome"] = entry.outcome;
         row.append(outcomeBadge);
       }
-      const previewSpan = el(
-        "span",
-        "gateway-surface__log-preview",
-        entry.promptPreview ?? "(không có nội dung prompt)",
-      );
-      row.append(previewSpan);
+      // Privacy (#38): the row shows routing metadata (time/connection/model/outcome) only — the
+      // Gateway no longer stores or displays the user's prompt text.
 
       row.addEventListener("click", () => {
         expandedLogId = expandedLogId === entry.id ? null : entry.id;
