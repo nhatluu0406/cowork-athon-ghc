@@ -112,6 +112,17 @@ export interface KnowledgeIndexView {
   readonly indexing: { readonly processed: number; readonly total: number | null } | null;
 }
 
+/** One indexed document, projected for the renderer's document list (no secret bytes, no raw text). */
+export interface KnowledgeDocumentView {
+  readonly id: string;
+  readonly relativePath: string;
+  readonly title: string;
+  readonly kind: KnowledgeDocumentKind;
+  readonly chunkCount: number;
+  readonly sizeBytes: number;
+  readonly indexedAt: string;
+}
+
 export interface KnowledgeGraphApiNode {
   readonly id: string;
   readonly label: string;

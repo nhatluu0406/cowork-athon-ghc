@@ -17,6 +17,7 @@ export const KNOWLEDGE_LOCAL_CANCEL_PATH = "/v1/knowledge-local/cancel";
 export const KNOWLEDGE_LOCAL_CLEAR_PATH = "/v1/knowledge-local/clear";
 export const KNOWLEDGE_LOCAL_SEARCH_PATH = "/v1/knowledge-local/search";
 export const KNOWLEDGE_LOCAL_GRAPH_PATH = "/v1/knowledge-local/graph";
+export const KNOWLEDGE_LOCAL_DOCUMENTS_PATH = "/v1/knowledge-local/documents";
 
 export class KnowledgeLocalRequestError extends BadRequestError {
   constructor(message: string) {
@@ -75,6 +76,14 @@ export function createKnowledgeLocalRouter(service: KnowledgeLocalService): Boun
           const limit = parseLimit(ctx.url.searchParams.get("limit"), 120, 400);
           return { status: 200, data: { graph: service.graph(limit) } };
         },
+      },
+      {
+        method: "GET",
+        path: KNOWLEDGE_LOCAL_DOCUMENTS_PATH,
+        handler: async (): Promise<RouteResult> => ({
+          status: 200,
+          data: { documents: service.documents() },
+        }),
       },
     ],
   };

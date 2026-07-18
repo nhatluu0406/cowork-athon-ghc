@@ -37,6 +37,7 @@ import {
 import type { SessionView } from "@cowork-ghc/service/execution";
 import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
 import type {
+  KnowledgeDocumentView,
   KnowledgeGraphApiResult,
   KnowledgeIndexView,
   KnowledgeSearchHit,
@@ -799,6 +800,7 @@ export interface ServiceClient {
   knowledgeLocalClear(): Promise<KnowledgeIndexView>;
   knowledgeLocalSearch(query: string, limit?: number): Promise<readonly KnowledgeSearchHit[]>;
   knowledgeLocalGraph(limit?: number): Promise<KnowledgeGraphApiResult>;
+  knowledgeLocalDocuments(): Promise<readonly KnowledgeDocumentView[]>;
   /** Connect an MS365 account using a Bearer token. */
   connectMs365Token(token: string): Promise<Ms365ViewData>;
   /** Fetch the current MS365 connection state and services. */
@@ -1416,6 +1418,8 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       const suffix = limit !== undefined ? `?limit=${String(limit)}` : "";
       return (await call<{ graph: KnowledgeGraphApiResult }>(`/v1/knowledge-local/graph${suffix}`)).graph;
     },
+    knowledgeLocalDocuments: async () =>
+      (await call<{ documents: readonly KnowledgeDocumentView[] }>("/v1/knowledge-local/documents")).documents,
 
     connectMs365Token: async (token) =>
       call<Ms365ViewData>("/v1/ms365/connect", {

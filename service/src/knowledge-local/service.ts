@@ -10,6 +10,7 @@
 import { indexWorkspace, type IndexOptions } from "./indexer.js";
 import type { KnowledgeLocalRepository } from "./repository.js";
 import type {
+  KnowledgeDocumentView,
   KnowledgeGraphApiResult,
   KnowledgeIndexStatus,
   KnowledgeIndexView,
@@ -34,6 +35,8 @@ export interface KnowledgeLocalService {
   clear(): KnowledgeIndexView;
   search(query: string, limit?: number): readonly KnowledgeSearchHit[];
   graph(limit?: number): KnowledgeGraphApiResult;
+  /** The indexed documents for the active workspace (for the renderer's document list). */
+  documents(): readonly KnowledgeDocumentView[];
   /** Test-only: resolves when no index job is running. */
   whenIdle(): Promise<void>;
 }
@@ -175,6 +178,20 @@ export function createKnowledgeLocalService(
         edges: view.edges.map((e) => ({ from: e.fromId, to: e.toId, type: e.type })),
         truncated: view.truncated,
       };
+    },
+    documents(): readonly KnowledgeDocumentView[] {
+      const ws = activeWorkspaceRoot();
+      if (ws === undefined) return [];
+      const counts = repo.chunkCountsByDocument(ws);
+      return repo.listDocuments(ws).map((d) => ({
+        id: d.id,
+        relativePath: d.relativePath,
+        title: d.title,
+        kind: d.kind,
+        chunkCount: counts[d.id] ?? 0,
+        sizeBytes: d.sizeBytes,
+        indexedAt: d.indexedAt,
+      }));
     },
     async whenIdle(): Promise<void> {
       while (job !== null) {

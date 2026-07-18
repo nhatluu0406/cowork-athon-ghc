@@ -43,6 +43,8 @@ export interface KnowledgeLocalRepository {
   setState(row: KnowledgeIndexStateRow): void;
   getDocumentByPath(workspaceRoot: string, relativePath: string): KnowledgeDocumentRow | null;
   listDocuments(workspaceRoot: string): readonly KnowledgeDocumentRow[];
+  /** chunk count per document id (for the renderer's document list). */
+  chunkCountsByDocument(workspaceRoot: string): Record<string, number>;
   upsertDocument(doc: KnowledgeDocumentRow): void;
   deleteDocument(id: string): void;
   replaceChunks(
@@ -94,6 +96,10 @@ export function createKnowledgeLocalRepository(db: SqliteDatabase): KnowledgeLoc
     `SELECT id, workspace_root AS workspaceRoot, relative_path AS relativePath, title, kind,
        size_bytes AS sizeBytes, content_hash AS contentHash, indexed_at AS indexedAt
      FROM knowledge_documents WHERE workspace_root = ? ORDER BY relative_path ASC`,
+  );
+  const chunkCountsStmt = db.prepare(
+    `SELECT document_id AS documentId, COUNT(*) AS n FROM knowledge_chunks
+     WHERE workspace_root = ? GROUP BY document_id`,
   );
   const upsertDocStmt = db.prepare(
     `INSERT INTO knowledge_documents
@@ -185,6 +191,12 @@ export function createKnowledgeLocalRepository(db: SqliteDatabase): KnowledgeLoc
     },
     listDocuments(workspaceRoot) {
       return listDocsStmt.all(workspaceRoot) as KnowledgeDocumentRow[];
+    },
+    chunkCountsByDocument(workspaceRoot) {
+      const rows = chunkCountsStmt.all(workspaceRoot) as { documentId: string; n: number }[];
+      const out: Record<string, number> = {};
+      for (const row of rows) out[row.documentId] = row.n;
+      return out;
     },
     upsertDocument(doc) {
       upsertDocStmt.run(doc);
