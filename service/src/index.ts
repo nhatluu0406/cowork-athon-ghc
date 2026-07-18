@@ -111,6 +111,7 @@ export * as diagnostics from "./diagnostics/index.js";
 export * as execution from "./execution/index.js";
 export * as skills from "./skills/index.js";
 export * as mcp from "./mcp/index.js";
+export * as gateway from "./gateway/index.js";
 
 // Composition root (Tier 1): the integration assembly that wires the domain modules above into
 // ONE running loopback service and mounts every router. The shell/scripts call `startCoworkService`;

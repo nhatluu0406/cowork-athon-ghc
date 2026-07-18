@@ -123,6 +123,13 @@ export interface CoworkServiceOptions extends ServiceOptions {
 
   /** Allow POST /v1/credentials/import-env (development / verification only). Default: false. */
   readonly allowEnvCredentialImport?: boolean;
+  /**
+   * Port for the Gateway's real HTTP proxy (`gateway/proxy-server.ts`). Default: an ephemeral
+   * OS-assigned port (0) — safe for parallel tests. Production (the shell) passes the fixed
+   * `DEFAULT_GATEWAY_PROXY_PORT` so a persisted, gateway-swapped profile baseUrl keeps resolving
+   * across restarts and settings-only → live tier transitions.
+   */
+  readonly gatewayProxyPort?: number;
 
   // ---- Tier 2 seams (default: honest not-attached doubles; CGHC-028 fills these) ----
   /**

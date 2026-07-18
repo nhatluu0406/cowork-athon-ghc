@@ -32,6 +32,9 @@ export interface SettingsOnlyStartOptions {
   readonly allowedOrigins: readonly string[];
   /** Development / verification: enable POST /v1/credentials/import-env on the service. */
   readonly allowEnvCredentialImport?: boolean;
+  /** Fixed port for the Gateway proxy (default: an ephemeral bind). See `gatewayProxyPort` on
+   * `CoworkServiceOptions` for why production pins this to a stable address. */
+  readonly gatewayProxyPort?: number;
 }
 
 /**
@@ -55,6 +58,7 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
       rememberUnlock,
       allowedOrigins: options.allowedOrigins,
       allowEnvCredentialImport: options.allowEnvCredentialImport === true,
+      ...(options.gatewayProxyPort !== undefined ? { gatewayProxyPort: options.gatewayProxyPort } : {}),
     });
     return {
       baseUrl: running.baseUrl,

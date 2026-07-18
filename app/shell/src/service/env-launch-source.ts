@@ -43,6 +43,8 @@ export interface EnvLaunchSourceOptions {
   }[];
   /** Test-only: inject a credential store instead of the vault-owned default. */
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
+  /** Fixed port for the Gateway proxy (default: an ephemeral bind). */
+  readonly gatewayProxyPort?: number;
 }
 
 function trimmed(value: string | undefined): string | undefined {
@@ -131,6 +133,9 @@ export function createEnvLaunchSource(options: EnvLaunchSourceOptions = {}): Liv
           ? { skillsStateFilePath: options.skillsStateFilePath }
           : {}),
         ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
+        ...(options.gatewayProxyPort !== undefined
+          ? { gatewayProxyPort: options.gatewayProxyPort }
+          : {}),
       },
       ...(binPath !== undefined ? { binPath } : {}),
       ...(appRoot !== undefined ? { appRoot } : {}),
