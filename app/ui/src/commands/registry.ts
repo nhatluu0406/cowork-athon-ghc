@@ -99,12 +99,12 @@ export function createDefaultRegistry(): CommandRegistry {
       try {
         const status = await ctx.client.remoteStatus();
         if (!status.enabled) {
-          ctx.appendAssistantMessage("Remote chưa bật. Khởi động lại với CGHC_REMOTE_ENABLED=1 (và CGHC_REMOTE_LAN=1 để dùng cùng Wi-Fi).");
+          ctx.appendAssistantMessage("Điều phối từ xa chưa bật trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật cổng kết nối từ xa.");
           ctx.refreshUI();
           return;
         }
       } catch (err) {
-        ctx.appendAssistantMessage("Remote chưa bật. Khởi động lại với CGHC_REMOTE_ENABLED=1 (và CGHC_REMOTE_LAN=1 để dùng cùng Wi-Fi).");
+        ctx.appendAssistantMessage("Điều phối từ xa chưa bật trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật cổng kết nối từ xa.");
         ctx.refreshUI();
         return;
       }

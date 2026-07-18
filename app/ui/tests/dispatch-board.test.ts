@@ -221,7 +221,7 @@ test("/remote reports remote is not enabled when service returns enabled=false",
   const registry = createDefaultRegistry();
   const res = await registry.dispatch("/remote", ctx);
   assert.equal(res.handled, true);
-  assert.match(messages[0] ?? "", /Remote chưa bật/);
+  assert.match(messages[0] ?? "", /Điều phối từ xa chưa bật/);
 });
 
 test("/remote reports remote is not enabled when service status throws error", async () => {
@@ -233,7 +233,7 @@ test("/remote reports remote is not enabled when service status throws error", a
   const registry = createDefaultRegistry();
   const res = await registry.dispatch("/remote", ctx);
   assert.equal(res.handled, true);
-  assert.match(messages[0] ?? "", /Remote chưa bật/);
+  assert.match(messages[0] ?? "", /Điều phối từ xa chưa bật/);
 });
 
 test("/remote off calls remoteRevokeAll when remote is enabled", async () => {
