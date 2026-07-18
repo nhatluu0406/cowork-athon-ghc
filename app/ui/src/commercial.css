@@ -1308,6 +1308,10 @@ button {
 }
 
 .skills-settings__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 10px;
   border-radius: 11px;
   color: var(--cghc-text-secondary);
 }
@@ -1320,6 +1324,84 @@ button {
   background: var(--cghc-accent-soft);
   color: var(--cghc-accent);
 }
+.skills-settings__item--active .skills-settings__item-name { color: var(--cghc-accent); }
+
+/* Clickable label area (name + meta) — selects the skill for the editor. */
+.skills-settings__item-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.skills-settings__item-main:focus-visible {
+  outline: 2px solid var(--cghc-accent);
+  outline-offset: -2px;
+  border-radius: 9px;
+}
+
+/* Per-row on/off toggle + delete (issue #18): the enable/disable switch and delete now live on
+   the list row, not only inside the editor. */
+.skills-settings__item-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.skills-settings__row-toggle {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--cghc-border);
+  border-radius: 999px;
+  background: var(--cghc-surface-muted);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.skills-settings__row-toggle[data-on="true"] {
+  background: var(--cghc-accent);
+  border-color: var(--cghc-accent);
+}
+.skills-settings__row-toggle:disabled { opacity: .45; cursor: not-allowed; }
+.skills-settings__row-toggle:focus-visible { outline: 2px solid var(--cghc-accent); outline-offset: 2px; }
+.skills-settings__row-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
+  transition: transform .15s ease;
+}
+.skills-settings__row-toggle[data-on="true"] .skills-settings__row-toggle-knob {
+  transform: translateX(16px);
+}
+.skills-settings__row-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--cghc-text-muted);
+  cursor: pointer;
+}
+.skills-settings__row-delete:hover { background: var(--cghc-danger-soft, color-mix(in srgb, var(--cghc-danger) 14%, transparent)); color: var(--cghc-danger); }
+.skills-settings__row-delete:focus-visible { outline: 2px solid var(--cghc-danger); outline-offset: 1px; }
+.skills-settings__row-delete svg { width: 17px; height: 17px; }
 
 .skills-settings__textarea {
   min-height: 320px;

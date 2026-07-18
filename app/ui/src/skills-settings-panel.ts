@@ -3,6 +3,7 @@
  */
 
 import type { ServiceClient, SkillView } from "./service-client.js";
+import { icon } from "./ui-shell/dom-utils.js";
 
 export interface SkillWriteInput {
   readonly name: string;
@@ -138,6 +139,39 @@ export function mountSkillsSettingsPanel(
     return skills.filter((skill) => skill.name.toLowerCase().includes(q));
   }
 
+  // Shared enable/disable + delete actions, reused by BOTH the per-row controls (issue #18: the
+  // on/off toggle and delete now live on the list row, not only inside the editor) and the editor
+  // buttons. Both call the same existing typed client methods — no new backend.
+  async function applyToggle(skill: SkillView): Promise<void> {
+    if (skill.validationStatus !== "valid") return;
+    errorBox.hidden = true;
+    try {
+      await client.setSkillEnabled(skill.id, skill.status !== "enabled");
+      await refresh();
+    } catch (error) {
+      errorBox.hidden = false;
+      errorBox.textContent = error instanceof Error ? error.message : "Không cập nhật trạng thái.";
+    }
+  }
+
+  async function applyDelete(skill: SkillView): Promise<void> {
+    if (skill.source === "built_in") return;
+    if (!window.confirm(`Xóa Skill “${skill.name}” khỏi thư mục người dùng?`)) return;
+    errorBox.hidden = true;
+    try {
+      await client.deleteSkill(skill.id);
+      if (selectedId === skill.id) {
+        selectedId = null;
+        setDirty(false);
+      }
+      await refresh();
+      status.textContent = "Đã xóa Skill.";
+    } catch (error) {
+      errorBox.hidden = false;
+      errorBox.textContent = error instanceof Error ? error.message : "Không xóa được Skill.";
+    }
+  }
+
   function renderList(): void {
     list.replaceChildren();
     const visible = filteredSkills();
@@ -157,13 +191,17 @@ export function mountSkillsSettingsPanel(
       return;
     }
     for (const skill of visible) {
-      const item = el("button", "skills-settings__item") as HTMLButtonElement;
-      item.type = "button";
+      const item = el("div", "skills-settings__item");
       item.dataset["skillId"] = skill.id;
       item.setAttribute("role", "option");
       item.setAttribute("aria-selected", skill.id === selectedId ? "true" : "false");
       if (skill.id === selectedId) item.classList.add("skills-settings__item--active");
-      item.append(
+
+      // Clickable main area (name + meta) selects the skill for the editor.
+      const main = el("button", "skills-settings__item-main") as HTMLButtonElement;
+      main.type = "button";
+      main.setAttribute("aria-label", `Mở Skill ${skill.name}`);
+      main.append(
         el("span", "skills-settings__item-name", skill.name),
         el(
           "span",
@@ -171,11 +209,57 @@ export function mountSkillsSettingsPanel(
           `${sourceLabel(skill.source)} · v${skill.version} · ${skill.status === "enabled" ? "Đang bật" : skill.status === "disabled" ? "Đang tắt" : "Không hợp lệ"}`,
         ),
       );
-      item.addEventListener("click", () => {
+      main.addEventListener("click", () => {
         if (!confirmDiscard()) return;
         creating = false;
         void selectSkill(skill.id);
       });
+
+      // Row controls: the on/off toggle (issue #18) always visible for a valid skill, and a delete
+      // button for user-local skills (built-in skills are read-only, so no delete).
+      const controls = el("div", "skills-settings__item-controls");
+      const isValid = skill.validationStatus === "valid";
+      const enabled = skill.status === "enabled";
+      const toggle = el("button", "skills-settings__row-toggle") as HTMLButtonElement;
+      toggle.type = "button";
+      toggle.dataset["on"] = enabled ? "true" : "false";
+      toggle.disabled = !isValid;
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", enabled ? "true" : "false");
+      toggle.setAttribute(
+        "aria-label",
+        isValid
+          ? `${enabled ? "Tắt" : "Bật"} Skill ${skill.name}`
+          : `Skill ${skill.name} không hợp lệ — không thể bật`,
+      );
+      toggle.title = isValid
+        ? enabled
+          ? "Đang bật — nhấn để tắt"
+          : "Đang tắt — nhấn để bật"
+        : "Skill không hợp lệ — không thể bật";
+      toggle.append(el("span", "skills-settings__row-toggle-knob"));
+      toggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!isValid) return;
+        toggle.disabled = true;
+        void applyToggle(skill);
+      });
+      controls.append(toggle);
+
+      if (skill.source !== "built_in") {
+        const del = el("button", "skills-settings__row-delete") as HTMLButtonElement;
+        del.type = "button";
+        del.setAttribute("aria-label", `Xóa Skill ${skill.name}`);
+        del.title = "Xóa Skill";
+        del.append(icon("trash"));
+        del.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void applyDelete(skill);
+        });
+        controls.append(del);
+      }
+
+      item.append(main, controls);
       list.append(item);
     }
   }
@@ -301,41 +385,23 @@ export function mountSkillsSettingsPanel(
     })();
   });
 
+  // Editor delete/toggle reuse the same shared actions as the per-row controls (issue #18).
   deleteButton.addEventListener("click", () => {
-    if (selectedId === null) return;
-    if (!window.confirm("Xóa Skill này khỏi thư mục người dùng?")) return;
-    void (async () => {
-      deleteButton.disabled = true;
-      try {
-        await client.deleteSkill(selectedId!);
-        selectedId = null;
-        setDirty(false);
-        await refresh();
-        status.textContent = "Đã xóa Skill.";
-      } catch (error) {
-        errorBox.hidden = false;
-        errorBox.textContent = error instanceof Error ? error.message : "Không xóa được Skill.";
-      } finally {
-        deleteButton.disabled = false;
-      }
-    })();
+    const skill = selectedId === null ? undefined : skills.find((entry) => entry.id === selectedId);
+    if (skill === undefined) return;
+    deleteButton.disabled = true;
+    void applyDelete(skill).finally(() => {
+      deleteButton.disabled = false;
+    });
   });
 
   toggleButton.addEventListener("click", () => {
-    if (selectedId === null) return;
-    const skill = skills.find((entry) => entry.id === selectedId);
+    const skill = selectedId === null ? undefined : skills.find((entry) => entry.id === selectedId);
     if (skill === undefined || skill.validationStatus !== "valid") return;
     toggleButton.disabled = true;
-    void client
-      .setSkillEnabled(selectedId, skill.status !== "enabled")
-      .then(() => refresh())
-      .catch((error) => {
-        errorBox.hidden = false;
-        errorBox.textContent = error instanceof Error ? error.message : "Không cập nhật trạng thái.";
-      })
-      .finally(() => {
-        toggleButton.disabled = false;
-      });
+    void applyToggle(skill).finally(() => {
+      toggleButton.disabled = false;
+    });
   });
 
   createButton.addEventListener("click", () => {
