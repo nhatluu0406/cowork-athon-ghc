@@ -855,7 +855,10 @@ async function finalizeFileMutationReview(
     refreshActivityUi(state, dom);
     void persistActivity(state);
     // Wave 4 — reflect the verified mutation in the workspace surface.
-    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
+    // 1) Refresh the file trees so a create/delete/rename appears without a manual reload. The
+    // workspace navigator's onRefreshed hook also drops the composer's @-mention cache, so a newly
+    // created/renamed file shows up in `@` suggestions immediately, not only after a workspace
+    // switch (issue #24).
     void workspaceNavigator?.refresh();
     void codeNavigator?.refresh();
     // Code Phase 1 — update any open Code editor tab for this file (reload clean, conflict if dirty,
@@ -2793,13 +2796,43 @@ export function mountCoworkApp(root: HTMLElement): void {
           // cannot leave Settings → Nhà cung cấp permanently empty.
           if (!featuresMounted) {
             featuresMounted = true;
+            // Relaunch the supervised runtime against a newly selected workspace (issue #26): a
+            // FORCED connectLive stop+restarts the live service so OpenCode re-reads the persisted
+            // active workspace as its launch cwd (an un-forced connectLive is idempotent and would
+            // keep the old child). Then re-adopt the fresh bootstrap via ensureLive.
+            //
+            // A monotonic generation guards against overlapping switches (user clicks the wrong
+            // recent workspace, then the right one, before the first restart finishes): only the
+            // newest relaunch drives bootstrap re-adoption; superseded ones bail out so two
+            // ensureLive/permission-poll cycles never run concurrently.
+            let workspaceSwitchGeneration = 0;
+            const relaunchRuntimeForWorkspaceSwitch = async (): Promise<void> => {
+              const generation = (workspaceSwitchGeneration += 1);
+              // End the current turn's stream cleanly before the child dies, so the switch reads as
+              // an intentional cancellation instead of a "Mất kết nối luồng sự kiện." error injected
+              // by the dropped connection.
+              stopStream(state);
+              try {
+                await getShellBridge().connectLive({ force: true });
+              } catch {
+                // Restart failed — the next send surfaces an honest "Runtime chưa sẵn sàng" via
+                // ensureLive rather than silently pretending the old workspace is still active.
+              }
+              if (generation !== workspaceSwitchGeneration) return; // superseded by a newer switch
+              state.liveAttached = false;
+              await ensureLive(state, readiness).catch(() => undefined);
+              if (generation !== workspaceSwitchGeneration) return;
+              renderState(dom, state, handlers);
+            };
             workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
               bridge: getShellBridge(),
               client: dynamicClient,
               onActivated: (rootPath) => {
                 // A different active workspace resets the Code editor (its tabs pointed at the old
                 // project). "reset đúng" per ADR 0013; unsaved Code edits are discarded on switch.
-                if (state.activeWorkspace !== rootPath) {
+                const previousWorkspace = state.activeWorkspace;
+                const workspaceChanged = previousWorkspace !== rootPath;
+                if (workspaceChanged) {
                   codeEditor?.reset();
                   previewController?.reset();
                   appController?.reset();
@@ -2809,6 +2842,17 @@ export function mountCoworkApp(root: HTMLElement): void {
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
+                // Issue #26: the supervised OpenCode child is bound to ONE workspace via its launch
+                // cwd (see runtime/session-store-adapter). Persisting the new active workspace is
+                // not enough — the RUNNING child keeps operating in the OLD folder, so the agent
+                // "chỉ nhớ link workspace cũ". On a real switch BETWEEN two workspaces with a live
+                // runtime, force a stop+restart so OpenCode relaunches with the new workspace as its
+                // cwd. The initial restore (null → first workspace) is skipped: the child already
+                // launched on that folder. The next turn plans a fresh session (planRuntimeTurn
+                // falls back to new_turn when the pre-restart session is gone).
+                if (workspaceChanged && previousWorkspace !== null && state.liveAttached) {
+                  void relaunchRuntimeForWorkspaceSwitch();
+                }
               },
               onDeactivated: () => {
                 state.activeWorkspace = null;
@@ -2831,6 +2875,9 @@ export function mountCoworkApp(root: HTMLElement): void {
               void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
+            // A manual tree refresh (e.g. after adding files outside the app) also refreshes the
+            // composer's @-mention file cache (issue #24).
+            onRefreshed: () => mentionTypeahead.invalidate(),
           });
           codeNavigator = mountWorkspaceNavigator(dom.codeView.explorer.treeSlot, {
             client: dynamicClient,
