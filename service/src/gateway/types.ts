@@ -100,13 +100,8 @@ export interface GatewayRequestLogEntry {
   readonly gatewayEnabled: boolean;
   readonly outcome: GatewayRequestOutcome;
   readonly reason?: string;
-  /**
-   * The user's own prompt text, truncated (see `PROMPT_PREVIEW_MAX_CHARS` in
-   * gateway-service.ts) and PII-masked (see `maskPii`) — never the assistant's reply, never
-   * tool output. This is the same user-visible content already stored in the conversation
-   * transcript, not a secret, but emails/phone-like/card-like numbers are still redacted.
-   */
-  readonly promptPreview?: string;
+  // Privacy (#38): the Gateway no longer records the user's prompt text. It is an API-key routing
+  // proxy, not a prompt logger — chat content lives only in the conversation store.
   /** e.g. "DeepSeek-V4-Flash" — the profile's configured model at request time. */
   readonly modelId?: string;
   /** e.g. "deepseek" | "custom-openai-compat" — the profile's provider type. */
@@ -125,7 +120,6 @@ export interface RecordRequestInput {
   readonly gatewayEnabled: boolean;
   readonly outcome: GatewayRequestOutcome;
   readonly reason?: string;
-  readonly promptPreview?: string;
   readonly modelId?: string;
   readonly providerType?: string;
   readonly httpStatus?: number;

@@ -18,28 +18,6 @@ import type {
 
 export type { ProxyUpstream };
 
-/** Stored prompt preview cap — bounds `gateway.json` size regardless of what the caller passes. */
-const PROMPT_PREVIEW_MAX_CHARS = 300;
-
-// Short-term PII masking (see the Gateway logging plan): cheap regex redaction of the obvious
-// cases before a prompt preview ever touches disk. Not a full PII-detection library — that's
-// the long-term item — but it stops plainly-shaped emails/phone/card numbers from being stored.
-const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-// 13-19 consecutive digits (spaces/dashes allowed as separators) — long enough that ordinary
-// code/IDs rarely collide, matching typical card-number lengths.
-const CARD_LIKE_RE = /\b(?:\d[ -]?){13,19}\b/g;
-// Optional country code + a 9-10 digit local number (VN mobile/landline shape) — narrower than a
-// bare digit-run match to avoid flagging ordinary numeric IDs in code or file paths.
-const PHONE_LIKE_RE = /\b(?:\+?\d{1,3}[-. ]?)?0\d{9,10}\b/g;
-
-/** Redact email/card-like/phone-like substrings from user-supplied text before it is persisted. */
-function maskPii(text: string): string {
-  return text
-    .replace(EMAIL_RE, "[email]")
-    .replace(CARD_LIKE_RE, "[card]")
-    .replace(PHONE_LIKE_RE, "[phone]");
-}
-
 export interface GatewayService {
   listAccounts(): readonly GatewayAccount[];
   addAccount(input: AddAccountInput): Promise<GatewayAccount>;
@@ -355,14 +333,8 @@ export function createGatewayService(options: GatewayServiceOptions): GatewaySer
     },
 
     async recordRequest(input: RecordRequestInput): Promise<void> {
-      // Mask BEFORE truncating so a redaction never gets cut in half by the length cap.
-      const masked = input.promptPreview !== undefined ? maskPii(input.promptPreview) : undefined;
-      const promptPreview =
-        masked !== undefined
-          ? masked.length > PROMPT_PREVIEW_MAX_CHARS
-            ? `${masked.slice(0, PROMPT_PREVIEW_MAX_CHARS)}…`
-            : masked
-          : undefined;
+      // Privacy (#38): the request log records only routing metrics (model/outcome/status/timing),
+      // never the user's prompt text — that lives solely in the conversation store.
       const entry: GatewayRequestLogEntry = {
         id: generateId(),
         at: now(),
@@ -373,7 +345,6 @@ export function createGatewayService(options: GatewayServiceOptions): GatewaySer
         gatewayEnabled: input.gatewayEnabled,
         outcome: input.outcome,
         ...(input.reason !== undefined ? { reason: input.reason } : {}),
-        ...(promptPreview !== undefined ? { promptPreview } : {}),
         ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
         ...(input.providerType !== undefined ? { providerType: input.providerType } : {}),
         ...(input.httpStatus !== undefined ? { httpStatus: input.httpStatus } : {}),

@@ -872,6 +872,15 @@ textarea,
   min-height: 0;
 }
 
+.workspace-view__header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--cghc-border-subtle);
+}
+
 .workspace-view__companion-slot {
   flex: 1;
   min-height: 0;

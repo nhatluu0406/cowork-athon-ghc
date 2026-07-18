@@ -300,6 +300,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
     state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
   // The editor is a persistent controller; keep its open diff tabs in sync with the reviews.
   codeEditor?.setReviews(reviews);
+  const workspaceConversations = state.conv.state.summaries
+    .filter((summary) => summary.workspacePath === state.activeWorkspace && (summary.surface ?? "cowork") === "cowork")
+    .map((summary) => ({ id: summary.id, title: summary.title }));
   renderClaudeCodeSurface(
     dom.codeView,
     {
@@ -310,6 +313,9 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       phase: state.conv.state.runtimePhase,
       composerDisabled: !preflight.canSend || isComposerLocked(state),
       composerDisabledReason: preflight.canSend ? null : preflight.message,
+      conversations: workspaceConversations,
+      activeConversationId: state.conv.state.activeConversationId,
+      sessionControlsDisabled: state.activeWorkspace === null || isComposerLocked(state),
     },
     {
       onOpenReview: (review) => {
@@ -1016,6 +1022,14 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.coworkView.hidden = settingsOpen || !isCoworkSurface;
   dom.workspaceView.root.hidden = settingsOpen || !isCoworkSurface || state.workMode !== "workspace";
   dom.coworkView.classList.toggle("cowork-view--companion", isCoworkSurface && state.workMode === "workspace");
+  // Session control (#35) in the Workspace tab — shares the ONE Cowork conversation.
+  dom.workspaceView.sessionBar.render({
+    activeId: state.conv.state.activeConversationId,
+    conversations: state.conv.state.summaries
+      .filter((s) => s.workspacePath === state.activeWorkspace && (s.surface ?? "cowork") === "cowork")
+      .map((s) => ({ id: s.id, title: s.title })),
+    disabled: state.activeWorkspace === null || isComposerLocked(state),
+  });
   dom.knowledgeView.root.hidden = settingsOpen || !isKnowledgeSurface;
   dom.integrationSurface.hidden =
     settingsOpen ||
@@ -2833,6 +2847,12 @@ export function mountCoworkApp(root: HTMLElement): void {
               await ensureLive(state, readiness).catch(() => undefined);
               if (generation !== workspaceSwitchGeneration) return;
               renderState(dom, state, handlers);
+              // Issue #31: the forced restart swapped the loopback baseURL/token, but the navigators
+              // were refreshed in onActivated BEFORE the restart — against the old (dying) service —
+              // so the tree "fetch fail"s and the user had to click reload. Re-fetch now that the
+              // fresh bootstrap is adopted (dynamicClient reads the new state.client).
+              void workspaceNavigator?.refresh();
+              void codeNavigator?.refresh();
             };
             workspacePicker = mountWorkspacePicker(dom.workspaceBox, {
               bridge: getShellBridge(),
@@ -2849,8 +2869,6 @@ export function mountCoworkApp(root: HTMLElement): void {
                 }
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
-                void workspaceNavigator?.refresh();
-                void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
                 // Issue #26: the supervised OpenCode child is bound to ONE workspace via its launch
                 // cwd (see runtime/session-store-adapter). Persisting the new active workspace is
@@ -2860,8 +2878,15 @@ export function mountCoworkApp(root: HTMLElement): void {
                 // cwd. The initial restore (null → first workspace) is skipped: the child already
                 // launched on that folder. The next turn plans a fresh session (planRuntimeTurn
                 // falls back to new_turn when the pre-restart session is gone).
-                if (workspaceChanged && previousWorkspace !== null && state.liveAttached) {
+                const willRelaunch =
+                  workspaceChanged && previousWorkspace !== null && state.liveAttached;
+                if (willRelaunch) {
+                  // Refresh happens AFTER the restart adopts the new bootstrap (issue #31) — a
+                  // refresh here would race the dying service and fail until a manual reload.
                   void relaunchRuntimeForWorkspaceSwitch();
+                } else {
+                  void workspaceNavigator?.refresh();
+                  void codeNavigator?.refresh();
                 }
               },
               onDeactivated: () => {
@@ -3358,6 +3383,20 @@ export function mountCoworkApp(root: HTMLElement): void {
         renderState(dom, state, handlers);
       },
     );
+  };
+
+  // Session controls in the Code surface (#35) reuse the shared Cowork conversation flow.
+  dom.onCodeNewSession = (): void => {
+    void newConversation(state, dom, handlers).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
+  };
+  dom.onCodePickSession = (conversationId: string): void => {
+    void switchConversation(state, dom, handlers, conversationId).catch((error) => {
+      appendMessage(dom, "assistant", safeError(error));
+      renderState(dom, state, handlers);
+    });
   };
 
   dom.sendButton.addEventListener("click", () => {

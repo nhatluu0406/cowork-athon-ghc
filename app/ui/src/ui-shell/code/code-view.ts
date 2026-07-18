@@ -4,6 +4,7 @@ import type { ConversationMessage } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
 import { createClaudePanel, renderClaudePanel, type ClaudePanelDom } from "./claude-panel.js";
 import { createCodeExplorer, renderSourceControl, type CodeExplorerDom } from "./code-explorer.js";
+import { createSessionBar, type SessionBarConversation, type SessionBarDom } from "../session-bar.js";
 
 /** Center-pane mode: source editor vs runtime preview. */
 export type CodeMode = "code" | "preview";
@@ -31,6 +32,8 @@ export interface ClaudeCodeViewDom {
   readonly modeApp: HTMLButtonElement;
   readonly panel: ClaudePanelDom;
   readonly panelToggle: HTMLButtonElement;
+  /** Session control (#35): new session + pick an existing one, shared with the Cowork session. */
+  readonly sessionBar: SessionBarDom;
   mode: CodeMode;
   runtimeMode: RuntimeMode;
 }
@@ -43,6 +46,11 @@ export interface ClaudeCodeRenderInput {
   readonly phase: RuntimePhase;
   readonly composerDisabled: boolean;
   readonly composerDisabledReason: string | null;
+  /** Conversations (this workspace) for the session picker (#35). */
+  readonly conversations: readonly SessionBarConversation[];
+  readonly activeConversationId: string | null;
+  /** Disable session controls when no workspace is active. */
+  readonly sessionControlsDisabled: boolean;
 }
 
 export interface ClaudeCodeHandlers {
@@ -55,6 +63,10 @@ export interface ClaudeCodeViewHandlers {
   readonly onModeChange?: (mode: CodeMode) => void;
   /** Fired when the user switches Preview between Web and Ứng dụng (desktop app). */
   readonly onRuntimeModeChange?: (mode: RuntimeMode) => void;
+  /** #35: start a new shared session. */
+  readonly onNewSession?: () => void;
+  /** #35: switch to an existing conversation. */
+  readonly onPickSession?: (conversationId: string) => void;
 }
 
 export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCodeViewDom {
@@ -73,13 +85,21 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   runtimeStatus.setAttribute("role", "status");
   titleWrap.append(logoChip, el("h1", "cc-surface__title", "Code"), repoChip, runtimeStatus);
 
+  // Session control (#35): new session + pick an existing one, from the Code surface itself.
+  const sessionBar = createSessionBar({
+    onNew: () => handlers.onNewSession?.(),
+    onPick: (id) => handlers.onPickSession?.(id),
+  });
+
   const panelToggle = el("button", "cc-surface__panel-toggle") as HTMLButtonElement;
   panelToggle.type = "button";
   panelToggle.setAttribute("aria-label", "Ẩn/hiện panel Agent");
   panelToggle.setAttribute("data-tooltip", "Ẩn/hiện Agent");
   panelToggle.setAttribute("aria-pressed", "false");
   panelToggle.append(icon("sparkle", "Agent"));
-  header.append(titleWrap, panelToggle);
+  const headerActions = el("div", "cc-surface__header-actions");
+  headerActions.append(sessionBar.root, panelToggle);
+  header.append(titleWrap, headerActions);
 
   // --- Body: Explorer | Center (toolbar + editor/preview) | Agent ---
   const explorer = createCodeExplorer();
@@ -134,6 +154,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
     modeApp,
     panel,
     panelToggle,
+    sessionBar,
     mode: "code",
     runtimeMode: "web",
   };
@@ -228,6 +249,11 @@ export function renderClaudeCodeSurface(
   handlers: ClaudeCodeHandlers,
 ): void {
   dom.repoChip.textContent = input.workspaceName ?? "Chưa chọn workspace";
+  dom.sessionBar.render({
+    activeId: input.activeConversationId,
+    conversations: input.conversations,
+    disabled: input.sessionControlsDisabled,
+  });
   renderSourceControl(dom.explorer, input.reviews, handlers.onOpenReview);
   renderClaudePanel(dom.panel, {
     title: input.sessionTitle,

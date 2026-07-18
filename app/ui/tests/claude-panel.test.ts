@@ -17,6 +17,32 @@ test("renders messages from the shared conversation record", () => {
   assert.match(dom.title.textContent ?? "", /Phiên A/);
 });
 
+test("assistant answers render as Markdown — a GFM table becomes a <table> (#33)", () => {
+  const dom = createClaudePanel({ onSend: () => undefined });
+  const withTable: ConversationMessage[] = [
+    {
+      id: "m1",
+      role: "assistant",
+      text: "Kết quả:\n\n| Cột A | Cột B |\n| --- | --- |\n| 1 | 2 |\n",
+      at: "2026-07-13T00:00:00.000Z",
+    },
+  ];
+  renderClaudePanel(dom, { title: "T", messages: withTable, phase: "completed", disabled: false, disabledReason: null });
+  const table = dom.transcript.querySelector(".cc-msg--assistant .cc-msg__text.md table");
+  assert.ok(table, "assistant markdown table should render as a <table>");
+  assert.equal(dom.transcript.querySelectorAll(".cc-msg__text.md td").length, 2);
+});
+
+test("user messages stay plain text (no markdown parsing)", () => {
+  const dom = createClaudePanel({ onSend: () => undefined });
+  const msgs: ConversationMessage[] = [
+    { id: "u1", role: "user", text: "| not | a table |", at: "2026-07-13T00:00:00.000Z" },
+  ];
+  renderClaudePanel(dom, { title: "T", messages: msgs, phase: "idle", disabled: false, disabledReason: null });
+  assert.equal(dom.transcript.querySelector(".cc-msg--user table"), null);
+  assert.match(dom.transcript.querySelector(".cc-msg--user")?.textContent ?? "", /\| not \| a table \|/);
+});
+
 test("Enter sends, Shift+Enter does not; empty text never sends", () => {
   let sent: string | null = null;
   const dom = createClaudePanel({ onSend: (text) => { sent = text; } });

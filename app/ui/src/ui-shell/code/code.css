@@ -38,8 +38,10 @@
 .cc-surface__panel-toggle[aria-pressed="true"] { background: var(--cghc-accent-soft); color: var(--cghc-accent); border-color: transparent; }
 
 /* --- Body grid: Explorer | Center | Agent --- */
-.cc-surface__body { flex: 1; display: grid; grid-template-columns: 230px 1fr 372px; min-height: 0; }
-.cc-surface--explorer-collapsed .cc-surface__body { grid-template-columns: 0 1fr 372px; }
+/* #36: the Agent panel was a cramped 372px sidebar; widen it (min 420, up to 30vw) so the chat is
+   roomier and closer to the Workspace tab's chat proportions. */
+.cc-surface__body { flex: 1; display: grid; grid-template-columns: 230px 1fr clamp(420px, 30vw, 560px); min-height: 0; }
+.cc-surface--explorer-collapsed .cc-surface__body { grid-template-columns: 0 1fr clamp(420px, 30vw, 560px); }
 .cc-surface--explorer-collapsed .code-explorer { display: none; }
 .cc-surface--panel-collapsed .cc-surface__body { grid-template-columns: 230px 1fr 0; }
 .cc-surface--panel-collapsed.cc-surface--explorer-collapsed .cc-surface__body { grid-template-columns: 0 1fr 0; }
@@ -187,14 +189,32 @@
 .cc-panel__empty { font-size: 12.5px; color: var(--cghc-text-subtle); }
 .cc-msg--user { align-self: flex-end; max-width: 85%; background: var(--cghc-accent-soft); border: 1px solid color-mix(in srgb, var(--cghc-accent) 30%, transparent); border-radius: 14px 14px 4px 14px; padding: 8px 12px; }
 .cc-msg--assistant { align-self: flex-start; max-width: 95%; }
-.cc-msg__text { margin: 0; font-size: 13px; line-height: 1.55; color: var(--cghc-text-primary); white-space: pre-wrap; }
+.cc-msg__text { margin: 0; font-size: 13px; line-height: 1.55; color: var(--cghc-text-primary); }
+/* #33: assistant answers render as Markdown (.md); user text stays plain with preserved wrapping. */
+.cc-msg__text.md { white-space: normal; }
+.cc-msg__plain { margin: 0; white-space: pre-wrap; }
+.cc-msg__text.md > *:first-child { margin-top: 0; }
+.cc-msg__text.md > *:last-child { margin-bottom: 0; }
+.cc-msg__text.md table { border-collapse: collapse; width: 100%; margin: 0 0 .7em; font-size: 12px; display: block; overflow-x: auto; }
+.cc-msg__text.md th, .cc-msg__text.md td { border: 1px solid var(--cghc-border); padding: 4px 8px; text-align: left; }
+.cc-msg__text.md th { background: color-mix(in srgb, var(--cghc-text-primary) 6%, transparent); font-weight: 600; }
 .cc-panel__streaming { display: flex; gap: 8px; padding: 0 14px 10px; font-size: 13px; color: var(--cghc-text-secondary); align-items: baseline; }
 .cc-panel__pulse { width: 8px; height: 8px; border-radius: 999px; background: var(--cghc-accent); animation: cghc-pulse 1.6s infinite; flex: none; }
 @keyframes cghc-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .cc-composer { border-top: 1px solid var(--cghc-border-subtle); padding: 12px 14px 14px; }
 .cc-composer__row { display: flex; gap: 8px; align-items: flex-end; background: var(--cghc-surface-solid); border: 1px solid var(--cghc-border); border-radius: 14px; padding: 8px 8px 8px 12px; box-shadow: var(--cghc-shadow-sm); }
 .cc-composer__row:focus-within { border-color: var(--cghc-accent); box-shadow: 0 0 0 3px var(--cghc-accent-soft); }
-.cc-composer__input { flex: 1; border: 0; outline: none; background: transparent; padding: 2px 0; font: inherit; font-size: 13px; resize: none; color: var(--cghc-text-primary); }
+.cc-composer__input { flex: 1; border: 0; outline: none; background: transparent; padding: 2px 0; font: inherit; font-size: 13px; resize: none; color: var(--cghc-text-primary); min-height: 66px; line-height: 1.5; }
+
+/* Session control (#35) — new session + pick an existing one, in the Code header. */
+.cc-surface__header-actions { display: flex; align-items: center; gap: 8px; }
+.session-bar { display: flex; align-items: center; gap: 6px; }
+.session-bar__select { max-width: 200px; font-size: 12px; padding: 4px 8px; border-radius: 8px; border: 1px solid var(--cghc-border); background: var(--cghc-surface-solid); color: var(--cghc-text-primary); }
+.session-bar__select:disabled { opacity: .55; cursor: not-allowed; }
+.session-bar__new { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--cghc-border); background: var(--cghc-surface-solid); color: var(--cghc-text-primary); cursor: pointer; }
+.session-bar__new:hover:not(:disabled) { border-color: var(--cghc-accent); color: var(--cghc-accent); }
+.session-bar__new:disabled { opacity: .55; cursor: not-allowed; }
+.session-bar__new svg { width: 15px; height: 15px; }
 .cc-composer__send { width: 32px; height: 32px; border-radius: 10px; border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .cc-composer__send:hover:not(:disabled) { background: var(--cghc-accent-hover); }
 .cc-composer__send:disabled, .cc-composer__input:disabled { opacity: .55; cursor: not-allowed; }

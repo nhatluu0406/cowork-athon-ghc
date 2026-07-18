@@ -43,7 +43,6 @@ export interface ProxyRequestOutcome {
   readonly errorMessage?: string;
   /** Parsed straight from the REAL request body this proxy received — not inferred/guessed. */
   readonly modelId?: string;
-  readonly promptPreview?: string;
 }
 
 export interface GatewayProxyServerOptions {
@@ -115,7 +114,7 @@ export function createGatewayProxyServer(options: GatewayProxyServerOptions): Ga
     let responseBytes = 0;
     const bodyChunks: Buffer[] = [];
 
-    function parsedRequestBody(): { modelId?: string; promptPreview?: string } {
+    function parsedRequestBody(): { modelId?: string } {
       if (bodyChunks.length === 0) return {};
       try {
         return parseChatCompletionRequest(Buffer.concat(bodyChunks).toString("utf8"));
