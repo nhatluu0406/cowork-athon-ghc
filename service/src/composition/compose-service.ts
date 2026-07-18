@@ -279,7 +279,12 @@ export async function createCoworkService(
       });
     }
 
-    localAuth = createLocalAuthService({ users: usersRepo, vaultKeys: vaultKeysRepo, now });
+    localAuth = createLocalAuthService({
+      users: usersRepo,
+      vaultKeys: vaultKeysRepo,
+      appMeta,
+      now,
+    });
     vaultStore = createVaultCredentialStore({ auth: localAuth, secrets: secretsRepo, now });
 
     if (options.autoUnlock !== undefined) {
@@ -287,6 +292,16 @@ export async function createCoworkService(
         await localAuth.unlock(options.autoUnlock.username, options.autoUnlock.password);
       } catch {
         // Leave locked; renderer lock gate will prompt again.
+      }
+    } else if (options.autoUnlockDeviceSecret !== undefined) {
+      // Device-bound auto-unlock (login-not-required mode): unwrap the vault from the app_meta
+      // envelope using the shell's safeStorage-sealed deviceSecret. Failure leaves the vault locked
+      // so the renderer lock gate prompts for the password (recovery on a different device / corrupt
+      // envelope).
+      try {
+        localAuth.unlockWithAutoUnlock(options.autoUnlockDeviceSecret);
+      } catch {
+        // Leave locked; recovery via the password gate.
       }
     }
 
