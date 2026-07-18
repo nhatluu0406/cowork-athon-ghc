@@ -94,14 +94,16 @@ test("a qr payload carrying script is refused, and pairing still reports the cod
   assert.match(body.textContent ?? "", /không dựng được QR/);
 });
 
-test("the Dispatch surface offers phone pairing while still reporting D1 as unintegrated", () => {
+test("the connected Dispatch surface renders the live board + phone pairing, not the awaiting-D1 placeholder", () => {
   const container = document.createElement("div");
   renderIntegrationSurface(container, dispatchSurface, client());
 
-  // The honest D1 status must survive: pairing a phone does not mean D1 landed.
-  assert.match(container.textContent ?? "", /Chờ tích hợp D1/);
+  // ADR 0011 / commit 5934660: with a connected client the Dispatch surface shows its REAL
+  // content — the live dispatch board plus phone pairing — and no longer the honest-but-stale
+  // "Chờ tích hợp D1" placeholder (that survives only for the disconnected case below).
   assert.ok(container.querySelector(".integration-remote"), "dispatch must render the pairing section");
   assert.ok(container.querySelector(".integration-dispatch"), "dispatch must render the board section");
+  assert.doesNotMatch(container.textContent ?? "", /Chờ tích hợp D1/);
 });
 
 test("other awaiting-integration surfaces do not grow a pairing section", () => {
