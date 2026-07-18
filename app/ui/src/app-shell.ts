@@ -119,6 +119,7 @@ import { renderConversationProviderControl } from "./ui-shell/conversation-provi
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
 import { ensureAppUnlocked } from "./app-lock.js";
+import { createMentionTypeahead } from "./mention-typeahead.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
@@ -2771,9 +2772,22 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
+  const mentionTypeahead = createMentionTypeahead({
+    input: dom.composerInput,
+    anchor: dom.composer,
+    getClient: () => state.client,
+    getWorkspace: () => state.activeWorkspace,
+    onApplied: () => syncComposerChrome(dom, state),
+  });
+  dom.composerInput.addEventListener("input", () => {
+    syncComposerChrome(dom, state);
+    mentionTypeahead.refresh();
+  });
+  dom.composerInput.addEventListener("click", () => mentionTypeahead.refresh());
+  dom.composerInput.addEventListener("blur", () => mentionTypeahead.hide());
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
+    if (mentionTypeahead.handleKeydown(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       dom.sendButton.click();
