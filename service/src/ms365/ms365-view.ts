@@ -23,6 +23,12 @@ export function buildMs365View(
   const connectionState = connector.connectionState();
   const lastError = connector.lastError();
 
+  // When connected, show the permissions the account ACTUALLY holds (decoded from the token's
+  // scp/roles claims). When not connected, show the static list the app will request.
+  const granted = connector.grantedScopes();
+  const effectiveScopes =
+    connectionState === "connected" && granted.length > 0 ? Array.from(granted) : Array.from(scopes);
+
   const view: Ms365ViewData = {
     connectionState,
     services: [
@@ -32,7 +38,7 @@ export function buildMs365View(
         connected: connectionState === "connected",
       },
     ],
-    scopes: Array.from(scopes),
+    scopes: effectiveScopes,
     actionHistory: [],
   };
 

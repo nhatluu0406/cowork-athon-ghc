@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildOpencodeConfig } from "../src/runtime/opencode-config.js";
+import { TOOL_NAMES } from "../src/ms365/ms365-tool-router.js";
 
 test("skillsPaths emit OpenCode skills.paths object (not a bare string array)", () => {
   const cfg = buildOpencodeConfig(undefined, {
@@ -53,4 +54,24 @@ test("live policy denies OpenCode question tool (no product Question UI yet)", (
   assert.equal(permission["question"], "deny");
   const agent = cfg["agent"] as { build: { permission: Record<string, unknown> } };
   assert.equal(agent.build.permission["question"], "deny");
+});
+
+test("MS365 tools are allowed at both permission surfaces (bridge is the real gate)", () => {
+  // MS365 mounts unconditionally on main (the CGHC_MS365_ENABLED gate was removed), and the MS365
+  // tools are gated by the MS365 bridge (permission card per call), so opencode.json marks them
+  // "allow" to avoid a double-prompt from OpenCode's "*":"ask" wildcard.
+  const config = buildOpencodeConfig();
+  const permission = config["permission"] as Record<string, string>;
+  const agent = config["agent"] as { build: { permission: Record<string, string> } };
+  // The MS365 tool surface: SharePoint + Outlook + Teams + Planner + Lists + Calendar + OneDrive
+  // + Power Automate + people/identity. Lock the count so an accidental add/drop is caught.
+  assert.equal(TOOL_NAMES.length, 34);
+  for (const name of TOOL_NAMES) {
+    assert.equal(permission[name], "allow", `missing top-level allow for ${name}`);
+    assert.equal(agent.build.permission[name], "allow", `missing agent.build allow for ${name}`);
+  }
+  // Wildcard and existing gates stay intact.
+  assert.equal(permission["*"], "ask");
+  assert.equal(permission.bash, "deny");
+  assert.equal(permission.edit, "ask");
 });

@@ -121,6 +121,7 @@ export {
   startLiveCoworkService,
   buildLiveCoworkOptions,
   LiveLaunchConfigError,
+  SsrfBlockedError,
   RuntimeNotAttachedError,
   downRuntimeHealth,
   notAttachedConnector,

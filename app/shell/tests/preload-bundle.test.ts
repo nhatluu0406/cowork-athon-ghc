@@ -5,8 +5,9 @@
  * The bundle is built in-memory (esbuild `write: false`) from the real config, then executed
  * in a fake CommonJS context with a fake `electron` module — so we assert the SHIPPED artifact
  * (not just the source): single file, CJS (`require("electron")`, no ESM `import`), and an
- * `exposeInMainWorld` call carrying exactly `getBootstrap` + workspace pickers + `connectLive` + `setWindowTheme`
- * with no `ipcRenderer`/generic passthrough.
+ * `exposeInMainWorld` call carrying exactly the narrow capability set — bootstrap + workspace
+ * pickers + `connectLive` + theme/devtools + `saveTextFile` (Code Phase 1 editor) + the `preview*`
+ * runtime-preview group (Code Slice 1) — with no `ipcRenderer`/generic passthrough.
  */
 
 import assert from "node:assert/strict";
@@ -66,7 +67,20 @@ test("running the bundle exposes EXACTLY the narrow bridge under the contract ke
   const [call] = calls;
   assert.ok(call);
   assert.equal(call.key, COWORK_SHELL_BRIDGE_KEY);
-  assert.deepEqual(Object.keys(call.api).sort(), ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "saveTextFile", "setDevToolsEnabled", "setWindowTheme"]);
+  assert.deepEqual(Object.keys(call.api).sort(), [
+    "connectLive",
+    "getBootstrap",
+    "pickWorkspaceFile",
+    "pickWorkspaceFolder",
+    "previewClose",
+    "previewHide",
+    "previewLoad",
+    "previewReload",
+    "previewSetBounds",
+    "saveTextFile",
+    "setDevToolsEnabled",
+    "setWindowTheme",
+  ]);
 });
 
 test("the bundled bridge leaks no raw ipcRenderer or generic passthrough", async () => {

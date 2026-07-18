@@ -28,7 +28,7 @@ function makeFakeIpc() {
 test("the exposed bridge has EXACTLY the intended keys — no more", () => {
   const { ipc } = makeFakeIpc();
   const bridge = createShellBridge(ipc);
-  assert.deepEqual(Object.keys(bridge).sort(), ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "saveTextFile", "setDevToolsEnabled", "setWindowTheme"]);
+  assert.deepEqual(Object.keys(bridge).sort(), ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "previewClose", "previewHide", "previewLoad", "previewReload", "previewSetBounds", "saveTextFile", "setDevToolsEnabled", "setWindowTheme"]);
 });
 
 test("the bridge leaks no raw ipc handle or generic passthrough", () => {
@@ -78,7 +78,7 @@ test("exposeShellBridge publishes the bridge under the shared contract key", () 
   assert.equal(call.key, COWORK_SHELL_BRIDGE_KEY);
   assert.deepEqual(
     Object.keys(call.api as Record<string, unknown>).sort(),
-    ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "saveTextFile", "setDevToolsEnabled", "setWindowTheme"],
+    ["connectLive", "getBootstrap", "pickWorkspaceFile", "pickWorkspaceFolder", "previewClose", "previewHide", "previewLoad", "previewReload", "previewSetBounds", "saveTextFile", "setDevToolsEnabled", "setWindowTheme"],
   );
   assert.equal("ipcRenderer" in (call.api as Record<string, unknown>), false);
 });

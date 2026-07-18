@@ -11,6 +11,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { OPENAI_COMPATIBLE_NPM, isValidEnvName } from "@cowork-ghc/runtime";
 import { isE2eMockLlmUrl } from "../provider/e2e-mock-llm.js";
+import { TOOL_NAMES as MS365_TOOL_NAMES } from "../ms365/ms365-tool-router.js";
 
 /** Non-secret provider definition for the child's `opencode.json`. */
 export interface OpencodeProviderConfig {
@@ -153,6 +154,13 @@ export function buildOpencodeConfig(
   };
   if (skills?.skillAllow !== undefined) {
     permission["skill"] = buildSkillPermission(skills.skillAllow);
+  }
+  // MS365 tools are OpenCode plugin tools whose REAL gate is the MS365 bridge (every call routes
+  // through /v1/ms365/tool-call and requires a permission card). Mark them "allow" here so
+  // OpenCode's "*":"ask" wildcard does not double-prompt on top of the bridge gate. MS365 mounts
+  // unconditionally on main (the CGHC_MS365_ENABLED gate was removed), so this is unconditional.
+  for (const name of MS365_TOOL_NAMES) {
+    permission[name] = "allow";
   }
 
   return {

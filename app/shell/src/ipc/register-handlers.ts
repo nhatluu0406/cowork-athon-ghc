@@ -13,6 +13,8 @@ import type {
   ConnectLiveResult,
   PickedWorkspaceFile,
   PickedWorkspaceFolder,
+  PreviewLoadResult,
+  PreviewViewBounds,
   RendererBootstrap,
   SaveTextFileRequest,
   SaveTextFileResult,
@@ -21,6 +23,7 @@ import type {
 
 import { IpcChannel } from "./channels.js";
 import type { ShellBootstrap } from "../bootstrap.js";
+import { createPreviewViewController, type PreviewViewController } from "../preview/preview-view.js";
 
 /** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
 let e2eAttachmentQueue: string[] | null = null;
@@ -47,18 +50,40 @@ function consumeE2eAttachmentPath(): string | undefined {
  * request so the handshake reflects the true service state at call time — an honest empty
  * handshake while the service is starting / failed, the real base URL + token once running.
  *
- * `restartService` restarts the loopback service so it re-resolves its launch config from the
- * now-persisted onboarding settings (the settings-only → live transition). It is best-effort and
- * honest: the restart itself never throws to the renderer, and the true post-restart state is read
- * back via `getBootstrap` on the renderer's next readiness poll.
+ * `connectLive` ensures the loopback service is live: idempotent when already live (no restart,
+ * no dropped in-memory state — e.g. the MS365 manual token / session scope survive), and forces a
+ * stop+restart (re-resolving launch config from the now-persisted onboarding settings) only when
+ * the caller passes `{ force: true }` — the settings-only → live transition, and after a
+ * provider-config change. It is best-effort and honest: it never throws to the renderer, and the
+ * true post-call state is read back via `getBootstrap` on the renderer's next readiness poll.
  */
 export interface IpcHandlerDeps {
   readonly getBootstrap: () => ShellBootstrap;
-  readonly restartService: () => Promise<void>;
+  readonly connectLive: (force: boolean) => Promise<ConnectLiveResult>;
+}
+
+/** Lazily-created embedded preview controller, one per owning window. */
+const previewControllers = new WeakMap<BrowserWindow, PreviewViewController>();
+
+function previewControllerFor(event: IpcMainInvokeEvent): PreviewViewController | null {
+  const owner = BrowserWindow.fromWebContents(event.sender);
+  if (owner === null) return null;
+  let controller = previewControllers.get(owner);
+  if (controller === undefined) {
+    controller = createPreviewViewController(owner);
+    previewControllers.set(owner, controller);
+    // The child view is destroyed with the window; drop our reference so a relaunch re-creates it.
+    owner.once("closed", () => previewControllers.delete(owner));
+  }
+  return controller;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
-  const { getBootstrap, restartService } = deps;
+  const { getBootstrap, connectLive } = deps;
   ipcMain.handle(IpcChannel.GetBootstrap, (): RendererBootstrap => {
     const bootstrap = getBootstrap();
     return {
@@ -70,12 +95,15 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     };
   });
 
-  ipcMain.handle(IpcChannel.ConnectLive, async (): Promise<ConnectLiveResult> => {
-    // Best-effort + honest: a failing live start is swallowed by the controller (→ not_connected),
-    // never surfaced as a thrown IPC error. The renderer re-handshakes to learn the real outcome.
-    await restartService();
-    return { restarted: true };
-  });
+  ipcMain.handle(
+    IpcChannel.ConnectLive,
+    async (_event, opts?: { readonly force?: boolean }): Promise<ConnectLiveResult> => {
+      // Best-effort + honest: a failing live start is swallowed by the controller
+      // (→ not_connected), never surfaced as a thrown IPC error. The renderer re-handshakes to
+      // learn the real outcome.
+      return connectLive(opts?.force === true);
+    },
+  );
 
   ipcMain.handle(
     IpcChannel.SetWindowTheme,
@@ -185,4 +213,47 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
       }
     },
   );
+
+  // --- Embedded runtime preview (WebContentsView, hardened) ---
+  ipcMain.handle(
+    IpcChannel.PreviewLoad,
+    (event: IpcMainInvokeEvent, url: unknown): PreviewLoadResult => {
+      if (typeof url !== "string") return { ok: false, error: "invalid_url" };
+      const controller = previewControllerFor(event);
+      if (controller === null) return { ok: false, error: "no_window" };
+      return controller.load(url);
+    },
+  );
+  ipcMain.handle(
+    IpcChannel.PreviewSetBounds,
+    (event: IpcMainInvokeEvent, bounds: unknown): void => {
+      const b = bounds as Partial<PreviewViewBounds> | null;
+      if (
+        b === null ||
+        typeof b !== "object" ||
+        !isFiniteNumber(b.x) ||
+        !isFiniteNumber(b.y) ||
+        !isFiniteNumber(b.width) ||
+        !isFiniteNumber(b.height)
+      ) {
+        return;
+      }
+      previewControllerFor(event)?.setBounds({
+        x: b.x,
+        y: b.y,
+        width: b.width,
+        height: b.height,
+        visible: b.visible === true,
+      });
+    },
+  );
+  ipcMain.handle(IpcChannel.PreviewHide, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.hide();
+  });
+  ipcMain.handle(IpcChannel.PreviewReload, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.reload();
+  });
+  ipcMain.handle(IpcChannel.PreviewClose, (event: IpcMainInvokeEvent): void => {
+    previewControllerFor(event)?.close();
+  });
 }

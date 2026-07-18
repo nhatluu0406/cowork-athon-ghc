@@ -23,7 +23,9 @@ export type PermissionActionKind =
   | "file_delete"
   | "file_move"
   | "command_exec"
-  | "ms365_write";
+  | "ms365_write"
+  // Read-only external-data access (e.g. the m365_knowledge_search tool). Additive (REQ-205 T0.3).
+  | "network_access";
 
 /** What the user is being asked to Allow or Deny (P2 describes action + target). */
 export interface PermissionAction {

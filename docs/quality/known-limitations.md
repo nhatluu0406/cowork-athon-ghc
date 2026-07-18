@@ -1,7 +1,7 @@
 ---
 language: "vi"
 status: "active"
-updated_at: "2026-07-17"
+updated_at: "2026-07-18"
 ---
 
 # Known limitations
@@ -66,6 +66,45 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   mới). Export/Clear đi qua `/v1/diagnostics` + save-dialog của shell (renderer không tự chọn đường dẫn).
 - **MCP:** Phase 1 reachability-only (`toolCount` = 0, chưa expose tool catalog); OAuth deferred
   (token do OpenCode quản sẽ nằm ngoài vault mã hoá của Cowork).
+- **Surface `Code` (Hybrid, ADR 0013 — Phase 1):** **renderer surface dùng chung backend Cowork**
+  (cùng active workspace/`WorkspaceGuard`/`PermissionGate`/OpenCode session — không backend/session/
+  runtime riêng). Code Phase 1 đã có editor nhiều tab **sửa + lưu** (Ctrl+S, `PUT /v1/workspace/
+  file-content` guard-confined), dirty + hộp thoại đóng-khi-chưa-lưu, syntax highlight, verified-
+  mutation refresh/xung đột/deleted, handoff "Mở trong Code" ↔ "Xem trong Workspace"; label đã đổi
+  "Claude Code" → "Code" và đã gỡ chip giả. Giới hạn còn lại:
+  - **Runtime web preview (Slice 1, ADR 0014)** đã có: xem trước dự án **tĩnh** (máy chủ loopback
+    bounded) và **dev server** frontend. Giới hạn trung thực:
+    - Nhúng bằng **WebContentsView** nổi trên DOM ⇒ được **ẩn chủ động** khi có Settings/permission
+      dialog hoặc rời chế độ Preview; **không tự clip** theo bo góc/scroll như iframe (đánh đổi để
+      giữ CSP renderer). Chỉ nạp **loopback**; remote-nav/popup/download/webview bị chặn.
+    - **Dev server**: chỉ chạy `<pm> run <script>` (pm ∈ npm/pnpm/yarn) đã allowlist + **người dùng
+      phê duyệt lệnh**; không chạy lệnh tự do từ model/file. Dò port là **heuristic** (đọc URL
+      localhost từ output / dò `PORT`); framework in URL khác thường có thể không phát hiện được →
+      `failed` trung thực, không giả "running". Không đảm bảo HMR/websocket; không proxy remote/CDN.
+    - **Đổi workspace / tắt app** dừng preview bằng **tree-kill trên cây còn sống**
+      (`taskkill /PID <pid> /T /F`) — không graceful-kill riêng `cmd.exe` trước (sẽ bỏ mồ côi
+      `pm→node→…`); **không orphan** (được test tiến trình thật kiểm chứng). Output đã redact +
+      giới hạn kích thước.
+    PDF/Office/ảnh trong Code hiển thị chỉ đọc + "Xem trong Workspace" (không dựng lại viewer).
+  - **Desktop app launch (Slice 2, ADR 0015)** đã có: **Build / Chạy / Dừng / Khởi động lại** một
+    ứng dụng **Electron** của workspace như **tiến trình/cửa sổ riêng** (selector **Web / Ứng dụng**).
+    Tái dùng nguyên runner Slice 1 (permission mỗi Build/Run, cwd confined, env curated không secret,
+    output redact/bounded, **tree-kill không mồ côi**). Giới hạn trung thực:
+    - **Chỉ Electron**: nhận app khi có dependency `electron` **và** script chạy (start/app/electron/
+      dev/serve). App Node trần / executable đóng gói **không** tự đoán → `unsupported` rõ ràng
+      (tránh chạy executable tuỳ ý). Chỉ chạy `<pm> run <script>` đã allowlist + **người dùng phê
+      duyệt**; không chạy lệnh tự do từ model/file.
+    - **`running` là heuristic**: tiến trình đã spawn còn sống qua cửa sổ readiness ngắn (không
+      introspect được cửa sổ app). App tự thoát ngay mã 0 → `stopped`; mã ≠ 0 / lỗi spawn → `failed`.
+      Không bao giờ giả "running".
+    - **Không nhúng** app vào Cowork (chạy cửa sổ riêng); **không** mở "thư mục đầu ra" (chưa có safe
+      shell contract). Vẫn không terminal/PTY, Git client, debugger, LSP.
+  - **Chỉ sửa được tệp văn bản/mã** (kind `text`); spreadsheet/tài liệu vẫn xem/sửa ở Workspace.
+  - **Đổi active workspace khi còn tab Code chưa lưu sẽ reset** (bỏ thay đổi chưa lưu) — giống
+    companion Workspace hiện tại; hộp thoại xác nhận trước khi đổi workspace là việc sau (không nằm
+    trong Phase 1). Hộp thoại xác nhận **đã có** cho thao tác đóng tab.
+  - **Packaged PO observation chưa chạy**: focused UI tests + `build:app` PASS nhưng chưa claim WORKS
+    cho tới khi PO quan sát trên packaged app (xem `demo-acceptance.md`).
 - **Web / Next.js** vẫn deferred.
 - **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
   workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)
@@ -75,3 +114,59 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   nhưng instruction ngoài workspace có thể đổi hành vi/danh tính agent mà người dùng không biết.
   Cách né: đặt `AGENTS.md` riêng trong workspace để ghi đè, hoặc chọn workspace không có `AGENTS.md`
   cha. Cảnh báo/hiển thị instruction kế thừa là việc cân nhắc sau.
+
+## Tích hợp gần đây — giới hạn còn tồn (PR #11 MS365, PR #12 Local import)
+
+Ghi lại các phần **đã merge nhưng còn giới hạn/POC** sau khi tích hợp PR #11 (MS365) và PR #12
+(Local folder import → Knowledge Graph, Go backend). Đây là ghi nhận trung thực, không phải blocker
+demo, nhưng KHÔNG được coi là "chạy đầy đủ".
+
+- **Local folder import → Knowledge Graph (D3, Go backend `app/backend`):**
+  - **Embedding local chunk là best-effort, cần llm-svc:** chunk local được embed inline dưới đúng
+    model retrieval dùng, nhưng chỉ khi `llm-svc` (gRPC embeddings) chạy; thiếu dịch vụ → chunk vẫn
+    lưu **text-only** (không semantic search). Pipeline job source-agnostic
+    (`embedding.BatchProcessor.QueueJob/ProcessJob`) **tồn tại nhưng chưa được caller nào gọi** —
+    khoảng trống POC, chưa nối vào luồng import.
+  - **Cần dịch vụ ngoài để chạy/kiểm thử thật:** import + Neo4j graph cần **Postgres + Neo4j +
+    llm-svc**. Ở máy dev không dựng được nên **integration test import/neo4j chưa chạy**; chỉ verify
+    unit (91 pass) + 4 test auth mới. 5 unit `now()` fail là **môi trường** (store SQL nhắm Postgres,
+    chạy trên sqlite thiếu hàm `now()`), không phải lỗi logic.
+  - **Đã cứng hoá (landed):** endpoint bắt buộc **JWT** (fail-closed 401), cap đọc file **25 MiB**,
+    chặn escape qua **symlink/junction** (EvalSymlinks + confine trong root), **job timeout 30′**,
+    unique index chống job trùng (→ 409). Chính sách hiển thị chunk: local chunk theo **local-first
+    ownership tường minh** (không fail-open như M365 scope). Log đã **redact** absolute path.
+- **MS365 (PR #11):**
+  - **Power Automate flow store chỉ in-memory:** đường persist ra JSON plaintext đã bị **gỡ** (URL
+    flow là bearer SAS — không lưu plaintext). Seam `setFlows` **chưa nối** nguồn bền vững nào, nên
+    flow phải **đăng ký lại sau mỗi lần khởi động service**. Trigger đã cứng hoá: **IP-pin qua dialer**,
+    **host-allowlist** Logic Apps (`.logic.azure.com/.us/.cn/.de`), timeout 15s, redact `sig` khỏi
+    permission card.
+  - **SSRF private-provider opt-in (`CGHC_SSRF_ALLOW_PRIVATE_PROVIDER`) chưa wire:** policy `ssrf`
+    hiện **dùng chung** cho provider + MCP + MS365 + Power Automate. Wire opt-in ở điểm dùng chung sẽ
+    **nới lỏng SSRF cho cả MS365/MCP** (regression bảo mật), nên cố ý **không tự ý wire** — cần tách
+    scope riêng + **independent review** theo CLAUDE.md. Hệ quả: **2 test private-provider opt-in vẫn
+    đỏ** (chưa có wiring ở cả hai nhánh) — đây là giới hạn đã biết, không phải hồi quy do merge.
+- **Môi trường dev (không phải giới hạn sản phẩm):** pin OpenCode local hiện là `v1.17.11`; **2 test
+  config** khẳng định `v1.18.1` sẽ **đỏ tại máy dev** cho tới khi cài đúng build pin (xem mục
+  "OpenCode pin" ở trên). Không ảnh hưởng logic.
+
+## MS365 OpenCode plugin `tool.execute.before` hook (intentional no-op seam)
+
+The MS365 OpenCode plugin (`service/src/runtime/ms365-plugin-file.ts`) includes a
+`tool.execute.before` hook that is deliberately a **no-op passthrough** — it does not gate any tool
+calls. This is **not** a missing security gate; it is a reserved seam.
+
+**Why no-op?** The child process (OpenCode's sandboxed runtime) cannot read its own session's
+MS365 scope, so any authorization decision made inside the hook would be a guess. The real,
+fail-closed authorization boundary is `Ms365SessionScope` in the router
+(`service/src/ms365/ms365-tool-router.ts`): only sessions explicitly registered by the **Microsoft
+365** tab are allowed to call any MS365 tool. Every other session is rejected at the router level.
+
+**Design choice:** The hook is kept as a **RESERVED SEAM** (documented in the source). If OpenCode
+ever exposes a way for the child to learn its own session scope, the hook could become an early,
+in-process friendly block (fail fast before round-tripping to the router). Until then, it is a
+no-op for all sessions — no action needed, and adding a gate here today would be security theater.
+
+**Related:** Session gating is enforced in `service/src/ms365/ms365-tools.ts:handleToolCall`, which
+checks `deps.sessionAllowed(sessionId)` first, before any tool-specific logic. This is the
+production authorization boundary.

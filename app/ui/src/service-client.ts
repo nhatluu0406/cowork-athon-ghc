@@ -22,17 +22,27 @@ import {
   type ModelRef,
   type ProviderDescriptor,
   type ResponseEnvelope,
+  type RuntimePreviewOutput,
+  type RuntimePreviewProjectInfo,
+  type RuntimePreviewStartInput,
+  type RuntimePreviewState,
+  type RuntimeAppOutput,
+  type RuntimeAppProjectInfo,
+  type RuntimeAppStartInput,
+  type RuntimeAppState,
   type SessionMeta,
   type TestResult,
   type WorkspaceGrant,
 } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
+import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
 import {
   createPermissionClient,
   type DecidePermissionInput,
   type PendingPermissionView,
   type PermissionDecisionResponse,
 } from "./permission-client.js";
+import type { MicrosoftIntegrationView } from "./integration-slots.js";
 
 // Re-exported so consumers keep importing the permission wire types from `./service-client.js`
 // (the split in CGHC-025 preserves the public surface).
@@ -370,6 +380,8 @@ export interface ConversationSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly messageCount: number;
+  /** Which product surface owns this conversation. Absent in legacy records → treat as "cowork". */
+  readonly surface: "cowork" | "ms365";
 }
 
 /** Redacted activity metadata from conversation persistence (no secrets). */
@@ -410,6 +422,7 @@ export interface CreateConversationInput {
   readonly providerId?: string;
   readonly modelId?: string;
   readonly parentId?: string;
+  readonly surface?: "cowork" | "ms365";
   readonly providerSnapshot?: ConversationProviderSnapshot;
 }
 
@@ -423,6 +436,37 @@ export interface ContinueSessionResult {
 export interface ClearSessionModelResult {
   readonly cleared: boolean;
   readonly defaultModel: ModelRef | null;
+}
+
+/** MS365 integration state and connected services (Task 4: MS365 UI wiring). */
+export interface Ms365ViewData {
+  readonly connectionState: string;
+  readonly services: readonly { readonly id: string; readonly label: string; readonly connected: boolean }[];
+  readonly scopes: readonly string[];
+  readonly actionHistory: readonly { readonly label: string; readonly source: string; readonly at?: string }[];
+  readonly error?: string;
+}
+
+/** Batch write-mode for MS365 write operations: manual confirms each write; auto approves once. */
+export type Ms365WriteMode = "manual" | "auto";
+
+/** A SharePoint site the connected MS365 account can see, with its search-scope toggle. */
+export interface Ms365SiteView {
+  readonly id: string;
+  readonly displayName: string;
+  readonly webUrl: string;
+  readonly enabled: boolean;
+}
+
+/** Result of initiating MS365 device-code flow. */
+export type Ms365DeviceBeginResult =
+  | { readonly userCode: string; readonly verificationUri: string; readonly expiresInSec: number }
+  | { readonly error: "not_configured" };
+
+/** Result of polling MS365 device-code status. */
+export interface Ms365DevicePollResult {
+  readonly status: "pending" | "connected" | "expired";
+  readonly view?: Ms365ViewData;
 }
 
 /**
@@ -487,6 +531,44 @@ export interface ServiceClient {
   recentWorkspaces(): Promise<readonly RecentWorkspaceView[]>;
   /** List direct children of the active workspace or a loaded child folder. */
   listWorkspaceChildren(relativePath?: string, limit?: number): Promise<WorkspaceListResult>;
+
+  // --- Runtime preview (Code surface web preview) ---
+  /** Inspect the active workspace for previewable capability (static / dev-server). */
+  detectRuntimePreview(): Promise<RuntimePreviewProjectInfo>;
+  /** Read the current preview state. */
+  getRuntimePreviewState(): Promise<RuntimePreviewState>;
+  /** Read preview state + output lines newer than `afterSeq`. */
+  getRuntimePreviewOutput(afterSeq: number): Promise<RuntimePreviewOutput>;
+  /** Start a static (no-command) preview of the workspace. */
+  startStaticPreview(): Promise<RuntimePreviewState>;
+  /** Step 1 of a dev-server launch: raise a `command_exec` permission request. */
+  requestPreviewLaunch(
+    input: RuntimePreviewStartInput,
+  ): Promise<{ requestId: string; command: string; cwd: string }>;
+  /** Step 2: resolve the launch permission (Allow starts it server-side). */
+  resolvePreviewLaunch(requestId: string, decision: "allow" | "deny"): Promise<RuntimePreviewState>;
+  /** Stop the active preview. */
+  stopRuntimePreview(): Promise<RuntimePreviewState>;
+  /** Restart the active preview (re-uses the approved launch / static kind). */
+  restartRuntimePreview(): Promise<RuntimePreviewState>;
+
+  // --- Runtime desktop-app launch (Code surface Slice 2) ---
+  /** Inspect the active workspace for desktop-app (Electron) launch capability. */
+  detectRuntimeApp(): Promise<RuntimeAppProjectInfo>;
+  /** Read the current desktop-app state. */
+  getRuntimeAppState(): Promise<RuntimeAppState>;
+  /** Read desktop-app state + output lines newer than `afterSeq`. */
+  getRuntimeAppOutput(afterSeq: number): Promise<RuntimeAppOutput>;
+  /** Step 1 of a Build/Run: raise a `command_exec` permission request. */
+  requestAppLaunch(
+    input: RuntimeAppStartInput,
+  ): Promise<{ requestId: string; action: "build" | "run"; command: string; cwd: string }>;
+  /** Step 2: resolve the launch permission (Allow starts it server-side). */
+  resolveAppLaunch(requestId: string, decision: "allow" | "deny"): Promise<RuntimeAppState>;
+  /** Stop the active desktop app. */
+  stopRuntimeApp(): Promise<RuntimeAppState>;
+  /** Restart the active desktop app (re-uses the last approved run launch). */
+  restartRuntimeApp(): Promise<RuntimeAppState>;
   /** Fetch the current non-secret settings projection (CGHC-022 SD1). */
   getSettings(): Promise<SettingsView>;
   /** List provider descriptors exposed by the service (provider-neutral). */
@@ -569,8 +651,11 @@ export interface ServiceClient {
   getDispatchRun(runId: string): Promise<DispatchRunView>;
   /** Cancel a dispatch run (loop + in-flight branches). */
   cancelDispatchRun(runId: string): Promise<void>;
-  /** List persisted conversations (optional local search query). */
-  listConversations(query?: string): Promise<readonly ConversationSummary[]>;
+  /** List persisted conversations (optional local search query + surface filter). */
+  listConversations(
+    query?: string,
+    surface?: "cowork" | "ms365",
+  ): Promise<readonly ConversationSummary[]>;
   createConversation(input: CreateConversationInput): Promise<ConversationRecord>;
   getConversation(id: string): Promise<ConversationRecord>;
   getLastActiveConversationId(): Promise<string | null>;
@@ -689,6 +774,35 @@ export interface ServiceClient {
     readonly username: string;
     readonly userId: string;
   }>;
+  /**
+   * Knowledge (M365 Knowledge-Graph) settings surface (REQ-205): read status, configure a source
+   * (the raw token crosses the boundary inbound only — every response is the secret-free
+   * {@link KnowledgeStatusView}), force a health re-check, and disconnect.
+   */
+  getKnowledgeStatus(): Promise<KnowledgeStatusView>;
+  configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
+  testKnowledgeConnection(): Promise<{ readonly ok: boolean }>;
+  disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
+  /** Connect an MS365 account using a Bearer token. */
+  connectMs365Token(token: string): Promise<Ms365ViewData>;
+  /** Fetch the current MS365 connection state and services. */
+  fetchMs365View(): Promise<Ms365ViewData>;
+  /** Begin MS365 device-code authentication flow. */
+  beginMs365Device(): Promise<Ms365DeviceBeginResult>;
+  /** Poll the status of an MS365 device-code flow. */
+  pollMs365Device(): Promise<Ms365DevicePollResult>;
+  /** Disconnect the current MS365 session; returns the fresh (disconnected) view. */
+  disconnectMs365(): Promise<Ms365ViewData>;
+  /** List SharePoint sites visible to the connected account, with their search-scope toggle. */
+  listMs365Sites(): Promise<readonly Ms365SiteView[]>;
+  /** Enable/disable a site for search scope; returns the refreshed site list. */
+  setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+  /** Đọc chế độ ghi hàng loạt MS365 hiện tại. */
+  fetchMs365WriteMode(): Promise<{ mode: Ms365WriteMode }>;
+  /** Đổi chế độ ghi hàng loạt MS365 (nguồn sự thật ở service). */
+  setMs365WriteMode(mode: Ms365WriteMode): Promise<{ mode: Ms365WriteMode }>;
+  /** Grant/revoke the MS365 tool session-scope allowlist for a single OpenCode session. */
+  setMs365SessionScope(sessionId: string, enabled: boolean): Promise<{ allowed: boolean }>;
 }
 
 /** Create a client bound to a loopback base URL + per-launch token. */
@@ -732,6 +846,60 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       query.set("limit", String(limit));
       return (await call<{ tree: WorkspaceListResult }>(`/v1/workspace/list?${query.toString()}`)).tree;
     },
+
+    detectRuntimePreview: async () =>
+      (await call<{ info: RuntimePreviewProjectInfo }>("/v1/runtime-preview/detect")).info,
+    getRuntimePreviewState: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/state")).state,
+    getRuntimePreviewOutput: async (afterSeq) =>
+      (
+        await call<{ output: RuntimePreviewOutput }>(
+          `/v1/runtime-preview/output?after=${String(afterSeq)}`,
+        )
+      ).output,
+    startStaticPreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/start-static", { method: "POST" }))
+        .state,
+    requestPreviewLaunch: (input) =>
+      call<{ requestId: string; command: string; cwd: string }>("/v1/runtime-preview/request-launch", {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    resolvePreviewLaunch: async (requestId, decision) =>
+      (
+        await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/resolve", {
+          method: "POST",
+          body: JSON.stringify({ requestId, decision }),
+        })
+      ).state,
+    stopRuntimePreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/stop", { method: "POST" })).state,
+    restartRuntimePreview: async () =>
+      (await call<{ state: RuntimePreviewState }>("/v1/runtime-preview/restart", { method: "POST" }))
+        .state,
+
+    detectRuntimeApp: async () =>
+      (await call<{ info: RuntimeAppProjectInfo }>("/v1/runtime-app/detect")).info,
+    getRuntimeAppState: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/state")).state,
+    getRuntimeAppOutput: async (afterSeq) =>
+      (await call<{ output: RuntimeAppOutput }>(`/v1/runtime-app/output?after=${String(afterSeq)}`)).output,
+    requestAppLaunch: (input) =>
+      call<{ requestId: string; action: "build" | "run"; command: string; cwd: string }>(
+        "/v1/runtime-app/request-launch",
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    resolveAppLaunch: async (requestId, decision) =>
+      (
+        await call<{ state: RuntimeAppState }>("/v1/runtime-app/resolve", {
+          method: "POST",
+          body: JSON.stringify({ requestId, decision }),
+        })
+      ).state,
+    stopRuntimeApp: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/stop", { method: "POST" })).state,
+    restartRuntimeApp: async () =>
+      (await call<{ state: RuntimeAppState }>("/v1/runtime-app/restart", { method: "POST" })).state,
 
     getSettings: async () => (await call<{ settings: SettingsView }>("/v1/settings")).settings,
     listProviders: async () =>
@@ -982,12 +1150,13 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       );
     },
 
-    listConversations: async (query) => {
+    listConversations: async (query, surface) => {
+      const params = new URLSearchParams();
       const q = query?.trim();
-      const path =
-        q !== undefined && q.length > 0
-          ? `/v1/conversations?q=${encodeURIComponent(q)}`
-          : "/v1/conversations";
+      if (q !== undefined && q.length > 0) params.set("q", q);
+      if (surface !== undefined) params.set("surface", surface);
+      const suffix = params.toString();
+      const path = suffix.length > 0 ? `/v1/conversations?${suffix}` : "/v1/conversations";
       return (await call<{ conversations: readonly ConversationSummary[] }>(path)).conversations;
     },
 
@@ -1194,5 +1363,71 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         "/v1/auth/unlock",
         { method: "POST", body: JSON.stringify({ username, password }) },
       ),
+
+    getKnowledgeStatus: () => call<KnowledgeStatusView>("/v1/knowledge/status"),
+    configureKnowledgeSource: (baseUrl, token) =>
+      call<KnowledgeStatusView>("/v1/knowledge/configure", {
+        method: "POST",
+        body: JSON.stringify({ baseUrl, token }),
+      }),
+    testKnowledgeConnection: async () => {
+      // The route returns the refreshed status; the settings panel re-reads it separately, so a
+      // simple ok/throw is the honest signal here (a failed re-check throws from `call`).
+      await call<KnowledgeStatusView>("/v1/knowledge/test-connection", { method: "POST" });
+      return { ok: true };
+    },
+    disconnectKnowledgeSource: async () => {
+      await call<{ readonly status: "not_configured" }>("/v1/knowledge/connection", {
+        method: "DELETE",
+      });
+      return { status: "not_configured", baseUrl: null, lastHealthCheckAt: null };
+    },
+
+    connectMs365Token: async (token) =>
+      call<Ms365ViewData>("/v1/ms365/connect", {
+        method: "POST",
+        body: JSON.stringify({ token }),
+      }),
+
+    fetchMs365View: () => call<Ms365ViewData>("/v1/ms365/view"),
+
+    beginMs365Device: () =>
+      call<Ms365DeviceBeginResult>("/v1/ms365/device/begin", {
+        method: "POST",
+      }),
+
+    pollMs365Device: () =>
+      call<Ms365DevicePollResult>("/v1/ms365/device/poll", {
+        method: "POST",
+      }),
+
+    disconnectMs365: () =>
+      call<Ms365ViewData>("/v1/ms365/disconnect", {
+        method: "POST",
+      }),
+
+    listMs365Sites: async () =>
+      (await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites")).sites,
+
+    setMs365SiteEnabled: async (siteId, enabled) =>
+      (
+        await call<{ sites: readonly Ms365SiteView[] }>("/v1/ms365/sites/toggle", {
+          method: "POST",
+          body: JSON.stringify({ siteId, enabled }),
+        })
+      ).sites,
+
+    fetchMs365WriteMode: () => call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode"),
+    setMs365WriteMode: (mode) =>
+      call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode", {
+        method: "POST",
+        body: JSON.stringify({ mode }),
+      }),
+
+    setMs365SessionScope: (sessionId, enabled) =>
+      call<{ allowed: boolean }>("/v1/ms365/session-scope", {
+        method: "POST",
+        body: JSON.stringify({ sessionId, enabled }),
+      }),
   };
 }

@@ -38,7 +38,6 @@ export function createProductRail(): ProductRailDom {
 }
 
 function railTooltip(surface: ProductSurfaceDefinition): string {
-  if (surface.id === "code") return "Code — Đã lên kế hoạch";
   if (surface.dependency !== undefined) return `${surface.label} — Chờ tích hợp ${surface.dependency}`;
   return surface.label;
 }

@@ -49,6 +49,9 @@ export type ProductIconName =
   | "history"
   | "split"
   | "play"
+  | "stop"
+  | "eye"
+  | "window"
   | "git-branch";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -97,6 +100,9 @@ const PATHS: Readonly<Record<ProductIconName, readonly string[]>> = Object.freez
   history: ["M4 12a8 8 0 1 1 2.3 5.7", "M4 12H2.5M4 12l-1.5 3", "M12 8v4l3 2"],
   split: ["M5 5h6v14H5zM13 5h6v14h-6z"],
   play: ["M8 6l10 6-10 6V6Z"],
+  stop: ["M7 7h10v10H7z"],
+  eye: ["M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z", "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"],
+  window: ["M4 5h16v14H4V5Z", "M4 9h16", "M6.5 7h.01M9 7h.01"],
   "git-branch": ["M7 5a2 2 0 1 0 0 .1M7 19a2 2 0 1 0 0 .1M17 7a2 2 0 1 0 0 .1", "M7 7v10", "M17 9a6 6 0 0 1-6 6"],
 });
 
