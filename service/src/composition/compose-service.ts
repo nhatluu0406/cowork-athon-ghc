@@ -143,6 +143,12 @@ import {
   readMs365DeviceConfig,
 } from "../ms365/index.js";
 import {
+  createKnowledgeRouter,
+  createKnowledgeService,
+  createKnowledgeTool,
+  createKnowledgeSourceConfigStore,
+} from "../knowledge/index.js";
+import {
   closeSqliteDatabase,
   collectCredentialAccounts,
   createAppMetaRepository,
@@ -194,6 +200,7 @@ const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
 const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
 const DEFAULT_MS365_SITE_SCOPE_PATH = ".runtime/ms365-site-scope.json";
 const DEFAULT_MS365_WRITE_MODE_PATH = ".runtime/ms365-write-mode.json";
+const DEFAULT_KNOWLEDGE_SOURCE_CONFIG_PATH = ".runtime/knowledge-source.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -594,6 +601,22 @@ export async function createCoworkService(
     stateFilePath: options.skillsStateFilePath ?? DEFAULT_SKILLS_STATE_PATH,
   });
 
+  // --- Knowledge Graph (M365 Knowledge Graph integration - REQ-205 Phase 1)
+  // The knowledge config store path is determined dynamically from the active workspace.
+  let knowledgeConfigStore = createKnowledgeSourceConfigStore({
+    filePath: DEFAULT_KNOWLEDGE_SOURCE_CONFIG_PATH,
+  });
+  const knowledgeService = createKnowledgeService({
+    configStore: knowledgeConfigStore,
+    credentialService,
+    now,
+  });
+  const knowledgeTool = createKnowledgeTool({
+    gate: permissionGate,
+    port: knowledgeService,
+    now,
+  });
+
   // --- Agent catalog + Task store (agent-harness-plan.md Task 5.1 / 4.1). Built-ins are always
   // present; user definitions persist as one JSON doc each. Agent presets can only NARROW the live
   // session policy (validated in the catalog); tasks validate agent/branch references against the
@@ -798,6 +821,7 @@ export async function createCoworkService(
     ...(mcpStore !== undefined
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
+    createKnowledgeRouter(knowledgeService),
     ...(ms365Router !== undefined ? [ms365Router] : []),
     ...(options.extraRouters ?? []),
   ];
@@ -827,6 +851,8 @@ export async function createCoworkService(
     conversationStore,
     skillCatalog,
     agentCatalog,
+    knowledgeService,
+    knowledgeTool,
     taskStore,
     dispatchRuns,
     redactError,

@@ -523,18 +523,26 @@ async function assertMicrosoftAssistant(call, label) {
 }
 
 async function assertMicrosoftConnect(call, label) {
+<<<<<<< HEAD
+=======
   // The connect card is wired (device-code + manual token fallback both call the real backend
   // client, per feat(ui): wire MS365 connect view to backend). With no env configured
   // (CGHC_MS365_CLIENT_ID / CGHC_MS365_TENANT unset), the device sign-in button renders enabled —
   // it only becomes disabled after being clicked and the backend reports a missing app
   // registration. We assert the button exists and is in one of those two honest states (enabled,
   // or disabled with the registration note visible) — never that a live connection occurred.
+>>>>>>> 289d0e16b78787a318348a1937ff78bb81659277
   const result = await evaluate(
     call,
     `(() => {
       const errors = [];
       const signIn = document.querySelector('.ms-connect__signin');
       if (!signIn) errors.push('ms-connect__signin missing');
+<<<<<<< HEAD
+      else if (!signIn.disabled) errors.push('ms-connect__signin is not disabled');
+      const bodyText = document.body.textContent ?? '';
+      if (!bodyText.includes('Backend D2')) errors.push('page text missing "Backend D2" honesty note');
+=======
       else if (signIn.disabled) {
         const note = document.querySelector('.ms-connect__note');
         const noteText = note?.textContent ?? '';
@@ -548,6 +556,7 @@ async function assertMicrosoftConnect(call, label) {
       }
       const bodyText = document.body.textContent ?? '';
       if (!bodyText.includes('Kết nối Microsoft 365')) errors.push('page text missing "Kết nối Microsoft 365" card title');
+>>>>>>> 289d0e16b78787a318348a1937ff78bb81659277
       return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
     })()`,
   );

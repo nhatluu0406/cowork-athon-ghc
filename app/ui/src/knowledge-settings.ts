@@ -45,6 +45,8 @@ function statusLabel(status: KnowledgeStatusView["status"]): string {
       return "Không thể truy cập";
     case "auth_failed":
       return "Xác thực thất bại";
+    default:
+      return status satisfies never;
   }
 }
 

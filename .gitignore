@@ -71,8 +71,6 @@ coverage/
 **/coverage/
 .nyc_output/
 *.lcov
-coverage.out
-**/coverage.out
 
 # --- Local databases / caches ---
 *.sqlite
@@ -123,3 +121,6 @@ Desktop.ini
 
 # --- Local TypeScript test output ---
 **/tsc-out/
+
+# --- Local Go ---
+app/backend/vendor/*

@@ -57,3 +57,13 @@ export {
   CredentialRequestError,
   CREDENTIALS_PATH,
 } from "./router.js";
+
+export {
+  M365_KNOWLEDGE_PROVIDER_ID,
+  m365KnowledgeAccount,
+  m365KnowledgeCredentialRef,
+  storeM365KnowledgeToken,
+  hasM365KnowledgeToken,
+  resolveM365KnowledgeToken,
+  removeM365KnowledgeToken,
+} from "./m365-knowledge.js";

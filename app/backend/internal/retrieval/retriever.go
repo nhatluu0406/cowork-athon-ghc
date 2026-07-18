@@ -66,6 +66,19 @@ func (r *Retriever) Query(ctx context.Context, req QueryRequest) (*QueryResponse
 	if err != nil {
 		return nil, err
 	}
+
+	// If user has no file access, return permission_denied immediately
+	// (but still allow graph-only results via entity recognition and graph expansion)
+	if len(allowedFiles) == 0 {
+		return &QueryResponse{
+			Intent:    "permission_denied",
+			Answer:    "",
+			Sources:   []interface{}{},
+			Entities:  []interface{}{},
+			LatencyMs: int(time.Since(start).Milliseconds()),
+		}, nil
+	}
+
 	// Note: we do NOT early-exit on empty allowedFiles here. Entity recognition
 	// (Stage 2) and graph expansion (Stage 3) should still run to allow users to
 	// discover graph entities even if they have no document access. SemanticSearch

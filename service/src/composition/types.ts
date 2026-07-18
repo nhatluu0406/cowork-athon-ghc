@@ -89,6 +89,8 @@ export interface CoworkServiceOptions extends ServiceOptions {
   readonly taskStoreFs?: SettingsFs;
   /** User-tasks file path when {@link taskStoreFs} is not supplied. Default: `.runtime/tasks.json`. */
   readonly taskStoreFilePath?: string;
+  /** M365 Knowledge Graph config file path. Default: `.runtime/knowledge-source.json`. */
+  readonly knowledgeSourceConfigPath?: string;
   /**
    * The ONE credential store. Default: encrypted SQLite vault when a database is open;
    * otherwise tests inject the memory store. Legacy keyring is used only as a migration source.
@@ -229,6 +231,10 @@ export interface CoworkServiceDeps {
    * shares the ONE permission gate + runtime-reply port so a Deny blocks at the boundary.
    */
   buildToolPermissionProxy(guard: WorkspaceGuard): ToolPermissionProxy;
+  /** M365 Knowledge Graph integration: the permission-gated tool for agent execution. */
+  readonly knowledgeTool: any; // KnowledgeTool type is not exported from contracts
+  /** M365 Knowledge Graph integration: the service backing the `/v1/knowledge/*` routes. */
+  readonly knowledgeService: any; // KnowledgeService type is not exported from contracts
 }
 
 /** A fully-wired but not-yet-listening service: its routers, its deps, and a start seam. */
