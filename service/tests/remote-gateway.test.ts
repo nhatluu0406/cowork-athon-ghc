@@ -73,6 +73,16 @@ function startFakeMain(): Promise<{
       });
       return;
     }
+    if (req.method === "POST" && /^\/v1\/conversations\/[^/]+\/turn$/.test(url.pathname)) {
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
+      req.on("end", () => {
+        messageBodies.push(`${url.pathname} ${Buffer.concat(chunks).toString("utf8")}`);
+        res.writeHead(202, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: true, data: { accepted: true, sessionId: "sess-web" } }));
+      });
+      return;
+    }
     if (req.method === "POST" && url.pathname === "/v1/permission/decision") {
       const chunks: Buffer[] = [];
       req.on("data", (c: Buffer) => chunks.push(c));
@@ -344,6 +354,36 @@ test("send prompt to a session proxies through the POST allowlist", async () => 
 
     // Deep/odd session paths never cross the allowlist.
     const deep = await fetch(`${gateway.url}/api/sessions/a/b/message`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: "{}",
+    });
+    assert.equal(deep.status, 404);
+    assert.equal(main.messageBodies.length, 1);
+  } finally {
+    await gateway.stop();
+    main.server.close();
+  }
+});
+
+test("start a conversation turn from the web proxies through the POST allowlist (#21)", async () => {
+  const main = await startFakeMain();
+  const { gateway, pairAndGetToken } = await startTestGateway(main.baseUrl);
+  try {
+    const token = await pairAndGetToken();
+    const res = await fetch(`${gateway.url}/api/conversations/conv-1/turn`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ text: "chat from web" }),
+    });
+    assert.equal(res.status, 202);
+    const body = (await res.json()) as { data: { accepted: boolean; sessionId: string } };
+    assert.equal(body.data.accepted, true);
+    assert.equal(body.data.sessionId, "sess-web");
+    assert.deepEqual(main.messageBodies, ['/v1/conversations/conv-1/turn {"text":"chat from web"}']);
+
+    // Deep/odd conversation paths never cross the allowlist.
+    const deep = await fetch(`${gateway.url}/api/conversations/a/b/turn`, {
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: "{}",

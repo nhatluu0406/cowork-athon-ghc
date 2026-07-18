@@ -8,6 +8,11 @@ export type {
 } from "./types.js";
 export { createConversationStore, type ConversationStore } from "./store.js";
 export { createConversationRouter, CONVERSATIONS_PATH } from "./router.js";
+export {
+  createConversationTurnRouter,
+  CONVERSATION_TURN_PATH,
+  type ConversationTurnRouterOptions,
+} from "./turn-router.js";
 export { normalizeTitle, titleFromFirstMessage } from "./title.js";
 export {
   createSqliteConversationStore,
