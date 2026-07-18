@@ -102,6 +102,35 @@ export interface DispatchTaskView {
   readonly agentId?: string;
 }
 
+/** A workflow draft the LLM produced from a description (validated, not yet saved). */
+export interface WorkflowDraftTask {
+  readonly id: string;
+  readonly name: string;
+  readonly goal: string;
+  readonly loop: {
+    readonly mode: "run_once" | "retry_until_verified" | "scheduled";
+    readonly maxTurns: number;
+    readonly maxDurationMs: number;
+    readonly intervalMs?: number;
+    readonly requireVerifiedEvidence?: boolean;
+  };
+  readonly branches?: readonly { readonly agentId: string; readonly focus?: string }[];
+  readonly agentId?: string;
+  readonly maxConcurrency?: number;
+}
+
+export interface WorkflowDraftAgent {
+  readonly id: string;
+  readonly name: string;
+  readonly systemPrompt: string;
+  readonly permissionPreset?: Readonly<Record<string, string>>;
+}
+
+export interface WorkflowDraft {
+  readonly task: WorkflowDraftTask;
+  readonly newAgent?: WorkflowDraftAgent;
+}
+
 /** Secret-free live view of one fan-out branch (mirrors the service view). */
 export interface DispatchBranchView {
   readonly branchId: string;
@@ -674,6 +703,10 @@ export interface ServiceClient {
   getDispatchRun(runId: string): Promise<DispatchRunView>;
   /** Cancel a dispatch run (loop + in-flight branches). */
   cancelDispatchRun(runId: string): Promise<void>;
+  /** Ask the provider LLM to draft a workflow from a description (validated, NOT saved/run). */
+  draftWorkflow(prompt: string): Promise<WorkflowDraft>;
+  /** Save a reviewed workflow draft (creates the proposed agent first, then the task). */
+  confirmWorkflow(draft: WorkflowDraft): Promise<{ readonly taskId: string }>;
   /** List persisted conversations (optional local search query + surface filter). */
   listConversations(
     query?: string,
@@ -1206,6 +1239,30 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
         `/v1/dispatch/runs/${encodeURIComponent(runId)}/cancel`,
         { method: "POST", body: "{}" },
       );
+    },
+    draftWorkflow: async (prompt) => {
+      // The draft route wraps its own {ok,error} outcome in a success envelope (a 422 refusal is
+      // still `data`, not a boundary error), so read the outcome and map a refusal to a throw.
+      const outcome = await call<{
+        ok: boolean;
+        task?: WorkflowDraftTask;
+        newAgent?: WorkflowDraftAgent;
+        error?: string;
+      }>("/v1/tasks/draft", { method: "POST", body: JSON.stringify({ prompt }) });
+      if (!outcome.ok || outcome.task === undefined) {
+        throw new Error(outcome.error ?? "Không tạo được workflow.");
+      }
+      return {
+        task: outcome.task,
+        ...(outcome.newAgent !== undefined ? { newAgent: outcome.newAgent } : {}),
+      };
+    },
+    confirmWorkflow: async (draft) => {
+      const res = await call<{ task: { id: string } }>("/v1/tasks/draft/confirm", {
+        method: "POST",
+        body: JSON.stringify(draft),
+      });
+      return { taskId: res.task.id };
     },
 
     listConversations: async (query, surface) => {

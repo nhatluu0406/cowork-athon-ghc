@@ -3052,3 +3052,93 @@ body {
   color: var(--text-muted);
   font-size: 12.5px;
 }
+
+/* ---- Workflow creator (right of Dispatch surface) ---- */
+.workflow-creator {
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.workflow-creator__title {
+  margin: 0 0 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.workflow-creator__hint {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.workflow-creator__input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line-warm);
+  border-radius: var(--cghc-radius-sm);
+  background: var(--surface);
+  color: var(--text-strong);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.workflow-creator__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.workflow-creator__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.workflow-creator__note {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--text-body);
+}
+.workflow-creator__preview:empty {
+  display: none;
+}
+.workflow-draft {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line-warm);
+  border-radius: var(--cghc-radius-sm);
+  background: var(--surface-muted);
+}
+.workflow-draft__name {
+  font-weight: 600;
+  color: var(--text-strong);
+  font-size: 13.5px;
+}
+.workflow-draft__goal {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  white-space: pre-wrap;
+}
+.workflow-draft__meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.workflow-draft__branch {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-body);
+}
+.workflow-draft__agent {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-soft);
+}
+.workflow-draft__agent-name {
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--accent);
+}
+.workflow-draft__agent-prompt {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}

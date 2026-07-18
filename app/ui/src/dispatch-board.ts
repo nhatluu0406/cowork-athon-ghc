@@ -167,6 +167,9 @@ export async function renderDispatchBoard(
     body.replaceChildren(el("p", "dispatch-note", "Không đọc được danh sách dispatch từ service."));
     return;
   }
+  // Only show workflows the user created from a description. The built-in placeholder templates
+  // (goal never filled in) are hidden — the "Tạo workflow từ mô tả" panel replaces them.
+  tasks = tasks.filter((task) => task.source === "user_local");
 
   const refresh = (): void => {
     if (!body.isConnected) return;

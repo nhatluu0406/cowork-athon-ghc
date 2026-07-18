@@ -8,7 +8,7 @@ import type { DispatchRunView, DispatchTaskView } from "../src/service-client.js
 const TASK: DispatchTaskView = {
   id: "review-repo",
   name: "Review repository",
-  source: "built_in",
+  source: "user_local",
   goal: "review the change",
   loop: { mode: "run_once" },
   branches: [{ agentId: "researcher" }, { agentId: "reviewer" }],
@@ -47,10 +47,27 @@ test("the board renders the task catalog with an honest built-in badge and a run
   await renderDispatchBoard(boardClient(), body);
 
   assert.match(body.textContent ?? "", /Review repository/);
-  assert.match(body.textContent ?? "", /built-in/);
+  assert.match(body.textContent ?? "", /user/);
   assert.match(body.textContent ?? "", /fan-out 2 nhánh/);
   assert.ok(body.querySelector("button.dispatch-btn"), "each task needs a run button");
   assert.match(body.textContent ?? "", /Chưa có lượt chạy nào/);
+  body.remove();
+});
+
+test("built-in placeholder templates are hidden from the board (replaced by 'tạo từ mô tả')", async () => {
+  const builtIn: DispatchTaskView = {
+    id: "tpl-investigate",
+    name: "Điều tra một câu hỏi",
+    source: "built_in",
+    goal: "Điều tra câu hỏi sau: {mục tiêu}",
+    loop: { mode: "run_once" },
+    agentId: "researcher",
+  };
+  const body = document.createElement("div");
+  document.body.appendChild(body);
+  await renderDispatchBoard(boardClient({ listDispatchTasks: async () => [builtIn, TASK] }), body);
+  assert.doesNotMatch(body.textContent ?? "", /Điều tra một câu hỏi/, "built-in template must be hidden");
+  assert.match(body.textContent ?? "", /Review repository/, "user task still shows");
   body.remove();
 });
 

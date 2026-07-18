@@ -104,6 +104,41 @@ function freshDraftId(): string {
   return `wf-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Deterministic, ID_PATTERN-safe id for a proposed new agent, derived from its name (mirrors the
+ * agent catalog's `suggestId`). The LLM cannot know the id the builder will assign, so it references
+ * a proposed agent by NAME; this makes that name resolvable to a stable id.
+ */
+function slugAgentId(name: string): string {
+  const slug = name
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, "-")
+    .replace(/^-+|-+$/gu, "")
+    .slice(0, 64);
+  return slug.length >= 2 ? slug : "agent";
+}
+
+/**
+ * Rewrite a task draft's agent references (`agentId` and `branches[].agentId`) that name-match the
+ * proposed new agent to its assigned id, so the LLM can reference a new agent by name and still pass
+ * `validateTaskDefinition`'s known-id check. Only rewrites exact name matches; nothing else changes.
+ */
+function rewriteAgentReferences(task: unknown, fromName: string, toId: string): unknown {
+  if (typeof task !== "object" || task === null) return task;
+  const rec: Record<string, unknown> = { ...(task as Record<string, unknown>) };
+  if (rec["agentId"] === fromName) rec["agentId"] = toId;
+  if (Array.isArray(rec["branches"])) {
+    rec["branches"] = (rec["branches"] as readonly unknown[]).map((branch) => {
+      if (typeof branch !== "object" || branch === null) return branch;
+      const br: Record<string, unknown> = { ...(branch as Record<string, unknown>) };
+      if (br["agentId"] === fromName) br["agentId"] = toId;
+      return br;
+    });
+  }
+  return rec;
+}
+
 export function createWorkflowBuilder(options: WorkflowBuilderOptions): WorkflowBuilder {
   const maxPrompt = options.maxPromptLength ?? DEFAULT_MAX_PROMPT;
 
@@ -142,7 +177,9 @@ export function createWorkflowBuilder(options: WorkflowBuilderOptions): Workflow
         rawAgent !== undefined
           ? {
               ...rawAgent,
-              id: freshDraftId(),
+              // Derived from the name (not random) so the task can reference it by name — see
+              // rewriteAgentReferences below and the instruction prompt in workflow-draft-generator.
+              id: slugAgentId(typeof rawAgent["name"] === "string" ? rawAgent["name"] : ""),
               source: "user_local",
               skillIds: rawAgent["skillIds"] ?? [],
               permissionPreset: rawAgent["permissionPreset"] ?? {},
@@ -156,10 +193,16 @@ export function createWorkflowBuilder(options: WorkflowBuilderOptions): Workflow
     const knownAgentIds = new Set(options.knownAgentIds());
     if (newAgent !== undefined) knownAgentIds.add(newAgent.id);
 
-    const taskCandidate =
-      typeof candidate.task === "object" && candidate.task !== null
-        ? { ...(candidate.task as Record<string, unknown>), id: freshDraftId(), source: "user_local" }
+    // Map "reference the new agent by its name" (what the LLM can do) to the assigned id (what the
+    // validator checks). Only exact name matches are rewritten; built-in ids are untouched.
+    const taskInput =
+      newAgent !== undefined
+        ? rewriteAgentReferences(candidate.task, newAgent.name, newAgent.id)
         : candidate.task;
+    const taskCandidate =
+      typeof taskInput === "object" && taskInput !== null
+        ? { ...(taskInput as Record<string, unknown>), id: freshDraftId(), source: "user_local" }
+        : taskInput;
     const taskCheck = validateTaskDefinition(taskCandidate, knownAgentIds);
     if (!taskCheck.ok) return { ok: false, error: `task invalid: ${taskCheck.error}` };
 
