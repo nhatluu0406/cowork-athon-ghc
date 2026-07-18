@@ -10,13 +10,14 @@ owner: "quality"
 Findings from reviewing **real screenshots of the packaged app**, against
 `.agents/skills/cowork-ghc-commercial-ui/SKILL.md` and the current design tokens.
 
-> **Status: first evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
-> `tools/ui-audit/`) captured 21 screenshots of the packaged `coworkghc.exe` across every rail
-> surface, both themes, plus the first-run and Settings states. Raw output is git-ignored under
-> `reports/ui-audit/<run-id>/` (contact sheet: `contact-sheet.html`). Findings below are from that
-> first pass on a **fresh, unconfigured** profile (no provider, no workspace) — the honest cold-start
-> a newcomer sees. States requiring a live provider / a loaded workspace / error injection are not
-> yet covered (see Gaps).
+> **Status: evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
+> `tools/ui-audit/`) captured **33 screenshots** of the packaged `coworkghc.exe` across every rail
+> surface, both themes, first-run and Settings states, **plus data-rich Knowledge** (an isolated
+> seed workspace indexed in audit mode: document list, detail, FTS search, graph node/edge + select,
+> re-sync prune, safe clear). Raw output is git-ignored under `reports/ui-audit/<run-id>/` (contact
+> sheet: `contact-sheet.html`). The cold-start findings below are from a **fresh, unconfigured**
+> profile (no provider) — the honest cold-start a newcomer sees. States requiring a live provider /
+> Cowork streaming / error injection are not yet covered (see Gaps).
 
 ## Quality bar to preserve
 
@@ -75,7 +76,7 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 | Code (Workspace) | 5 | Reference bar — three-pane Explorer/editor/Agent, honest empty states. **Preserve.** |
 | Skill & MCP | 4 | Clear catalog, create/detail flow, honest "Đang tắt" state. |
 | Settings (Nhà cung cấp / Chung) | 4 | Clean; minor whitespace balance (F8). |
-| Knowledge (D3) | 4 | Real unified store (2 tabs `Kho tri thức`/`Đồ thị`, no source tabs); status/doc list/search/graph + provenance badges + source filter; Microsoft 365 = honest readiness (no fake, no network). Packaged no-workspace/graph captured (audit 8/8); data-rich PO obs pending. |
+| Knowledge (D3) | 4.5 | Real unified store (2 tabs `Kho tri thức`/`Đồ thị`, no source tabs); status/doc list/search/graph + provenance badges + source filter; Microsoft 365 = honest readiness (no fake, no network). **Data-rich packaged states captured** (audit 21/21, 33 shots via isolated seed workspace: index ready 7 docs/10 nodes/15 edges, list/detail/FTS snippet/graph node-select/prune/safe clear). |
 | Gateway (D4) | 4 | Honest "không hiển thị dữ liệu giả trước khi team tích hợp". |
 | Microsoft 365 (D2) | 3.5 | Good connect card; interactive-while-disconnected (F5). |
 | First-run lock | 3.5 | Clear + localized; dark-in-light-theme (F1). |

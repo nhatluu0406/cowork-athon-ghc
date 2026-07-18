@@ -120,8 +120,10 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
 Đây là hệ Knowledge **local mới** (`service/src/knowledge-local` + `/v1/knowledge-local` + surface
 Knowledge thật), **tách biệt** với Go backend/M365KG bên dưới. Đây là **một kho tri thức thống nhất
 theo active Workspace** — chỉ hai tab `Kho tri thức` / `Đồ thị`, **không** có tab nguồn tách biệt.
-Code+tests+build PASS; packaged no-workspace + đồ thị states đã capture (UI audit 8/8), **data-rich
-packaged PO observation còn pending** (cần PO chọn Workspace thật). Giới hạn có chủ ý của MVP:
+Code+tests+build PASS; **data-rich packaged acceptance PASS** (UI audit 21/21, 33 ảnh) qua seed
+workspace cô lập trong audit mode (không dùng workspace thật, không fake data): index status=ready,
+document list, chi tiết + provenance, FTS search có snippet, đồ thị nút/cạnh + chọn nút, đồng bộ lại
+prune, xóa chỉ mục an toàn giữ file gốc. Giới hạn có chủ ý của MVP:
 
 - **Chỉ keyword FTS5 — không semantic/vector/embedding.** Không gọi LLM để index; `llm-svc` (LF-3)
   chưa bundle. Không bịa "semantic similarity". Tìm kiếm là prefix AND trên token.

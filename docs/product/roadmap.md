@@ -180,8 +180,9 @@ Deferred: terminal/PTY, Git UI, debugger, LSP; app không phải Electron; mở 
 - [ ] D2 Microsoft 365 product acceptance.
 - [x] D3 **Local** Knowledge Base + Graph MVP — **kho tri thức thống nhất theo active Workspace**
       (SQLite FTS5 + deterministic graph; provenance badge + bộ lọc nguồn; chỉ 2 tab `Kho tri thức`/
-      `Đồ thị`, không tab nguồn; code+tests+build PASS, no-workspace/graph packaged qua UI audit 8/8,
-      **data-rich packaged PO obs pending**, 2026-07-18). Microsoft 365 = nguồn bổ sung tương lai với
+      `Đồ thị`, không tab nguồn; code+tests+build PASS, **data-rich packaged acceptance PASS** qua UI
+      audit 21/21 / 33 ảnh với seed workspace cô lập — index/list/search/graph/prune/clear, 2026-07-18).
+      Microsoft 365 = nguồn bổ sung tương lai với
       readiness trung thực (không fake data/network); contracts sẵn sàng ingest vào cùng kho.
       Deferred: embeddings/semantic (needs `llm-svc`, LF-3), PDF text, external M365KG/Neo4j path,
       MS365 ingestion thật.

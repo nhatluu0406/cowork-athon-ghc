@@ -31,7 +31,7 @@ Legend for Persistence/Network: SQLite · vault · file · none / none · loopba
 | Desktop App Launch | Code → Ứng dụng | Build/Run/Stop/Restart an Electron app | WIRED-UNVERIFIED | `app/ui` | `service` runtime-preview | file | loopback | — | **Pending** | Electron only; others `unsupported` (ADR 0015) |
 | Dispatch (D1) | Dispatch | Run saved task, fan-out, board, `/dispatch` | PARTIAL | `app/ui` dispatch | `service/src/dispatchers`,`tasks` | SQLite | loopback | LLM provider | No (unit/integration only) | No packaged/live fan-out (Checkpoint 5) |
 | Microsoft 365 (D2) | Microsoft tab | Manual-token connect, chat, history, permission cards | PARTIAL | `app/ui` ms tab | `service/src/ms365` | SQLite + vault | Graph HTTPS | Microsoft Graph | No (no live tenant) | OAuth device-code gated; not live-verified |
-| Knowledge (D3) — Local KB/Graph MVP | Kho tri thức + Đồ thị | Unified store over active workspace; search/graph + provenance | CODE+TESTS+BUILD PASS; no-workspace/graph packaged (audit 8/8); data-rich PO obs pending | `app/ui` knowledge-local-panel + knowledge-local-graph | `service/src/knowledge-local` (repo+indexer+service) + `/v1/knowledge-local` router | SQLite (migration id:4) FTS5 + node/edge tables | loopback (in-service) | index/sync/rebuild/clear/cancel, FTS search, graph | No (fully local) | 2 tabs only (no source tabs); provenance badge + source filter; Microsoft 365 = honest readiness (no fake, no network); keyword only, no PDF text |
+| Knowledge (D3) — Local KB/Graph MVP | Kho tri thức + Đồ thị | Unified store over active workspace; search/graph + provenance | CODE+TESTS+BUILD PASS; **data-rich packaged acceptance PASS (audit 21/21, 33 shots)** | `app/ui` knowledge-local-panel + knowledge-local-graph | `service/src/knowledge-local` (repo+indexer+service) + `/v1/knowledge-local` router | SQLite (migration id:4) FTS5 + node/edge tables | loopback (in-service) | index/sync/rebuild/clear/cancel, FTS search, graph | Yes (audit seed workspace: index/list/search/graph/prune/clear) | 2 tabs only (no source tabs); provenance badge + source filter; Microsoft 365 = honest readiness (no fake, no network); keyword only, no PDF text |
 | Knowledge (D3) — external M365KG client | (advanced/optional) | — | DORMANT | — | `app/backend` Go + `app/llm-svc` Rust + `service/src/knowledge` (not composed) | Neo4j/PG (designed) | (designed loopback) | — | Yes (external) | Not wired/bundled; separate from the Local KB MVP |
 | Gateway (D4) | slot | — | NOT IMPLEMENTED | slot | — | — | — | — | No | Mount boundary only |
 | Remote / PWA / Discord | `/remote`, phone PWA | Pair, view, permission, prompt | DEV/DEMO | `app/ui` + `pwa.ts` | `service/src/remote-gateway` | in-memory | LAN (no TLS) | Discord (opt) | No | Dev/demo flags; LAN unencrypted |
@@ -44,6 +44,7 @@ Legend for Persistence/Network: SQLite · vault · file · none / none · loopba
 
 - "Pending" packaged evidence for Code/Web Preview/Desktop App: code + focused tests + `build:app`
   PASS, but no packaged Product-Owner observation yet — do not claim WORKS (see `demo-acceptance.md`).
-- D3 is the single largest gap between "code present" and "capability": see
+- D3 **Local** KB/Graph now has data-rich packaged acceptance (automated seed workspace in audit
+  mode). The remaining D3 gap is semantic/embeddings + the external M365KG path: see
   `../architecture/dependencies-and-services.md §5` and `../architecture/local-first-strategy.md`.
 - Negative/recovery-path coverage is tracked in `exhibition-readiness-plan.md §8.3`.

@@ -14,7 +14,7 @@
  */
 
 import { app, screen, type BrowserWindow } from "electron";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const AUDIT_ENV = "COWORK_GHC_UI_AUDIT";
@@ -79,6 +79,25 @@ async function runAudit(window: BrowserWindow): Promise<void> {
     log(`${ok ? "PASS" : "FAIL"} check:${name}${detail ? ` — ${detail}` : ""}`);
   };
   const evalJs = <T>(expr: string): Promise<T> => wc.executeJavaScript(expr, true) as Promise<T>;
+  // Audit-only: call the loopback service directly from the renderer, reusing the in-memory bootstrap
+  // token, to set the active workspace + run a REAL index over the seeded corpus. This exercises the
+  // exact routes the panel uses — it never fabricates data. Returns the envelope `data`, or
+  // `{ __error }` when the service replies with an error envelope.
+  const svc = <T>(method: string, path: string, body?: unknown): Promise<T> => {
+    const bodyJs = body === undefined ? "undefined" : JSON.stringify(JSON.stringify(body));
+    const expr = `(async () => {
+      const b = await window.coworkShell.getBootstrap();
+      const base = String(b.serviceBaseUrl).replace(/\\/$/, '');
+      const headers = { authorization: 'Bearer ' + b.clientToken };
+      const init = { method: ${JSON.stringify(method)}, headers };
+      const bodyStr = ${bodyJs};
+      if (bodyStr !== undefined) { init.body = bodyStr; headers['content-type'] = 'application/json'; }
+      const res = await fetch(base + ${JSON.stringify(path)}, init);
+      const env = await res.json();
+      return env && env.ok ? env.data : { __error: (env && env.error) || 'no-envelope' };
+    })()`;
+    return evalJs<T>(expr);
+  };
   const clickSel = (sel: string): Promise<boolean> =>
     evalJs<boolean>(
       `(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return false; n.click(); return true; })()`,
@@ -233,6 +252,124 @@ async function runAudit(window: BrowserWindow): Promise<void> {
         } else {
           check("nav:knowledge-states", false, "knowledge rail button missing");
         }
+      }
+
+      // 3c) Data-rich Knowledge — point the app at the seeded workspace, run a REAL local index, and
+      // capture the populated states (document list / detail / FTS search / graph / node detail), then
+      // a real re-sync after an on-disk change + delete (prune), then the safe destructive clear that
+      // keeps the source files. Requires the seed dir handed in by tools/ui-audit; skipped if absent.
+      const seedWs = process.env.COWORK_GHC_UI_AUDIT_WORKSPACE?.trim();
+      if (seedWs !== undefined && seedWs.length > 0) {
+        log(`data-rich knowledge: seeding active workspace ${seedWs}`);
+        const setRes = await svc<{ __error?: unknown }>("PUT", "/v1/settings/active-workspace", {
+          rootPath: seedWs,
+        });
+        check("knowledge-set-workspace", !setRes?.__error, setRes?.__error ? JSON.stringify(setRes.__error) : "");
+        await svc("POST", "/v1/knowledge-local/sync");
+
+        type KStatus = { status: string; documentCount: number; nodeCount: number; edgeCount: number };
+        const readyBy = Date.now() + 90_000;
+        let view: KStatus | null = null;
+        while (Date.now() < readyBy) {
+          const st = await svc<{ status?: KStatus }>("GET", "/v1/knowledge-local/status");
+          view = st?.status ?? null;
+          if (view !== null && view.status !== "indexing" && view.status !== "not_initialized") break;
+          await delay(600);
+        }
+        const indexed = view !== null && view.documentCount > 0 && (view.status === "ready" || view.status === "partial");
+        check(
+          "knowledge-indexed",
+          indexed,
+          view !== null ? `status=${view.status} docs=${view.documentCount} nodes=${view.nodeCount} edges=${view.edgeCount}` : "no status",
+        );
+
+        // Navigate to Knowledge; the panel refreshes status + loads the now-real document list.
+        await clickSel('button[data-surface-id="knowledge"]');
+        await clickSel('[data-knowledge-tab="base"]');
+        const docsShown = await waitFor("document.querySelector('.klp-doc')", 12_000);
+        check("knowledge-doc-list", docsShown, docsShown ? "" : "no .klp-doc rendered");
+        await capture({ id: "40-knowledge-docs-light", title: "Knowledge — danh sách tài liệu (có dữ liệu)", theme: "light", viewport: "desktop", expectSelector: ".klp-kb" });
+        await capture({ id: "41-knowledge-docs-dark", title: "Knowledge — danh sách tài liệu (dark)", theme: "dark", viewport: "desktop", expectSelector: ".klp-kb" });
+
+        // Document detail — provenance badge + safe path + Mở nguồn / Hỏi Cowork handoffs.
+        await clickSel(".klp-doc");
+        const detailShown = await waitFor("document.querySelector('.klp-detail')", 8_000);
+        check("knowledge-doc-detail", detailShown, detailShown ? "" : "no .klp-detail");
+        await capture({ id: "42-knowledge-doc-detail-light", title: "Knowledge — chi tiết tài liệu + nguồn", theme: "light", viewport: "desktop", expectSelector: ".klp-detail" });
+
+        // Real FTS keyword search — a term present across the corpus → highlighted snippet + provenance.
+        const typed = await evalJs<boolean>(`(() => {
+          const inp = document.querySelector('.klp-search__input');
+          if (!inp) return false;
+          inp.value = 'knowledge';
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+          return true;
+        })()`);
+        check("knowledge-search-typed", typed, typed ? "" : "search input missing");
+        const hitsShown = await waitFor("document.querySelector('.klp-hit')", 8_000);
+        check("knowledge-search-hits", hitsShown, hitsShown ? "" : "no .klp-hit");
+        await capture({ id: "43-knowledge-search-light", title: "Knowledge — tìm kiếm FTS + snippet + nguồn", theme: "light", viewport: "desktop", expectSelector: ".klp-results" });
+
+        // Clear search, open the graph tab — expect a real node/edge graph (not a blank canvas).
+        await evalJs(`(() => { const inp = document.querySelector('.klp-search__input'); if (inp) { inp.value=''; inp.dispatchEvent(new Event('input',{bubbles:true})); } })()`);
+        await clickSel('[data-knowledge-tab="graph"]');
+        const nodesShown = await waitFor("document.querySelector('[data-node-id]')", 12_000);
+        check("knowledge-graph-nodes", nodesShown, nodesShown ? "" : "no graph nodes");
+        await capture({ id: "44-knowledge-graph-light", title: "Knowledge — đồ thị (nút/cạnh thật)", theme: "light", viewport: "desktop", expectSelector: ".klp-graph" });
+
+        // Select a node → detail aside with provenance + link count. SVG <g> nodes have no `.click()`
+        // (that is HTMLElement-only), so dispatch a bubbling MouseEvent the graph's listener handles.
+        const nodeClicked = await evalJs<boolean>(`(() => {
+          const n = document.querySelector('[data-node-id]');
+          if (!n) return false;
+          n.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          return true;
+        })()`);
+        check("knowledge-graph-node-click", nodeClicked, nodeClicked ? "" : "no node to click");
+        const nodeDetail = await waitFor("document.querySelector('.klp-graph__aside-title')", 6_000);
+        check("knowledge-graph-node-detail", nodeDetail, nodeDetail ? "" : "no node detail aside");
+        await capture({ id: "45-knowledge-graph-node-light", title: "Knowledge — chọn nút + chi tiết nguồn", theme: "light", viewport: "desktop", expectSelector: ".klp-graph__aside" });
+
+        // Real re-sync after an on-disk change + delete → prune. Mutate the seed, then sync again.
+        try {
+          appendFileSync(join(seedWs, "notes.txt"), "\nAppended during audit to force a re-index.\n");
+          rmSync(join(seedWs, "standalone.md"), { force: true });
+        } catch {
+          /* best effort — the prune check below reports if it did not take */
+        }
+        await svc("POST", "/v1/knowledge-local/sync");
+        const reReadyBy = Date.now() + 60_000;
+        let view2: KStatus | null = null;
+        while (Date.now() < reReadyBy) {
+          const st = await svc<{ status?: KStatus }>("GET", "/v1/knowledge-local/status");
+          view2 = st?.status ?? null;
+          if (view2 !== null && view2.status !== "indexing") break;
+          await delay(600);
+        }
+        const pruned = view !== null && view2 !== null && view2.documentCount < view.documentCount;
+        check("knowledge-resync-prune", pruned, view !== null && view2 !== null ? `before=${view.documentCount} after=${view2.documentCount}` : "no status");
+        await clickSel('[data-knowledge-tab="base"]');
+        await waitFor("document.querySelector('.klp-doc')", 8_000);
+        await capture({ id: "46-knowledge-resync-light", title: "Knowledge — đồng bộ lại sau thay đổi/xóa (prune)", theme: "light", viewport: "desktop", expectSelector: ".klp-kb" });
+
+        // Safe destructive clear: More ▾ → Xóa chỉ mục → confirmation → confirm → not_initialized.
+        await clickSel('.klp-menu button[aria-haspopup="menu"]');
+        await delay(200);
+        await clickSel(".klp-menu__item--danger");
+        const confirmShown = await waitFor("document.querySelector('.klp-status__confirm')", 4_000);
+        check("knowledge-clear-confirm", confirmShown, confirmShown ? "" : "no confirm prompt");
+        await capture({ id: "47-knowledge-clear-confirm-light", title: "Knowledge — xác nhận xóa chỉ mục (an toàn)", theme: "light", viewport: "desktop", expectSelector: ".klp-status__confirm" });
+        await clickSel(".klp-status__confirm .klp-btn--danger");
+        const backToInit = await waitFor("document.querySelector('.klp-chip--not_initialized')", 8_000);
+        check("knowledge-cleared", backToInit, backToInit ? "" : "did not return to not_initialized");
+        // The index clear must NOT touch the source files on disk.
+        const filesKept = existsSync(join(seedWs, "README.md")) && existsSync(join(seedWs, "docs", "overview.md"));
+        check("knowledge-clear-keeps-files", filesKept, filesKept ? "" : "seed files missing after clear");
+        await capture({ id: "48-knowledge-cleared-light", title: "Knowledge — sau khi xóa chỉ mục (file gốc giữ nguyên)", theme: "light", viewport: "desktop", expectSelector: ".klp" });
+
+        // Leave the app on Cowork so the subsequent Settings/large-viewport steps start clean.
+        await clickSel('button[data-surface-id="cowork"]');
+        await delay(300);
       }
 
       // 4) Settings surface (provider + general tabs).
