@@ -3056,13 +3056,28 @@ export function mountCoworkApp(root: HTMLElement): void {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
             updateSkillsMcpChip();
           });
-          if (state.bootstrap !== null) {
-            const bootstrap = state.bootstrap;
-            mountGatewayIntegrationSlot(dom.gatewayView, {
-              getBaseUrl: () => bootstrap.serviceBaseUrl ?? "",
-              getClientToken: () => bootstrap.clientToken ?? "",
-            });
-          }
+          // Read `state.bootstrap` fresh on every call, not a snapshot captured at mount time:
+          // a tier transition (settings-only → live) REPLACES `state.bootstrap` with a new
+          // object on a new port (see `readiness`'s `createClient` above) — a captured `const`
+          // here would keep pointing at the old, now-dead port forever ("Failed to fetch").
+          mountGatewayIntegrationSlot(dom.gatewayView, {
+            getBaseUrl: () => state.bootstrap?.serviceBaseUrl ?? "",
+            getClientToken: () => state.bootstrap?.clientToken ?? "",
+            listProfiles: async () => (await dynamicClient.listProviderProfiles()).profiles,
+            // Reuse the SAME reconnect flow the chat composer uses (`ensureLive`): restarts the
+            // live service (fresh OpenCode child, re-reads `opencode.json`) and polls until
+            // `state.bootstrap`/`state.client` actually reflect the new session — a bare
+            // `connectLive()` IPC call resolves once the SERVICE has restarted, but the
+            // renderer's own bootstrap adoption is a separate step this also waits out.
+            // `ensureLive`'s FAST PATH skips reconnecting entirely when the existing client
+            // already health-checks OK — exactly the common case here (a healthy session that
+            // just needs its OpenCode child respawned for the new Gateway config) — so force past
+            // it by marking the current attachment stale first.
+            reconnectLive: async () => {
+              state.liveAttached = false;
+              await ensureLive(state, readiness).catch(() => undefined);
+            },
+          });
           const permissions = createPermissionController({
             client: dynamicClient,
             container: dom.root,

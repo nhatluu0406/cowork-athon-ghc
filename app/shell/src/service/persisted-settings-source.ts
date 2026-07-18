@@ -56,6 +56,8 @@ export interface PersistedSettingsSourceOptions {
   readonly makeCredentialStore?: () => Promise<credential.CredentialStore>;
   /** Open the persistent settings reader (default: the real Node settings store). Injectable. */
   readonly makeSettingsReader?: () => Promise<PersistedSettingsReader>;
+  /** Fixed port for the Gateway proxy (default: an ephemeral bind). */
+  readonly gatewayProxyPort?: number;
 }
 
 /**
@@ -122,6 +124,9 @@ export function createPersistedSettingsSource(
           ? { skillsStateFilePath: options.skillsStateFilePath }
           : {}),
         ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
+        ...(options.gatewayProxyPort !== undefined
+          ? { gatewayProxyPort: options.gatewayProxyPort }
+          : {}),
       },
       ...(options.binPath !== undefined ? { binPath: options.binPath } : {}),
       ...(options.appRoot !== undefined ? { appRoot: options.appRoot } : {}),

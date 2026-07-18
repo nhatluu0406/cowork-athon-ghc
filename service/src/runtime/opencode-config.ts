@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { OPENAI_COMPATIBLE_NPM, isValidEnvName } from "@cowork-ghc/runtime";
 import { isE2eMockLlmUrl } from "../provider/e2e-mock-llm.js";
 import { TOOL_NAMES as MS365_TOOL_NAMES } from "../ms365/ms365-tool-router.js";
+import { isGatewayProxyUrl } from "../gateway/gateway-proxy-url.js";
 
 /** Non-secret provider definition for the child's `opencode.json`. */
 export interface OpencodeProviderConfig {
@@ -73,6 +74,7 @@ export const LIVE_SESSION_PERMISSION_POLICY: Readonly<Record<string, string>> = 
 
 function assertSafeBaseUrl(baseUrl: string): void {
   if (isE2eMockLlmUrl(baseUrl)) return;
+  if (isGatewayProxyUrl(baseUrl)) return;
   let url: URL;
   try {
     url = new URL(baseUrl);
