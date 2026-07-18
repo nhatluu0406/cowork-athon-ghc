@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Host              string
 	Port              int
+	DBType            string        // postgres_neo4j or sqlite_lancedb
 	DBUrl             string
 	Neo4jUri          string
 	Neo4jUser         string
@@ -34,10 +35,17 @@ type Config struct {
 }
 
 func LoadConfig() (*Config, error) {
+	dbType := getEnv("DB_TYPE", "sqlite_lancedb")
+	// Default DATABASE_URL depends on DBType
+	defaultDBUrl := "file:./m365kg.db?cache=shared"
+	if dbType == "postgres_neo4j" {
+		defaultDBUrl = "postgres://user:pass@localhost:5432/m365kg"
+	}
 	cfg := &Config{
 		Host:              getEnv("HOST", "0.0.0.0"),
 		Port:              getEnvInt("PORT", 8080),
-		DBUrl:             getEnv("DATABASE_URL", "postgres://user:pass@localhost:5432/m365kg"),
+		DBType:            dbType,
+		DBUrl:             getEnv("DATABASE_URL", defaultDBUrl),
 		Neo4jUri:          getEnv("NEO4J_URI", "bolt://localhost:7687"),
 		Neo4jUser:         getEnv("NEO4J_USERNAME", "neo4j"),
 		Neo4jPass:         getEnv("NEO4J_PASSWORD", ""),
@@ -65,9 +73,15 @@ func (c *Config) Validate() error {
 	if c.DBUrl == "" {
 		return fmt.Errorf("DATABASE_URL is required")
 	}
-	if c.Neo4jUri == "" {
-		return fmt.Errorf("NEO4J_URI is required")
+
+	if c.DBType != "postgres_neo4j" && c.DBType != "sqlite_lancedb" {
+		return fmt.Errorf("invalid DB_TYPE: %s (must be postgres_neo4j or sqlite_lancedb)", c.DBType)
 	}
+
+	if c.DBType == "postgres_neo4j" && c.Neo4jUri == "" {
+		return fmt.Errorf("NEO4J_URI is required for postgres_neo4j stack")
+	}
+
 	// T175/T176a: LLM_API_BASE_URL was removed — all LLM-shaped operations go
 	// through llm-svc (LLMSVC_ADDR) only. LLMSVC_ADDR itself stays optional
 	// here: an unset value is fine for a development environment without
