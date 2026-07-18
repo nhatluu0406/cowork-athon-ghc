@@ -20,14 +20,15 @@ import { renderIntegrationSurface } from "../src/ui-shell/integration-view.js";
 test("surface registry declares the seven top-level product surfaces", () => {
   const registry = createSurfaceRegistry();
   const ids = registry.map((surface) => surface.id);
+  // Product-flow rail order (Phase 3): work → external connections → capability.
   assert.deepEqual(ids, [
     "cowork",
-    "skills-mcp",
-    "dispatch",
-    "gateway",
+    "code",
     "knowledge",
     "microsoft",
-    "code",
+    "dispatch",
+    "skills-mcp",
+    "gateway",
   ] satisfies ProductSurfaceId[]);
   for (const surface of registry) {
     assert.ok(surface.label.length > 0);
@@ -42,31 +43,30 @@ test("production default exposes all navigable product rail surfaces", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.deepEqual(visible.map((surface) => [surface.id, surface.availability]), [
     ["cowork", "available"],
-    ["skills-mcp", "available"],
-    ["dispatch", "awaiting_integration"],
-    // Gateway backend (PR #16 multi-account proxy) is now integrated — no longer a mount boundary.
-    ["gateway", "available"],
+    ["code", "available"],
     ["knowledge", "awaiting_integration"],
     ["microsoft", "awaiting_integration"],
-    ["code", "available"],
+    ["dispatch", "awaiting_integration"],
+    ["skills-mcp", "available"],
+    // Gateway backend (PR #16 multi-account proxy) is now integrated — no longer a mount boundary.
+    ["gateway", "available"],
   ]);
 });
 
-test("skills-mcp surface sits directly below Cowork in the rail", () => {
+test("work surfaces lead the rail: Code sits directly below Cowork", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry());
   assert.equal(visible[0]?.id, "cowork");
-  assert.equal(visible[1]?.id, "skills-mcp");
-  assert.equal(visible[1]?.label, "Skill & MCP");
-  assert.equal(visible[1]?.icon, "skills");
+  assert.equal(visible[1]?.id, "code");
+  assert.equal(visible[2]?.id, "knowledge");
 });
 
 test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
   assert.deepEqual(visible.map((surface) => surface.id), [
     "cowork",
+    "code",
     "skills-mcp",
     "gateway",
-    "code",
   ]);
 });
 
@@ -85,7 +85,8 @@ test("external surfaces carry dependency-specific awaiting integration copy", ()
 
 test("integration adapters declare stable mount boundaries", () => {
   assert.equal(getIntegrationSurfaceAdapter("dispatch")?.statusLabel, "Chờ tích hợp D1");
-  assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Chờ tích hợp D4");
+  // Gateway backend is integrated (PR #16); its adapter fallback no longer reads "chờ tích hợp".
+  assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Đã tích hợp");
   assert.equal(getIntegrationSurfaceAdapter("knowledge")?.statusLabel, "Chờ tích hợp D3");
   assert.equal(getIntegrationSurfaceAdapter("microsoft")?.statusLabel, "Chờ tích hợp D2");
   assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã lên kế hoạch");
