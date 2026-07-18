@@ -193,13 +193,37 @@ async function main() {
   const PHASE_B_DIR = join(OUT_DIR, "phase2-autounlock");
   await launch("phaseB", PHASE_B_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify" });
 
-  // ---- aggregate the shell's capture results from both phases ----
+  // Phase C — corrupt the safeStorage-sealed deviceSecret, then relaunch: the vault MUST fall back
+  // to the password gate (never brick), the password must still unlock, and we re-enable "Require
+  // login" ON. The seal lives at <appDataRoot>/auto-unlock.seal, where appDataRoot === RUN_DATA_ROOT
+  // (COWORK_GHC_RUNTIME_ROOT → <root>/data; appDataRoot = dirname(dataRoot) = <root>).
+  const sealFile = join(RUN_DATA_ROOT, "auto-unlock.seal");
+  let sealCorrupted = false;
+  if (existsSync(sealFile)) {
+    writeFileSync(sealFile, Buffer.from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 255, 254]));
+    sealCorrupted = true;
+  }
+  check("seal-present-to-corrupt", sealCorrupted, sealCorrupted ? sealFile : "no auto-unlock.seal was written by phase A");
+  const PHASE_C_DIR = join(OUT_DIR, "phase3-corrupt-seal");
+  await launch("phaseC", PHASE_C_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify_fallback" });
+  const PHASE_D_DIR = join(OUT_DIR, "phase4-reenabled-on");
+  await launch("phaseD", PHASE_D_DIR, { COWORK_GHC_UI_AUDIT_AUTOUNLOCK: "verify_on" });
+
+  // ---- aggregate the shell's capture results from every phase ----
   const steps = readJson(join(OUT_DIR, "steps.json"), []);
   const stepsB = readJson(join(PHASE_B_DIR, "steps.json"), []);
+  const stepsC = readJson(join(PHASE_C_DIR, "steps.json"), []);
+  const stepsD = readJson(join(PHASE_D_DIR, "steps.json"), []);
   const shellChecks = readJson(join(OUT_DIR, "checks.json"), []);
   const shellChecksB = readJson(join(PHASE_B_DIR, "checks.json"), []);
-  check("screenshots-captured", steps.length > 0, `${steps.length} (phaseA) + ${stepsB.length} (phaseB)`);
-  const allChecks = [...shellChecks, ...shellChecksB, ...checks];
+  const shellChecksC = readJson(join(PHASE_C_DIR, "checks.json"), []);
+  const shellChecksD = readJson(join(PHASE_D_DIR, "checks.json"), []);
+  check(
+    "screenshots-captured",
+    steps.length > 0,
+    `${steps.length} (A) + ${stepsB.length} (B) + ${stepsC.length} (C) + ${stepsD.length} (D)`,
+  );
+  const allChecks = [...shellChecks, ...shellChecksB, ...shellChecksC, ...shellChecksD, ...checks];
 
   writeReports(steps, allChecks);
 

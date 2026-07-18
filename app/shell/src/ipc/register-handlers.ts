@@ -31,6 +31,7 @@ import {
   isSecureAutoUnlockAvailable,
   sealDeviceSecret,
 } from "../service/device-unlock.js";
+import { applyStartupAuthMode } from "../service/startup-auth-mode.js";
 
 /** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
 let e2eAttachmentQueue: string[] | null = null;
@@ -129,43 +130,21 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     ): Promise<StartupAuthModeResult> => {
       const requireLogin = (arg as { requireLogin?: unknown })?.requireLogin === true;
       const password = (arg as { password?: unknown })?.password;
-      if (typeof password !== "string" || password.length === 0) {
-        return { ok: false, reason: "password_required", requireLogin: !requireLogin };
-      }
       const bootstrap = getBootstrap();
-
-      if (requireLogin) {
-        // Turn the requirement ON: remove the auto-unlock envelope + sealed secret, persist setting.
-        const disabled = await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/disable", {
-          password,
-        });
-        if (!disabled.ok) return { ok: false, reason: "invalid_password", requireLogin: false };
-        clearSealedDeviceSecret(appDataRoot);
-        await serviceCall(bootstrap, "PATCH", "/v1/settings/general", {
-          requireLoginOnStartup: true,
-        });
-        return { ok: true, requireLogin: true };
-      }
-
-      // Turn the requirement OFF: needs device-bound secure storage to fall back on.
-      if (!isSecureAutoUnlockAvailable()) {
-        return { ok: false, reason: "secure_storage_unavailable", requireLogin: true };
-      }
-      const deviceSecret = generateDeviceSecret();
-      const enabled = await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/enable", {
-        password,
-        deviceSecret,
-      });
-      if (!enabled.ok) return { ok: false, reason: "invalid_password", requireLogin: true };
-      if (!sealDeviceSecret(appDataRoot, deviceSecret)) {
-        // Roll back the envelope so we never leave a half-configured OFF state.
-        await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/disable", { password });
-        return { ok: false, reason: "seal_failed", requireLogin: true };
-      }
-      await serviceCall(bootstrap, "PATCH", "/v1/settings/general", {
-        requireLoginOnStartup: false,
-      });
-      return { ok: true, requireLogin: false };
+      // The two-step orchestration (envelope in the service ↔ seal in the shell) with its rollback
+      // lives in `applyStartupAuthMode` so the interruption behaviour is unit-tested; here we only
+      // bind the real seams (loopback call + safeStorage device-unlock).
+      return applyStartupAuthMode(
+        {
+          serviceCall: (method, path, body) => serviceCall(bootstrap, method, path, body),
+          isSecureAvailable: isSecureAutoUnlockAvailable,
+          generateDeviceSecret,
+          sealDeviceSecret: (secret) => sealDeviceSecret(appDataRoot, secret),
+          clearSealedDeviceSecret: () => clearSealedDeviceSecret(appDataRoot),
+        },
+        requireLogin,
+        typeof password === "string" ? password : "",
+      );
     },
   );
 

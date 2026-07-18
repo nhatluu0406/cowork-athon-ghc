@@ -196,6 +196,68 @@ async function runAudit(window: BrowserWindow): Promise<void> {
       return; // finally writes the sentinel + quits
     }
 
+    // Phase C (device-bound auto-unlock, corrupt-seal fallback): the launcher CORRUPTED the sealed
+    // deviceSecret before this relaunch. safeStorage can no longer decrypt it → the vault must NOT
+    // auto-unlock; the password gate MUST take over (no bricked vault). We then unlock with the
+    // password (proving the untouched password path still works) and re-enable "Require login" ON
+    // (deletes the envelope + clears the seal) so Phase D can confirm the ON boot.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify_fallback") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 20_000);
+      check(
+        "corrupt-seal-falls-back-to-password",
+        lockAppeared,
+        lockAppeared ? "" : "no lock screen — auto-unlock unexpectedly succeeded with a corrupt seal",
+      );
+      if (lockAppeared) {
+        await capture({ id: "52-corrupt-seal-fallback-login", title: "Auth OFF — corrupt seal falls back to the password gate", theme: "light", viewport: "desktop", expectSelector: ".app-lock__card" });
+        const submitted = await evalJs<boolean>(`(() => {
+          const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+          const user = document.querySelector('.app-lock input[type=text]');
+          const pass = document.querySelector('.app-lock input[type=password]');
+          if (!user || !pass) return false;
+          setVal(user, ${JSON.stringify(SYNTH_USER)});
+          setVal(pass, ${JSON.stringify(SYNTH_PASS)});
+          const btn = document.querySelector('.app-lock__submit');
+          if (!btn) return false;
+          btn.click();
+          return true;
+        })()`);
+        const unlocked = submitted && (await waitFor("!document.querySelector('.app-lock')", 20_000));
+        check(
+          "password-still-unlocks-after-corrupt-seal",
+          unlocked,
+          unlocked ? "" : "the password path failed after a corrupt seal (would be a bricked vault)",
+        );
+        if (unlocked) {
+          const onRes = await evalJs<{ ok?: boolean; requireLogin?: boolean; reason?: string }>(
+            `(async () => { try { return await window.coworkShell.setStartupAuthMode(true, ${JSON.stringify(SYNTH_PASS)}); } catch (e) { return { ok: false, reason: String(e) }; } })()`,
+          );
+          check(
+            "re-enable-require-login",
+            onRes?.ok === true && onRes?.requireLogin === true,
+            JSON.stringify(onRes),
+          );
+          await capture({ id: "53-require-login-re-enabled", title: "Auth — Require login at startup re-enabled (ON)", theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
+        }
+      }
+      return; // finally writes the sentinel + quits
+    }
+
+    // Phase D (re-enabled ON boot): after Phase C turned "Require login" back ON, a fresh relaunch
+    // MUST show the password gate again — no envelope/seal remain to auto-unlock from.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify_on") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 20_000);
+      check(
+        "re-enabled-on-shows-login",
+        lockAppeared,
+        lockAppeared ? "" : "no lock screen after re-enabling Require login (auto-unlock envelope/seal not cleared)",
+      );
+      if (lockAppeared) {
+        await capture({ id: "54-auth-on-login-after-reenable", title: "Auth ON — password gate returns after re-enable", theme: "light", viewport: "desktop", expectSelector: ".app-lock__card" });
+      }
+      return; // finally writes the sentinel + quits
+    }
+
     // 1) First-run lock/setup screen (honest onboarding evidence — ER-002).
     const lockShown = await waitFor("document.querySelector('.app-lock')", 10_000);
     if (lockShown) {
