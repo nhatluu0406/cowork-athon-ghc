@@ -102,9 +102,9 @@ test("the Dispatch surface renders real phone pairing + the local dispatch board
   // plus the local dispatch board — not the "Chờ tích hợp D1" awaiting-integration placeholder
   // that only fits the genuinely-empty surfaces. Honesty is preserved by the board/pairing
   // rendering their own empty/loading states, not by faking a D1 backend that has not landed.
-  assert.doesNotMatch(container.textContent ?? "", /Chờ tích hợp D1/);
   assert.ok(container.querySelector(".integration-remote"), "dispatch must render the pairing section");
   assert.ok(container.querySelector(".integration-dispatch"), "dispatch must render the board section");
+  assert.doesNotMatch(container.textContent ?? "", /Chờ tích hợp D1/);
 });
 
 test("other awaiting-integration surfaces do not grow a pairing section", () => {

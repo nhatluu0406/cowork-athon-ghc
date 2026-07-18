@@ -178,7 +178,16 @@ function createShellController(
     allowEnvCredentialImport: envCredentialImportEnabled(),
   };
   const settingsOnlyStart = createSettingsOnlyStartService(settingsOnlyOptions);
-  const liveStart = createLiveStartService(createLiveOptionsResolver(liveSource));
+  // Route the remote gateway's diagnostics (LAN URL, "gateway ready", Discord-on) into the
+  // lifecycle log. Without this they default to process.stdout, which a packaged Windows GUI
+  // app swallows — leaving the gateway impossible to debug from a log file. The lines carry no
+  // secret (URLs only; pairing codes/tokens are never passed to remoteLog) and are redacted by
+  // writeLifecycleLog anyway.
+  const resolveLiveOptions = createLiveOptionsResolver(liveSource);
+  const liveStart = createLiveStartService(async () => ({
+    ...(await resolveLiveOptions()),
+    remoteLog: writeLifecycleLog,
+  }));
 
   return new ServiceController({
     log: writeLifecycleLog,
