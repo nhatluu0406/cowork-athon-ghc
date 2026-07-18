@@ -40,6 +40,7 @@ import {
   assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
+  dispatchGateReason,
   localServiceStatus,
   providerModelLabel,
   providerStatus,
@@ -61,6 +62,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
+import { createMentionTypeahead } from "./mention-typeahead.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -126,7 +128,6 @@ import { renderConversationProviderControl } from "./ui-shell/conversation-provi
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
 import { ensureAppUnlocked } from "./app-lock.js";
-import { createMentionTypeahead } from "./mention-typeahead.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
@@ -363,8 +364,10 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   const copy = dom.emptyState.querySelector<HTMLElement>(".empty-state__copy");
   if (state.activeWorkspace === null) {
     if (title !== null) title.textContent = "Chọn workspace để bắt đầu";
-    if (copy !== null) copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
-    dom.emptyStateCta.hidden = true;
+    if (copy !== null) copy.textContent = "Chọn một workspace dùng chung cho mọi màn hình trước khi gửi yêu cầu đầu tiên.";
+    dom.emptyStateCta.textContent = "Chọn Workspace";
+    dom.emptyStateCta.dataset["action"] = "pick-workspace";
+    dom.emptyStateCta.hidden = false;
     return;
   }
   if (
@@ -375,6 +378,8 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   ) {
     if (title !== null) title.textContent = "Cấu hình provider để bắt đầu";
     if (copy !== null) copy.textContent = preflight.message;
+    dom.emptyStateCta.textContent = "Mở Settings";
+    dom.emptyStateCta.dataset["action"] = "open-settings";
     dom.emptyStateCta.hidden = false;
     return;
   }
@@ -1022,7 +1027,13 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
+    // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
+    // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
+    const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client, {
+      canRun: dispatchCfg.canSend,
+      reason: dispatchCfg.canSend ? "" : dispatchGateReason(dispatchCfg.blockKind),
+    });
   }
 
   if (isCoworkSurface) {
@@ -2196,6 +2207,38 @@ function openWorkspaceFileFromCowork(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Cross-surface "Hỏi Cowork về tệp này": switch to Cowork and seed the composer with a question
+ * scoped to `relativePath`. The shared active workspace is unchanged; the agent reads the file via
+ * its normal workspace tools, so nothing here fabricates content or an attachment. If the composer
+ * already holds a draft it is preserved (the reference is prepended once, not duplicated).
+ */
+function askCoworkAboutFile(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): void {
+  state.activeSurface = "cowork";
+  state.workMode = "cowork";
+  const lead = `Về tệp \`${relativePath}\`: `;
+  const existing = textFromComposer(dom.composerInput);
+  if (!existing.startsWith(`Về tệp \`${relativePath}\``)) {
+    setComposerText(dom.composerInput, existing.length > 0 ? `${lead}${existing}` : lead);
+  }
+  renderState(dom, state, handlers);
+  // Focus + caret to end so the user just types the question.
+  dom.composerInput.focus();
+  const sel = window.getSelection();
+  if (sel !== null) {
+    const range = document.createRange();
+    range.selectNodeContents(dom.composerInput);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
 function createShell(root: HTMLElement): AppDom {
   return createAppFrame(root);
 }
@@ -2625,6 +2668,8 @@ export function mountCoworkApp(root: HTMLElement): void {
                 renderState(dom, state, handlers);
               },
             });
+            // The Cowork empty-state primary action opens this same picker (no-workspace state).
+            dom.pickWorkspace = () => void workspacePicker?.choose();
             workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
@@ -2651,6 +2696,8 @@ export function mountCoworkApp(root: HTMLElement): void {
               void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
+            // Code → Cowork handoff: ask the agent about the active file.
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
           });
           previewController = mountPreviewController(
             dom.codeView.previewPaneHost,
@@ -2690,6 +2737,8 @@ export function mountCoworkApp(root: HTMLElement): void {
                 codeEditor?.openFile(relativePath);
                 renderState(dom, state, handlers);
               },
+              // Workspace → Cowork handoff: ask the agent about the open file.
+              onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
             },
           );
           mountProviderProfilesPanel(dom.settingsProviderBody, {
@@ -3115,6 +3164,9 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
+  // @-mention typeahead: typing `@` in the composer suggests active-workspace files; picking one
+  // inserts `@<relativePath> ` as plain text (the agent resolves it with its normal read tools — no
+  // new capability boundary). The file list comes from the guarded /v1/workspace/list walk.
   const mentionTypeahead = createMentionTypeahead({
     input: dom.composerInput,
     anchor: dom.composer,

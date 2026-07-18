@@ -104,8 +104,8 @@ function resolveRuntimePaths() {
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
   // Claude Code-style skill folders: the project checkout's `.agents/skills` (shipped to
-  // `<resources>/agents-skills` when packaged) plus the user-global `~/.agents/skills`.
-  // Roots that do not exist are skipped by the catalog, so these are safe to list always.
+  // `<resources>/agents-skills` when packaged) plus the user-global `~/.agents/skills`. Both are
+  // optional discovery roots — a missing directory is skipped by the catalog (realpath guard).
   const agentsSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "agents-skills")
     : join(DEV_APP_ROOT, ".agents", "skills");

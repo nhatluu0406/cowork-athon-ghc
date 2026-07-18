@@ -46,6 +46,8 @@ export type { CloseDirtyChoice };
 export interface CodeEditorCallbacks {
   /** Hand off to the Workspace companion (surface switch handled by the app shell). */
   readonly onOpenInWorkspace?: (relativePath: string) => void;
+  /** Hand off to Cowork with the composer seeded to ask about the active file (surface switch by app shell). */
+  readonly onAskCowork?: (relativePath: string) => void;
   /** The active tab / its dirty state changed — the app re-reads `getActivePath()` for agent context. */
   readonly onActiveTabChange?: () => void;
   /** Confirm closing a tab with unsaved edits. Injectable so tests avoid the real modal. */
@@ -246,6 +248,14 @@ export function mountCodeEditor(
     openWs.type = "button";
     openWs.addEventListener("click", () => callbacks.onOpenInWorkspace?.(tab.relativePath));
     toolbar.append(openWs);
+
+    if (callbacks.onAskCowork !== undefined) {
+      const ask = el("button", "code-editor__action", "Hỏi Cowork") as HTMLButtonElement;
+      ask.type = "button";
+      ask.setAttribute("aria-label", "Hỏi Cowork về tệp này");
+      ask.addEventListener("click", () => callbacks.onAskCowork?.(tab.relativePath));
+      toolbar.append(ask);
+    }
     return toolbar;
   };
 

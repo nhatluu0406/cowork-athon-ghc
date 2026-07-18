@@ -73,6 +73,8 @@ extraResources:
     to: "opencode/opencode.exe"
   - from: "skills/builtin"
     to: "skills"
+  # Claude Code-style skill folders (name/description frontmatter, folder-name identity), shipped
+  # read-only and discovered from `<resources>/agents-skills` (see main.ts skillRoots).
   - from: ".agents/skills"
     to: "agents-skills"
   - from: "app/shell/assets/cowork-ghc.ico"

@@ -1,7 +1,7 @@
 import { getIntegrationSurfaceAdapter } from "../integration-surface-adapters.js";
 import type { ProductSurfaceDefinition } from "../surface-registry.js";
 import { renderRemotePairing, type RemotePairingClient } from "../remote-pairing-view.js";
-import { renderDispatchBoard, type DispatchBoardClient } from "../dispatch-board.js";
+import { renderDispatchBoard, type DispatchBoardClient, type DispatchRunGate } from "../dispatch-board.js";
 import { el, icon } from "./dom-utils.js";
 
 /** The client surface the Dispatch panel needs: phone pairing + the dispatch board. */
@@ -19,13 +19,13 @@ export function createIntegrationView(): HTMLElement {
  * REAL local-service data (agent-harness-plan.md Tasks 4.1/5.1/5.2), not the external D1 backend
  * — the D1 dependency badge above stays honest about what has not landed.
  */
-function appendDispatchBoard(mount: HTMLElement, client: DispatchBoardClient): void {
+function appendDispatchBoard(mount: HTMLElement, client: DispatchBoardClient, gate: DispatchRunGate): void {
   const section = el("section", "integration-dispatch");
   section.append(el("h2", "integration-dispatch__title", "Dispatch nội bộ"));
   const body = el("div", "integration-dispatch__body", "Đang tải danh sách task…");
   section.append(body);
   mount.append(section);
-  void renderDispatchBoard(client, body);
+  void renderDispatchBoard(client, body, gate);
 }
 
 /**
@@ -54,6 +54,7 @@ export function renderIntegrationSurface(
   container: HTMLElement,
   surface: ProductSurfaceDefinition,
   remoteClient?: IntegrationSurfaceClient | null,
+  dispatchGate: DispatchRunGate = { canRun: true, reason: "" },
 ): void {
   container.replaceChildren();
   const adapter = getIntegrationSurfaceAdapter(surface.id);
@@ -103,14 +104,14 @@ export function renderIntegrationSurface(
   // remote; the quick-access renders its own honest "remote chưa bật" note when the gateway is
   // off, so nothing here pretends to be connectable when it is not.
   if (surface.id === "dispatch" && remoteClient != null) {
-    // Two-column dispatch layout: phone pairing on the left (main), the task board on the
-    // right (a sidebar). Each helper renders its own <section> into the column it is handed,
-    // so both stay reusable and the /remote overlay keeps the single-column pairing view.
+    // Two-column dispatch layout (pr14): phone pairing on the left (main), the task board on
+    // the right (a sidebar). The board KEEPS the F3 DispatchRunGate (main-wins) — pr14 dropped
+    // that arg; we restore it so the provider/readiness gate still governs runs.
     mount.classList.add("integration-surface__mount--dispatch");
     const mainCol = el("div", "integration-surface__col integration-surface__col--main");
     const asideCol = el("aside", "integration-surface__col integration-surface__col--aside");
     appendRemoteQuickAccess(mainCol, remoteClient);
-    appendDispatchBoard(asideCol, remoteClient);
+    appendDispatchBoard(asideCol, remoteClient, dispatchGate);
     mount.append(mainCol, asideCol);
   } else {
     mount.append(card);

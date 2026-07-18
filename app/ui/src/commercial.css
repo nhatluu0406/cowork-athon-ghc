@@ -1210,7 +1210,8 @@ button {
   font-weight: 650;
 }
 
-.workspace-companion-pane__open-in-code {
+.workspace-companion-pane__open-in-code,
+.workspace-companion-pane__ask-cowork {
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid var(--cghc-border-subtle);
@@ -1221,7 +1222,8 @@ button {
   cursor: pointer;
 }
 
-.workspace-companion-pane__open-in-code:hover {
+.workspace-companion-pane__open-in-code:hover,
+.workspace-companion-pane__ask-cowork:hover {
   border-color: var(--cghc-accent, #e85d1a);
   color: var(--cghc-accent, #e85d1a);
 }

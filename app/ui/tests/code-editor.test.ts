@@ -299,6 +299,28 @@ test("non-text file hands off to Workspace instead of duplicating a viewer", asy
   assert.equal(handedOff, "a.pdf");
 });
 
+test("a text tab offers Hỏi Cowork and hands the active path to the callback", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  let asked: string | null = null;
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client, { onAskCowork: (p) => (asked = p) });
+  ctrl.openFile("a.ts");
+  await flush();
+  const askBtn = button(container, "Hỏi Cowork");
+  assert.ok(askBtn, "a text tab exposes the Hỏi Cowork handoff");
+  askBtn!.click();
+  assert.equal(asked, "a.ts");
+});
+
+test("Hỏi Cowork is absent when no onAskCowork handler is wired", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  assert.equal(button(container, "Hỏi Cowork"), null);
+});
+
 test("openReview shows a diff tab; getActivePath is null for a review", () => {
   const container = document.createElement("div");
   const { client } = makeClient({});

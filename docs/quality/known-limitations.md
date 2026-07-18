@@ -150,6 +150,29 @@ demo, nhưng KHÔNG được coi là "chạy đầy đủ".
   config** khẳng định `v1.18.1` sẽ **đỏ tại máy dev** cho tới khi cài đúng build pin (xem mục
   "OpenCode pin" ở trên). Không ảnh hưởng logic.
 
+## M365 Knowledge Graph (PR #13) — optional subsystem preserved off-main
+
+Full implementation của **M365 Knowledge Graph** (PR #13) được đánh giá runtime rồi **bảo tồn
+nguyên vẹn** ở branch `experimental/m365-knowledge-graph` (checkpoint tag
+`m365-kg-pr13-integration-2026-07`), **không merge vào `main`**. Branch compile sạch trên nền main
+(typecheck + verify:fast 54/54 + build:app PASS).
+
+**Stack:** Go backend (`app/backend`, `github.com/rad-system/m365-knowledge-graph`) + PostgreSQL 16 +
+Neo4j 5.26 (Bolt, JRE Temurin 21) + Rust/Python `llm-svc` (gRPC) + supervisors/provisioning + M365
+Graph ingestion/query + graph routes + citations.
+
+**Vì sao optional/không chạy end-to-end trong thời gian bounded:**
+- **Source `llm-svc` VẮNG MẶT trong repo** — docs mô tả nó là microservice riêng; provisioning không
+  fetch nó. Không có `llm-svc` ⇒ không embeddings, không câu trả lời sinh ra. Đây là thành phần bắt
+  buộc mà **source không tồn tại**, không giải quyết được bằng provisioning.
+- Không có orchestration/compose; chưa có toolchain (Go 1.25 / Neo4j / PostgreSQL / JRE) cài sẵn.
+- Chưa có packaged verification.
+
+**Trạng thái trên `main`:** default **OFF**. Packaged app **không** khởi động Go/PostgreSQL/Neo4j/JRE
+(TS stack supervisor là dormant, không nằm trong composition root). **Không fake WORKS.** Exhibition
+Knowledge dùng **SQLite Workspace Knowledge** (local, offline); M365 KG là subsystem tương lai với
+readiness rõ. Muốn đánh giá tiếp: checkout `experimental/m365-knowledge-graph`.
+
 ## MS365 OpenCode plugin `tool.execute.before` hook (intentional no-op seam)
 
 The MS365 OpenCode plugin (`service/src/runtime/ms365-plugin-file.ts`) includes a

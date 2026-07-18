@@ -2886,6 +2886,7 @@ body {
   margin-bottom: 8px;
 }
 .dispatch-note { font-size: 13px; opacity: 0.75; margin: 6px 0 0; }
+.dispatch-note--blocked { opacity: 1; color: var(--cghc-warning, #b0761f); font-weight: 500; }
 .dispatch-task,
 .dispatch-run {
   padding: 10px 0;
@@ -3006,7 +3007,7 @@ body {
   cursor: default;
 }
 
-/* ---- @-mention typeahead (composer) ---- */
+/* ---- @-mention typeahead (composer) — ported from PR #14 ---- */
 .composer {
   position: relative;
 }
