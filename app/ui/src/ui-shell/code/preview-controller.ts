@@ -146,7 +146,7 @@ export function mountPreviewController(
     overlay.replaceChildren();
     const s = state.status;
     if (s === "failed") {
-      overlay.append(overlayCard("info", "Preview lỗi", state.error ?? "Không rõ nguyên nhân."));
+      overlay.append(overlayCard("info", "Xem trước lỗi", state.error ?? "Không rõ nguyên nhân."));
       return;
     }
     if (s === "starting") {
@@ -240,10 +240,28 @@ export function mountPreviewController(
     }
   }
 
+  // Reset the captured-output view for a NEW run. The service resets its output sequence to 0 on
+  // every (re)start (output-buffer.clear), so the renderer MUST drop its stale `lastSeq` and clear
+  // the drawer/problems too — otherwise `since(lastSeq)` returns nothing and the second run's output
+  // (and any parsed problems) never appear.
+  function resetOutputView(): void {
+    lastSeq = 0;
+    outputBody.replaceChildren();
+    outputLines.length = 0;
+    renderProblems(problemsBody, tabProblems, outputLines);
+  }
+
   // --- Actions ---
+  // Every (re)start STOPS the poller for the whole handshake first: otherwise a poll tick landing
+  // during the permission prompt (or the restart round-trip) would re-fetch the PREVIOUS run's still-
+  // buffered output and push `lastSeq` forward again, so the new run's early lines (incl. a build
+  // error) would be skipped once the service clears + restarts its sequence at 0. Polling only
+  // resumes AFTER the service has actually started the new run, with the cursor reset to 0.
   async function doStart(): Promise<void> {
     if (info === null) await refreshDetect();
     if (info === null || info.kind === "unsupported") return;
+    stopPolling();
+    resetOutputView();
     if (info.kind === "static") {
       state = await client.startStaticPreview();
       renderStatus();
@@ -267,12 +285,16 @@ export function mountPreviewController(
     }
     const decision = await askLaunchPermission(requested.command, requested.cwd);
     state = await client.resolvePreviewLaunch(requested.requestId, decision);
+    // The service has now cleared + (on allow) started the new run at seq 0; resync the cursor so the
+    // first poll fetches the new run from the beginning (it may have re-buffered during the prompt).
+    resetOutputView();
     renderStatus();
     await applyRunningTransition();
     startPolling();
   }
 
   async function doStop(): Promise<void> {
+    stopPolling();
     state = await client.stopRuntimePreview();
     loadedUrl = null;
     callbacks.onPreviewUrlChange?.(null);
@@ -281,7 +303,11 @@ export function mountPreviewController(
   }
 
   async function doRestart(): Promise<void> {
+    stopPolling();
+    resetOutputView();
     state = await client.restartRuntimePreview();
+    // Re-clear the cursor after the round-trip: the service restarted its sequence at 0.
+    resetOutputView();
     loadedUrl = null;
     renderStatus();
     await applyRunningTransition();
@@ -380,9 +406,13 @@ export function mountPreviewController(
   return {
     root: host,
     setActive(next: boolean) {
+      const wasActive = active;
       active = next;
       if (next) {
-        if (info === null) void refreshDetect();
+        // Re-detect on (re)entry into Preview: the active workspace or its files may have changed
+        // since we last looked (e.g. a package.json / index.html was added), so a cached
+        // "unsupported" must not stick. Skip only redundant same-state calls while already active.
+        if (info === null || !wasActive) void refreshDetect();
         startPolling();
       } else {
         stopPolling();

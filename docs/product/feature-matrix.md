@@ -26,8 +26,8 @@ Legend for Persistence/Network: SQLite · vault · file · none / none · loopba
 | Workspace preview/edit | Workspace | Navigate + preview + edit text/code/PDF/Office | IMPLEMENTED (Wave 4) | `app/ui` workspace | `service` workspace guard | file (workspace) | loopback | — | Yes (PO 2026-07-17) | Read-only Office; no editor; malformed/encrypted not guaranteed |
 | Inspector | Cowork pane | Kế hoạch/Hoạt động/Tệp from EV events | IMPLEMENTED (Phase 1) | `app/ui` | `service` EV reducer | SQLite | loopback | — | Yes (PO 2026-07-17) | — |
 | Logging/telemetry | Settings → Chẩn đoán | View/export/clear redacted logs + counters | IMPLEMENTED (Wave 6) | `app/ui` | `service` logging | file + SQLite | none | — | Yes (PO 2026-07-17) | Local only; no egress |
-| Code surface | Code | Multi-file editor, edit+save, run | WIRED-UNVERIFIED | `app/ui` code | shared Cowork backend | file | loopback | — | Layout captured (audit 2026-07-18, shots 05/31/35); **live-run pending** | Not an IDE; no terminal/Git/LSP (ADR 0013) |
-| Web Preview | Code → Xem trước | Static + dev-server preview in hardened view | WIRED-UNVERIFIED | `app/ui` | `service` runtime-preview | file | loopback | — | Empty/unsupported + Kết quả/Vấn đề captured (shots 32/33); **live-run pending** | Command approval required (ADR 0014); labels localized (F10) |
+| Code surface | Code | Multi-file editor, edit+save, run | WIRED-UNVERIFIED (run path **packaged-observed**) | `app/ui` code | shared Cowork backend | file | loopback | — | Layout captured (shots 05/31/35); the **run** path (Web Preview) has packaged live-run acceptance (see Web Preview row); **editor edit+save live-run still pending** | Not an IDE; no terminal/Git/LSP (ADR 0013) |
+| Web Preview | Code → Xem trước | Static + dev-server preview in hardened view | IMPLEMENTED (**PACKAGED-OBSERVED** live-run) | `app/ui` | `service` runtime-preview | file | loopback | — | **Packaged live-run acceptance PASS** (automated audit 2026-07-18, real web fixture): detect `dev` → permission → `npm run dev` → running on real loopback `:60033` → embedded page serves real marker → Kết quả 9 log lines → stop closes port (no orphan) → error mode → Vấn đề `src/app.tsx:12:7` (shots 36–39/60/62/63, light+dark) | Command approval required (ADR 0014); labels localized (F10); dev-server via `<pm> run <script>` allowlist; port detection heuristic |
 | Desktop App Launch | Code → Ứng dụng | Build/Run/Stop/Restart an Electron app | WIRED-UNVERIFIED | `app/ui` | `service` runtime-preview | file | loopback | — | Empty/unsupported captured (shot 34); **live-run pending** | Electron only; others `unsupported` (ADR 0015); labels localized (F10) |
 | Dispatch (D1) | Dispatch | Run saved task, fan-out, board, `/dispatch` | PARTIAL | `app/ui` dispatch | `service/src/dispatchers`,`tasks` | SQLite | loopback | LLM provider | No (unit/integration only) | No packaged/live fan-out (Checkpoint 5) |
 | Microsoft 365 (D2) | Microsoft tab | Manual-token connect, chat, history, permission cards | PARTIAL | `app/ui` ms tab | `service/src/ms365` | SQLite + vault | Graph HTTPS | Microsoft Graph | No (no live tenant) | OAuth device-code gated; not live-verified |
@@ -42,8 +42,11 @@ Legend for Persistence/Network: SQLite · vault · file · none / none · loopba
 
 ## Notes
 
-- "Pending" packaged evidence for Code/Web Preview/Desktop App: code + focused tests + `build:app`
-  PASS, but no packaged Product-Owner observation yet — do not claim WORKS (see `demo-acceptance.md`).
+- **Web Preview now has packaged live-run acceptance** (automated audit over a real web fixture,
+  2026-07-18): detect → permission → running on a real loopback → embedded real content → output →
+  stop (no orphan) → error → parsed problem. "Pending" packaged evidence remains for the **Code
+  editor edit+save** and **Desktop App launch (Ứng dụng)** live-run: code + focused tests +
+  `build:app` PASS, but no packaged live observation yet — do not claim WORKS (see `demo-acceptance.md`).
 - D3 **Local** KB/Graph now has data-rich packaged acceptance (automated seed workspace in audit
   mode). The remaining D3 gap is semantic/embeddings + the external M365KG path: see
   `../architecture/dependencies-and-services.md §5` and `../architecture/local-first-strategy.md`.

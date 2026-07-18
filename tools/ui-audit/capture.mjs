@@ -19,7 +19,7 @@
  */
 
 import { spawn, execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,6 +34,11 @@ const OUT_DIR = join(REPO_ROOT, "reports", "ui-audit", RUN_ID); // COWORK_GHC_UI
 // It holds real Markdown/text/code with cross-links so the packaged index/search/graph show honest,
 // non-fabricated data. The shell (audit mode) sets it active + drives the real index over it.
 const SEED_WORKSPACE = join(RUN_DATA_ROOT, "seed-workspace");
+// Code Web Preview live-run uses a SEPARATE isolated workspace: a copy of the committed, zero-dep
+// web fixture (`tools/ui-audit/fixtures/web-preview`). The shell (audit mode) makes it active and
+// drives a REAL dev-server launch over it (permission → spawn → loopback HTTP → embed → stop).
+const FIXTURE_SRC = join(REPO_ROOT, "tools", "ui-audit", "fixtures", "web-preview");
+const PREVIEW_WORKSPACE = join(RUN_DATA_ROOT, "preview-workspace");
 const LAUNCH_TIMEOUT_MS = 240_000;
 
 /**
@@ -130,6 +135,9 @@ async function main() {
   mkdirSync(SEED_WORKSPACE, { recursive: true });
   seedWorkspace(SEED_WORKSPACE);
   note(`seeded data-rich knowledge workspace at ${SEED_WORKSPACE}`);
+  mkdirSync(PREVIEW_WORKSPACE, { recursive: true });
+  cpSync(FIXTURE_SRC, PREVIEW_WORKSPACE, { recursive: true });
+  note(`copied web-preview fixture to isolated workspace ${PREVIEW_WORKSPACE}`);
 
   const checks = [];
   const check = (name, ok, detail = "") => {
@@ -149,6 +157,7 @@ async function main() {
         COWORK_GHC_UI_AUDIT: "1",
         COWORK_GHC_UI_AUDIT_OUT: outDir,
         COWORK_GHC_UI_AUDIT_WORKSPACE: SEED_WORKSPACE,
+        COWORK_GHC_UI_AUDIT_PREVIEW_WORKSPACE: PREVIEW_WORKSPACE,
         COWORK_GHC_RUNTIME_ROOT: RUN_DATA_ROOT,
         COWORK_GHC_ALLOW_ENV_IMPORT: "0",
         ...extraEnv,

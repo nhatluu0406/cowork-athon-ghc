@@ -11,11 +11,14 @@ Findings from reviewing **real screenshots of the packaged app**, against
 `.agents/skills/cowork-ghc-commercial-ui/SKILL.md` and the current design tokens.
 
 > **Status: evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
-> `tools/ui-audit/`) captured **38 screenshots** of the packaged `coworkghc.exe` across every rail
+> `tools/ui-audit/`) captured **45 screenshots** of the packaged `coworkghc.exe` across every rail
 > surface, both themes, first-run and Settings states, **data-rich Knowledge** (an isolated
 > seed workspace indexed in audit mode: document list, detail, FTS search, graph node/edge + select,
-> re-sync prune, safe clear), **plus the Code runtime panels** (Xem trước/Web + Kết quả/Vấn đề
-> drawer, Ứng dụng/desktop, and the collapsed Explorer+Agent layout — shots 32–35). Raw output is
+> re-sync prune, safe clear), the Code runtime panels' empty states (shots 32–35), **plus a real
+> Code Web Preview LIVE-RUN** over a committed web fixture (`tools/ui-audit/fixtures/web-preview`):
+> detect dev target → permission confirm → running on a real loopback port → embedded page serves the
+> real fixture marker → Kết quả with real log lines → stop (no orphan) → deliberate error mode →
+> Vấn đề with a real parsed `src/app.tsx:12:7` (shots 36–39/60/62/63, light+dark). Raw output is
 > git-ignored under `reports/ui-audit/<run-id>/` (contact sheet: `contact-sheet.html`). The cold-start
 > findings below are from a **fresh, unconfigured** profile (no provider) — the honest cold-start a
 > newcomer sees. States requiring a live provider / Cowork streaming / error injection / DPI scaling
@@ -77,6 +80,8 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 | F8 | Settings · Chung | 22-settings-general | LOW | "Giao diện" column is sparse (control at top, large empty area) while "Chẩn đoán" is full — unbalanced. | Wasted whitespace; asymmetric density. | Balance the two-column layout or add theme-preview/description to the left column. | settings | Columns visually balanced. |
 | F9 | Top bar | 03 vs 05 vs 06/08/09 | LOW | Top-right controls vary by surface (Cowork: inspector-toggle + settings; Code: sparkle + settings; placeholders: settings only). | Slightly inconsistent affordance placement. | Standardise the top-bar control set / order across surfaces. | shared topbar | Consistent top-bar controls. |
 | F10 | Code · Xem trước / Ứng dụng | 32/34-code | MEDIUM (**FIXED 2026-07-18**) | The Code runtime panes leaked English into the fully-Vietnamese commercial UI: preview status-bar kind label `"Preview"`, overlay title `"Web preview"`, and header runtime pills `"Preview: tắt"` / `"App: tắt"` — none matched the localized mode buttons (`Xem trước` / `Ứng dụng`). | Off-brand raw English on a demo surface; inconsistent with the commercial-UI standard. | Localize to `Xem trước` / `Ứng dụng` across the status bar, overlay title, and header pills. | code preview/app | No English `Preview`/`App` label in the Code runtime panes; header pill mirrors the active mode. **Done** (`preview-controller.ts`, `app-controller.ts`, `code-view.ts`; test `preview-controller` + packaged shots 32–35). |
+| F11 | Code · Xem trước | 63-code-preview-problems (live-run) | MEDIUM (**FIXED 2026-07-18**) | On a **second** run (re-run/restart or a follow-up script), the "Kết quả"/"Vấn đề" panes stayed empty: the service restarts its output sequence at 0 on every launch, but the renderer kept its stale `lastSeq` cursor (and a poll tick during the permission prompt re-primed it from the previous buffer), so `since(lastSeq)` returned nothing and a real build error never surfaced. | A re-run's output and parsed problems silently vanish — misleads the user into thinking a failing run produced no diagnostics. | Stop polling for the whole start handshake, reset the cursor after the service (re)starts, and detect the sequence reset. | code preview | Second run shows its own output + parses the error into "Vấn đề". **Done** (`preview-controller.ts` `doStart`/`doRestart`/`doStop`; tests `preview-controller` "re-run resets the output cursor"; packaged live-run shot 63 shows `Vấn đề (1)` = `src/app.tsx:12:7`). |
+| F12 | Code · Xem trước | preview-controller | LOW (**FIXED 2026-07-18**) | Re-entering Preview after switching the active workspace kept a stale `unsupported` detection (detect only ran when `info` was null), so a newly-web workspace's Start stayed disabled until a full reset. | A valid dev-server project can look unpreviewable after a workspace switch. | Re-detect capability on every (re)activation of Preview. | code preview | Start enables after switching to a web workspace. **Done** (`preview-controller.ts` `setActive`; test "re-detects capability each time Preview is re-activated"). |
 
 ## Roll-ups
 
@@ -137,17 +142,22 @@ panels):
   collapsible right panel; folding them into one tab set would *reduce* usable width and add a
   WebContentsView bounds-sync risk. Defer.
 - **Does the right-side `Xem trước | Kết quả | Vấn đề` layout block anything? — No.** It ships today
-  as `Xem trước` (a center mode) + a `Kết quả`/`Vấn đề` drawer; both render honest empty/unsupported
-  states packaged (shots 32/33). Restructuring into a single right panel is polish, not a blocker.
+  as `Xem trước` (a center mode) + a `Kết quả`/`Vấn đề` drawer, now proven end-to-end **packaged**:
+  a real dev-server serves content in the embedded view, `Kết quả` shows real log lines, and `Vấn đề`
+  parses a real `file:line:col` on a failing run (shots 36–39/60/62/63). Restructuring into a single
+  right panel is polish, not a blocker.
 - **Are dependency-install and the Python tier needed before the exhibition? — No.** With a non-web/
   non-app workspace the panes show clear, honest guidance ("Chưa xem trước được: thiếu index.html và
   package.json", "Chưa chạy được ứng dụng: thiếu package.json"). Node/TS + Electron detection is the
-  demoable path; dependency-install and Python/Go/Rust/Java/.NET tiers stay deferred (no fake
-  capability). See `current-status.md` and `feature-matrix.md`.
+  demoable path (the packaged live-run above uses exactly `npm run dev`); dependency-install and
+  Python/Go/Rust/Java/.NET tiers stay deferred (no fake capability). See `current-status.md` and
+  `feature-matrix.md`.
 
-**Verdict:** the Code screen is exhibition-ready as-is; the only Code defect this pass was the F10
-English-label leak, now fixed. The remaining Code work (right-panel restructure, dependency install,
-Python tier) is optional polish/scope, not exhibition-blocking.
+**Verdict:** the Code screen is exhibition-ready as-is, and the Web Preview run path now has a
+**packaged live-run acceptance** (not just layout). Code defects this pass — F10 (English labels),
+F11 (re-run output/problems empty), F12 (stale re-detect) — are all fixed. The remaining Code work
+(right-panel restructure, dependency install, Python tier, Desktop-App live-run, editor edit+save
+live) is optional polish/scope, not exhibition-blocking.
 
 ## Gaps (next capture passes)
 
@@ -157,7 +167,12 @@ exhibition sign-off:
 
 - Provider **configured + connected**: Cowork streaming a turn, model switcher, provider status green.
 - **Workspace loaded**: Code editor with a file open + dirty edit + diff; Workspace Companion Office/
-  PDF preview; Code **live run** (Xem trước serving a real project, Kết quả/Vấn đề with real output).
+  PDF preview. *(Code **Web Preview** live-run is now covered — automated packaged acceptance over a
+  real web fixture; see the status block + F11. The **Desktop App / Ứng dụng** live-run and editor
+  edit+save live remain PO-manual.)*
+- **Embedded preview pixels**: the embedded `WebContentsView` content is verified by reading its DOM
+  (the fixture marker) in audit mode; a **pixel** screenshot of that child view returns an empty frame
+  when the audit window is not OS-foreground, so the visual is a PO-manual confirmation.
 - **Permission + File Work Review** dialogs; Inspector plan/activity/files populated.
 - **Error/recovery** states (N1–N20 in `release-acceptance.md`): provider offline, DB locked,
   OpenCode crash, permission denied — needs fault injection in audit mode.

@@ -103,8 +103,15 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
   - **Đổi active workspace khi còn tab Code chưa lưu sẽ reset** (bỏ thay đổi chưa lưu) — giống
     companion Workspace hiện tại; hộp thoại xác nhận trước khi đổi workspace là việc sau (không nằm
     trong Phase 1). Hộp thoại xác nhận **đã có** cho thao tác đóng tab.
-  - **Packaged PO observation chưa chạy**: focused UI tests + `build:app` PASS nhưng chưa claim WORKS
-    cho tới khi PO quan sát trên packaged app (xem `demo-acceptance.md`).
+  - **Web Preview đã có packaged live-run acceptance** (audit tự động 2026-07-18, fixture web thật
+    `tools/ui-audit/fixtures/web-preview`): detect `dev` → phê duyệt lệnh → `npm run dev` chạy trên
+    loopback thật → nhúng nội dung web thật (marker trong WebContentsView) → Kết quả log thật → Dừng
+    đóng cổng, **không orphan** → chế độ lỗi (`serve`) → `failed` + Vấn đề `src/app.tsx:12:7`. Ảnh
+    **pixel** của WebContentsView nhúng có thể là frame rỗng khi cửa sổ audit không ở foreground →
+    xác minh bằng đọc DOM (marker); ảnh pixel là bước PO thủ công.
+  - **Packaged PO observation còn lại**: **Desktop App launch (Ứng dụng)** live-run và **editor Code
+    edit+save** live chưa quan sát packaged — focused UI tests + `build:app` PASS nhưng chưa claim
+    WORKS tới khi PO quan sát (xem `demo-acceptance.md`).
 - **Web / Next.js** vẫn deferred.
 - **OpenCode nạp `AGENTS.md` ngoài ranh giới workspace:** OpenCode đi ngược cây thư mục từ
   workspace root và nạp mọi `AGENTS.md` gặp được (kể cả ở thư mục **cha**, ngoài workspace đã chọn)

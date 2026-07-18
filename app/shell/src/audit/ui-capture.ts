@@ -13,7 +13,7 @@
  * `COWORK_GHC_UI_AUDIT_OUT` and quits the app (so `before-quit` stops the service + child cleanly).
  */
 
-import { app, screen, type BrowserWindow } from "electron";
+import { app, screen, WebContentsView, type BrowserWindow } from "electron";
 import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -508,6 +508,145 @@ async function runAudit(window: BrowserWindow): Promise<void> {
         await delay(200);
       } else {
         check("nav:code-panels", false, "preview mode button missing");
+      }
+
+      // 5c) Code Web Preview LIVE-RUN over a REAL fixture workspace (the deliverable of this slice).
+      // Point the app at the isolated copy of the committed zero-dep web fixture, then drive the exact
+      // user flow packaged: detect the dev-server target, approve the command_exec permission, spawn a
+      // real `npm run dev` process, embed the real loopback page, read real output, parse a real build
+      // error into "Vấn đề", and stop cleanly. The embedded page is a SEPARATE WebContentsView, so its
+      // real content is captured from that view's own webContents (the main capturePage cannot see it).
+      const previewWs = process.env.COWORK_GHC_UI_AUDIT_PREVIEW_WORKSPACE?.trim();
+      if (previewWs !== undefined && previewWs.length > 0) {
+        log(`code web preview: activating fixture workspace ${previewWs}`);
+        const setWs = await svc<{ __error?: unknown }>("PUT", "/v1/settings/active-workspace", { rootPath: previewWs });
+        check("preview-set-workspace", !setWs?.__error, setWs?.__error ? JSON.stringify(setWs.__error) : "");
+
+        const waitSel = (sel: string, ms = 8_000): Promise<boolean> =>
+          waitFor(`document.querySelector(${JSON.stringify(sel)})`, ms);
+        const waitEnabled = (sel: string, ms = 12_000): Promise<boolean> =>
+          waitFor(`(() => { const n = document.querySelector(${JSON.stringify(sel)}); return !!n && !n.disabled; })()`, ms);
+        const START = 'button[aria-label="Chạy preview"]';
+        const STOP = 'button[aria-label="Dừng preview"]';
+
+        // Capture the embedded preview's OWN WebContentsView (real served content) + assert the marker.
+        // Its webContents is a separate process the main-window capturePage cannot see. Background
+        // paint throttling can make an off-focus capturePage return an empty frame, so bring the
+        // window forward and retry until a real (non-trivial) PNG lands.
+        const capturePreviewContent = async (id: string, title: string): Promise<void> => {
+          const child = window.contentView.children.find((v): v is WebContentsView => v instanceof WebContentsView);
+          if (child === undefined) {
+            check(`preview-embed:${id}`, false, "no embedded WebContentsView found");
+            return;
+          }
+          try {
+            window.show();
+            window.moveTop();
+            window.focus();
+            child.setVisible(true);
+          } catch {
+            /* best effort */
+          }
+          let text = "";
+          let png: Buffer = Buffer.alloc(0);
+          for (let i = 0; i < 8; i += 1) {
+            try {
+              text = await child.webContents.executeJavaScript("document.body.innerText", true);
+            } catch {
+              /* preview page not ready */
+            }
+            try {
+              png = (await child.webContents.capturePage()).toPNG();
+            } catch {
+              /* not paintable yet */
+            }
+            if (png.length >= 2000 && /COWORK-GHC-PREVIEW-FIXTURE-LIVE/.test(text)) break;
+            await delay(500);
+          }
+          const hasMarker = /COWORK-GHC-PREVIEW-FIXTURE-LIVE/.test(text);
+          // Acceptance = the marker is really present in the EMBEDDED view's own DOM (proof the real
+          // fixture page is served + loaded into the hardened WebContentsView). The pixel screenshot is
+          // supplementary: child-view capturePage can return an empty frame when the audit window is not
+          // the OS-foreground window, so we only add it to the contact sheet when a real frame lands.
+          if (png.length >= 2000) {
+            writeFileSync(join(shotsDir, `${id}.png`), png);
+            steps.push({
+              id, title, theme: "light", viewport: "desktop", size: "embedded",
+              file: `screenshots/${id}.png`, bytes: png.length, selectorFound: true, contentOk: true,
+            });
+          }
+          check(`preview-embed-content:${id}`, hasMarker, `marker=${hasMarker} png=${png.length}B`);
+          log(`captured embedded preview ${id} ${png.length}B marker=${hasMarker}`);
+        };
+
+        await clickSel('button[data-surface-id="code"]');
+        await delay(300);
+        await clickSel('.code-mode__item[data-mode="preview"]');
+        // 5b may have left the runtime mode on "Ứng dụng"; switch to Web → activates the web preview
+        // controller, which re-detects the now-active fixture workspace (dev-server).
+        await clickSel('.code-runtime-mode .code-mode__item[data-runtime-mode="web"]');
+        const detected = await waitEnabled(START, 15_000);
+        check("preview-detect-devserver", detected, detected ? "" : "Start never enabled (fixture dev-server not detected)");
+        if (detected) {
+          await capture({ id: "36-code-preview-ready-light", title: "Code — Xem trước sẵn sàng (dev-server phát hiện)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+          await capture({ id: "37-code-preview-ready-dark", title: "Code — Xem trước sẵn sàng (dark)", theme: "dark", viewport: "desktop", expectSelector: ".code-preview__bar" });
+
+          // Start (dev) → explicit permission confirm → capture → Allow.
+          await clickSel(START);
+          const confirmShown = await waitSel(".code-confirm", 6_000);
+          check("preview-permission-confirm", confirmShown, confirmShown ? "" : "no permission confirm dialog");
+          if (confirmShown) {
+            await capture({ id: "38-code-preview-permission-light", title: "Code — xác nhận chạy lệnh preview (permission)", theme: "light", viewport: "desktop", expectSelector: ".code-confirm" });
+            await clickSel(".code-confirm__btn--primary"); // Allow
+          }
+
+          const running = await waitSel(".code-preview__status--running", 60_000);
+          check("preview-running", running, running ? "" : "dev server never reached running");
+          if (running) {
+            await delay(2_500); // let the poller embed the URL + pull the first output lines
+            await capture({ id: "39-code-preview-running-light", title: "Code — Xem trước đang chạy + Kết quả (log thật)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            await capture({ id: "60-code-preview-running-dark", title: "Code — Xem trước đang chạy (dark)", theme: "dark", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            const outLines = await evalJs<number>("document.querySelectorAll('.code-preview__line').length");
+            check("preview-output-lines", outLines > 0, `${outLines} captured output lines`);
+            await capturePreviewContent("61-code-preview-embedded", "Code — nội dung web thật hiển thị trong Xem trước");
+          }
+
+          // Stop → port closes; the pane returns to a stopped state.
+          await clickSel(STOP);
+          const stopped = await waitSel(".code-preview__status--stopped", 15_000);
+          check("preview-stopped", stopped, stopped ? "" : "did not report stopped");
+          if (stopped) {
+            await capture({ id: "62-code-preview-stopped-light", title: "Code — Xem trước đã dừng", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+          }
+
+          // Deliberate error mode: pick the `serve` script → Start → Allow → failed → parsed problem.
+          const pickedErr = await evalJs<boolean>(`(() => {
+            const s = document.querySelector('.code-preview__script');
+            if (!s) return false;
+            s.value = 'serve';
+            s.dispatchEvent(new Event('change', { bubbles: true }));
+            return s.value === 'serve';
+          })()`);
+          check("preview-select-error-script", pickedErr, pickedErr ? "" : "serve script not selectable");
+          if (pickedErr) {
+            await clickSel(START);
+            if (await waitSel(".code-confirm", 6_000)) await clickSel(".code-confirm__btn--primary");
+            const failed = await waitSel(".code-preview__status--failed", 30_000);
+            check("preview-error-failed", failed, failed ? "" : "error-mode run did not fail");
+            await evalJs(`(() => { const t = document.querySelectorAll('.code-preview__drawer-tab'); if (t[1]) t[1].click(); })()`);
+            const problem = await waitSel(".code-preview__problem", 8_000);
+            check("preview-problem-parsed", problem, problem ? "" : "no parsed problem row");
+            const loc = await evalJs<string>("document.querySelector('.code-preview__problem-loc')?.textContent || ''");
+            check("preview-problem-location", /src\/app\.tsx:12:7/.test(loc), loc || "(no location)");
+            await capture({ id: "63-code-preview-problems-light", title: "Code — Vấn đề: lỗi build thật (file:line:col)", theme: "light", viewport: "desktop", expectSelector: ".code-preview__bar" });
+            await clickSel(STOP);
+            await delay(300);
+          }
+
+          // Restore a clean Code state for the auth-OFF step that follows.
+          await clickSel('.code-mode__item[data-mode="code"]');
+          await delay(200);
+        }
       }
 
       // 6) Auth OFF enable (phase 1 of the auth-OFF packaged smoke). Turn the requirement OFF via the

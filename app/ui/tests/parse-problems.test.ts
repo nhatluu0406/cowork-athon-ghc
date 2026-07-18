@@ -78,6 +78,27 @@ test("ignores ordinary dev-server chatter and system lines", () => {
   assert.deepEqual(problems, []);
 });
 
+test("parses the committed audit fixture's build-fail diagnostic verbatim", () => {
+  // Lock-stepped with tools/ui-audit/fixtures/web-preview/build-fail.mjs and the service-side
+  // runtime-preview-fixture test: the exact stderr line the fixture emits must parse into one
+  // located problem so the packaged "Vấn đề" tab shows a real file:line:col.
+  const problems = parseProblems(
+    lines(
+      ["stderr", "cghc-web-preview-fixture: type-checking"],
+      ["stderr", "src/app.tsx(12,7): error TS2322: Type 'number' is not assignable to type 'string'."],
+    ),
+  );
+  assert.equal(problems.length, 1);
+  assert.deepEqual(problems[0], {
+    severity: "error",
+    file: "src/app.tsx",
+    line: 12,
+    column: 7,
+    message: "Type 'number' is not assignable to type 'string'.",
+  });
+  assert.equal(problemLocation(problems[0]), "src/app.tsx:12:7");
+});
+
 test("de-duplicates identical diagnostics", () => {
   const same = "src/a.ts(1,1): error TS1005: ';' expected.";
   const problems = parseProblems(lines(["stdout", same], ["stdout", same], ["stdout", same]));
