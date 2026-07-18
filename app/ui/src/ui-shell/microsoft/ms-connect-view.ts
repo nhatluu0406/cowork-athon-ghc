@@ -5,11 +5,23 @@ import type {
   Ms365SiteView,
 } from "../../service-client.js";
 import { el } from "../dom-utils.js";
+import { getShellBridge } from "../../bridge.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
 import { renderDevicePendingCard } from "./ms-connect-device.js";
 
 /** Nơi lấy access token thủ công (Graph Explorer → "Access token"). */
 const GRAPH_EXPLORER_URL = "https://developer.microsoft.com/en-us/graph/graph-explorer";
+
+/** Honest expiry line: past → cần đăng nhập lại; else the local time it expires. */
+function formatExpiry(expiresAtMs: number): string {
+  if (expiresAtMs <= Date.now()) return "Phiên đã hết hạn — cần đăng nhập lại.";
+  try {
+    const t = new Date(expiresAtMs).toLocaleString("vi-VN");
+    return `Phiên hợp lệ tới: ${t}`;
+  } catch {
+    return "Phiên đang hợp lệ.";
+  }
+}
 
 /** Minimal service-client slice the connect view needs (structural — real ServiceClient satisfies it). */
 export interface Ms365ConnectClient {
@@ -28,6 +40,8 @@ export interface RenderMsConnectDeps {
   readonly onViewChange: (view: Ms365ViewData) => void;
   /** Poll interval in ms; defaults to 5000. Injectable so tests don't wait on a real 5s timer. */
   readonly pollIntervalMs?: number;
+  /** PHASE 3: open the detected LOCAL OneDrive folder as a workspace (local files, not Graph). */
+  readonly onUseLocalOneDrive?: (path: string) => void;
 }
 
 type LocalMode = "idle" | "device_pending";
@@ -69,6 +83,10 @@ function paint(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewSta
   } else {
     wrap.append(renderSignInCard(container, deps, state));
   }
+  // Local OneDrive folder fallback (PHASE 3): available regardless of cloud connection state —
+  // it is plain LOCAL filesystem access, clearly labelled, never Graph/cloud.
+  const oneDriveCard = renderLocalOneDriveCard(deps);
+  if (oneDriveCard !== null) wrap.append(oneDriveCard);
   container.append(wrap);
 }
 
@@ -135,10 +153,23 @@ function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps,
   guide.append(
     document.createTextNode("Chưa có token? Mở "),
   );
-  const guideLink = el("a", "ms-connect__manual-guide-link", "Microsoft Graph Explorer") as HTMLAnchorElement;
-  guideLink.href = GRAPH_EXPLORER_URL;
-  guideLink.target = "_blank";
-  guideLink.rel = "noopener noreferrer";
+  // A renderer `<a target=_blank>` is a dead no-op in Electron (navigation/window.open denied), so
+  // open Graph Explorer through the shell's allowlisted `openExternal` bridge instead (PHASE 3).
+  const guideLink = el("button", "ms-connect__manual-guide-link") as HTMLButtonElement;
+  guideLink.type = "button";
+  guideLink.textContent = "Microsoft Graph Explorer";
+  guideLink.addEventListener("click", () => {
+    void getShellBridge()
+      .openExternal(GRAPH_EXPLORER_URL)
+      .then((result) => {
+        if (!result.ok) {
+          guide.setAttribute("data-open-error", "Không mở được liên kết ngoài.");
+        }
+      })
+      .catch(() => {
+        guide.setAttribute("data-open-error", "Không mở được liên kết ngoài.");
+      });
+  });
   guide.append(
     guideLink,
     document.createTextNode(", đăng nhập tài khoản của bạn, chuyển sang tab “Access token”, sao chép rồi dán vào ô bên dưới."),
@@ -249,12 +280,58 @@ function stopPolling(state: ViewState): void {
   }
 }
 
+/**
+ * PHASE 3 OneDrive fallback: when the OneDrive client has synced a LOCAL folder on this machine,
+ * offer to open it as a workspace. This is plain local filesystem access (indexed by the existing
+ * local Workspace Knowledge) — explicitly NOT Microsoft Graph/cloud, and never claims to be.
+ */
+function renderLocalOneDriveCard(deps: RenderMsConnectDeps): HTMLElement | null {
+  const local = deps.view.localOneDrive;
+  if (local === undefined || deps.onUseLocalOneDrive === undefined) return null;
+  const onUse = deps.onUseLocalOneDrive;
+  const card = el("section", "ms-card ms-connect__onedrive-local");
+  card.append(el("h3", "ms-section-label", "OneDrive trên máy (cục bộ)"));
+  card.append(
+    el(
+      "p",
+      "ms-connect__onedrive-note",
+      "Truy cập tệp OneDrive đã đồng bộ trong thư mục cục bộ trên máy này — không qua Microsoft Graph/đám mây.",
+    ),
+  );
+  card.append(el("code", "ms-connect__onedrive-path", local.path));
+  const useBtn = el("button", "ms-connect__onedrive-use", "Dùng thư mục OneDrive trên máy") as HTMLButtonElement;
+  useBtn.type = "button";
+  useBtn.addEventListener("click", () => onUse(local.path));
+  card.append(useBtn);
+  return card;
+}
+
 function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {
   const view = deps.view;
   const card = el("section", "ms-card ms-connect__summary");
   const header = el("div", "ms-connect__summary-header");
-  header.append(el("h2", "ms-card__title", "Microsoft 365"), el("span", "ms-pill ms-pill--ok", "Đã kết nối"));
+  const expired = typeof view.expiresAtMs === "number" && view.expiresAtMs <= Date.now();
+  header.append(
+    el("h2", "ms-card__title", "Microsoft 365"),
+    el(
+      "span",
+      expired ? "ms-pill ms-pill--warn" : "ms-pill ms-pill--ok",
+      expired ? "Cần đăng nhập lại" : "Đã kết nối",
+    ),
+  );
   card.append(header);
+
+  // Account identity (the user's own non-secret claims) + token expiry — honest session status.
+  const account = view.account;
+  if (account !== undefined && (account.name !== undefined || account.username !== undefined)) {
+    const who = account.name !== undefined && account.username !== undefined
+      ? `${account.name} · ${account.username}`
+      : (account.name ?? account.username ?? "");
+    card.append(el("p", "ms-connect__account", `Tài khoản: ${who}`));
+  }
+  if (typeof view.expiresAtMs === "number") {
+    card.append(el("p", "ms-connect__expiry", formatExpiry(view.expiresAtMs)));
+  }
 
   const services = el("div", "ms-service-grid");
   for (const service of view.services) {

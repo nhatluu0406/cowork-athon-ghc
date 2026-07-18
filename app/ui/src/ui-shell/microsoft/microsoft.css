@@ -190,6 +190,14 @@
 .ms-connect__oauth-note { font-size: 11px; color: #9aa4b2; margin-top: 14px; }
 .ms-pill { border-radius: 999px; padding: 3px 10px; font-size: 11px; font-weight: 600; }
 .ms-pill--ok { background: #eafaf0; color: #1f8f55; }
+.ms-pill--warn { background: #fdf0e3; color: #b3641a; }
+.ms-connect__account { margin: 6px 0 2px; font-size: 13px; color: var(--cghc-text-primary); font-weight: 600; }
+.ms-connect__expiry { margin: 0 0 8px; font-size: 12px; color: var(--cghc-text-secondary); }
+.ms-connect__onedrive-local { margin-top: 12px; }
+.ms-connect__onedrive-note { margin: 4px 0 8px; font-size: 12px; color: var(--cghc-text-secondary); }
+.ms-connect__onedrive-path { display: block; font-size: 12px; color: var(--cghc-text-primary); background: color-mix(in srgb, var(--cghc-text-primary) 6%, transparent); padding: 6px 8px; border-radius: 6px; margin-bottom: 8px; word-break: break-all; }
+.ms-connect__onedrive-use { padding: 8px 14px; border-radius: 8px; border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); font-weight: 600; cursor: pointer; }
+.ms-connect__onedrive-use:hover { background: var(--cghc-accent-hover); }
 .ms-service-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(248px, 1fr)); gap: 12px; }
 .ms-service-card { border: 1px solid #eceff3; border-radius: 10px; padding: 12px; }
 .ms-service-card__name { font-size: 13px; font-weight: 600; color: #1a2332; }
@@ -235,8 +243,11 @@
  * visible and the toggle button appears to do nothing. */
 .ms-connect__manual-body[hidden] { display: none; }
 .ms-connect__manual-guide { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--cghc-text-muted); }
-.ms-connect__manual-guide-link { color: var(--cghc-accent); font-weight: 600; text-decoration: none; }
+.ms-connect__manual-guide-link { color: var(--cghc-accent); font-weight: 600; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .ms-connect__manual-guide-link:hover { text-decoration: underline; }
+.ms-connect__device-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.ms-connect__open-link { padding: 6px 12px; border-radius: 8px; border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); font-weight: 600; cursor: pointer; }
+.ms-connect__open-link:hover { background: var(--cghc-accent-hover); }
 .ms-connect__manual-input {
   width: 100%;
   box-sizing: border-box;

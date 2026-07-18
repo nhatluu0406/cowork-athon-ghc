@@ -452,6 +452,12 @@ export interface Ms365ViewData {
   readonly services: readonly { readonly id: string; readonly label: string; readonly connected: boolean }[];
   readonly scopes: readonly string[];
   readonly actionHistory: readonly { readonly label: string; readonly source: string; readonly at?: string }[];
+  /** Connected account's non-secret display identity (name/username), when known. */
+  readonly account?: { readonly name?: string; readonly username?: string };
+  /** Active token expiry as epoch milliseconds, when known. */
+  readonly expiresAtMs?: number;
+  /** Local OneDrive sync folder on this machine (LOCAL filesystem, not Graph/cloud), when present. */
+  readonly localOneDrive?: { readonly path: string; readonly kind: string };
   readonly error?: string;
 }
 

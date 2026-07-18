@@ -13,12 +13,19 @@ export interface Ms365ViewData {
   services: Array<{ id: string; label: string; connected: boolean }>;
   scopes: string[];
   actionHistory: Array<{ label: string; source: string; at?: string }>;
+  /** Connected account's non-secret display identity (name/username), when known. */
+  account?: { name?: string; username?: string };
+  /** Active token expiry as epoch milliseconds, when known (for an honest "hết hạn" state). */
+  expiresAtMs?: number;
+  /** Local OneDrive sync folder on this machine (LOCAL filesystem, not Graph/cloud), when present. */
+  localOneDrive?: { path: string; kind: string };
   error?: string;
 }
 
 export function buildMs365View(
   connector: Ms365Connector,
-  scopes: readonly string[]
+  scopes: readonly string[],
+  localOneDrive?: { path: string; kind: string } | null,
 ): Ms365ViewData {
   const connectionState = connector.connectionState();
   const lastError = connector.lastError();
@@ -41,6 +48,24 @@ export function buildMs365View(
     scopes: effectiveScopes,
     actionHistory: [],
   };
+
+  // Account identity + token expiry (non-secret display claims), only while connected.
+  if (connectionState === "connected") {
+    const identity = connector.accountIdentity();
+    if (identity !== null && (identity.name !== undefined || identity.username !== undefined)) {
+      view.account = {
+        ...(identity.name !== undefined ? { name: identity.name } : {}),
+        ...(identity.username !== undefined ? { username: identity.username } : {}),
+      };
+    }
+    const exp = connector.tokenExpiresAtMs();
+    if (exp !== null) view.expiresAtMs = exp;
+  }
+
+  // Local OneDrive folder is a machine fact independent of the cloud connection state.
+  if (localOneDrive !== undefined && localOneDrive !== null) {
+    view.localOneDrive = { path: localOneDrive.path, kind: localOneDrive.kind };
+  }
 
   // Only include error if it exists (non-null)
   if (lastError !== null) {

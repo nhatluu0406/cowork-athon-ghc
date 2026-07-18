@@ -46,6 +46,8 @@ export interface MicrosoftSurfaceDeps {
   readonly onSelectConversation: (id: string) => void;
   readonly onNewConversation: () => void;
   readonly onSearchConversations: (query: string) => void;
+  /** PHASE 3: open the detected LOCAL OneDrive folder as a workspace (local files, not Graph). */
+  readonly onUseLocalOneDrive?: (path: string) => void;
 }
 
 export function createMicrosoftView(): MicrosoftViewDom {
@@ -172,7 +174,12 @@ function renderMicrosoftSurfaceInternal(dom: MicrosoftViewDom, view: Ms365ViewDa
     }
   } else {
     dom.assistantLayout = null;
-    renderMsConnect(dom.body, { view, client: deps.client, onViewChange: deps.onViewChange });
+    renderMsConnect(dom.body, {
+      view,
+      client: deps.client,
+      onViewChange: deps.onViewChange,
+      ...(deps.onUseLocalOneDrive !== undefined ? { onUseLocalOneDrive: deps.onUseLocalOneDrive } : {}),
+    });
   }
 }
 

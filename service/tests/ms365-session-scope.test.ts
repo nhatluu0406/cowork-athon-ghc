@@ -139,6 +139,8 @@ function fakeConnector(): Ms365RouterDeps["connector"] {
     pollDeviceCode: async () => "pending",
     deviceConfigured: () => false,
     grantedScopes: () => [],
+    accountIdentity: () => null,
+    tokenExpiresAtMs: () => null,
   } as unknown as Ms365RouterDeps["connector"];
 }
 

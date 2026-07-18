@@ -17,6 +17,7 @@ import type { BoundaryRouter, RouteContext, RouteResult } from "../boundary/cont
 import { BadRequestError } from "../server/http-util.js";
 import type { Ms365Connector } from "./ms365-connector.js";
 import { buildMs365View, type Ms365ViewData } from "./ms365-view.js";
+import { detectLocalOneDrive } from "./onedrive-local.js";
 import { handleToolCall, type ToolCall, type ToolDeps, type ToolResult, type Ms365ToolName } from "./ms365-tools.js";
 import type { SiteScopeService } from "./site-scope-service.js";
 import type { Ms365WriteMode, WriteModeStore } from "./write-mode-store.js";
@@ -176,6 +177,10 @@ export interface Ms365RouterDeps {
 
 /** Build the MS365 router. The orchestrator mounts it via `service.mount`. */
 export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
+  // The connected view + the local OneDrive folder (detected fresh per request — it is a cheap
+  // env+existsSync check and the folder can appear/disappear while the app runs).
+  const view = (): Ms365ViewData =>
+    buildMs365View(deps.connector, deps.scopes, detectLocalOneDrive());
   return {
     name: "ms365",
     routes: [
@@ -194,7 +199,7 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
         handler: async (ctx: RouteContext): Promise<RouteResult<Ms365ViewData>> => {
           const token = parseConnectBody(ctx.body);
           await deps.connector.connectWithToken(token);
-          return { status: 200, data: buildMs365View(deps.connector, deps.scopes) };
+          return { status: 200, data: view() };
         },
       },
       {
@@ -202,7 +207,7 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
         path: MS365_VIEW_PATH,
         handler: (): RouteResult<Ms365ViewData> => ({
           status: 200,
-          data: buildMs365View(deps.connector, deps.scopes),
+          data: view(),
         }),
       },
       {
@@ -214,7 +219,7 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
           // connector.disconnect() so tool access is revoked even if disconnect throws.
           deps.sessionScope.revokeAll();
           await deps.connector.disconnect();
-          return { status: 200, data: buildMs365View(deps.connector, deps.scopes) };
+          return { status: 200, data: view() };
         },
       },
       {
@@ -236,7 +241,7 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
             status: 200,
             data:
               status === "connected"
-                ? { status, view: buildMs365View(deps.connector, deps.scopes) }
+                ? { status, view: view() }
                 : { status },
           };
         },

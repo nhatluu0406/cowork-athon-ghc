@@ -148,6 +148,8 @@ function fakeConnector(overrides?: Partial<Ms365Connector>): Ms365Connector {
     pollDeviceCode: async () => "pending",
     deviceConfigured: () => false,
     grantedScopes: () => [],
+    accountIdentity: () => null,
+    tokenExpiresAtMs: () => null,
     ...overrides,
   };
 }

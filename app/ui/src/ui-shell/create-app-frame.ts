@@ -96,6 +96,8 @@ export interface AppFrameDom {
   openSettings: () => void;
   /** Opens the native workspace folder picker (wired by app-shell once the picker is mounted). */
   pickWorkspace: () => void;
+  /** Activate a specific folder path as the workspace (MS365 local-OneDrive action, PHASE 3). */
+  activateWorkspace: (rootPath: string) => void;
   closeSettings: () => void;
   closeDrawers: () => void;
   applySidebarCollapsed: (collapsed: boolean) => void;
@@ -234,6 +236,7 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     gatewayView,
     openSettings: () => undefined,
     pickWorkspace: () => undefined,
+    activateWorkspace: () => undefined,
     closeSettings: () => undefined,
     closeDrawers: () => undefined,
     applySidebarCollapsed: () => undefined,

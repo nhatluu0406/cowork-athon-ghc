@@ -70,6 +70,8 @@ test("running the bundle exposes EXACTLY the narrow bridge under the contract ke
   assert.deepEqual(Object.keys(call.api).sort(), [
     "connectLive",
     "getBootstrap",
+    "isSecureAutoUnlockAvailable",
+    "openExternal",
     "pickWorkspaceFile",
     "pickWorkspaceFolder",
     "previewClose",
@@ -79,6 +81,7 @@ test("running the bundle exposes EXACTLY the narrow bridge under the contract ke
     "previewSetBounds",
     "saveTextFile",
     "setDevToolsEnabled",
+    "setStartupAuthMode",
     "setWindowTheme",
   ]);
 });

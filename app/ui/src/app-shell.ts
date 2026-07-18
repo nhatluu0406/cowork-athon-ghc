@@ -2520,6 +2520,13 @@ function renderMicrosoftSurfaceBound(dom: AppDom, state: AppState, handlers: Par
       state.msConversationSearch = query;
       void refreshMs365Conversations(state, dom, handlers);
     },
+    // PHASE 3: open the detected LOCAL OneDrive folder as a workspace (local files, not Graph).
+    onUseLocalOneDrive: (path) => {
+      state.activeSurface = "cowork";
+      state.workMode = "workspace";
+      dom.activateWorkspace(path);
+      renderState(dom, state, handlers);
+    },
     ...(connected ? { writeModePill: state.msWriteModePill.root } : {}),
   };
   renderMicrosoftSurface(dom.microsoftView, state.msView, deps);
@@ -2901,6 +2908,8 @@ export function mountCoworkApp(root: HTMLElement): void {
             });
             // The Cowork empty-state primary action opens this same picker (no-workspace state).
             dom.pickWorkspace = () => void workspacePicker?.choose();
+            // MS365 "Dùng thư mục OneDrive trên máy" activates a specific local folder (PHASE 3).
+            dom.activateWorkspace = (path: string) => void workspacePicker?.activate(path);
             workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
