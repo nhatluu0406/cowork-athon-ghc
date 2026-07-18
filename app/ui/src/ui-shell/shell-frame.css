@@ -101,6 +101,12 @@ textarea,
   min-height: 0;
   grid-template-columns: var(--rail-w) var(--sidebar-w) minmax(0, 1fr) var(--panel-w);
   grid-template-areas: "rail sidebar main inspector";
+  /* One bounded content row: without this the single implicit `auto` row grows to the visible
+     view's max-content, so a tall integration surface (Dispatch) balloons past the viewport,
+     its own `overflow-y:auto` never engages, and this element's `overflow:hidden` clips the
+     bottom (e.g. the pairing button). Cowork escapes it only because its subtree caps its own
+     height; bounding the row to the frame height makes every surface scroll internally. */
+  grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   background: var(--paper);
 }

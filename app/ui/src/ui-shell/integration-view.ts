@@ -103,8 +103,15 @@ export function renderIntegrationSurface(
   // remote; the quick-access renders its own honest "remote chưa bật" note when the gateway is
   // off, so nothing here pretends to be connectable when it is not.
   if (surface.id === "dispatch" && remoteClient != null) {
-    appendDispatchBoard(mount, remoteClient);
-    appendRemoteQuickAccess(mount, remoteClient);
+    // Two-column dispatch layout: phone pairing on the left (main), the task board on the
+    // right (a sidebar). Each helper renders its own <section> into the column it is handed,
+    // so both stay reusable and the /remote overlay keeps the single-column pairing view.
+    mount.classList.add("integration-surface__mount--dispatch");
+    const mainCol = el("div", "integration-surface__col integration-surface__col--main");
+    const asideCol = el("aside", "integration-surface__col integration-surface__col--aside");
+    appendRemoteQuickAccess(mainCol, remoteClient);
+    appendDispatchBoard(asideCol, remoteClient);
+    mount.append(mainCol, asideCol);
   } else {
     mount.append(card);
   }
