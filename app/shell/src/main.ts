@@ -72,6 +72,8 @@ const RENDERER_DIR = join(here, "..", "..", "ui", "dist");
 
 let lifecycleLogPath = join(DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
 let shellController: ServiceController | null = null;
+/** Writable app-data root (holds the safeStorage-sealed deviceSecret for auto-unlock). */
+let shellAppDataRoot = "";
 
 function envCredentialImportEnabled(): boolean {
   return !app.isPackaged || process.env["COWORK_GHC_ALLOW_ENV_IMPORT"] === "1";
@@ -310,6 +312,7 @@ void runShellLifecycle({
         dbPath,
         skillRoots,
       } = resolveRuntimePaths();
+      shellAppDataRoot = dirname(settingsFilePath);
       shellController = createShellController(
         settingsFilePath,
         conversationsDir,
@@ -345,6 +348,7 @@ void runShellLifecycle({
     registerIpcHandlers({
       getBootstrap: () => shellController!.getBootstrap(),
       connectLive: createConnectLive(shellController),
+      appDataRoot: shellAppDataRoot,
     });
     const mainWindow = createMainWindow();
     // Off by default; only the ER-013 UI-audit tool sets COWORK_GHC_UI_AUDIT=1. When enabled it

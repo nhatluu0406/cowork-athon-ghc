@@ -18,12 +18,19 @@ import type {
   RendererBootstrap,
   SaveTextFileRequest,
   SaveTextFileResult,
+  StartupAuthModeResult,
   WindowTheme,
 } from "@cowork-ghc/contracts";
 
 import { IpcChannel } from "./channels.js";
 import type { ShellBootstrap } from "../bootstrap.js";
 import { createPreviewViewController, type PreviewViewController } from "../preview/preview-view.js";
+import {
+  clearSealedDeviceSecret,
+  generateDeviceSecret,
+  isSecureAutoUnlockAvailable,
+  sealDeviceSecret,
+} from "../service/device-unlock.js";
 
 /** Packaged verification: pop one path per pick from `COWORK_GHC_E2E_ATTACHMENT_QUEUE` (`|` separated). */
 let e2eAttachmentQueue: string[] | null = null;
@@ -60,6 +67,33 @@ function consumeE2eAttachmentPath(): string | undefined {
 export interface IpcHandlerDeps {
   readonly getBootstrap: () => ShellBootstrap;
   readonly connectLive: (force: boolean) => Promise<ConnectLiveResult>;
+  /** Writable app-data root where the safeStorage-sealed deviceSecret lives (auto-unlock.seal). */
+  readonly appDataRoot: string;
+}
+
+/** One authenticated call to the loopback service; returns the parsed envelope. */
+async function serviceCall(
+  bootstrap: ShellBootstrap,
+  method: string,
+  path: string,
+  body: unknown,
+): Promise<{ ok: boolean }> {
+  const base = bootstrap.serviceBaseUrl;
+  const token = bootstrap.clientToken;
+  if (base === undefined || base === "" || token === undefined || token === "") {
+    return { ok: false };
+  }
+  try {
+    const res = await fetch(new URL(path, base), {
+      method,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const env = (await res.json()) as { ok?: boolean };
+    return { ok: res.ok && env?.ok === true };
+  } catch {
+    return { ok: false };
+  }
 }
 
 /** Lazily-created embedded preview controller, one per owning window. */
@@ -83,7 +117,59 @@ function isFiniteNumber(value: unknown): value is number {
 }
 
 export function registerIpcHandlers(deps: IpcHandlerDeps): void {
-  const { getBootstrap, connectLive } = deps;
+  const { getBootstrap, connectLive, appDataRoot } = deps;
+
+  ipcMain.handle(IpcChannel.IsSecureAutoUnlockAvailable, (): boolean => isSecureAutoUnlockAvailable());
+
+  ipcMain.handle(
+    IpcChannel.SetStartupAuthMode,
+    async (
+      _event: IpcMainInvokeEvent,
+      arg: unknown,
+    ): Promise<StartupAuthModeResult> => {
+      const requireLogin = (arg as { requireLogin?: unknown })?.requireLogin === true;
+      const password = (arg as { password?: unknown })?.password;
+      if (typeof password !== "string" || password.length === 0) {
+        return { ok: false, reason: "password_required", requireLogin: !requireLogin };
+      }
+      const bootstrap = getBootstrap();
+
+      if (requireLogin) {
+        // Turn the requirement ON: remove the auto-unlock envelope + sealed secret, persist setting.
+        const disabled = await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/disable", {
+          password,
+        });
+        if (!disabled.ok) return { ok: false, reason: "invalid_password", requireLogin: false };
+        clearSealedDeviceSecret(appDataRoot);
+        await serviceCall(bootstrap, "PATCH", "/v1/settings/general", {
+          requireLoginOnStartup: true,
+        });
+        return { ok: true, requireLogin: true };
+      }
+
+      // Turn the requirement OFF: needs device-bound secure storage to fall back on.
+      if (!isSecureAutoUnlockAvailable()) {
+        return { ok: false, reason: "secure_storage_unavailable", requireLogin: true };
+      }
+      const deviceSecret = generateDeviceSecret();
+      const enabled = await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/enable", {
+        password,
+        deviceSecret,
+      });
+      if (!enabled.ok) return { ok: false, reason: "invalid_password", requireLogin: true };
+      if (!sealDeviceSecret(appDataRoot, deviceSecret)) {
+        // Roll back the envelope so we never leave a half-configured OFF state.
+        await serviceCall(bootstrap, "POST", "/v1/auth/auto-unlock/disable", { password });
+        return { ok: false, reason: "seal_failed", requireLogin: true };
+      }
+      await serviceCall(bootstrap, "PATCH", "/v1/settings/general", {
+        requireLoginOnStartup: false,
+      });
+      return { ok: true, requireLogin: false };
+    },
+  );
+
+
   ipcMain.handle(IpcChannel.GetBootstrap, (): RendererBootstrap => {
     const bootstrap = getBootstrap();
     return {

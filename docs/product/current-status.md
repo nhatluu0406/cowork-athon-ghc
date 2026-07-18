@@ -20,6 +20,7 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 | Provider profiles | WORKS (basic) | DeepSeek preset + custom OpenAI-compatible; verified fingerprint + status bar. Model discovery `GET /models` chưa làm (Wave 3). |
 | Local DB + vault | WORKS | SQLite `<userData>/cowork-ghc.db` + AES-256-GCM vault; renderer không chạm DB/secret. |
 | Local auth (unlock) | WORKS | Vault master key chỉ trong memory sau unlock. |
+| Auth ON/OFF khởi động | WORKS | Setting **Yêu cầu đăng nhập khi khởi động** (Cấu hình → Chung). **Mặc định BẬT** (hỏi mật khẩu — giữ hành vi hiện tại; fresh + existing installs đều ON đến khi user tự tắt). TẮT = mở thẳng Cowork qua **auto-unlock gắn thiết bị** (Electron safeStorage/DPAPI): wrap thứ hai của master key trong `app_meta`, deviceSecret seal bằng safeStorage ở `<appData>/auto-unlock.seal`; **không lưu key thô, không dùng Windows Credential Manager**, vault vẫn mã hoá, `vault_keys` (password wrap) không bị đụng → recovery bằng mật khẩu luôn còn. Packaged smoke ON+OFF PASS (audit 28/28: OFF relaunch mở thẳng Cowork). |
 | Conversations | WORKS | SQLite (Wave 0B); user-visible messages + durable turn summaries. |
 | Skills | WORKS (hub) | Rail `Kỹ năng & MCP`; catalog là hệ Skill duy nhất; extension registry deprecated. |
 | MCP | WORKS (Phase 1) | SQLite config + vault header secrets; stdio/URL; no OAuth; reachability adapter (`toolCount` 0). |

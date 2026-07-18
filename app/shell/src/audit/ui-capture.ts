@@ -176,6 +176,26 @@ async function runAudit(window: BrowserWindow): Promise<void> {
     );
     check("renderer-mounted", mounted, mounted ? "" : "#app never populated");
 
+    // Phase 2 (device-bound auto-unlock verify): relaunched over the SAME data root after auth was
+    // turned OFF. The app MUST boot straight into Cowork with no lock screen (safeStorage decrypts the
+    // sealed deviceSecret → the service unwraps the vault at composition). Verifies the OFF path.
+    if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "verify") {
+      const lockAppeared = await waitFor("document.querySelector('.app-lock')", 4_000);
+      const railReady = await waitFor(
+        "document.querySelector('.product-rail') && !document.querySelector('.app-lock')",
+        20_000,
+      );
+      check(
+        "auth-off-auto-unlock-boots-to-cowork",
+        !lockAppeared && railReady,
+        lockAppeared ? "lock screen appeared (auto-unlock failed)" : railReady ? "" : "rail not ready",
+      );
+      if (railReady) {
+        await capture({ id: "51-auth-off-autounlock-cowork", title: "Auth OFF — auto-unlock boots straight to Cowork", theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
+      }
+      return; // finally writes the sentinel + quits
+    }
+
     // 1) First-run lock/setup screen (honest onboarding evidence — ER-002).
     const lockShown = await waitFor("document.querySelector('.app-lock')", 10_000);
     if (lockShown) {
@@ -395,6 +415,33 @@ async function runAudit(window: BrowserWindow): Promise<void> {
       await clickSel('button[data-surface-id="code"]');
       await delay(400);
       await capture({ id: "31-code-large-light", title: "Code — large", theme: "light", viewport: "large", expectSelector: ".product-rail" });
+
+      // 6) Auth OFF enable (phase 1 of the auth-OFF packaged smoke). Turn the requirement OFF via the
+      // real bridge (safeStorage seal + service envelope), capture the Settings toggle, and LEAVE it
+      // OFF so the phase-2 relaunch (COWORK_GHC_UI_AUDIT_AUTOUNLOCK=verify) can prove straight-to-Cowork.
+      if (process.env.COWORK_GHC_UI_AUDIT_AUTOUNLOCK === "enable") {
+        const secureAvail = await evalJs<boolean>(
+          `(async () => { try { return await window.coworkShell.isSecureAutoUnlockAvailable(); } catch { return false; } })()`,
+        );
+        check("secure-auto-unlock-available", secureAvail, secureAvail ? "" : "safeStorage unavailable on host");
+        const enableRes = await evalJs<{ ok?: boolean; reason?: string; requireLogin?: boolean }>(
+          `(async () => { try { return await window.coworkShell.setStartupAuthMode(false, ${JSON.stringify(SYNTH_PASS)}); } catch (e) { return { ok: false, reason: String(e) }; } })()`,
+        );
+        check(
+          "auth-off-enable",
+          enableRes?.ok === true && enableRes?.requireLogin === false,
+          JSON.stringify(enableRes),
+        );
+        await clickSel('button[data-surface-id="cowork"]');
+        await delay(200);
+        if (await clickSel(".topbar__settings")) {
+          await waitFor("document.querySelector('.settings-surface')", 6_000);
+          await evalJs("(() => { const tabs = document.querySelectorAll('.settings-surface__tab'); if (tabs[1]) tabs[1].click(); })()");
+          await delay(300);
+          await capture({ id: "50-auth-off-settings-light", title: "Auth — Yêu cầu đăng nhập khi khởi động (OFF)", theme: "light", viewport: "desktop", expectSelector: ".settings-surface" });
+          await evalJs("(() => { const b = document.querySelector('.settings-surface__close'); if (b) b.click(); })()");
+        }
+      }
     }
   } catch (error) {
     const message = error instanceof Error ? (error.stack ?? error.message) : String(error);

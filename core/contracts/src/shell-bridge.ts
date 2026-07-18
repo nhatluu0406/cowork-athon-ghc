@@ -150,6 +150,31 @@ export interface CoworkShellBridge {
   readonly previewReload: () => Promise<void>;
   /** Tear down the embedded preview surface entirely. */
   readonly previewClose: () => Promise<void>;
+  /**
+   * Whether device-bound secure auto-unlock is available on this machine (Electron safeStorage /
+   * Windows DPAPI). The Settings toggle uses this to gate turning "Require login at startup" OFF —
+   * we never disable the password gate without a real device-bound envelope to fall back on.
+   */
+  readonly isSecureAutoUnlockAvailable: () => Promise<boolean>;
+  /**
+   * Flip the "Require login at startup" mode (shell owns safeStorage). The shell verifies the
+   * current password via the loopback service, then either creates a device-bound auto-unlock
+   * envelope + seals the deviceSecret (requireLogin=false) or deletes both (requireLogin=true), and
+   * persists the setting. The password is used only for this call and never stored.
+   */
+  readonly setStartupAuthMode: (
+    requireLogin: boolean,
+    password: string,
+  ) => Promise<StartupAuthModeResult>;
+}
+
+/** Result of {@link CoworkShellBridge.setStartupAuthMode}. */
+export interface StartupAuthModeResult {
+  readonly ok: boolean;
+  /** Non-secret reason on failure (e.g. "invalid_password", "secure_storage_unavailable"). */
+  readonly reason?: string;
+  /** The effective `requireLoginOnStartup` after the call (for the renderer to reflect). */
+  readonly requireLogin: boolean;
 }
 
 /** Global key under which the preload exposes {@link CoworkShellBridge} on `window`. */

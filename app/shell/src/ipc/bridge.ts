@@ -37,6 +37,9 @@ export function createShellBridge(ipc: BridgeIpc): CoworkShellBridge {
     previewHide: () => ipc.invoke(IpcChannel.PreviewHide),
     previewReload: () => ipc.invoke(IpcChannel.PreviewReload),
     previewClose: () => ipc.invoke(IpcChannel.PreviewClose),
+    isSecureAutoUnlockAvailable: () => ipc.invoke(IpcChannel.IsSecureAutoUnlockAvailable),
+    setStartupAuthMode: (requireLogin, password) =>
+      ipc.invoke(IpcChannel.SetStartupAuthMode, { requireLogin, password }),
   };
 }
 

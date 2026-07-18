@@ -213,6 +213,8 @@ export interface GeneralSettingsView {
   readonly verboseLogging: boolean;
   readonly telemetryEnabled: boolean;
   readonly devtoolsEnabled: boolean;
+  /** Require the local password at startup (false = device-bound secure auto-unlock). */
+  readonly requireLoginOnStartup: boolean;
 }
 
 /**
