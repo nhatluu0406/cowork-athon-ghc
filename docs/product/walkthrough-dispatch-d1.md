@@ -108,10 +108,21 @@ file sẽ **tự bị từ chối** ở boundary (branch hiện `errored`), user
 `retry_until_verified` chỉ báo `verified` khi có **bằng chứng file/disk thật**; hết lượt mà chưa có
 là `exhausted` — **không bao giờ** `completed` giả.
 
-### 3.5. Workflow builder từ prompt (Task 4.3)
+### 3.5. Tạo workflow từ mô tả (Task 4.3 — đã nối LLM thật)
 
-Mô tả workflow bằng ngôn ngữ tự nhiên → LLM sinh **draft** `TaskDefinition` → validate bắt buộc qua
-contract → trả draft để review → **confirm riêng mới lưu**. Không đường nào chạy draft chưa confirm.
+Panel **"Tạo workflow từ mô tả"** ở **cột phải màn Dispatch**: gõ mô tả → provider LLM sinh **draft**
+`TaskDefinition` (có thể đề xuất **agent mới**) → validate bắt buộc qua contract (whitelist field, id/
+source do hệ thống gán, preset chỉ thu hẹp) → hiện draft để **review** → **bấm "Lưu"** mới lưu. Không
+đường nào chạy draft chưa confirm; giữ chốt an toàn "never auto-run". Task đã lưu xuất hiện trong bảng,
+chạy được trên desktop và **1-touch trên điện thoại**.
+
+- Generator dùng đúng đường bảo mật của model-discovery (SSRF/IP-pin/redirect-refuse; key chỉ vào
+  header Bearer), gọi `POST {base}/chat/completions` của provider đang active. Cần provider đã cấu
+  hình (https hoặc dev-skip loopback http); chưa cấu hình → báo lỗi trung thực.
+- **3 template built-in cũ đã ẩn khỏi bảng** (placeholder `{mục tiêu}` không bao giờ được điền) — luồng
+  "tạo từ mô tả" thay thế chúng.
+- Agent mới: LLM tham chiếu agent đề xuất bằng **tên**; builder gán id từ tên (slug) và rewrite tham
+  chiếu, nên task dùng agent mới validate được.
 
 ### 3.6. Research workspace scaffolder (building block, chưa wired UI)
 
