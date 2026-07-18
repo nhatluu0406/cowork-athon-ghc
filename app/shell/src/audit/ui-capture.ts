@@ -46,7 +46,7 @@ const SURFACES: ReadonlyArray<{ id: string; label: string }> = [
   { id: "cowork", label: "Cowork" },
   { id: "skills-mcp", label: "Skill & MCP" },
   { id: "code", label: "Code" },
-  { id: "knowledge", label: "Knowledge (D3 chờ tích hợp)" },
+  { id: "knowledge", label: "Knowledge — kho tri thức local" },
   { id: "dispatch", label: "Dispatch (D1 chờ tích hợp)" },
   { id: "gateway", label: "Gateway (D4 chờ tích hợp)" },
   { id: "microsoft", label: "Microsoft 365 (D2 chờ tích hợp)" },
@@ -210,6 +210,29 @@ async function runAudit(window: BrowserWindow): Promise<void> {
         await capture({ id: `${idx}-surface-${s.id}-light`, title: `${s.label} — light`, theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
         await capture({ id: `${idx}-surface-${s.id}-dark`, title: `${s.label} — dark`, theme: "dark", viewport: "desktop", expectSelector: ".product-rail" });
         n += 1;
+      }
+
+      // 3b) Knowledge surface states reachable in the isolated audit env (no workspace configured):
+      // the honest no-workspace empty state (both themes) and the empty Đồ thị (graph) tab. The
+      // data-rich states (document list / search / graph-with-data) require an interactively selected
+      // workspace + a real index, which is a Product-Owner acceptance step — never faked here.
+      {
+        const toKnowledge = await clickSel('button[data-surface-id="knowledge"]');
+        if (toKnowledge) {
+          await waitFor("document.querySelector('.knowledge-view') && !document.querySelector('.knowledge-view').hidden", 8_000);
+          await capture({ id: "18-knowledge-no-workspace-light", title: "Knowledge — chưa chọn workspace", theme: "light", viewport: "desktop", expectSelector: ".klp" });
+          await capture({ id: "19-knowledge-no-workspace-dark", title: "Knowledge — chưa chọn workspace (dark)", theme: "dark", viewport: "desktop", expectSelector: ".klp" });
+          // Đồ thị (graph) tab — empty state, still an honest packaged view (no blank canvas).
+          const toGraph = await clickSel('[data-knowledge-tab="graph"]');
+          if (toGraph) {
+            await delay(500);
+            await capture({ id: "19b-knowledge-graph-empty-light", title: "Knowledge — đồ thị (trống)", theme: "light", viewport: "desktop", expectSelector: ".knowledge-view" });
+          }
+          await clickSel('[data-knowledge-tab="base"]');
+          await delay(200);
+        } else {
+          check("nav:knowledge-states", false, "knowledge rail button missing");
+        }
       }
 
       // 4) Settings surface (provider + general tabs).

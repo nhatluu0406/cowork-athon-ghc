@@ -318,6 +318,10 @@ export function mountKnowledgeLocalPanel(
 
     statusHost.append(left);
 
+    // No workspace → the body owns the "Chọn Workspace" CTA; don't offer index actions that would
+    // run against nothing ("không để action indexing chạy sai").
+    if (status !== null && !status.hasWorkspace) return;
+
     if (pendingClear) {
       const confirm = el("div", "klp-status__confirm");
       confirm.append(el("span", "klp-status__confirm-text", "Xóa toàn bộ chỉ mục? File gốc được giữ nguyên."));

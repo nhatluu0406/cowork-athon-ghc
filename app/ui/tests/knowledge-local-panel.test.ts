@@ -112,6 +112,9 @@ test("no workspace → renders a Chọn Workspace primary action", async () => {
   await flush();
   const btn = [...dom.body.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Chọn Workspace"));
   assert.ok(btn, "no-workspace state offers a workspace picker action");
+  // The status bar must NOT offer an index action that would run against no workspace.
+  const init = [...dom.body.querySelectorAll("button")].find((b) => (b.textContent ?? "").includes("Khởi tạo"));
+  assert.equal(init, undefined, "no init/index action while no workspace is selected");
   btn!.click();
   assert.equal(chose, true);
   panel.dispose();
