@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -287,7 +288,7 @@ func main() {
 	}
 
 	// Create processor for import jobs
-	localChunkStore := metadata.NewChunkStore(db)
+	localChunkStore := metadata.NewChunkStore(repo.Conn())
 	localProcessor := localimport.NewProcessor(
 		localDeltaResolver,
 		localExtractor,
@@ -407,6 +408,28 @@ func main() {
 	}
 
 	logger.Info("server shutdown complete")
+}
+
+// similaritySearcherAdapter wraps embedding.Store to implement retrieval.SimilaritySearcher
+type similaritySearcherAdapter struct {
+	store *embedding.Store
+}
+
+func (a similaritySearcherAdapter) SearchSimilar(ctx context.Context, modelID int64, queryVec []float32, topK int) ([]retrieval.ScoredChunkResult, error) {
+	scoredChunks, err := a.store.SearchSimilar(ctx, modelID, queryVec, topK)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert embedding.ScoredChunk to retrieval.ScoredChunkResult
+	results := make([]retrieval.ScoredChunkResult, len(scoredChunks))
+	for i, sc := range scoredChunks {
+		results[i] = retrieval.ScoredChunkResult{
+			ChunkID: sc.ChunkID,
+			Score:   sc.Score,
+		}
+	}
+	return results, nil
 }
 
 // Helper function to extract the underlying SQLite DB from the SQLiteDriver

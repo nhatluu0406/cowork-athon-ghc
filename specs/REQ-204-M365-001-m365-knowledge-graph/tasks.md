@@ -50,7 +50,7 @@ Each task is labeled with **[OPT1]**, **[OPT2]**, or **[SHARED]** to indicate wh
 - [X] T012 [OPT1] Implement PostgreSQL driver in `app/backend/internal/metadata/postgres_driver.go`: connection pool (lib/pq), transaction support, parameterized queries ($1/$2/$3), prepared statements, connection pooling (pgx)
 - [X] T013 [OPT1] Implement PostgreSQL query builders in `app/backend/internal/metadata/postgres_queries.go` (CRUD operations for all 11 tables, implements Repository interface)
 - [X] T014 [OPT1] Create Neo4j connection pool and query builder in `app/backend/internal/graph/neo4j_store.go` (node labels: Entity, Person, Project, Technology, Customer, Department; relationship types per data-model.md §2)
-- [ ] T015 [OPT1] Create docker-compose.yml for local PostgreSQL + Neo4j stack at repo root (PostgreSQL 15, Neo4j 5.x community)
+- [X] T015 [OPT1] Create docker-compose.yml for local PostgreSQL + Neo4j stack at repo root (PostgreSQL 15, Neo4j 5.x community)
 
 ### 2.3 Option 2 (SQLite + LanceDB) Specific Setup
 
