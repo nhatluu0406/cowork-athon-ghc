@@ -56,6 +56,16 @@ updated_at: "2026-07-18"
 - [x] Shared session controls (new/pick) in Code + Workspace tabs; roomier Code chat (#35, #36 layout).
 - [ ] #36 remaining: agent reliably creating `.py` (OpenCode pin tool coverage) — packaged obs.
 
+## PHASE 3 — Microsoft 365 session & Knowledge
+
+- [x] Safe `openExternal` bridge (https + Microsoft host allowlist) for MS365 external links.
+- [x] Connected page shows account identity + token expiry (decoded claims; token never stored).
+- [x] Local OneDrive folder fallback → open as local workspace (not Graph/cloud).
+- [x] Knowledge source reflects real MS365 connection state (#19, prior).
+- [x] MS365 first-turn runtime readiness gate + retry (prior).
+- [ ] Persistent OAuth session (refresh token in vault) — blocked on Azure app registration.
+- [ ] Distinct "OneDrive cục bộ" provenance tag in the Knowledge graph (currently Workspace-local).
+
 ## WAVE 3 — Provider model discovery
 
 - [ ] Safe OpenAI-compatible `GET /models`.

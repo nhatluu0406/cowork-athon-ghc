@@ -232,6 +232,28 @@ no-op for all sessions — no action needed, and adding a gate here today would 
 checks `deps.sessionAllowed(sessionId)` first, before any tool-specific logic. This is the
 production authorization boundary.
 
+## PHASE 3 — MS365 session & Knowledge (2026-07-18) — trạng thái + giới hạn
+
+- **Liên kết ngoài (openExternal):** renderer không mở được `window.open`/`<a target=_blank>` (shell
+  chặn điều hướng), nên link Graph Explorer / device verify URL trước đây là no-op chết. Nay có
+  bridge **`openExternal` fail-closed**: chỉ `https://` + host thuộc allowlist Microsoft
+  (microsoft.com / microsoftonline.com / office.com / sharepoint.com / live.com / azure.com, khớp
+  đúng hoặc subdomain) mới được `shell.openExternal`; scheme/host khác bị từ chối.
+- **Trang đã kết nối:** hiện **tài khoản** (name + preferred_username/upn/email) và **hạn token**
+  (giải mã claim `name`/`exp` — **token không bao giờ được lưu/log**, chỉ claim hiển thị); hết hạn →
+  pill "Cần đăng nhập lại". Reset khi disconnect/verify fail.
+- **OneDrive cục bộ (fallback, KHÔNG phải Graph):** phát hiện thư mục OneDrive đã đồng bộ trên máy
+  qua env `OneDriveCommercial`/`OneDriveConsumer`/`OneDrive` (chỉ khi tồn tại). Nút "Dùng thư mục
+  OneDrive trên máy" mở nó làm **workspace cục bộ** (qua đúng luồng grant của picker) → Workspace
+  Knowledge index local. **Provenance là Workspace-local** (không có tag riêng "OneDrive cục bộ"
+  trong đồ thị Knowledge — nhãn "cục bộ" chỉ ở UI MS365; tag provenance riêng là việc sau). Không
+  gọi Graph, không upload, không giả truy cập đám mây.
+- **Persistent OAuth session vẫn bị chặn:** device-code OAuth cần Azure app registration
+  (`CGHC_MS365_CLIENT_ID`) chưa có, nên refresh-token/khôi-phục-khi-khởi-động **không** làm được và
+  **không giả**. Manual-token là **chỉ phiên hiện tại** (in-memory, mất khi restart — UI nói rõ).
+- **First-turn readiness gate** đã có sẵn (preflight + 1 lần retry khi runtime chưa attach, mirror
+  Cowork) — không phải việc mới của PHASE 3.
+
 ## Sửa lỗi đợt issues (2026-07-18, đợt 2) — giới hạn còn lại
 
 - **Chat từ web/điện thoại không gửi được cho Cowork (#21, core FIXED, để OPEN):** root cause =
