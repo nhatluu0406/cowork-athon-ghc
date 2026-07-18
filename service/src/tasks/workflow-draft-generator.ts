@@ -213,9 +213,10 @@ export function createLlmWorkflowDraftGenerator(
       }
     }
     if (response === undefined) {
-      throw new WorkflowGenerationError(
-        lastError instanceof Error ? `Gọi provider thất bại: ${lastError.message}` : "Gọi provider thất bại.",
-      );
+      // Static, non-secret message — never interpolate the raw dialer error (matches
+      // model-discovery's secret-discipline: no upstream detail in a returned error).
+      void lastError;
+      throw new WorkflowGenerationError("Gọi provider thất bại (không kết nối được endpoint).");
     }
 
     // F2: the socket MUST have used the exact validated IP (never trust re-resolution).
