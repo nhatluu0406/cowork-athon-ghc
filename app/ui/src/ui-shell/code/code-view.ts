@@ -90,7 +90,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   segmented.setAttribute("role", "tablist");
   segmented.setAttribute("aria-label", "Chế độ hiển thị");
   const modeCode = modeButton("code", "Code", true);
-  const modePreview = modeButton("preview", "Preview", false);
+  const modePreview = modeButton("preview", "Xem trước", false);
   segmented.append(modeCode, modePreview);
 
   // Web / Ứng dụng segmented — only meaningful in Preview mode (hidden otherwise).

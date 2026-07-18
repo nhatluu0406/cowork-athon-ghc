@@ -144,6 +144,34 @@ test("dev-server Start shows an Allow/Deny confirm; Allow launches, Deny does no
   controller2.dispose();
 });
 
+test("captured error output surfaces in the Vấn đề (Problems) tab with a localized label + count badge", async () => {
+  const host = document.createElement("div");
+  const shell = fakeShell();
+  const client = fakeClient({
+    detectRuntimePreview: async () =>
+      ({ kind: "static", hasStaticIndex: true, hasPackageJson: false, packageJsonMalformed: false, devScripts: [], packageManager: null }) as RuntimePreviewProjectInfo,
+    getRuntimePreviewOutput: async () => ({
+      state: runningState(),
+      lines: [
+        { seq: 1, stream: "stdout" as const, text: "VITE v5  ready in 200 ms" },
+        { seq: 2, stream: "stderr" as const, text: "src/app.ts(3,10): error TS2304: Cannot find name 'foo'." },
+      ],
+      truncated: false,
+    }),
+  });
+  const controller = mountPreviewController(host, client, shell.bridge);
+  controller.setActive(true);
+  await flush();
+  const tabs = host.querySelectorAll(".code-preview__drawer-tab");
+  assert.equal(tabs[0]?.textContent, "Kết quả", "Output tab localized");
+  assert.match(tabs[1]?.textContent ?? "", /^Vấn đề \(1\)$/, "Problems tab localized + count badge");
+  const rows = host.querySelectorAll(".code-preview__problem");
+  assert.equal(rows.length, 1, "one parsed problem row (dev-server chatter ignored)");
+  assert.match(host.querySelector(".code-preview__problem-msg")?.textContent ?? "", /Cannot find name 'foo'/);
+  assert.equal(host.querySelector(".code-preview__problem-loc")?.textContent, "src/app.ts:3:10");
+  controller.dispose();
+});
+
 test("inactive controller hides the embedded view (visible=false)", async () => {
   const host = document.createElement("div");
   const shell = fakeShell();

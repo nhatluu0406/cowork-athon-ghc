@@ -17,6 +17,7 @@ import type {
 } from "@cowork-ghc/contracts";
 import type { ServiceClient } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
+import { renderProblems } from "./problems-view.js";
 
 export interface PreviewControllerCallbacks {
   /** Called when the confirmed loopback preview URL appears/disappears (for Agent context). */
@@ -69,8 +70,8 @@ export function mountPreviewController(
   // --- Output drawer ---
   const drawer = el("div", "code-preview__drawer");
   const drawerHead = el("div", "code-preview__drawer-head");
-  const tabOutput = drawerTab("Output", true);
-  const tabProblems = drawerTab("Problems", false);
+  const tabOutput = drawerTab("Kết quả", true);
+  const tabProblems = drawerTab("Vấn đề", false);
   const drawerToggle = el("button", "code-preview__drawer-toggle") as HTMLButtonElement;
   drawerToggle.type = "button";
   drawerToggle.setAttribute("aria-expanded", "true");
@@ -78,7 +79,8 @@ export function mountPreviewController(
   drawerHead.append(tabOutput, tabProblems, el("span", "code-preview__spacer"), drawerToggle);
   const outputBody = el("pre", "code-preview__output");
   outputBody.setAttribute("aria-live", "polite");
-  const problemsBody = el("div", "code-preview__problems", "Không có problem nào (Phase 1 chưa có phân tích lỗi).");
+  const problemsBody = el("div", "code-preview__problems");
+  problemsBody.append(el("div", "code-preview__problems-empty", "Không có vấn đề nào."));
   problemsBody.hidden = true;
   drawer.append(drawerHead, outputBody, problemsBody);
 
@@ -93,6 +95,8 @@ export function mountPreviewController(
   let loadedUrl: string | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let confirmOpen = false;
+  // Accumulated captured output, reduced to the "Vấn đề" (Problems) tab (redacted upstream).
+  const outputLines: RuntimePreviewOutputLine[] = [];
 
   function emptyState(): RuntimePreviewState {
     return { status: "idle", kind: null, url: null, port: null, command: null, startedAt: null, error: null, outputSeq: 0 };
@@ -185,9 +189,13 @@ export function mountPreviewController(
     for (const line of lines) {
       const row = el("span", `code-preview__line code-preview__line--${line.stream}`, line.text + "\n");
       outputBody.append(row);
+      outputLines.push(line);
       lastSeq = Math.max(lastSeq, line.seq);
     }
-    if (lines.length > 0) outputBody.scrollTop = outputBody.scrollHeight;
+    if (lines.length > 0) {
+      outputBody.scrollTop = outputBody.scrollHeight;
+      renderProblems(problemsBody, tabProblems, outputLines);
+    }
   }
 
   async function applyRunningTransition(): Promise<void> {
@@ -393,6 +401,8 @@ export function mountPreviewController(
       info = null;
       state = emptyState();
       outputBody.replaceChildren();
+      outputLines.length = 0;
+      renderProblems(problemsBody, tabProblems, outputLines);
       callbacks.onPreviewUrlChange?.(null);
       renderStatus();
     },
