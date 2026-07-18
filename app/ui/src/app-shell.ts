@@ -75,6 +75,7 @@ import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
 import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
+import { confirmModal } from "./ui-shell/confirm-modal.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
@@ -1719,7 +1720,11 @@ async function switchConversation(
   if (currentId === id) return;
   const unsent = textFromComposer(dom.composerInput);
   if (unsent.length > 0 && currentId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và chuyển cuộc trò chuyện?");
+    const ok = await confirmModal({
+      title: "Chuyển cuộc trò chuyện?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Chuyển",
+    });
     if (!ok) return;
   }
   saveComposerDraft(state, dom);
@@ -1814,7 +1819,11 @@ async function newConversation(
     return;
   }
   if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
+    const ok = await confirmModal({
+      title: "Tạo cuộc trò chuyện mới?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Tạo cuộc trò chuyện mới",
+    });
     if (!ok) return;
   }
 
