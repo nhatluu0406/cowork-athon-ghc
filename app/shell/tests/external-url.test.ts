@@ -50,3 +50,17 @@ test("trailing-dot host cannot bypass the allowlist check either way", () => {
   // A trailing dot resolves to the same host; normalize so it neither bypasses nor breaks allow.
   assert.equal(evaluateExternalUrl("https://microsoft.com./x").allowed, true);
 });
+
+test("userinfo / fragment tricks resolve to the real host (no bypass)", () => {
+  // The real host is what after the last '@' — the URL parser resolves these correctly.
+  assert.equal(evaluateExternalUrl("https://microsoft.com@evil.com/x").allowed, false);
+  assert.equal(evaluateExternalUrl("https://evil.com#@microsoft.com/x").allowed, false);
+  // ...and an allowlisted host with userinfo is still allowed (host is what matters).
+  assert.equal(evaluateExternalUrl("https://evil.com@login.microsoftonline.com/x").allowed, true);
+});
+
+test("IDN/punycode lookalikes fail closed (ASCII suffix list, no homograph match)", () => {
+  // A punycode host that renders like "microsoft" is not the ASCII allowlisted host → refused.
+  assert.equal(evaluateExternalUrl("https://xn--microsoft-xyz.com/x").allowed, false);
+  assert.equal(evaluateExternalUrl("https://microsoft.com.xn--evil-xyz.com/x").allowed, false);
+});
