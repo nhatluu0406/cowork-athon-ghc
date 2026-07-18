@@ -146,14 +146,20 @@ export async function renderRemotePairing(
       el(
         "p",
         "remote-note",
-        "Remote chưa bật. Khởi động lại với CGHC_REMOTE_ENABLED=1 (và CGHC_REMOTE_LAN=1 để dùng cùng Wi-Fi).",
+        "Điều phối từ xa chưa sẵn sàng trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật cổng kết nối từ xa.",
       ),
     );
     return;
   }
 
   if (!status.enabled) {
-    body.replaceChildren(el("p", "remote-note", "Gateway remote chưa chạy trong phiên này."));
+    body.replaceChildren(
+      el(
+        "p",
+        "remote-note",
+        "Cổng kết nối từ xa chưa bật trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật.",
+      ),
+    );
     return;
   }
 

@@ -20,7 +20,10 @@ import type {
 import { normalizeTitle, titleFromFirstMessage } from "./title.js";
 
 export interface ConversationStore {
-  list(query?: string): Promise<readonly ConversationSummary[]>;
+  list(
+    query?: string,
+    options?: { readonly surface?: "cowork" | "ms365" },
+  ): Promise<readonly ConversationSummary[]>;
   get(id: string): Promise<ConversationRecord | undefined>;
   create(input: CreateConversationInput): Promise<ConversationRecord>;
   rename(id: string, title: string): Promise<ConversationRecord>;
@@ -198,12 +201,18 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
   }
 
   return {
-    async list(query) {
+    async list(query, options) {
       const index = await readIndex();
       const q = query?.trim().toLowerCase();
-      if (q === undefined || q.length === 0) return index.conversations;
+      const wantSurface = options?.surface;
+      const keep = (summary: ConversationSummary): boolean =>
+        wantSurface === undefined || (summary.surface ?? "cowork") === wantSurface;
+      if (q === undefined || q.length === 0) {
+        return index.conversations.filter(keep);
+      }
       const matches: ConversationSummary[] = [];
       for (const summary of index.conversations) {
+        if (!keep(summary)) continue;
         if (summary.title.toLowerCase().includes(q)) {
           matches.push(summary);
           continue;
@@ -235,6 +244,7 @@ export function createConversationStore(options: ConversationStoreOptions): Conv
         updatedAt: now,
         messageCount: 0,
         messages: [],
+        surface: input.surface ?? "cowork",
         ...(input.providerId !== undefined ? { providerId: input.providerId } : {}),
         ...(input.modelId !== undefined ? { modelId: input.modelId } : {}),
         ...(input.parentId !== undefined ? { parentId: input.parentId } : {}),

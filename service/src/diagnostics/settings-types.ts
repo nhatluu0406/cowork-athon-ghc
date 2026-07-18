@@ -29,6 +29,13 @@ export interface GeneralSettings {
   readonly telemetryEnabled: boolean;
   /** Open Electron DevTools when true (shell applies; persisted for next launch). */
   readonly devtoolsEnabled: boolean;
+  /**
+   * Require the local password at every startup (default true = current behavior). When false, the
+   * app boots straight into Cowork via a device-bound secure auto-unlock (Electron safeStorage /
+   * DPAPI); the vault stays encrypted and no plaintext key is persisted. Only the shell may flip
+   * this (it owns safeStorage); the toggle is refused when secure auto-unlock is unavailable.
+   */
+  readonly requireLoginOnStartup: boolean;
 }
 
 /**
@@ -65,7 +72,7 @@ export interface ModelPreference {
 export interface PersistedProviderProfile {
   readonly id: string;
   readonly displayName: string;
-  readonly providerType: "deepseek" | "custom-openai-compat";
+  readonly providerType: "deepseek" | "fptcloud" | "custom-openai-compat";
   readonly baseUrl: string;
   readonly modelId: string;
   readonly envVar: string;
@@ -105,6 +112,9 @@ export const DEFAULT_GENERAL_SETTINGS: GeneralSettings = Object.freeze({
   verboseLogging: false,
   telemetryEnabled: false,
   devtoolsEnabled: false,
+  // Safe canonical default: existing + fresh installs require the password at startup until the user
+  // explicitly turns it off (documented in current-status). Preserves current behavior.
+  requireLoginOnStartup: true,
 });
 
 /** A fresh, valid settings document. Used on first run and as the SD5 safe default. */

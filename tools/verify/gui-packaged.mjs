@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19225;
 const TRACE = join(REPO, ".runtime", "gui-packaged.trace");
 const FIXTURE_FILE = "cghc-gui-fixture.txt";
@@ -145,7 +145,7 @@ function launch(extraEnv = {}) {
 async function stop(proc) {
   if (proc.exitCode === null) proc.kill();
   await sleep(3000);
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
     } catch {
@@ -244,7 +244,7 @@ async function main() {
 
   const pid = proc.pid;
   await stop(proc);
-  const coworkLeft = countProcesses("Cowork GHC.exe");
+  const coworkLeft = countProcesses("coworkghc.exe");
   const opencodeLeft = countProcesses("opencode.exe");
   if (coworkLeft > 0 || opencodeLeft > 0) {
     throw new Error(`Orphan processes remain: cowork=${coworkLeft} opencode=${opencodeLeft}`);

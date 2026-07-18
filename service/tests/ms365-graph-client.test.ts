@@ -265,6 +265,101 @@ test("GraphClient: 429 response maps to rate_limited via mapGraphStatus", async 
   }
 });
 
+test("GraphClient: PATCH via noContent sends If-Match header from ifMatch", async () => {
+  const allowedHosts = new Set(["graph.microsoft.com"]);
+  const ssrf = createTestSsrf(allowedHosts);
+
+  const calls: Array<{ url: string | URL; init?: RequestInit }> = [];
+  const client = createHttpGraphClient({
+    ssrf,
+    getToken: () => Promise.resolve("token"),
+    fetchFn: async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(null, { status: 204 });
+    },
+  });
+
+  await client.noContent({ method: "PATCH", path: "/planner/tasks/t1", ifMatch: 'W/"etag1"', body: { title: "x" } });
+
+  assert.equal(calls[0].init?.method, "PATCH");
+  assert.equal((calls[0].init?.headers as Record<string, string>)["if-match"], 'W/"etag1"');
+});
+
+test("GraphClient: DELETE via noContent accepts a 204 empty body", async () => {
+  const allowedHosts = new Set(["graph.microsoft.com"]);
+  const ssrf = createTestSsrf(allowedHosts);
+
+  const client = createHttpGraphClient({
+    ssrf,
+    getToken: () => Promise.resolve("token"),
+    fetchFn: async () => new Response(null, { status: 204 }),
+  });
+
+  await client.noContent({ method: "DELETE", path: "/planner/tasks/t1", ifMatch: 'W/"e"' });
+  // Should not throw.
+});
+
+test("GraphClient: existing json() GET behaviour unchanged (no if-match header when ifMatch absent)", async () => {
+  const allowedHosts = new Set(["graph.microsoft.com"]);
+  const ssrf = createTestSsrf(allowedHosts);
+
+  const calls: Array<{ url: string | URL; init?: RequestInit }> = [];
+  const client = createHttpGraphClient({
+    ssrf,
+    getToken: () => Promise.resolve("token"),
+    fetchFn: async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({}), { status: 200 });
+    },
+  });
+
+  await client.json({ method: "GET", path: "/me" });
+
+  assert.equal((calls[0].init?.headers as Record<string, string>)["if-match"], undefined);
+});
+
+test("GraphClient: prefer field is sent as the prefer header through the single send path", async () => {
+  const allowedHosts = new Set(["graph.microsoft.com"]);
+  const ssrf = createTestSsrf(allowedHosts);
+
+  const calls: Array<{ url: string | URL; init?: RequestInit }> = [];
+  const client = createHttpGraphClient({
+    ssrf,
+    getToken: () => Promise.resolve("token"),
+    fetchFn: async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({ value: [] }), { status: 200 });
+    },
+  });
+
+  await client.json({
+    method: "GET",
+    path: "/sites/s/lists/l/items",
+    prefer: "HonorNonIndexedQueriesWarningMayFailRandomly",
+  });
+
+  assert.equal((calls[0].init?.headers as Record<string, string>)["prefer"], "HonorNonIndexedQueriesWarningMayFailRandomly");
+});
+
+test("GraphClient: no prefer field -> no prefer header", async () => {
+  const allowedHosts = new Set(["graph.microsoft.com"]);
+  const ssrf = createTestSsrf(allowedHosts);
+
+  const calls: Array<{ url: string | URL; init?: RequestInit }> = [];
+  const client = createHttpGraphClient({
+    ssrf,
+    getToken: () => Promise.resolve("token"),
+    fetchFn: async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify({}), { status: 200 });
+    },
+  });
+
+  await client.json({ method: "GET", path: "/me" });
+
+  assert.equal((calls[0].init?.headers as Record<string, string>)["prefer"], undefined);
+});
+
 test("GraphClient: non-allowlisted baseUrl host is blocked before fetch is called", async () => {
   const allowedHosts = new Set(["evil.example.com"]);
   const ssrf = createTestSsrf(allowedHosts);

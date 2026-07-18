@@ -166,3 +166,63 @@ test("startLive() uses startLiveService when provided", async () => {
   assert.equal(liveCalls, 1);
   assert.deepEqual(controller.getBootstrap(), { serviceBaseUrl: BASE_URL, clientToken: TOKEN });
 });
+
+test("runningTier is null before start and while not running", () => {
+  const controller = new ServiceController({
+    startService: async () => ({ baseUrl: BASE_URL, token: TOKEN, stop: async () => {} }),
+  });
+  assert.equal(controller.runningTier, null);
+});
+
+test("runningTier reflects settings_only after start() (fallback-tagged by caller)", async () => {
+  const controller = new ServiceController({
+    startService: async () => ({ baseUrl: BASE_URL, token: TOKEN, stop: async () => {} }),
+  });
+  await controller.start();
+  assert.equal(controller.runningTier, "settings_only");
+});
+
+test("runningTier reflects live after startLive() (fallback-tagged by caller)", async () => {
+  const controller = new ServiceController({
+    startService: async () => ({ baseUrl: "http://127.0.0.1:2", token: "onboard", stop: async () => {} }),
+    startLiveService: async () => ({ baseUrl: BASE_URL, token: TOKEN, stop: async () => {} }),
+  });
+  await controller.startLive();
+  assert.equal(controller.runningTier, "live");
+});
+
+test("runningTier honors an explicit tier on the started handle over the caller's fallback", async () => {
+  // startLive() passes "live" as its fallback tier, but a tiered live start that silently
+  // degraded to settings-only MUST report its honest tier — never masquerade as live.
+  const controller = new ServiceController({
+    startService: async () => ({ baseUrl: "http://127.0.0.1:2", token: "onboard", stop: async () => {} }),
+    startLiveService: async () => ({
+      baseUrl: BASE_URL,
+      token: TOKEN,
+      tier: "settings_only",
+      stop: async () => {},
+    }),
+  });
+  await controller.startLive();
+  assert.equal(controller.runningTier, "settings_only", "a live-path fallback must not report as live");
+});
+
+test("runningTier resets to null after stop()", async () => {
+  const controller = new ServiceController({
+    startService: async () => ({ baseUrl: BASE_URL, token: TOKEN, stop: async () => {} }),
+  });
+  await controller.start();
+  assert.equal(controller.runningTier, "settings_only");
+  await controller.stop();
+  assert.equal(controller.runningTier, null);
+});
+
+test("runningTier is null after an honest start failure", async () => {
+  const controller = new ServiceController({
+    startService: async () => {
+      throw new Error("boom");
+    },
+  });
+  await controller.start();
+  assert.equal(controller.runningTier, null);
+});

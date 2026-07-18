@@ -30,7 +30,7 @@ export interface HttpGraphClientOptions {
 
 export interface GraphClientRequest {
   /** HTTP method for this request. */
-  method: "GET" | "POST" | "PUT";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   /** Path component (e.g. "/me", "/sites/contoso") */
   path: string;
   /** Optional query parameters */
@@ -39,6 +39,10 @@ export interface GraphClientRequest {
   body?: unknown;
   /** Optional body bytes for PUT/PATCH/POST */
   bodyBytes?: Uint8Array;
+  /** Optional ETag for optimistic concurrency (Planner PATCH/DELETE). Sent as If-Match. */
+  ifMatch?: string;
+  /** Optional Prefer header value (e.g. non-indexed-query warning for SharePoint $filter). */
+  prefer?: string;
 }
 
 export interface HttpGraphClient {
@@ -46,6 +50,8 @@ export interface HttpGraphClient {
   json<T>(req: GraphClientRequest): Promise<T>;
   /** Send request and return response as bytes */
   bytes(req: GraphClientRequest): Promise<Uint8Array>;
+  /** Send request expecting a 2xx with no meaningful body (e.g. 204). */
+  noContent(req: GraphClientRequest): Promise<void>;
 }
 
 /**
@@ -131,6 +137,14 @@ export function createHttpGraphClient(options: HttpGraphClientOptions): HttpGrap
       },
     };
 
+    if (req.ifMatch !== undefined) {
+      (init.headers as Record<string, string>)["if-match"] = req.ifMatch;
+    }
+
+    if (req.prefer !== undefined) {
+      (init.headers as Record<string, string>)["prefer"] = req.prefer;
+    }
+
     // Set content type and body
     if (req.bodyBytes) {
       init.body = req.bodyBytes;
@@ -160,6 +174,10 @@ export function createHttpGraphClient(options: HttpGraphClientOptions): HttpGrap
     async bytes(req: GraphClientRequest): Promise<Uint8Array> {
       const res = await send(req);
       return new Uint8Array(await res.arrayBuffer());
+    },
+
+    async noContent(req: GraphClientRequest): Promise<void> {
+      await send(req);
     },
   };
 }

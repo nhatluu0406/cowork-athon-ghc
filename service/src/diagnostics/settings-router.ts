@@ -88,6 +88,12 @@ export function createSettingsRouter(
   store: SettingsStore,
   models: SettingsModelPort,
   profiles?: ProviderProfileStore,
+  /**
+   * Called AFTER the active workspace changes. The runtime preview owner uses this to tear
+   * down any running preview process confined to the previous workspace (no orphans, no
+   * cross-workspace leak). Failures here never fail the settings write.
+   */
+  onActiveWorkspaceChanged?: (rootPath: string) => void | Promise<void>,
 ): BoundaryRouter {
   return {
     name: "settings",
@@ -175,6 +181,13 @@ export function createSettingsRouter(
           const record = asRecord(ctx.body);
           const rootPath = requireNonEmptyString(record.rootPath, "rootPath");
           await store.setActiveWorkspace(rootPath);
+          if (onActiveWorkspaceChanged !== undefined) {
+            try {
+              await onActiveWorkspaceChanged(rootPath);
+            } catch {
+              // A preview teardown failure must never block persisting the workspace switch.
+            }
+          }
           return { status: 200, data: { settings: toView(store, profiles) } };
         },
       },

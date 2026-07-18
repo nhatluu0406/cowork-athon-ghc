@@ -90,6 +90,19 @@ import {
 } from "../tasks/index.js";
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
+import {
+  createKnowledgeLocalRepository,
+  createKnowledgeLocalRouter,
+  createKnowledgeLocalService,
+} from "../knowledge-local/index.js";
+import {
+  createPreviewGate,
+  createPreviewService,
+  createRuntimePreviewRouter,
+  type PreviewService,
+} from "../runtime-preview/index.js";
+import { createAppService, createRuntimeAppRouter, type AppService } from "../runtime-app/index.js";
+import type { TelemetryCounter } from "../diagnostics/telemetry-store.js";
 import { createSessionStreamHub } from "../server/session-stream-hub.js";
 import { createEvStreamRouter } from "../server/ev-stream-router.js";
 import { createSessionStreamRouter } from "../server/session-stream-route.js";
@@ -116,7 +129,23 @@ import {
   createMs365Connector,
   createMs365Router,
   createSharePointService,
-  isMs365Enabled,
+  createSiteScopeStore,
+  createSiteScopeFilePersistence,
+  createSiteScopeService,
+  createWriteModeStore,
+  createWriteModeFilePersistence,
+  createOutlookService,
+  createPlannerService,
+  createListsService,
+  createTeamsService,
+  createCalendarService,
+  createOneDriveService,
+  createCommonService,
+  createPowerAutomateService,
+  createPowerAutomateStore,
+  createMs365SessionScope,
+  createDeviceCodeProvider,
+  readMs365DeviceConfig,
 } from "../ms365/index.js";
 import {
   closeSqliteDatabase,
@@ -145,11 +174,22 @@ import {
 import type { CredentialStore } from "../credential/index.js";
 
 /**
- * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11). Read-only Files
- * + Sites scopes, matching the SharePoint operations the tool surface exposes (search, list,
- * summary, upload). No extra scope is requested.
+ * Fixed OAuth scopes advertised on the MS365 view/connect surface (Task 8/11), matching the
+ * Graph operations the tool surface exposes. `Files.ReadWrite.All` covers SharePoint + OneDrive
+ * files (search/list/summary/upload, incl. `/me/drive` reads); `Sites.Read.All` the site reads;
+ * `Calendars.ReadWrite` the calendar list/search/create; `User.Read.All` the `resolve_user`
+ * `/users` lookup; `User.Read` the `get_me` `/me` identity; `MailboxSettings.Read` the best-effort
+ * `/me/mailboxSettings` time-zone read. Power Automate trigger is a plain webhook (no Graph
+ * scope). No extra scope is requested.
  */
-const MS365_SCOPES: readonly string[] = ["Files.ReadWrite.All", "Sites.Read.All"];
+const MS365_SCOPES: readonly string[] = [
+  "Files.ReadWrite.All",
+  "Sites.Read.All",
+  "Calendars.ReadWrite",
+  "User.Read.All",
+  "User.Read",
+  "MailboxSettings.Read",
+];
 
 const DEFAULT_SETTINGS_PATH = ".runtime/settings.json";
 const DEFAULT_CONVERSATIONS_DIR = ".runtime/conversations";
@@ -157,6 +197,8 @@ const DEFAULT_SKILLS_DIR = ".runtime/skills";
 const DEFAULT_SKILLS_STATE_PATH = ".runtime/skills-enabled.json";
 const DEFAULT_AGENTS_PATH = ".runtime/agents.json";
 const DEFAULT_TASKS_PATH = ".runtime/tasks.json";
+const DEFAULT_MS365_SITE_SCOPE_PATH = ".runtime/ms365-site-scope.json";
+const DEFAULT_MS365_WRITE_MODE_PATH = ".runtime/ms365-write-mode.json";
 const DEFAULT_PERMISSION_TIMEOUT_MS = 120_000;
 
 /**
@@ -237,7 +279,12 @@ export async function createCoworkService(
       });
     }
 
-    localAuth = createLocalAuthService({ users: usersRepo, vaultKeys: vaultKeysRepo, now });
+    localAuth = createLocalAuthService({
+      users: usersRepo,
+      vaultKeys: vaultKeysRepo,
+      appMeta,
+      now,
+    });
     vaultStore = createVaultCredentialStore({ auth: localAuth, secrets: secretsRepo, now });
 
     if (options.autoUnlock !== undefined) {
@@ -245,6 +292,16 @@ export async function createCoworkService(
         await localAuth.unlock(options.autoUnlock.username, options.autoUnlock.password);
       } catch {
         // Leave locked; renderer lock gate will prompt again.
+      }
+    } else if (options.autoUnlockDeviceSecret !== undefined) {
+      // Device-bound auto-unlock (login-not-required mode): unwrap the vault from the app_meta
+      // envelope using the shell's safeStorage-sealed deviceSecret. Failure leaves the vault locked
+      // so the renderer lock gate prompts for the password (recovery on a different device / corrupt
+      // envelope).
+      try {
+        localAuth.unlockWithAutoUnlock(options.autoUnlockDeviceSecret);
+      } catch {
+        // Leave locked; recovery via the password gate.
       }
     }
 
@@ -409,9 +466,12 @@ export async function createCoworkService(
   };
 
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
+  // Resolve the runtime-health seam once so the built-in /v1/health route can honestly report
+  // `runtimeReady` (Tier 1 → downRuntimeHealth → false; live → supervisor.isAlive()).
+  const runtimeHealthSeam = options.runtimeHealth ?? downRuntimeHealth();
   const sessionService = createSessionService({
     store: options.sessionStore ?? notAttachedSessionStore(),
-    health: options.runtimeHealth ?? downRuntimeHealth(),
+    health: runtimeHealthSeam,
     canceller: providerPort,
     now,
     redactError,
@@ -453,6 +513,45 @@ export async function createCoworkService(
     }
     return outcome;
   };
+
+  // --- Runtime preview (Code surface): bounded process runner for static / dev-server web
+  // preview. It gets its OWN permission gate (no-op reply/session sinks — a user-initiated
+  // launch has no OpenCode runtime to reply to — but the SHARED audit sink, so every launch
+  // Allow/Deny is recorded). Enforcement is identical: the command runs only inside the gate's
+  // `proceed`. Single owner of the one preview process; torn down on workspace change + shutdown.
+  const previewGate = createPreviewGate({
+    audit: permissionAudit,
+    scheduler: createNodeScheduler(),
+    now,
+  });
+  const previewService: PreviewService = createPreviewService({
+    getActiveRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    gate: previewGate,
+    scrubber,
+    ...(telemetry !== undefined
+      ? { telemetry: (counter: string) => telemetry.increment(counter as TelemetryCounter) }
+      : {}),
+    log: (line: string) => logger.debug(line),
+  });
+
+  // --- Runtime desktop-app launch (Code surface Slice 2): reuses the SAME bounded process-runner
+  // primitives and a preview-style permission gate (own gate instance, shared audit). Launches
+  // the app as its own separate process/window (never embedded). Single owner; torn down on
+  // workspace change + shutdown alongside the preview.
+  const appGate = createPreviewGate({
+    audit: permissionAudit,
+    scheduler: createNodeScheduler(),
+    now,
+  });
+  const appService: AppService = createAppService({
+    getActiveRoot: () => settingsStore.activeWorkspace()?.rootPath,
+    gate: appGate,
+    scrubber,
+    ...(telemetry !== undefined
+      ? { telemetry: (counter: string) => telemetry.increment(counter as TelemetryCounter) }
+      : {}),
+    log: (line: string) => logger.debug(line),
+  });
 
   // D1 fix: the ONE session→preset registry a dispatch branch binds before its first prompt
   // (live-branch-runner, via `deps.branchPermissionBindings` below) and `buildToolPermissionProxy`
@@ -558,36 +657,100 @@ export async function createCoworkService(
     basePolicy: LIVE_SESSION_PERMISSION_POLICY,
   });
 
-  // --- MS365 (SharePoint over Microsoft Graph), Task 11: OFF by default. `isMs365Enabled`
-  // reads the SAME `process.env` the rest of this module treats as the environment source
-  // (no options field exists for it — Tier 1/Tier 2 env-driven switches all read `process.env`
-  // directly, e.g. `readE2eMockLlmBaseUrl` above). With the var unset, `ms365Router` is
-  // `undefined` and NOTHING below is constructed or mounted — the baseline is byte-for-byte
-  // unaffected. The SAME `ssrf` policy instance built above (line ~105) is reused here; no
-  // second SsrfPolicy is created.
-  const ms365Router = isMs365Enabled(process.env)
-    ? (() => {
-        const ms365Manual = createManualTokenProvider({ credentials: credentialService });
-        const ms365Connector = createMs365Connector({
-          manual: ms365Manual,
-          makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
-        });
-        const sharepoint = createSharePointService({
-          connector: ms365Connector,
-          files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
-        });
-        return createMs365Router({
-          connector: ms365Connector,
-          scopes: MS365_SCOPES,
-          tools: {
-            sharepoint,
-            connectionState: () => ms365Connector.connectionState(),
-            gate: permissionGate,
-            now,
-          },
-        });
-      })()
-    : undefined;
+  // --- MS365 (SharePoint over Microsoft Graph): the router mounts UNCONDITIONALLY. The former
+  // `CGHC_MS365_ENABLED` env gate has been removed; there is no default-OFF switch. NOTE: this is a
+  // local flag-removal only — it is NOT the team-level D2 boundary merge described in CLAUDE.md.
+  // The SAME `ssrf` policy instance built above is reused here; no second SsrfPolicy is created.
+  const ms365Router = await (async () => {
+    const ms365Manual = createManualTokenProvider();
+    const ms365DeviceConfig = readMs365DeviceConfig(process.env);
+    const ms365Device =
+      ms365DeviceConfig !== null
+        ? createDeviceCodeProvider({
+            ssrf,
+            config: {
+              clientId: ms365DeviceConfig.clientId,
+              tenant: ms365DeviceConfig.tenant,
+              scopes: MS365_SCOPES,
+            },
+          })
+        : undefined;
+    const ms365Connector = createMs365Connector({
+      manual: ms365Manual,
+      makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
+      ...(ms365Device !== undefined ? { device: ms365Device } : {}),
+    });
+    const siteScopeStore = await createSiteScopeStore({
+      persistence: createSiteScopeFilePersistence(DEFAULT_MS365_SITE_SCOPE_PATH),
+    });
+    const siteScope = createSiteScopeService({ connector: ms365Connector, store: siteScopeStore });
+    const writeModeStore = await createWriteModeStore({
+      persistence: createWriteModeFilePersistence(DEFAULT_MS365_WRITE_MODE_PATH),
+    });
+    const sharepoint = createSharePointService({
+      connector: ms365Connector,
+      files: createWorkspaceLocalFileReader(() => settingsStore.activeWorkspace()?.rootPath),
+      siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
+    });
+    const outlook = createOutlookService({ connector: ms365Connector });
+    const planner = createPlannerService({ connector: ms365Connector });
+    const lists = createListsService({
+      connector: ms365Connector,
+      siteFilter: { isEnabled: (id) => siteScope.isEnabled(id) },
+    });
+    const teams = createTeamsService({ connector: ms365Connector });
+    const calendar = createCalendarService({ connector: ms365Connector });
+    const onedrive = createOneDriveService({ connector: ms365Connector });
+    const common = createCommonService({ connector: ms365Connector });
+    // A Power Automate flow trigger URL embeds a SAS `sig` — it is a bearer SECRET, so it must
+    // NOT be persisted to plaintext JSON (vault invariant). No flow-configuration UI/route wires
+    // `setFlows` today, so the store stays in-memory (empty by default); `trigger_flow` works by
+    // direct URL regardless. When a flow-config surface lands, persist URLs in the vault (the
+    // `mcp:<id>:header` pattern), never plaintext on disk.
+    const powerAutomateStore = await createPowerAutomateStore({
+      persistence: { load: async () => null, save: async () => {} },
+    });
+    // Power Automate trigger is a plain webhook POST — the SAME `ssrf` policy the provider port
+    // and Graph client use guards a user-configured flow URL, and the fetch is IP-pinned + host-
+    // allowlisted (Logic Apps only) before it is ever sent (see power-automate-service.ts).
+    const powerAutomate = createPowerAutomateService({ store: powerAutomateStore, ssrf });
+    const sessionScope = createMs365SessionScope();
+    return createMs365Router({
+      connector: ms365Connector,
+      scopes: MS365_SCOPES,
+      siteScope,
+      writeMode: writeModeStore,
+      sessionScope,
+      tools: {
+        sharepoint,
+        siteScope: { listJoinedSites: () => siteScope.listJoinedSites() },
+        outlook,
+        planner,
+        lists,
+        teams,
+        calendar,
+        onedrive,
+        powerAutomate,
+        common,
+        connectionState: () => ms365Connector.connectionState(),
+        gate: permissionGate,
+        now,
+        writeMode: () => writeModeStore.mode(),
+        sessionAllowed: (sessionId) => sessionScope.isAllowed(sessionId),
+      },
+    });
+  })();
+
+  // Local Knowledge Base + Graph (MVP) — only when the SQLite DB is present. Scoped to the active
+  // workspace; purely local (no network, no embeddings).
+  const knowledgeLocalService =
+    sqliteDatabase !== undefined
+      ? createKnowledgeLocalService({
+          repo: createKnowledgeLocalRepository(sqliteDatabase),
+          activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+          now,
+        })
+      : undefined;
 
   const routers = [
     ...(localAuth !== undefined
@@ -613,7 +776,11 @@ export async function createCoworkService(
     createCredentialRouter(credentialService, {
       allowEnvImport: options.allowEnvCredentialImport === true,
     }),
-    createSettingsRouter(settingsStore, modelPort, providerProfileStore),
+    createSettingsRouter(settingsStore, modelPort, providerProfileStore, (_rootPath) => {
+      // Workspace changed → tear down any preview / desktop app confined to the previous workspace.
+      void previewService.dispose("workspace_changed");
+      void appService.dispose("workspace_changed");
+    }),
     createProviderRouter(providerPort, modelConfig),
     createProviderProfileRouter({
       profiles: providerProfileStore,
@@ -653,6 +820,11 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(knowledgeLocalService !== undefined
+      ? [createKnowledgeLocalRouter(knowledgeLocalService)]
+      : []),
+    createRuntimePreviewRouter(previewService),
+    createRuntimeAppRouter(appService),
     createDiagnosticsRouter({
       logger,
       ...(fileSink !== undefined ? { fileSink } : {}),
@@ -682,6 +854,8 @@ export async function createCoworkService(
     recentWorkspaces,
     permissionGate,
     permissionAudit,
+    previewService,
+    appService,
     branchPermissionBindings,
     sessionService,
     streamHub,
@@ -710,7 +884,11 @@ export async function createCoworkService(
     deps,
     // The service auto-mounts the (token-guarded) health router itself; we never re-mount it.
     start: async (): Promise<RunningService> => {
-      const running = await startService({ ...options, routers });
+      const running = await startService({
+        ...options,
+        routers,
+        runtimeReady: () => runtimeHealthSeam.isAlive(),
+      });
       if (!ownsSqlite || sqliteDatabase === undefined) return running;
       const db = sqliteDatabase;
       const originalStop = running.service.stop.bind(running.service);

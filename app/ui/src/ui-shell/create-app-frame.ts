@@ -7,7 +7,7 @@
 
 import { createActivityPanel, setRightPanelCollapsed, type ActivityPanelDom } from "../activity-panel.js";
 import type { ProductSurfaceId } from "../surface-registry.js";
-import { createClaudeCodeView, type ClaudeCodeViewDom } from "./code/code-view.js";
+import { createClaudeCodeView, type ClaudeCodeViewDom, type CodeMode, type RuntimeMode } from "./code/code-view.js";
 import { createContextualSidebar } from "./contextual-sidebar.js";
 import type { ConversationProviderControl } from "./conversation-provider-control.js";
 import type { PermissionModeControl } from "./permission-mode-control.js";
@@ -93,11 +93,15 @@ export interface AppFrameDom {
   readonly microsoftView: MicrosoftViewDom;
   readonly codeView: ClaudeCodeViewDom;
   openSettings: () => void;
+  /** Opens the native workspace folder picker (wired by app-shell once the picker is mounted). */
+  pickWorkspace: () => void;
   closeSettings: () => void;
   closeDrawers: () => void;
   applySidebarCollapsed: (collapsed: boolean) => void;
   applyRightPanelCollapsed: (collapsed: boolean) => void;
   onCodePanelSend: (text: string) => void;
+  onCodeModeChange: (mode: CodeMode) => void;
+  onCodeRuntimeModeChange: (mode: RuntimeMode) => void;
 }
 
 export function createAppFrame(root: HTMLElement): AppFrameDom {
@@ -112,7 +116,11 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   const knowledgeView = createKnowledgeView();
   const integrationSurface = createIntegrationView();
   const microsoftView = createMicrosoftView();
-  const codeView = createClaudeCodeView({ onSendPrompt: (text) => dom.onCodePanelSend(text) });
+  const codeView = createClaudeCodeView({
+    onSendPrompt: (text) => dom.onCodePanelSend(text),
+    onModeChange: (mode) => dom.onCodeModeChange(mode),
+    onRuntimeModeChange: (mode) => dom.onCodeRuntimeModeChange(mode),
+  });
   const skillsMcpView = createSkillsMcpView();
   const settingsSurface = createSettingsSurface();
   const inspector = createInspectorShell();
@@ -211,11 +219,14 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
     microsoftView,
     codeView,
     openSettings: () => undefined,
+    pickWorkspace: () => undefined,
     closeSettings: () => undefined,
     closeDrawers: () => undefined,
     applySidebarCollapsed: () => undefined,
     applyRightPanelCollapsed: () => undefined,
     onCodePanelSend: () => undefined,
+    onCodeModeChange: () => undefined,
+    onCodeRuntimeModeChange: () => undefined,
   };
 
   const closeSettings = (): void => {
@@ -243,7 +254,12 @@ export function createAppFrame(root: HTMLElement): AppFrameDom {
   // NB: the composer provider control is a MODEL SWITCHER — app-shell wires its click to a
   // profile menu (falling back to Settings when none exist), so it is intentionally not wired here.
   cowork.composerPreflightCta.addEventListener("click", () => dom.openSettings());
-  cowork.emptyStateCta.addEventListener("click", () => dom.openSettings());
+  cowork.emptyStateCta.addEventListener("click", () => {
+    // The empty-state CTA is context-aware: pick a workspace when none is active, otherwise open
+    // provider settings (set by renderCoworkEmptyState via data-action).
+    if (cowork.emptyStateCta.dataset["action"] === "pick-workspace") dom.pickWorkspace();
+    else dom.openSettings();
+  });
   settingsSurface.closeButton.addEventListener("click", () => dom.closeSettings());
   settingsSurface.backButton.addEventListener("click", () => dom.closeSettings());
   settingsSurface.root.addEventListener("keydown", (event) => {

@@ -18,6 +18,7 @@
 
 import { app, BrowserWindow, Menu, protocol, session } from "electron";
 import { appendFileSync, copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -27,12 +28,14 @@ if (remoteDebugPort) {
 }
 
 import { createMainWindow } from "./create-window.js";
+import { runUiAuditIfEnabled } from "./audit/ui-capture.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { runShellLifecycle, type LifecycleApp } from "./lifecycle.js";
 import { hardenWebContents } from "./security/navigation.js";
 import { installCsp } from "./security/csp.js";
 import { APP_ORIGIN, installAppProtocol, registerAppScheme } from "./security/app-protocol.js";
 import { ServiceController, type StartService } from "./service/service-controller.js";
+import { createConnectLive } from "./service/connect-live.js";
 import { createLiveStartService } from "./service/live-service-adapter.js";
 import { createLiveOptionsResolver } from "./service/live-launch-resolver.js";
 import { createEnvLaunchSource } from "./service/env-launch-source.js";
@@ -69,6 +72,8 @@ const RENDERER_DIR = join(here, "..", "..", "ui", "dist");
 
 let lifecycleLogPath = join(DEV_APP_ROOT, ".runtime", "service-lifecycle.log");
 let shellController: ServiceController | null = null;
+/** Writable app-data root (holds the safeStorage-sealed deviceSecret for auto-unlock). */
+let shellAppDataRoot = "";
 
 function envCredentialImportEnabled(): boolean {
   return !app.isPackaged || process.env["COWORK_GHC_ALLOW_ENV_IMPORT"] === "1";
@@ -100,6 +105,13 @@ function resolveRuntimePaths() {
   const builtInSkillsRoot = app.isPackaged
     ? join(process.resourcesPath, "skills")
     : join(DEV_APP_ROOT, "skills", "builtin");
+  // Claude Code-style skill folders: the project checkout's `.agents/skills` (shipped to
+  // `<resources>/agents-skills` when packaged) plus the user-global `~/.agents/skills`. Both are
+  // optional discovery roots — a missing directory is skipped by the catalog (realpath guard).
+  const agentsSkillsRoot = app.isPackaged
+    ? join(process.resourcesPath, "agents-skills")
+    : join(DEV_APP_ROOT, ".agents", "skills");
+  const userAgentsSkillsRoot = join(homedir(), ".agents", "skills");
   lifecycleLogPath = join(appDataRoot, "service-lifecycle.log");
   mkdirSync(conversationsDir, { recursive: true });
   if (process.env["COWORK_GHC_VERBOSE_LOGGING"] === "1") {
@@ -114,6 +126,8 @@ function resolveRuntimePaths() {
     dataPaths,
     skillRoots: [
       { path: builtInSkillsRoot, source: "built_in" as const },
+      { path: agentsSkillsRoot, source: "built_in" as const },
+      { path: userAgentsSkillsRoot, source: "built_in" as const },
       { path: userSkillsRoot, source: "user_local" as const, createIfMissing: true },
     ],
   };
@@ -166,7 +180,16 @@ function createShellController(
     allowEnvCredentialImport: envCredentialImportEnabled(),
   };
   const settingsOnlyStart = createSettingsOnlyStartService(settingsOnlyOptions);
-  const liveStart = createLiveStartService(createLiveOptionsResolver(liveSource));
+  // Route the remote gateway's diagnostics (LAN URL, "gateway ready", Discord-on) into the
+  // lifecycle log. Without this they default to process.stdout, which a packaged Windows GUI
+  // app swallows — leaving the gateway impossible to debug from a log file. The lines carry no
+  // secret (URLs only; pairing codes/tokens are never passed to remoteLog) and are redacted by
+  // writeLifecycleLog anyway.
+  const resolveLiveOptions = createLiveOptionsResolver(liveSource);
+  const liveStart = createLiveStartService(async () => ({
+    ...(await resolveLiveOptions()),
+    remoteLog: writeLifecycleLog,
+  }));
 
   return new ServiceController({
     log: writeLifecycleLog,
@@ -289,6 +312,7 @@ void runShellLifecycle({
         dbPath,
         skillRoots,
       } = resolveRuntimePaths();
+      shellAppDataRoot = dirname(settingsFilePath);
       shellController = createShellController(
         settingsFilePath,
         conversationsDir,
@@ -316,16 +340,20 @@ void runShellLifecycle({
       app.setAppUserModelId("com.coworkghc.desktop");
     }
     // Live getter: every renderer `getBootstrap` reflects the true service state at call time.
-    // `restartService` performs the user-gated onboarding → live transition (stop, then start, which
-    // now re-resolves the persisted config). Stop+start are each idempotent + own the child.
+    // `connectLive` is idempotent when the service is ALREADY live (no stop/start, no dropped
+    // in-memory state — e.g. the MS365 manual token / session scope survive a chat turn) and only
+    // forces a stop+restart (re-resolving the persisted config) when the renderer explicitly asks
+    // for it — the settings-only → live transition, and after a provider-config change. Stop+start
+    // are each idempotent + own the child.
     registerIpcHandlers({
       getBootstrap: () => shellController!.getBootstrap(),
-      restartService: async () => {
-        await shellController!.stop();
-        await shellController!.startLive();
-      },
+      connectLive: createConnectLive(shellController),
+      appDataRoot: shellAppDataRoot,
     });
-    createMainWindow();
+    const mainWindow = createMainWindow();
+    // Off by default; only the ER-013 UI-audit tool sets COWORK_GHC_UI_AUDIT=1. When enabled it
+    // drives capture in-process then quits the app; skip normal activate wiring in that mode.
+    runUiAuditIfEnabled(mainWindow);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

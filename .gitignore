@@ -23,6 +23,9 @@ out/
 *.tsbuildinfo
 .vite/
 **/.vite/
+target/
+**/target/
+app/llm-svc/target/
 
 # --- Electron packaging / release artifacts (large binaries) ---
 dist-app/
@@ -41,6 +44,12 @@ opencode/
 **/opencode.exe
 **/opencode-*/
 
+# --- Large vendor binaries (database/service distributions) ---
+vendor/*.zip
+vendor/**/*.zip
+vendor/postgresql-*/
+vendor/neo4j-*/
+
 # --- Runtime / process state (PID, port, temp, logs) ---
 .runtime/
 **/.runtime/
@@ -54,11 +63,16 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# --- Automated packaged UI-audit output (screenshots + manifests; ER-013) ---
+reports/ui-audit/
+
 # --- Coverage / test output ---
 coverage/
 **/coverage/
 .nyc_output/
 *.lcov
+coverage.out
+**/coverage.out
 
 # --- Local databases / caches ---
 *.sqlite
@@ -109,3 +123,6 @@ Desktop.ini
 
 # --- Local TypeScript test output ---
 **/tsc-out/
+
+# --- Local secrets (never commit) ---
+lock.MD

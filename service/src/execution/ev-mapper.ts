@@ -104,6 +104,10 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
   let seq = options.startSeq ?? 0;
   const textPartCursors: TextPartCursorMap = new Map();
   const messageRoles: MessageRoleTracker = createMessageRoleTracker();
+  // partID → part.type, learned from `message.part.updated` snapshots. A `message.part.delta`
+  // names its owning part by `partID` but NEVER carries the part's type, so this map is the only
+  // way to tell an answer-text delta from a reasoning delta at delta time (see the delta case).
+  const partTypes = new Map<string, string>();
 
   const alloc: BaseAllocator = (): EvBase => ({
     sessionId: options.sessionId,
@@ -143,6 +147,10 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
       case "message.part.updated": {
         const part = readPart(frame);
         if (!part) return [];
+        // Record the part's type so a later `message.part.delta` (which carries only partID,
+        // never the type) can be classified. Snapshots precede their deltas in the runtime
+        // stream, so a reasoning part is known by the time its first delta arrives.
+        if (part.id !== undefined && part.type !== undefined) partTypes.set(part.id, part.type);
         const partRaw = asRecord(asRecord(frame.properties).part);
         const toolEvents = mapPart(part, alloc);
         const role = messageRoles.roleOf(part.messageID);
@@ -155,14 +163,22 @@ export function createEvMapper(options: EvMapperOptions): EvMapper {
         const props = asRecord(frame.properties);
         const delta = readString(props, "delta");
         if (!delta) return [];
-        // Only the answer's `text` field becomes visible tokens. Reasoning/"thinking" deltas
-        // (`field: "reasoning"`, emitted by DeepSeek/GLM-style models) must NOT leak into the
-        // assistant bubble. A frame without a `field` is treated as text (older runtime frames).
+        // A delta's `field` names WHICH property of the owning part changed — it is "text" for
+        // BOTH answer parts and reasoning parts (reasoning stores its content in a `text` field
+        // too), so `field` alone cannot stop a thinking leak. The authoritative signal is the
+        // owning part's TYPE, learned from its `message.part.updated` snapshot (partTypes).
         const field = readString(props, "field");
         if (field !== undefined && field !== "text") return [];
+        const partId = readString(props, "partID");
+        // Drop deltas belonging to any non-answer part (e.g. `reasoning`): thinking must never
+        // reach the assistant bubble. An unknown part (no snapshot seen yet) stays text, so a
+        // field-less answer delta remains backward-compatible.
+        if (partId !== undefined) {
+          const partType = partTypes.get(partId);
+          if (partType !== undefined && partType !== "text") return [];
+        }
         const messageId = readString(props, "messageID");
         if (!isAssistantMessageRole(messageRoles.roleOf(messageId))) return [];
-        const partId = readString(props, "partID");
         const noted = noteTextPartDelta(textPartCursors, {
           delta,
           ...(partId !== undefined ? { partId } : {}),

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ConversationMessage } from "../src/service-client.js";
 import { createClaudePanel, renderClaudePanel, setClaudePanelStreaming } from "../src/ui-shell/code/claude-panel.js";
-import { createCodeOnboarding } from "../src/ui-shell/code/code-onboarding.js";
 
 const MSGS: ConversationMessage[] = [
   { id: "m1", role: "user", text: "Chạy test", at: "2026-07-13T00:00:00.000Z" },
@@ -50,12 +49,4 @@ test("streaming block toggles", () => {
   assert.match(dom.streaming.textContent ?? "", /đang gõ/);
   setClaudePanelStreaming(dom, "", false);
   assert.equal(dom.streaming.hidden, true);
-});
-
-test("onboarding renders 4 steps and start button", () => {
-  let started = false;
-  const node = createCodeOnboarding(() => { started = true; });
-  assert.equal(node.querySelectorAll(".cc-onboarding__step").length, 4);
-  node.querySelector<HTMLButtonElement>(".cc-onboarding__start")?.click();
-  assert.equal(started, true);
 });

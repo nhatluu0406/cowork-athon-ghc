@@ -16,6 +16,7 @@ import {
   type ActivitySnapshot,
   type PermissionHistoryEntry,
 } from "./activity-model.js";
+import { ms365ToolLabel } from "./ms365-tool-label.js";
 import {
   createActivityPanel,
   permissionEntryFromDecision,
@@ -39,6 +40,7 @@ import {
   assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
+  dispatchGateReason,
   localServiceStatus,
   providerModelLabel,
   providerStatus,
@@ -60,10 +62,17 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
-import type { MicrosoftIntegrationView } from "./integration-slots.js";
-import { renderMicrosoftSurface } from "./ui-shell/microsoft/microsoft-view.js";
+import { createMentionTypeahead } from "./mention-typeahead.js";
+import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
+import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
+import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
+import { buildMsChatDispatch, toMsChatStreamView } from "./ui-shell/microsoft/ms-chat-adapters.js";
+import { createMs365WriteModeControl, type Ms365WriteModeControl } from "./ui-shell/ms365-write-mode-control.js";
+import type { Ms365ViewData, Ms365WriteMode } from "./service-client.js";
 import { renderClaudeCodeSurface } from "./ui-shell/code/code-view.js";
-import { fileTabKey, type OpenCodeFile } from "./ui-shell/code/code-editor.js";
+import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code-editor.js";
+import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
+import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
@@ -71,6 +80,7 @@ import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import { renderAssistantMarkdown } from "./markdown-message.js";
 import {
   detectFileActionIntent,
   hasVerifiedFileAction,
@@ -79,6 +89,7 @@ import {
 } from "./file-action-integrity.js";
 import {
   createPendingAttachmentId,
+  isPendingRelativePath,
   totalValidBytes,
   type PendingAttachment,
 } from "./attachment-pending.js";
@@ -118,27 +129,54 @@ import { renderSkillsMcpTab, type SkillsMcpTab } from "./ui-shell/skills-mcp-vie
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { mountKnowledgeLocalPanel, type KnowledgeLocalPanelHandle } from "./knowledge-local-panel.js";
 import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+let knowledgeLocalPanel: KnowledgeLocalPanelHandle | null = null;
 // Module-level so the verified-mutation handler (finalizeFileMutationReview) can auto-refresh the
 // file trees after an agent create/modify/delete, not just the mount closure.
 let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
 let codeNavigator: WorkspaceNavigatorHandle | null = null;
+let codeEditor: CodeEditorController | null = null;
+let previewController: PreviewController | null = null;
+let appController: AppController | null = null;
+/** The running runtime-preview loopback URL (fed into the Code Agent turn context). */
+let codePreviewUrl: string | null = null;
 /** Hot path: poll permissions immediately when tools start (workspace_auto still waits on discovery). */
 let permissionRefreshNow: (() => void) | null = null;
 /** Pause/resume the permission poller across settings→live restart (avoid dead-port spam). */
 let permissionPausePoll: (() => void) | null = null;
 let permissionResumePoll: (() => void) | null = null;
+/** MS365-tab dedicated controller lifecycle hooks (always-ask, session-scoped to ms365Chat). */
+let ms365PermissionStart: (() => void) | null = null;
+let ms365PermissionStop: (() => void) | null = null;
+let ms365PermissionPausePoll: (() => void) | null = null;
+let ms365PermissionResumePoll: (() => void) | null = null;
 
-const MS_DISCONNECTED_VIEW: MicrosoftIntegrationView = Object.freeze({
+const MS_DISCONNECTED_VIEW: Ms365ViewData = Object.freeze({
   connectionState: "disconnected",
   services: [],
   scopes: [],
   actionHistory: [],
 });
+
+/**
+ * A client stub used only before the real service client is ready. Every method rejects so a
+ * click during that brief window surfaces an honest error instead of a silently-fabricated
+ * success — the disconnected sign-in button is only truly wired once `state.client` exists.
+ */
+const NULL_MS365_CLIENT: Ms365ConnectClient = {
+  connectMs365Token: () => Promise.reject(new Error("service_not_ready")),
+  fetchMs365View: () => Promise.reject(new Error("service_not_ready")),
+  beginMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  pollMs365Device: () => Promise.reject(new Error("service_not_ready")),
+  disconnectMs365: () => Promise.reject(new Error("service_not_ready")),
+  listMs365Sites: () => Promise.reject(new Error("service_not_ready")),
+  setMs365SiteEnabled: () => Promise.reject(new Error("service_not_ready")),
+};
 
 interface RuntimeSessionReady {
   readonly runtimeSessionId: string;
@@ -187,8 +225,6 @@ interface AppState {
   skillsMcpTab: SkillsMcpTab;
   serviceLabel: string;
   serviceOk: boolean;
-  codeOpenFiles: OpenCodeFile[];
-  codeActiveKey: string | null;
   permissionMode: PermissionMode;
   /** Conversation that owns the current processing indicator (`Đang xử lý`). */
   processingConversationId: string | null;
@@ -200,6 +236,21 @@ interface AppState {
    * skip connect — that path hits not-attached session create → Internal boundary.
    */
   liveAttached: boolean;
+  /** MS365 tab connection view + services (rich device-code/token vertical). */
+  msView: Ms365ViewData;
+  /** True once the current client's MS365 view has been fetched (once per client, not per render). */
+  msViewFetched: boolean;
+  /**
+   * MS365 tab chat controller. Lives alongside `msView` so it survives the `replaceChildren()`
+   * re-render of the Microsoft surface body. Wired with the real send-flow once `readiness` exists.
+   */
+  msChat: MsChatController;
+  /** Write-mode pill relocated into the MS365 tab composer; only rendered while MS365 is connected. */
+  msWriteModePill: Ms365WriteModeControl;
+  /** MS365 history-sidebar conversation list (surface "ms365"). */
+  msConversations: readonly { readonly id: string; readonly title: string; readonly meta?: string }[];
+  /** Current search query for the MS365 history sidebar. */
+  msConversationSearch: string;
 }
 
 type AppDom = AppFrameDom;
@@ -245,13 +296,13 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
   const reviews = state.fileReviews;
   const workspaceName =
     state.activeWorkspace === null ? null : (state.activeWorkspace.split(/[\\/]/).filter(Boolean).pop() ?? null);
+  // The editor is a persistent controller; keep its open diff tabs in sync with the reviews.
+  codeEditor?.setReviews(reviews);
   renderClaudeCodeSurface(
     dom.codeView,
     {
       workspaceName,
       reviews,
-      openFiles: state.codeOpenFiles,
-      activeKey: state.codeActiveKey,
       sessionTitle: record?.title ?? null,
       messages: record?.messages ?? [],
       phase: state.conv.state.runtimePhase,
@@ -259,44 +310,12 @@ function renderCodeSurface(dom: AppDom, state: AppState, handlers: Parameters<ty
       composerDisabledReason: preflight.canSend ? null : preflight.message,
     },
     {
-      onSelectTab: (key) => {
-        state.codeActiveKey = key;
-        renderState(dom, state, handlers);
-      },
-      onCloseTab: (key) => {
-        state.codeOpenFiles = state.codeOpenFiles.filter((f) => f.key !== key);
-        if (state.codeActiveKey === key) state.codeActiveKey = state.codeOpenFiles[0]?.key ?? null;
-        renderState(dom, state, handlers);
-      },
       onOpenReview: (review) => {
-        const key = fileTabKey("review", review.relativePath);
-        if (!state.codeOpenFiles.some((f) => f.key === key)) {
-          state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath: review.relativePath, kind: "review", reviewId: review.id }];
-        }
-        state.codeActiveKey = key;
+        codeEditor?.openReview(review);
         renderState(dom, state, handlers);
-      },
-      onLoadFile: (relativePath, body) => {
-        void loadCodePreview(state, relativePath, body);
       },
     },
   );
-}
-
-async function loadCodePreview(state: AppState, relativePath: string, body: HTMLElement): Promise<void> {
-  if (state.client === null) {
-    body.textContent = "Service chưa sẵn sàng.";
-    return;
-  }
-  try {
-    const result = await state.client.previewWorkspaceFile(relativePath);
-    if (result.kind === "binary") { body.textContent = "Chưa hỗ trợ xem trước loại tệp này."; return; }
-    if (result.kind === "missing") { body.textContent = "Không tìm thấy tệp trong workspace."; return; }
-    const suffix = result.truncated ? "\n\n[Đã cắt bớt — tệp lớn hơn giới hạn xem trước 64 KiB]" : "";
-    body.textContent = `${result.content ?? ""}${suffix}`;
-  } catch (error) {
-    body.textContent = safeError(error);
-  }
 }
 
 function surfaceById(id: ProductSurfaceId): ProductSurfaceDefinition {
@@ -349,8 +368,10 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   const copy = dom.emptyState.querySelector<HTMLElement>(".empty-state__copy");
   if (state.activeWorkspace === null) {
     if (title !== null) title.textContent = "Chọn workspace để bắt đầu";
-    if (copy !== null) copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
-    dom.emptyStateCta.hidden = true;
+    if (copy !== null) copy.textContent = "Chọn một workspace dùng chung cho mọi màn hình trước khi gửi yêu cầu đầu tiên.";
+    dom.emptyStateCta.textContent = "Chọn Workspace";
+    dom.emptyStateCta.dataset["action"] = "pick-workspace";
+    dom.emptyStateCta.hidden = false;
     return;
   }
   if (
@@ -361,6 +382,8 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   ) {
     if (title !== null) title.textContent = "Cấu hình provider để bắt đầu";
     if (copy !== null) copy.textContent = preflight.message;
+    dom.emptyStateCta.textContent = "Mở Settings";
+    dom.emptyStateCta.dataset["action"] = "open-settings";
     dom.emptyStateCta.hidden = false;
     return;
   }
@@ -419,9 +442,14 @@ function appendMessage(
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
   const textBox = el("div", "msg__text");
-  const p = document.createElement("p");
-  p.textContent = text;
-  textBox.append(p);
+  if (role === "assistant") {
+    // Assistant prose is rendered as SAFE Markdown (sanitized). User text stays plain.
+    renderAssistantMarkdown(textBox, text);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = text;
+    textBox.append(p);
+  }
   body.append(textBox);
 
   // Skills remain persisted for provenance; do not render chips/versions in the visible transcript.
@@ -829,6 +857,9 @@ async function finalizeFileMutationReview(
     // 1) Refresh the file trees so a create/delete/rename appears without a manual reload.
     void workspaceNavigator?.refresh();
     void codeNavigator?.refresh();
+    // Code Phase 1 — update any open Code editor tab for this file (reload clean, conflict if dirty,
+    // deleted-state on a verified delete). Uses the same verified evidence, no new verifier.
+    codeEditor?.applyVerifiedMutation(relativePath, event.operation === "delete" ? "delete" : "modify");
     // 2) Update the open file, or auto-open the affected file when safe.
     const openPath = workspaceCompanion?.getOpenPath() ?? null;
     if (openPath !== null && openPath === relativePath) {
@@ -989,18 +1020,30 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
+  // Drive the runtime panes: only in Code surface + Preview mode; Web drives the embedded preview,
+  // Ứng dụng drives the desktop-app pane. Exactly one is active at a time.
+  const codePreviewActive = isCodeSurface && !settingsOpen && dom.codeView.mode === "preview";
+  previewController?.setActive(codePreviewActive && dom.codeView.runtimeMode === "web");
+  appController?.setActive(codePreviewActive && dom.codeView.runtimeMode === "app");
 
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+    knowledgeLocalPanel?.show(state.knowledgeTab);
   } else if (isMicrosoftSurface) {
-    renderMicrosoftSurface(dom.microsoftView, MS_DISCONNECTED_VIEW);
+    renderMicrosoftSurfaceBound(dom, state, handlers);
   } else if (isCodeSurface) {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
+    // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
+    // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
+    const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client, {
+      canRun: dispatchCfg.canSend,
+      reason: dispatchCfg.canSend ? "" : dispatchGateReason(dispatchCfg.blockKind),
+    });
   }
 
   if (isCoworkSurface) {
@@ -1110,8 +1153,10 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
 }
 
 function updateAssistantBubble(state: AppState, text: string): void {
-  const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
-  if (assistant !== null) assistant.textContent = text;
+  // Full-text repaint each tick → re-render the whole Markdown block (streaming-safe: partial
+  // Markdown just renders partially, never throws or duplicates).
+  const textBox = state.activeAssistant?.querySelector<HTMLElement>(".msg__text") ?? null;
+  if (textBox !== null) renderAssistantMarkdown(textBox, text);
   if (text.trim().length > 0 && state.activeAssistant !== null) {
     state.activeAssistant.classList.remove("msg--awaiting");
     const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");
@@ -1518,6 +1563,7 @@ async function ensureLive(
   // Pause permission polls BEFORE stopping settings-only: otherwise the 100ms poller keeps
   // hitting the dying base URL and DevTools fills with net::ERR_CONNECTION_REFUSED.
   permissionPausePoll?.();
+  ms365PermissionPausePoll?.();
   state.liveAttached = false;
   state.client = null;
   state.bootstrap = null;
@@ -1555,6 +1601,7 @@ async function ensureLive(
     throw new Error("Không kết nối lại được local service.");
   } finally {
     permissionResumePoll?.();
+    ms365PermissionResumePoll?.();
   }
 }
 
@@ -1846,6 +1893,56 @@ async function pickAttachment(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Attach a workspace file by its workspace-RELATIVE path (from the `@`-mention picker), reusing
+ * the same guarded read + pending-chip flow as {@link pickAttachment}. Deduped so mentioning a
+ * file already attached is a no-op. Silent on missing client/workspace — the `@` popup only opens
+ * when both are present, so this is defensive.
+ */
+async function attachWorkspaceRelativePath(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): Promise<void> {
+  if (state.client === null || state.activeWorkspace === null) return;
+  if (isPendingRelativePath(state.pendingAttachments, relativePath)) return;
+
+  // The attachment-read endpoint takes an absolute path inside the workspace and re-derives the
+  // relative path itself (it normalizes `/`→`\` and checks the root prefix), so joining the root
+  // with a forward slash is safe on Windows.
+  const absolutePath = `${state.activeWorkspace}/${relativePath}`;
+  const priorBytes = totalValidBytes(state.pendingAttachments);
+  const result = await state.client.readWorkspaceAttachment(absolutePath, priorBytes);
+  if (!result.ok) {
+    const isSecret = result.reason === "secret_file";
+    state.pendingAttachments = [
+      ...state.pendingAttachments,
+      {
+        id: createPendingAttachmentId(),
+        relativePath,
+        filename: relativePath.split(/[\\/]/).pop() ?? relativePath,
+        status: "error",
+        errorMessage: isSecret ? SECRET_ATTACHMENT_MESSAGE : result.message,
+      },
+    ];
+    renderState(dom, state, handlers);
+    return;
+  }
+
+  state.pendingAttachments = [
+    ...state.pendingAttachments,
+    {
+      id: createPendingAttachmentId(),
+      relativePath: result.metadata.relativePath,
+      filename: result.metadata.filename,
+      status: "valid",
+      metadata: result.metadata,
+    },
+  ];
+  renderState(dom, state, handlers);
+}
+
 function recordAttachmentActivity(
   state: AppState,
   included: readonly AttachmentMetadata[],
@@ -1903,6 +2000,29 @@ function recordAttachmentActivity(
 interface SendPromptOptions {
   readonly promptOverride?: string;
   readonly skipAttachments?: boolean;
+  /** Set by the manual retry affordance so a user-initiated resend does not itself auto-retry. */
+  readonly skipStartupRetry?: boolean;
+}
+
+/**
+ * Poll `/v1/health` until the supervised runtime reports ready (Tier 2 attached + alive), bounded by
+ * `timeoutMs`. Used before the single first-turn retry so we wait on a REAL signal, never a blind
+ * sleep. Resolves `true` when ready; `false` on timeout / no live client / no runtime tier.
+ */
+async function awaitRuntimeReady(state: AppState, timeoutMs: number): Promise<boolean> {
+  const client = state.client;
+  if (client === null) return false;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const health = await client.health();
+      if (health.runtimeReady === true) return true;
+    } catch {
+      // transient during startup — keep polling until the deadline
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
 }
 
 async function sendPrompt(
@@ -1941,11 +2061,31 @@ async function sendPrompt(
   // Wave 4: when the Workspace companion has a file open, tell the agent which file it is
   // (path only) so "tệp này / file đang mở" resolves without the user pasting a path.
   const openFilePath =
-    state.workMode === "workspace" ? (workspaceCompanionHandle?.getOpenPath() ?? null) : null;
-  const workspaceContext = openFilePath !== null ? { openFilePath } : undefined;
+    state.activeSurface === "code"
+      ? (codeEditor?.getActivePath() ?? null)
+      : state.workMode === "workspace"
+        ? (workspaceCompanionHandle?.getOpenPath() ?? null)
+        : null;
+  // Code surface: also tell the agent when a runtime web preview is live (loopback URL only).
+  const previewUrl = state.activeSurface === "code" ? (previewController?.getPreviewUrl() ?? null) : null;
+  const workspaceContext =
+    openFilePath !== null || previewUrl !== null
+      ? {
+          ...(openFilePath !== null ? { openFilePath } : {}),
+          ...(previewUrl !== null ? { previewUrl } : {}),
+        }
+      : undefined;
   // Wave 2: OpenCode native on-demand — Skill content loads on-demand via the runtime;
   // do not assemble full Skill markdown into the outbound prompt (metadata-only provenance).
-  const dispatchPlan = planDispatchPrompt(priorMessages, snapshots, prompt, undefined, [], workspaceContext);
+  const dispatchPlan = planDispatchPrompt(
+    priorMessages,
+    snapshots,
+    prompt,
+    undefined,
+    [],
+    workspaceContext,
+    state.msView.connectionState === "connected",
+  );
   if (!dispatchPlan.ok) {
     window.alert(dispatchPlan.message);
     return;
@@ -2016,7 +2156,7 @@ async function sendPrompt(
     renderState(dom, state, handlers);
 
     const dispatchText = dispatchPlan.text;
-    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    let result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     if (result.accepted) {
       state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
     }
@@ -2026,6 +2166,41 @@ async function sendPrompt(
       (result.reason === "session_completed" ||
         ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
           state.lastView.terminal !== null));
+
+    // First-turn startup race: OpenCode passed `/global/health` but could not serve the prompt yet
+    // (transient 503 `runtime_unavailable`/`runtime_not_attached`). If NOTHING has happened on this
+    // session (no EV frame/stream/tool/mutation), the send never reached a run — so it is safe to
+    // wait for the runtime to report ready (bounded health poll, not a blind sleep) and resend the
+    // SAME text to the SAME session exactly ONCE. A 503 guarantees no duplicate turn.
+    const transientRuntime =
+      !result.accepted &&
+      (result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached");
+    const freshNoActivity =
+      state.lastView.terminal === null &&
+      state.lastView.lastSeq === 0 &&
+      state.lastView.text.length === 0 &&
+      state.lastView.toolCalls.length === 0 &&
+      state.lastView.fileMutations.length === 0;
+    if (
+      transientRuntime &&
+      !needsContinuation &&
+      freshNoActivity &&
+      options?.skipStartupRetry !== true
+    ) {
+      updateAssistantBubble(state, "Đang khởi động Agent…");
+      renderState(dom, state, handlers);
+      await awaitRuntimeReady(state, 12_000);
+      const startupRetry = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+      if (startupRetry.accepted) {
+        state.turnTiming.mark("PROMPT_ACCEPTED", "startup-retry-ok");
+        permissionRefreshNow?.();
+        updateAssistantBubble(state, ""); // clear the placeholder; the EV stream now drives the bubble
+        refreshActivityUi(state, dom);
+        return;
+      }
+      result = startupRetry; // fall through to the honest failure UI with the retry's reason
+    }
+
     if (!result.accepted) {
       if (needsContinuation) {
         await state.conv.startContinuation();
@@ -2038,6 +2213,7 @@ async function sendPrompt(
           undefined,
           [],
           workspaceContext,
+          state.msView.connectionState === "connected",
         );
         if (!retryPlan.ok) {
           state.currentFileActionIntent = null;
@@ -2082,7 +2258,11 @@ async function sendPrompt(
             | undefined;
           if (lastUser !== undefined) {
             attachSendRetry(lastUser, () => {
-              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+              void sendPrompt(state, dom, readiness, handlers, {
+                promptOverride: prompt,
+                skipAttachments: true,
+                skipStartupRetry: true,
+              });
             });
           }
         }
@@ -2151,8 +2331,235 @@ function openWorkspaceFileFromCowork(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Cross-surface "Hỏi Cowork về tệp này": switch to Cowork and seed the composer with a question
+ * scoped to `relativePath`. The shared active workspace is unchanged; the agent reads the file via
+ * its normal workspace tools, so nothing here fabricates content or an attachment. If the composer
+ * already holds a draft it is preserved (the reference is prepended once, not duplicated).
+ */
+function askCoworkAboutFile(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): void {
+  state.activeSurface = "cowork";
+  state.workMode = "cowork";
+  const lead = `Về tệp \`${relativePath}\`: `;
+  const existing = textFromComposer(dom.composerInput);
+  if (!existing.startsWith(`Về tệp \`${relativePath}\``)) {
+    setComposerText(dom.composerInput, existing.length > 0 ? `${lead}${existing}` : lead);
+  }
+  renderState(dom, state, handlers);
+  // Focus + caret to end so the user just types the question.
+  dom.composerInput.focus();
+  const sel = window.getSelection();
+  if (sel !== null) {
+    const range = document.createRange();
+    range.selectNodeContents(dom.composerInput);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
 function createShell(root: HTMLElement): AppDom {
   return createAppFrame(root);
+}
+
+function ensureMs365ViewFetched(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  if (state.client === null || state.msViewFetched) return;
+  state.msViewFetched = true;
+  void state.client
+    .fetchMs365View()
+    .then((view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      if (view.connectionState === "connected") {
+        void refreshMs365Conversations(state, dom, handlers);
+      }
+      renderState(dom, state, handlers);
+    })
+    .catch(() => {
+      // Keep the last known (disconnected) view; the connect card still lets the user retry.
+    });
+}
+
+/** Shows the MS365 tab composer's write-mode pill only while MS365 is connected, seeded from
+ * the service (one source of truth). Errors hide the pill — never show a mode we could not
+ * read. Relocated here from the cowork composer (P5.6 Task 3) — the main chat's session is
+ * never registered in the MS365 session scope, so it has nothing meaningful to show. */
+async function refreshMsTabWriteModePill(state: AppState): Promise<void> {
+  const control = state.msWriteModePill;
+  if (state.client === null || state.msView.connectionState !== "connected") {
+    control.setVisible(false);
+    return;
+  }
+  try {
+    const { mode } = await state.client.fetchMs365WriteMode();
+    control.setMode(mode);
+    control.setVisible(true);
+  } catch {
+    control.setVisible(false);
+  }
+}
+
+/**
+ * Renders the Microsoft 365 surface bound to the real service client. Fetches the current
+ * connection view once per client (not on every re-render) so the connect view never starts
+ * from a fabricated "disconnected" default when a real connection already exists.
+ */
+// Rebound on every renderMicrosoftSurfaceBound call so the chat controller's onStateChange
+// (bound once, at state-init time, before `dom`/`handlers` exist) can trigger a re-render on
+// each state mutation without capturing a stale dom/handlers pair.
+let msChatRerender: (() => void) | null = null;
+
+function renderMicrosoftSurfaceBound(dom: AppDom, state: AppState, handlers: Parameters<typeof renderState>[2]): void {
+  ensureMs365ViewFetched(dom, state, handlers);
+  msChatRerender = () => renderState(dom, state, handlers);
+  const connected = state.msView.connectionState === "connected";
+  const deps: MicrosoftSurfaceDeps = {
+    client: state.client ?? NULL_MS365_CLIENT,
+    onViewChange: (view) => {
+      state.msView = view;
+      void refreshMsTabWriteModePill(state);
+      if (view.connectionState !== "connected") {
+        void state.msChat.onDisconnected();
+        state.msConversations = [];
+      } else {
+        void refreshMs365Conversations(state, dom, handlers);
+      }
+      renderState(dom, state, handlers);
+    },
+    chat: state.msChat,
+    onSend: (prompt) => {
+      void (async () => {
+        await state.msChat.send(prompt);
+        // A first turn creates a conversation and persists messages — refresh so the sidebar
+        // shows the new/updated entry with fresh meta.
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
+    onCancel: () => void state.msChat.cancel(),
+    conversations: state.msConversations,
+    activeConversationId: state.msChat.state().conversationId,
+    onSelectConversation: (id) => {
+      const client = state.client;
+      if (client === null) return;
+      void (async () => {
+        try {
+          const record = await client.getConversation(id);
+          const messages = record.messages.map((m) => ({ role: m.role, content: m.text }));
+          state.msChat.adoptConversation(id, messages);
+        } catch {
+          // Leave the current transcript in place; surface nothing beyond a no-op.
+        }
+        void refreshMs365Conversations(state, dom, handlers);
+      })();
+    },
+    onNewConversation: () => {
+      void state.msChat.reset();
+      void refreshMs365Conversations(state, dom, handlers);
+    },
+    onSearchConversations: (query) => {
+      state.msConversationSearch = query;
+      void refreshMs365Conversations(state, dom, handlers);
+    },
+    ...(connected ? { writeModePill: state.msWriteModePill.root } : {}),
+  };
+  renderMicrosoftSurface(dom.microsoftView, state.msView, deps);
+}
+
+/** Refreshes the MS365 history-sidebar conversation list from the service (surface "ms365"). */
+async function refreshMs365Conversations(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+): Promise<void> {
+  const client = state.client;
+  if (client === null || state.msView.connectionState !== "connected") {
+    state.msConversations = [];
+    return;
+  }
+  const query = state.msConversationSearch.trim();
+  try {
+    const list = await client.listConversations(query.length > 0 ? query : undefined, "ms365");
+    state.msConversations = list.map((summary) => ({
+      id: summary.id,
+      title: summary.title,
+      meta: formatConversationMeta(summary),
+    }));
+  } catch {
+    state.msConversations = [];
+  }
+  renderState(dom, state, handlers);
+}
+
+/**
+ * Real MS365 tab chat deps (P5.6 Task 3) — wires the send-flow to the live service client:
+ * `createSession` -> `setMs365SessionScope(id, true)` -> `startEvStream` -> `sendSessionMessage`.
+ * `startStream` keeps its own tab-local `EvStreamHandle`; it never touches `state.stream` (the
+ * main chat's stream) so the two surfaces stay fully independent (per design doc §2).
+ */
+function createMsChatDeps(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  readiness: ReturnType<typeof createReadinessController>,
+): MsChatDeps {
+  return {
+    preflight: () => {
+      const result = assessSendPreflight(buildReadinessInput(state.localServiceReady, state));
+      return { canSend: result.canSend, message: result.message };
+    },
+    workspaceId: () => state.activeWorkspace,
+    createSession: async (input) => {
+      const client = await ensureLive(state, readiness);
+      return client.createSession({ workspaceId: input.workspaceId, title: input.title });
+    },
+    setSessionScope: async (sessionId, enabled) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.setMs365SessionScope(sessionId, enabled);
+    },
+    sendMessage: async (sessionId, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      return state.client.sendSessionMessage(sessionId, text);
+    },
+    cancelSession: async (sessionId) => {
+      if (state.client === null) return;
+      await state.client.cancelSession(sessionId);
+    },
+    startStream: (sessionId, onView) => {
+      const bootstrap = state.bootstrap;
+      if (bootstrap?.serviceBaseUrl === undefined || bootstrap.clientToken === undefined) {
+        return { stop: () => {} };
+      }
+      const handle = startEvStream({
+        baseUrl: bootstrap.serviceBaseUrl,
+        clientToken: bootstrap.clientToken,
+        sessionId,
+        onView: (view) => onView(toMsChatStreamView(view)),
+      });
+      return { stop: () => handle.stop() };
+    },
+    createConversation: async (input) => {
+      const client = await ensureLive(state, readiness);
+      const workspacePath = state.activeWorkspace ?? input.workspaceId;
+      const record = await client.createConversation({
+        workspacePath,
+        surface: "ms365",
+        title: input.title,
+      });
+      return { id: record.id };
+    },
+    persistMessage: async (conversationId, role, text) => {
+      if (state.client === null) throw new Error("Service chưa sẵn sàng.");
+      await state.client.appendConversationMessage(conversationId, role, text);
+    },
+    buildDispatch: buildMsChatDispatch,
+    now: () => Date.now(),
+    onStateChange: () => msChatRerender?.(),
+  };
 }
 
 
@@ -2200,12 +2607,32 @@ export function mountCoworkApp(root: HTMLElement): void {
     skillsMcpTab: "skills",
     serviceLabel: "Service · Đang khởi động",
     serviceOk: false,
-    codeOpenFiles: [],
-    codeActiveKey: null,
     permissionMode: readPermissionMode(),
     processingConversationId: null,
     pendingUserRow: null,
     liveAttached: false,
+    msView: MS_DISCONNECTED_VIEW,
+    msViewFetched: false,
+    // Real send-flow deps are wired just below, once `readiness` exists (createMsChatDeps
+    // needs it for ensureLive). Until then this fails closed with an honest message rather
+    // than silently doing nothing — no send is possible before mountCoworkApp finishes wiring.
+    msChat: createMsChatController({
+      preflight: () => ({
+        canSend: false,
+        message: "Ứng dụng đang khởi động — vui lòng thử lại sau giây lát.",
+      }),
+      workspaceId: () => null,
+      createSession: () => Promise.reject(new Error("ms365 chat not wired yet")),
+      setSessionScope: () => Promise.resolve(),
+      sendMessage: () => Promise.resolve({ accepted: false, reason: "not_wired" }),
+      cancelSession: () => Promise.resolve(),
+      startStream: () => ({ stop: () => {} }),
+      buildDispatch: (_prior, prompt) => ({ ok: true, text: prompt }),
+      onStateChange: () => msChatRerender?.(),
+    }),
+    msWriteModePill: createMs365WriteModeControl(),
+    msConversations: [],
+    msConversationSearch: "",
   };
 
   dom.permissionModeControl.setMode(state.permissionMode);
@@ -2342,6 +2769,13 @@ export function mountCoworkApp(root: HTMLElement): void {
               bridge: getShellBridge(),
               client: dynamicClient,
               onActivated: (rootPath) => {
+                // A different active workspace resets the Code editor (its tabs pointed at the old
+                // project). "reset đúng" per ADR 0013; unsaved Code edits are discarded on switch.
+                if (state.activeWorkspace !== rootPath) {
+                  codeEditor?.reset();
+                  previewController?.reset();
+                  appController?.reset();
+                }
                 state.activeWorkspace = rootPath;
                 void refreshSettings(state, dom, handlers);
                 void workspaceNavigator?.refresh();
@@ -2350,11 +2784,16 @@ export function mountCoworkApp(root: HTMLElement): void {
               },
               onDeactivated: () => {
                 state.activeWorkspace = null;
+                codeEditor?.reset();
+                previewController?.reset();
+                appController?.reset();
                 void workspaceNavigator?.refresh();
                 void codeNavigator?.refresh();
                 renderState(dom, state, handlers);
               },
             });
+            // The Cowork empty-state primary action opens this same picker (no-workspace state).
+            dom.pickWorkspace = () => void workspacePicker?.choose();
             workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
@@ -2369,23 +2808,87 @@ export function mountCoworkApp(root: HTMLElement): void {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
             onFileSelected: (relativePath) => {
-              const key = fileTabKey("file", relativePath);
-              if (!state.codeOpenFiles.some((f) => f.key === key)) {
-                state.codeOpenFiles = [...state.codeOpenFiles, { key, relativePath, kind: "file" }];
-              }
-              state.codeActiveKey = key;
-              renderState(dom, state, handlers);
+              codeEditor?.openFile(relativePath);
             },
           });
+          codeEditor = mountCodeEditor(dom.codeView.editorHost, dynamicClient, {
+            // Code → Workspace handoff via a shared, bounded contract (no URL hack / global string).
+            onOpenInWorkspace: (relativePath) => {
+              state.activeSurface = "cowork";
+              state.workMode = "workspace";
+              workspaceNavigator?.selectPath(relativePath);
+              void workspaceCompanionHandle?.open(relativePath);
+              renderState(dom, state, handlers);
+            },
+            // Code → Cowork handoff: ask the agent about the active file.
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
+          });
+          previewController = mountPreviewController(
+            dom.codeView.previewPaneHost,
+            dynamicClient,
+            getShellBridge(),
+            {
+              onPreviewUrlChange: (url) => {
+                codePreviewUrl = url;
+              },
+              // Hide the floating view under Settings or a permission dialog.
+              isObstructed: () =>
+                !dom.settingsSurface.hidden || document.querySelector(".permission-dialog") !== null,
+            },
+          );
+          appController = mountAppController(dom.codeView.appPaneHost, dynamicClient, {
+            isObstructed: () =>
+              !dom.settingsSurface.hidden || document.querySelector(".permission-dialog") !== null,
+          });
+          // Code → Preview mode / Web↔App switch drives the runtime panes' lifecycle.
+          dom.onCodeModeChange = (mode) => {
+            const inPreview = mode === "preview" && state.activeSurface === "code";
+            previewController?.setActive(inPreview && dom.codeView.runtimeMode === "web");
+            appController?.setActive(inPreview && dom.codeView.runtimeMode === "app");
+          };
+          dom.onCodeRuntimeModeChange = (mode) => {
+            const inPreview = dom.codeView.mode === "preview" && state.activeSurface === "code";
+            previewController?.setActive(inPreview && mode === "web");
+            appController?.setActive(inPreview && mode === "app");
+          };
           workspaceCompanionHandle = mountWorkspaceCompanionPane(
             dom.workspaceView.companionSlot,
             dynamicClient,
+            {
+              // Workspace → Code handoff for text/code files (shared active workspace unchanged).
+              onOpenInCode: (relativePath) => {
+                state.activeSurface = "code";
+                codeEditor?.openFile(relativePath);
+                renderState(dom, state, handlers);
+              },
+              // Workspace → Cowork handoff: ask the agent about the open file.
+              onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
+            },
           );
+          knowledgeLocalPanel = mountKnowledgeLocalPanel(dom.knowledgeView, dynamicClient, {
+            // Knowledge result → Workspace (open the source file) using the shared active workspace.
+            onOpenSource: (relativePath) => {
+              state.activeSurface = "cowork";
+              state.workMode = "workspace";
+              workspaceNavigator?.selectPath(relativePath);
+              void workspaceCompanionHandle?.open(relativePath);
+              renderState(dom, state, handlers);
+            },
+            // Knowledge result → Cowork (ask about the source file).
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
+            onChooseWorkspace: () => void workspacePicker?.choose(),
+          });
           mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             onSettingsUpdated: (view) => {
               state.settings = view;
-              state.activeWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              const nextWorkspace = view.activeWorkspace?.rootPath ?? state.activeWorkspace;
+              if (nextWorkspace !== state.activeWorkspace) {
+                codeEditor?.reset();
+                previewController?.reset();
+                appController?.reset();
+              }
+              state.activeWorkspace = nextWorkspace;
               void workspaceNavigator?.refresh();
               void codeNavigator?.refresh();
               renderState(dom, state, handlers);
@@ -2555,6 +3058,9 @@ export function mountCoworkApp(root: HTMLElement): void {
             // Discover permission ASAP — workspace_auto still needs the poll to see pending.
             pollIntervalMs: 100,
             getMode: () => state.permissionMode,
+            // Chỉ xử lý request của session Cowork đang chạy. Request MS365 (session khác) do
+            // controller MS365 riêng đảm nhiệm — tránh pop nhầm surface (P2-B bug fix).
+            sessionFilter: (sid) => sid === state.streamSessionId,
             onPending: (request) => {
               touchStreamActivity(state);
               state.turnTiming.mark("PERMISSION_SHOWN", request.requestId);
@@ -2620,6 +3126,30 @@ export function mountCoworkApp(root: HTMLElement): void {
             permissions.resume();
           };
           permissions.start();
+          const ms365Permissions = createPermissionController({
+            client: dynamicClient,
+            container: dom.root,
+            pollIntervalMs: 100,
+            // Luôn hỏi: write MS365 qua Graph luôn cần phê duyệt (đúng hint composer).
+            getMode: () => "ask",
+            // Chỉ request của session MS365 sống hiện tại. Đọc getter tại thời điểm poll nên
+            // tự bám session mới sau reset/adopt; request session cũ không pop lại. The approval
+            // modal (container: dom.root) is the surface; the rich MS365 transcript renders its
+            // own permission/turn state from `msChat.state()`, so no separate history strip here.
+            sessionFilter: (sid) => sid === state.msChat.state().sessionId,
+            onDecision: () => {
+              renderState(dom, state, handlers);
+            },
+          });
+          ms365PermissionStart = () => ms365Permissions.start();
+          ms365PermissionStop = () => ms365Permissions.stop();
+          ms365PermissionPausePoll = () => ms365Permissions.pause();
+          ms365PermissionResumePoll = () => ms365Permissions.resume();
+          // The MS365 controller polls continuously; its `sessionFilter` returns nothing until the
+          // MS365 tab has a live session, so it never pops a prompt for another surface.
+          ms365Permissions.start();
+          // Wire the MS365 tab chat controller with the real send-flow now that `readiness` exists.
+          state.msChat = createMsChatController(createMsChatDeps(state, dom, handlers, readiness));
           dom.activityPanel.outputFiles.addEventListener("click", (event) => {
             const target = event.target as HTMLElement;
             const row = target.closest<HTMLElement>(".file-row--clickable");
@@ -2771,9 +3301,32 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
+  // @-mention typeahead: typing `@` in the composer suggests active-workspace files; picking one
+  // inserts `@<relativePath> ` as text AND attaches the file's content (guarded workspace read,
+  // same pending-chip flow as the paperclip) so `@file` both references the path and pulls the
+  // file into context. The file list comes from the guarded /v1/workspace/list walk.
+  const mentionTypeahead = createMentionTypeahead({
+    input: dom.composerInput,
+    anchor: dom.composer,
+    getClient: () => state.client,
+    getWorkspace: () => state.activeWorkspace,
+    onApplied: () => syncComposerChrome(dom, state),
+    onPicked: (relativePath) => {
+      void attachWorkspaceRelativePath(state, dom, handlers, relativePath).catch((error) => {
+        appendMessage(dom, "assistant", safeError(error));
+        renderState(dom, state, handlers);
+      });
+    },
+  });
+  dom.composerInput.addEventListener("input", () => {
+    syncComposerChrome(dom, state);
+    mentionTypeahead.refresh();
+  });
+  dom.composerInput.addEventListener("click", () => mentionTypeahead.refresh());
+  dom.composerInput.addEventListener("blur", () => mentionTypeahead.hide());
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
+    if (mentionTypeahead.handleKeydown(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       dom.sendButton.click();

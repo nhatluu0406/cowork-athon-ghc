@@ -29,12 +29,14 @@ const RUN: DispatchRunView = {
   ],
 };
 
-function boardClient(over: Partial<DispatchBoardClient> = {}): DispatchBoardClient {
+function boardClient(over: any = {}): any {
   return {
     listDispatchTasks: async () => [TASK],
     listDispatchRuns: async () => [],
     runDispatchTask: async () => RUN,
     cancelDispatchRun: async () => undefined,
+    remoteStatus: async () => ({ enabled: true, url: "http://127.0.0.1:7777", lanUrls: [], devices: [] }),
+    remoteRevokeAll: async () => undefined,
     ...over,
   };
 }
@@ -82,6 +84,40 @@ test("clicking run starts the task through the client", async () => {
   body.querySelector<HTMLButtonElement>("button.dispatch-btn")!.click();
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(ranTask, "review-repo");
+  body.remove();
+});
+
+test("run buttons are disabled with a reason when the readiness gate blocks (F3)", async () => {
+  const body = document.createElement("div");
+  document.body.appendChild(body);
+  await renderDispatchBoard(boardClient(), body, {
+    canRun: false,
+    reason: "Cấu hình provider trong Cài đặt trước khi chạy task dispatch.",
+  });
+  const runBtn = body.querySelector<HTMLButtonElement>("button.dispatch-btn");
+  assert.ok(runBtn, "the task still renders");
+  assert.equal(runBtn!.disabled, true, "the run action is disabled while not ready");
+  assert.match(body.textContent ?? "", /Cấu hình provider/);
+  body.remove();
+});
+
+test("a blocked gate prevents the task from being started even if clicked", async () => {
+  let ranTask: string | null = null;
+  const body = document.createElement("div");
+  document.body.appendChild(body);
+  await renderDispatchBoard(
+    boardClient({
+      runDispatchTask: async (taskId) => {
+        ranTask = taskId;
+        return RUN;
+      },
+    }),
+    body,
+    { canRun: false, reason: "Chọn workspace trước khi chạy task dispatch." },
+  );
+  body.querySelector<HTMLButtonElement>("button.dispatch-btn")!.click();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(ranTask, null, "a blocked run must not reach the service");
   body.remove();
 });
 
@@ -176,4 +212,41 @@ test("an unknown slash command still reports the invalid-command message", async
   const res = await registry.dispatch("/nonsense", ctx);
   assert.equal(res.handled, true);
   assert.match(messages[0] ?? "", /Lệnh không hợp lệ/);
+});
+
+test("/remote reports remote is not enabled when service returns enabled=false", async () => {
+  const { ctx, messages } = commandCtx({
+    remoteStatus: async () => ({ enabled: false, url: null, lanUrls: [], devices: [] }),
+  });
+  const registry = createDefaultRegistry();
+  const res = await registry.dispatch("/remote", ctx);
+  assert.equal(res.handled, true);
+  assert.match(messages[0] ?? "", /Điều phối từ xa chưa bật/);
+});
+
+test("/remote reports remote is not enabled when service status throws error", async () => {
+  const { ctx, messages } = commandCtx({
+    remoteStatus: async () => {
+      throw new Error("connection failed");
+    },
+  });
+  const registry = createDefaultRegistry();
+  const res = await registry.dispatch("/remote", ctx);
+  assert.equal(res.handled, true);
+  assert.match(messages[0] ?? "", /Điều phối từ xa chưa bật/);
+});
+
+test("/remote off calls remoteRevokeAll when remote is enabled", async () => {
+  let revoked = false;
+  const { ctx, messages } = commandCtx({
+    remoteStatus: async () => ({ enabled: true, url: "http://127.0.0.1:7777", lanUrls: [], devices: [] }),
+    remoteRevokeAll: async () => {
+      revoked = true;
+    },
+  });
+  const registry = createDefaultRegistry();
+  const res = await registry.dispatch("/remote off", ctx);
+  assert.equal(res.handled, true);
+  assert.equal(revoked, true);
+  assert.match(messages[0] ?? "", /Đã tắt toàn bộ kênh remote/);
 });

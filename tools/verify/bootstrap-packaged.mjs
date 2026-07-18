@@ -11,7 +11,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19223;
 const TRACE = join(REPO, ".runtime", "bootstrap-packaged.trace");
 
@@ -108,7 +108,7 @@ async function stop(proc) {
   proc.kill();
   await sleep(3000);
   try {
-    execSync('taskkill /F /IM "Cowork GHC.exe" /T', { stdio: "ignore" });
+    execSync('taskkill /F /IM "coworkghc.exe" /T', { stdio: "ignore" });
   } catch {
     // already stopped
   }

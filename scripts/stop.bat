@@ -15,15 +15,15 @@ echo.
 
 rem Always attempt image-name tree kill first (packaged main + helper children).
 rem Identity-gated PID kill alone can hang or refuse when PowerShell/CIM is slow/unavailable.
-echo [Cowork GHC] Killing Cowork GHC.exe tree...
-taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+echo [Cowork GHC] Killing coworkghc.exe tree...
+taskkill /F /T /IM "coworkghc.exe" >nul 2>nul
 
 echo [Cowork GHC] Pruning tracked runtime pid records...
 node "%ROOT%\tools\app\cli.mjs" stop --root "%ROOT%"
 set "RC=%ERRORLEVEL%"
 
 rem Second pass in case a late helper respawned during prune.
-taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+taskkill /F /T /IM "coworkghc.exe" >nul 2>nul
 
 echo.
 if "%RC%"=="0" (
@@ -39,6 +39,6 @@ exit /b %RC%
 echo [Cowork GHC] ERROR: Node.js not found on PATH.
 echo Install Node.js LTS from https://nodejs.org and run this again.
 rem Still try to kill the packaged app without Node.
-taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+taskkill /F /T /IM "coworkghc.exe" >nul 2>nul
 pause
 exit /b 9

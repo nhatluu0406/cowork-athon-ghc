@@ -13,6 +13,7 @@
  */
 
 import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import {
   assertPinnedVersion,
   buildLaunchSpec,
@@ -24,6 +25,7 @@ import type { RuntimeHealth } from "../session/seams.js";
 import { nodeChildSpawner, type ChildSpawner, type SupervisedChild } from "./child-spawner.js";
 import { fetchHealthProbe, netPortChecker, win32ProcessTimesProbe, type HealthProbe, type PortChecker, type ProcessTimesProbe } from "./probes.js";
 import { writeOpencodeConfig } from "./opencode-config.js";
+import { writeMs365Plugin, seedMs365PluginDeps } from "./ms365-plugin-file.js";
 import { clearRuntimeState, writeRuntimeState } from "./runtime-state.js";
 import { awaitReady, waitForExit } from "./lifecycle-wait.js";
 import type { OpencodeSupervisorOptions, SupervisorStartSpec } from "./supervisor-types.js";
@@ -110,6 +112,7 @@ export class OpencodeSupervisor implements RuntimeHealth {
         providerKeys: injections,
         ...(spec.host !== undefined ? { host: spec.host } : {}),
         ...(spec.baseEnv !== undefined ? { baseEnv: spec.baseEnv } : {}),
+        ...(spec.extraSecretValues !== undefined ? { extraSecretValues: spec.extraSecretValues } : {}),
       });
 
       if (!(await this.portChecker(launch.host, launch.port))) {
@@ -134,6 +137,15 @@ export class OpencodeSupervisor implements RuntimeHealth {
             }
           : undefined;
       writeOpencodeConfig(spec.configDir, spec.providerConfig, forbidden, skillsConfig);
+
+      // MS365 tool bridge: the child learns the 25 MS365 tools from a plugin file in its configDir.
+      // The endpoint+token come from baseEnv at plugin-load time (never written into this file).
+      writeMs365Plugin(spec.configDir, forbidden);
+      seedMs365PluginDeps(
+        spec.configDir,
+        join(spec.binPath, "..", "..", ".."), // node_modules root: opencode.exe -> bin -> opencode-ai -> node_modules
+        this.log,
+      );
 
       const child = this.spawner.spawn(launch.command, launch.args, {
         cwd: launch.cwd,

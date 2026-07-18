@@ -106,12 +106,13 @@ const BASE_SURFACES: readonly ProductSurfaceDefinition[] = Object.freeze([
   },
   {
     id: "code",
-    label: "Claude Code",
+    label: "Code",
     icon: "code",
     featureFlag: "code.workspace",
     requiredCapability: "workspace_code_surface",
     availability: "available",
-    description: "IDE surface: Explorer, xem diff chỉ đọc và panel Claude Code dùng chung phiên Cowork.",
+    description:
+      "Surface project-centric: Project Explorer, editor nhiều tab (sửa + lưu) và panel Agent dùng chung phiên/backend với Cowork.",
     component: "ClaudeCodeSurface",
   },
 ]);

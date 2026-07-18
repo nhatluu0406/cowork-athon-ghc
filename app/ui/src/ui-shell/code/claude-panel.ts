@@ -2,8 +2,6 @@ import type { RuntimePhase } from "../../conversation-controller.js";
 import type { ConversationMessage } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
 
-const SUGGESTIONS = ["Chạy test", "Commit thay đổi", "Giải thích diff", "Sửa lỗi lint"] as const;
-
 export interface ClaudePanelDom {
   readonly root: HTMLElement;
   readonly title: HTMLElement;
@@ -15,14 +13,14 @@ export interface ClaudePanelDom {
 
 export function createClaudePanel(handlers: { readonly onSend: (text: string) => void }): ClaudePanelDom {
   const root = el("aside", "cc-panel");
-  root.setAttribute("aria-label", "Panel Claude Code");
+  root.setAttribute("aria-label", "Panel Agent");
 
   const tabBar = el("div", "cc-panel__tabbar");
-  tabBar.append(el("span", "cc-panel__tab", "CLAUDE CODE"));
+  tabBar.append(el("span", "cc-panel__tab", "AGENT"));
 
   const subheader = el("div", "cc-panel__session");
   const chip = el("span", "cc-panel__spark");
-  chip.append(icon("sparkle", "Claude Code"));
+  chip.append(icon("sparkle", "Agent"));
   const title = el("span", "cc-panel__title", "Chưa có phiên");
   subheader.append(chip, title);
 
@@ -32,24 +30,11 @@ export function createClaudePanel(handlers: { readonly onSend: (text: string) =>
   streaming.hidden = true;
 
   const composer = el("div", "cc-composer");
-  const chips = el("div", "cc-composer__chips");
-  for (const suggestion of SUGGESTIONS) {
-    const chipButton = el("button", "cc-composer__chip", suggestion) as HTMLButtonElement;
-    chipButton.type = "button";
-    chipButton.addEventListener("click", () => {
-      const input = root.querySelector<HTMLTextAreaElement>(".cc-composer__input");
-      if (input !== null && !input.disabled) {
-        input.value = suggestion;
-        input.focus();
-      }
-    });
-    chips.append(chipButton);
-  }
   const row = el("div", "cc-composer__row");
   const input = el("textarea", "cc-composer__input") as HTMLTextAreaElement;
   input.rows = 2;
-  input.placeholder = "Yêu cầu Claude Code…";
-  input.setAttribute("aria-label", "Soạn yêu cầu Claude Code");
+  input.placeholder = "Yêu cầu Agent về tệp đang mở…";
+  input.setAttribute("aria-label", "Soạn yêu cầu cho Agent");
   const send = el("button", "cc-composer__send") as HTMLButtonElement;
   send.type = "button";
   send.setAttribute("aria-label", "Gửi yêu cầu");
@@ -57,7 +42,7 @@ export function createClaudePanel(handlers: { readonly onSend: (text: string) =>
   row.append(input, send);
   const reason = el("p", "cc-composer__reason");
   reason.hidden = true;
-  composer.append(chips, row, reason);
+  composer.append(row, reason);
 
   const doSend = (): void => {
     const text = input.value.trim();

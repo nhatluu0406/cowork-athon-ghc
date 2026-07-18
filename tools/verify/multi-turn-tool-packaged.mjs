@@ -15,7 +15,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19229;
 const TRACE = join(REPO, ".runtime", "multi-turn-tool.trace");
 
@@ -130,7 +130,7 @@ function launch(extraEnv, profileDir) {
 async function stopAll(proc) {
   if (proc?.exitCode === null) proc.kill();
   await sleep(3000);
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
     } catch {
@@ -141,7 +141,7 @@ async function stopAll(proc) {
 }
 
 function assertNoOwnedProcesses() {
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       const out = execSync(`tasklist /FI "IMAGENAME eq ${image}" /NH`, { encoding: "utf8" });
       if (/\.exe/i.test(out) && !/No tasks/i.test(out)) {

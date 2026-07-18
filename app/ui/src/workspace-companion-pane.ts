@@ -94,6 +94,19 @@ export interface WorkspaceCompanionPaneOptions {
    * inject a fake to exercise the wiring without a real browser layout engine.
    */
   readonly loadPptxViewer?: () => Promise<PptxViewerModuleLike>;
+  /**
+   * Workspace → Code handoff (Code Phase 1). When provided, an "Mở trong Code" action appears for
+   * text/code files and opens the same workspace-relative file in the Code multi-tab editor. The
+   * app shell owns the surface switch; the active workspace never changes.
+   */
+  readonly onOpenInCode?: (relativePath: string) => void;
+  /**
+   * Workspace → Cowork handoff. When provided, an "Hỏi Cowork" action appears for the open file and
+   * switches to Cowork with the composer seeded to ask about this workspace-relative path. The
+   * shared active workspace is unchanged; the agent reads the file through its normal workspace tools
+   * (no fake attachment).
+   */
+  readonly onAskCowork?: (relativePath: string) => void;
 }
 
 export function mountWorkspaceCompanionPane(
@@ -145,7 +158,31 @@ export function mountWorkspaceCompanionPane(
   saveButton.dataset["tooltip"] = "Lưu tệp";
   saveButton.setAttribute("aria-label", "Lưu tệp");
   saveButton.append(icon("save", "Lưu tệp"));
-  toolbar.append(pathWrap, statusBadge, editButton, saveButton);
+  // Workspace → Code handoff: only shown for text/code files when a handler is wired.
+  const openInCodeButton = el(
+    "button",
+    "workspace-companion-pane__open-in-code",
+    "Mở trong Code",
+  ) as HTMLButtonElement;
+  openInCodeButton.type = "button";
+  openInCodeButton.hidden = true;
+  openInCodeButton.setAttribute("aria-label", "Mở tệp này trong Code");
+  openInCodeButton.addEventListener("click", () => {
+    if (openPath !== null) options.onOpenInCode?.(openPath);
+  });
+  // Workspace → Cowork handoff: ask the agent about the open file (any readable kind).
+  const askCoworkButton = el(
+    "button",
+    "workspace-companion-pane__ask-cowork",
+    "Hỏi Cowork",
+  ) as HTMLButtonElement;
+  askCoworkButton.type = "button";
+  askCoworkButton.hidden = true;
+  askCoworkButton.setAttribute("aria-label", "Hỏi Cowork về tệp này");
+  askCoworkButton.addEventListener("click", () => {
+    if (openPath !== null) options.onAskCowork?.(openPath);
+  });
+  toolbar.append(pathWrap, statusBadge, editButton, saveButton, openInCodeButton, askCoworkButton);
 
   // Conflict banner: shown when an agent edits the open file while the buffer is dirty.
   const conflictBanner = el("div", "workspace-companion-pane__conflict");
@@ -567,6 +604,8 @@ export function mountWorkspaceCompanionPane(
     editButton.hidden = true;
     saveButton.hidden = !file.editable;
     saveButton.disabled = true;
+    openInCodeButton.hidden = !(file.kind === "text" && options.onOpenInCode !== undefined);
+    askCoworkButton.hidden = options.onAskCowork === undefined || file.kind === "missing";
     revokeBlob();
     destroyPptxViewer();
     pathLabel.textContent = file.relativePath;
@@ -726,6 +765,7 @@ export function mountWorkspaceCompanionPane(
       editButton.hidden = true;
       saveButton.hidden = true;
       saveButton.disabled = true;
+      openInCodeButton.hidden = true;
       pathLabel.textContent = deleted ?? "Tệp đã bị xóa";
       pathLabel.title = "";
       statusBadge.hidden = true;

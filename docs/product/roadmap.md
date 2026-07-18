@@ -92,11 +92,104 @@ updated_at: "2026-07-17"
 - [x] No network telemetry. (No egress anywhere in the diagnostics modules.)
 - [x] Diagnostics documentation and acceptance.
 
+## WAVE 7 — Code Phase 1: Shared Workspace Multi-File Editor (code/tests/build PASS — packaged PO obs pending; ADR 0013)
+
+Kiến trúc chốt **Hybrid**: `Code` là project/developer-centric, giữ surface riêng nhưng **dùng chung
+hoàn toàn** backend với Workspace (một active workspace, `WorkspaceGuard`, `PermissionGate`,
+`SessionService`, một OpenCode runtime). Không backend/session/runtime riêng cho Code.
+
+- [x] Đổi product label "Claude Code" → "Code" (registry + rail + code-view + panel + onboarding + focused UI test).
+- [x] Shared active workspace (dùng lại `settingsStore.activeWorkspace()`; không có store thứ hai).
+- [x] Project explorer (dùng chung `mountWorkspaceNavigator`).
+- [x] Multi-tab code editor với save/dirty/conflict (controller `mountCodeEditor` promote logic companion + `PUT /v1/workspace/file-content`).
+- [x] Close/reopen tabs (đóng-khi-dirty có hộp thoại Lưu/Không lưu/Huỷ).
+- [x] Workspace ↔ Code handoff (`Mở trong Code` / `Xem trong Workspace`).
+- [x] Active-file làm Agent context (workspace-relative; không nhồi full-tree/nội dung).
+- [x] Verified Agent mutation refresh (dùng lại File Work Review evidence; reload/xung đột/deleted).
+- [x] Syntax highlighting (highlight.js, bỏ qua khi > 256 KiB).
+- [x] Gỡ chip/nhãn hứa terminal/git/test.
+
+Trạng thái: focused UI tests (68/68) + `npm run typecheck` + `npm run build:app` PASS. Còn lại
+**packaged PO observation** (14 bước ở `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
+
+Deferred (không thuộc Phase 1): terminal/PTY; Git UI; debugger; language server phức tạp;
+dev-server; runtime web preview; desktop app launch; extension marketplace. Đổi workspace khi Code
+còn tab dirty sẽ **reset** (bỏ sửa chưa lưu) — như companion Workspace; pre-switch guard là việc sau.
+
+Web/App preview taxonomy (ADR 0013): **File preview** (bounded local, có thể làm Later trong Code) ≠
+**Runtime web preview** (dev-server/port, deferred) ≠ **Desktop app launch** (process riêng, deferred).
+
+## WAVE 8 — Code Slice 1: Runtime web preview + UI redesign (code/tests/build PASS — packaged PO obs pending; ADR 0014)
+
+Mở khoá phần **Runtime web preview** mà ADR 0013 defer. Giữ Hybrid (dùng chung
+workspace/backend/session/permission với Cowork); **desktop app launch defer sang Slice 2**.
+
+- [x] Thiết kế lại UI Code theo visual system Workspace (token `--cghc-*`, dark mode); bỏ hai tab
+      "Phiên làm việc/Cách hoạt động" + onboarding tab; bố cục Explorer | Editor/Preview | Agent;
+      chế độ **Code/Preview**; Output drawer (Output | Problems); panel Agent theo composer Cowork,
+      thu gọn được; header gọn + workspace badge + runtime status.
+- [x] Bounded process runner trong service (`runtime-preview/`): static loopback server (confined,
+      no-command) + dev-server (`<pm> run <script>` allowlist + validate, env curated không secret,
+      dò port, timeout, graceful-then-tree-kill, dọn khi đổi workspace/tắt service).
+- [x] **Permission bắt buộc** cho mọi lần chạy lệnh dev-server (PermissionGate riêng, chạy chỉ trong
+      `proceed` sau Allow; Deny/timeout không spawn); output redact + bounded; telemetry counters.
+- [x] Nhúng bằng **WebContentsView hardened** (giữ CSP renderer, chỉ loopback, chặn remote-nav/
+      popup/download/webview, no preload, session in-memory); IPC typed hẹp; ẩn dưới modal/Settings.
+- [x] Active preview URL vào Agent context (loopback URL, không nội dung trang).
+
+Trạng thái: focused UI + service tests + `npm run typecheck` + `npm run build:app` PASS. Còn lại
+**packaged PO observation** (xem `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
+
+Deferred (Slice 2): **Desktop app launch** (build/launch process riêng, status/output, stop/restart)
+— dùng lại runner + permission + tree-kill. Terminal/PTY, Git UI, debugger, LSP vẫn defer.
+
+## WAVE 9 — Code Slice 2: Desktop app launch (code/tests/build PASS — packaged PO obs pending; ADR 0015)
+
+Mở khoá phần **Desktop app launch** mà ADR 0013/0014 defer. **Tái dùng runner Slice 1** (không tạo
+process manager thứ hai): tách `terminateChildTree` dùng chung; `runtime-app/` là AppService mỏng
+trên cùng spawner/output-buffer/launch-policy/permission-gate/WorkspaceGuard.
+
+- [x] Contracts `runtime-app` (kind Electron; status stopped/building/starting/running/failed/
+      stopping; detect/state/output/start-input).
+- [x] `app-detector` trung thực: chỉ nhận **Electron** (dependency `electron` + script chạy);
+      malformed/no-script/không-Electron → `unsupported` kèm lý do.
+- [x] `app-service`: build|run state machine, readiness theo thời gian (running = tiến trình còn
+      sống qua cửa sổ readiness), launch **cửa sổ/tiến trình riêng** (không nhúng), stop/restart
+      **tree-kill không mồ côi**, dọn khi đổi workspace/tắt service; **permission bắt buộc** mỗi
+      Build/Run (chỉ chạy trong `proceed` sau Allow; Deny/timeout không spawn); cwd confined; env
+      curated không secret; output redact + bounded.
+- [x] Router `/v1/runtime-app/*` token-guarded + wiring compose-service/compose-live/types; telemetry
+      counters `app_*` (bảng generic, không migration).
+- [x] UI: selector **Web / Ứng dụng** (chỉ hiện ở Preview), pane app (Build/Run/Stop/Restart +
+      trạng thái + elapsed + Output drawer dùng chung), confirm Allow/Deny mỗi Build/Run; app-shell
+      wiring + reset khi đổi workspace.
+- [x] Tests: detector (7) + service lifecycle/permission/security (15) + **real-process** (3, dựng
+      thật cmd→npm→node→cháu: env curated, redaction, tree-kill không mồ côi, build/crash) + UI (6).
+
+Trạng thái: focused UI + service tests + `npm run typecheck` + `verify-fast` + `npm run build:app` +
+`npm run package:win` PASS; **không có test service/UI mới thất bại** (branch == baseline `main`).
+Còn lại **packaged PO observation** (xem `docs/quality/demo-acceptance.md`) trước khi claim WORKS.
+
+Deferred: terminal/PTY, Git UI, debugger, LSP; app không phải Electron; mở "thư mục đầu ra"
+(chưa có safe shell contract).
+
 ## WAITING
 
-- [ ] D1 Dispatch integration.
+- [x] D1 Dispatch integration — wired into main (pairing + board + gate); `start.bat` bật cho demo.
+      Live phone round-trip chưa quan sát (WIRED — LIVE DEVICE UNVERIFIED).
 - [ ] D2 Microsoft 365 product acceptance.
-- [ ] D3 Knowledge/RAG integration.
+- [x] D3 **Local** Knowledge Base + Graph MVP — **kho tri thức thống nhất theo active Workspace**
+      (SQLite FTS5 + deterministic graph; provenance badge + bộ lọc nguồn; chỉ 2 tab `Kho tri thức`/
+      `Đồ thị`, không tab nguồn; code+tests+build PASS, **data-rich packaged acceptance PASS** qua UI
+      audit 21/21 / 33 ảnh với seed workspace cô lập — index/list/search/graph/prune/clear, 2026-07-18).
+      Microsoft 365 = nguồn bổ sung tương lai với
+      readiness trung thực (không fake data/network); contracts sẵn sàng ingest vào cùng kho.
+      Deferred: embeddings/semantic (needs `llm-svc`, LF-3), PDF text, external M365KG/Neo4j path,
+      MS365 ingestion thật.
+- [ ] D3 M365 Knowledge Graph (PR #13) — **bảo tồn ở branch `experimental/m365-knowledge-graph`**
+      (tag `m365-kg-pr13-integration-2026-07`), default OFF, không start trong packaged app. Blocker:
+      source `llm-svc` vắng mặt + chưa orchestration/package verification. Exhibition Knowledge dùng
+      **SQLite Local KB** ở trên (`feature/local-knowledge-mvp`).
 - [ ] D4 Gateway integration.
 
 ## DEFERRED

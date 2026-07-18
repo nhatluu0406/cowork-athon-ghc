@@ -15,10 +15,14 @@
     "@cowork-ghc/contracts": "*",
     "@cowork-ghc/service": "*",
     "@fontsource/be-vietnam-pro": "^5.2.8",
-    "highlight.js": "^11.11.1"
+    "dompurify": "^3.4.12",
+    "highlight.js": "^11.11.1",
+    "marked": "^14.1.4"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "20.10.6",
-    "happy-dom": "20.10.6"
+    "@types/jsdom": "^21.1.7",
+    "happy-dom": "20.10.6",
+    "jsdom": "^25.0.1"
   }
 }

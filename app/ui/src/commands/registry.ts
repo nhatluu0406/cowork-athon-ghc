@@ -96,6 +96,19 @@ export function createDefaultRegistry(): CommandRegistry {
     type: "client_side",
     handler: async (ctx) => {
       const args = ctx.arguments;
+      try {
+        const status = await ctx.client.remoteStatus();
+        if (!status.enabled) {
+          ctx.appendAssistantMessage("Điều phối từ xa chưa bật trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật cổng kết nối từ xa.");
+          ctx.refreshUI();
+          return;
+        }
+      } catch (err) {
+        ctx.appendAssistantMessage("Điều phối từ xa chưa bật trong phiên này. Hãy mở lại ứng dụng bằng lối tắt Cowork GHC để bật cổng kết nối từ xa.");
+        ctx.refreshUI();
+        return;
+      }
+
       if (args[0]?.toLowerCase() === "off") {
         await ctx.client.remoteRevokeAll();
         ctx.appendAssistantMessage("✅ Đã tắt toàn bộ kênh remote và thu hồi tất cả các token thiết bị.");

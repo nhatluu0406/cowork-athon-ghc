@@ -101,5 +101,11 @@ export function parseGeneralPatch(record: Record<string, unknown>): Partial<Gene
     }
     patch.devtoolsEnabled = record.devtoolsEnabled;
   }
+  if (record.requireLoginOnStartup !== undefined) {
+    if (typeof record.requireLoginOnStartup !== "boolean") {
+      throw new SettingsRequestError("requireLoginOnStartup must be a boolean.");
+    }
+    patch.requireLoginOnStartup = record.requireLoginOnStartup;
+  }
   return patch;
 }

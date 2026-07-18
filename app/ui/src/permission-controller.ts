@@ -58,6 +58,8 @@ export interface PermissionControllerDeps {
   readonly visibility?: PermissionControllerVisibility;
   /** Current product permission mode selected in the composer. */
   readonly getMode?: () => PermissionMode;
+  /** Chỉ xử lý request có sessionId thỏa predicate. Không truyền = nhận tất cả (hành vi cũ). */
+  readonly sessionFilter?: (sessionId: string) => boolean;
   /** Fired when a pending permission is shown (read-only history seed). */
   readonly onPending?: (request: PendingPermissionView) => void;
   /** Fired after a decision POST returns (resolved / already_resolved). */
@@ -270,14 +272,17 @@ export function createPermissionController(
       }
       return;
     }
-    const head = pending[0];
+    const scoped = deps.sessionFilter
+      ? pending.filter((p) => deps.sessionFilter!(p.sessionId))
+      : pending;
+    const head = scoped[0];
     if (head === undefined) {
       closeModal(); // nothing pending → show nothing (honest idle)
       announced.clear();
       lastPending = null;
       return;
     }
-    showHead(head, pending.length - 1);
+    showHead(head, scoped.length - 1);
   }
 
   // The bounded poll interval — only running while polling AND the tab is visible.

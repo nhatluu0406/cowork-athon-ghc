@@ -16,6 +16,11 @@ const DEEPSEEK_MODELS = [
   { id: "deepseek-reasoner", label: "DeepSeek Reasoner" },
 ] as const;
 
+// A non-empty stand-in the backend accepts (model id must be non-empty) while a just-created
+// draft has not picked a real model yet. "Dò model" replaces it with the first discovered id,
+// so the user never has to invent a model to get past the save gate.
+const DRAFT_MODEL_PLACEHOLDER = "(chưa chọn model)";
+
 export interface ProviderProfilesPanelDeps {
   readonly client: Pick<
     ServiceClient,
@@ -280,17 +285,73 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
     }
   };
 
-  // Discovery needs a persisted profile (id) with a stored credential; a brand-new draft must
-  // be saved once first. Manual entry is always available regardless.
+  // Discovery reads `{base_url}/models` using a credential that lives ONLY in the vault, so it
+  // needs a persisted profile. Manual entry is always available regardless.
+  //   - Edit mode: the stored credential is enough.
+  //   - Add mode: allowed as soon as Base URL + API key are typed — clicking "Dò model" first
+  //     auto-saves a draft (create + store key) so the user never has to invent a model id to
+  //     get past the save gate (the reason a placeholder like "123" used to fail verification).
   const updateDiscoverAvailability = (): void => {
     const profile = currentProfile();
     const providerType = addingType ?? profile?.providerType;
     if (providerType === "deepseek") return; // deepseek uses a fixed model select
-    const canDiscover = editingId !== null && profile?.credentialConfigured === true && !busy;
+    const addReady =
+      editingId === null &&
+      baseUrlInput.value.trim().length > 0 &&
+      credInput.value.trim().length > 0;
+    const editReady = editingId !== null && profile?.credentialConfigured === true;
+    const canDiscover = (addReady || editReady) && !busy;
     discoverBtn.disabled = !canDiscover;
     discoverBtn.dataset["tooltip"] = canDiscover
       ? "Lấy danh sách model từ endpoint"
-      : "Lưu hồ sơ và khoá API trước, rồi dò model";
+      : editingId === null
+        ? "Nhập Base URL và Khoá API, rồi bấm Dò model"
+        : "Lưu khoá API trước, rồi dò model";
+  };
+
+  // Add mode only: persist a draft (create profile + store the API key in the vault) so discovery
+  // has a credential to read the model list with. Returns the new profile id, or null on a
+  // validation/persist failure (status already surfaced). The draft keeps a placeholder model
+  // until discovery (or the user) picks a real one.
+  const ensureDraftForDiscovery = async (): Promise<string | null> => {
+    if (addingType !== "custom-openai-compat") return editingId;
+    const name = nameInput.value.trim();
+    const baseUrl = baseUrlInput.value.trim();
+    const key = credInput.value;
+    if (name.length === 0) {
+      setStatus("Nhập tên hiển thị trước khi dò model.", "err");
+      nameInput.focus();
+      return null;
+    }
+    if (baseUrl.length === 0) {
+      setStatus("Nhập Base URL trước khi dò model.", "err");
+      baseUrlInput.focus();
+      return null;
+    }
+    if (key.trim().length === 0) {
+      setStatus("Nhập Khoá API trước khi dò model (cần khoá để đọc danh sách model).", "err");
+      credInput.focus();
+      return null;
+    }
+    setStatus("Đang lưu tạm hồ sơ để dò model…");
+    const typedModel = modelCustomInput.value.trim();
+    const created = await deps.client.createProviderProfile({
+      displayName: name,
+      providerType: "custom-openai-compat",
+      baseUrl,
+      modelId: typedModel.length > 0 ? typedModel : DRAFT_MODEL_PLACEHOLDER,
+    });
+    // Adopt the new id immediately so a later failure (or retry) edits THIS draft instead of
+    // creating a duplicate.
+    editingId = created.id;
+    addingType = null;
+    const view = await deps.client.storeProfileCredential(created.id, key);
+    credInput.value = "";
+    deps.onSettingsUpdated?.(view);
+    await refresh();
+    const saved = profiles.find((p) => p.id === created.id);
+    if (saved !== undefined) showForm("edit", saved);
+    return created.id;
   };
 
   const showList = (): void => {
@@ -528,13 +589,19 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
   });
 
   discoverBtn.addEventListener("click", () => {
-    if (busy || editingId === null) return;
-    const profileId = editingId;
+    if (busy) return;
     busy = true;
     updateDiscoverAvailability();
     discoverStatus.textContent = "Đang dò model…";
     void (async () => {
       try {
+        // Add mode: create the draft + store the key first so discovery has a vault credential.
+        const profileId = editingId === null ? await ensureDraftForDiscovery() : editingId;
+        if (profileId === null) {
+          discoverStatus.textContent = "";
+          return;
+        }
+        discoverStatus.textContent = "Đang dò model…";
         const baseUrl = baseUrlInput.value.trim();
         const result = await deps.client.discoverProfileModels(
           profileId,
@@ -542,9 +609,18 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
         );
         if (result.ok && result.models !== undefined) {
           fillDiscoveredModels(result.models);
+          // Adopt the first discovered id when the field is empty or still the draft placeholder,
+          // so a fresh custom endpoint becomes usable with zero manual typing.
+          const current = modelCustomInput.value.trim();
+          if (
+            result.models.length > 0 &&
+            (current.length === 0 || current === DRAFT_MODEL_PLACEHOLDER)
+          ) {
+            modelCustomInput.value = result.models[0]!;
+          }
           discoverStatus.textContent =
             result.models.length > 0
-              ? `Tìm thấy ${result.models.length} model. Chọn hoặc nhập thủ công.`
+              ? `Tìm thấy ${result.models.length} model. Chọn/nhập rồi bấm "Lưu & kiểm tra".`
               : "Không có model nào. Nhập Model ID thủ công.";
         } else {
           fillDiscoveredModels([]);
@@ -559,6 +635,11 @@ export function mountProviderProfilesPanel(container: HTMLElement, deps: Provide
       }
     })();
   });
+
+  // Enable "Dò model" the moment a new custom endpoint has a Base URL + API key (add mode),
+  // so the user never has to invent a model id first.
+  baseUrlInput.addEventListener("input", updateDiscoverAvailability);
+  credInput.addEventListener("input", updateDiscoverAvailability);
 
   saveAndTestBtn.addEventListener("click", () => {
     void saveProfileFields({ runTest: true });

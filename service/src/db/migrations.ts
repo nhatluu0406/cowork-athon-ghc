@@ -152,6 +152,82 @@ CREATE TABLE IF NOT EXISTS telemetry_counters (
 );
 `,
   },
+  {
+    // Local Knowledge Base + Knowledge Graph MVP (local-first, Option 1 in local-first-strategy.md):
+    // embedded SQLite + FTS5 keyword search + deterministic node/edge tables. Every row is scoped by
+    // `workspace_root` so switching/clearing a workspace never leaks index data across workspaces.
+    // No embeddings, no external service — the index is derived only from files the WorkspaceGuard
+    // already permits (secret-like files excluded by the indexer). Document/chunk TEXT is extracted
+    // content, held locally only; nothing here is sent to any provider by default.
+    id: 4,
+    name: "local_knowledge_index",
+    sql: `
+CREATE TABLE IF NOT EXISTS knowledge_index_state (
+  workspace_root TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  document_count INTEGER NOT NULL DEFAULT 0,
+  chunk_count INTEGER NOT NULL DEFAULT 0,
+  node_count INTEGER NOT NULL DEFAULT 0,
+  edge_count INTEGER NOT NULL DEFAULT 0,
+  last_indexed_at TEXT,
+  error TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_documents (
+  id TEXT PRIMARY KEY,
+  workspace_root TEXT NOT NULL,
+  relative_path TEXT NOT NULL,
+  title TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL DEFAULT 0,
+  content_hash TEXT NOT NULL,
+  indexed_at TEXT NOT NULL,
+  UNIQUE(workspace_root, relative_path)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_documents_ws ON knowledge_documents(workspace_root);
+
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+  id TEXT PRIMARY KEY,
+  document_id TEXT NOT NULL REFERENCES knowledge_documents(id) ON DELETE CASCADE,
+  workspace_root TEXT NOT NULL,
+  ordinal INTEGER NOT NULL,
+  char_start INTEGER NOT NULL DEFAULT 0,
+  char_end INTEGER NOT NULL DEFAULT 0,
+  text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_doc ON knowledge_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_ws ON knowledge_chunks(workspace_root);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_fts USING fts5(
+  text,
+  relative_path,
+  workspace_root UNINDEXED,
+  document_id UNINDEXED,
+  chunk_id UNINDEXED,
+  tokenize = 'unicode61'
+);
+
+CREATE TABLE IF NOT EXISTS knowledge_nodes (
+  id TEXT PRIMARY KEY,
+  workspace_root TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  relative_path TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_nodes_ws ON knowledge_nodes(workspace_root);
+
+CREATE TABLE IF NOT EXISTS knowledge_edges (
+  id TEXT PRIMARY KEY,
+  workspace_root TEXT NOT NULL,
+  from_id TEXT NOT NULL,
+  to_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  UNIQUE(workspace_root, from_id, to_id, type)
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_edges_ws ON knowledge_edges(workspace_root);
+`,
+  },
 ];
 
 export function appliedMigrationIds(db: SqliteDatabase): readonly number[] {

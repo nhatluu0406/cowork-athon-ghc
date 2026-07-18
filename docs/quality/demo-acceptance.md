@@ -49,6 +49,80 @@ Chỉ đánh dấu khi thao tác chạy trên packaged Windows app. Unit test ho
 - Note: verified delete VIA THE AGENT is blocked upstream — the pinned OpenCode build exposes no
   delete tool (see known-limitations), so this journey is only observable when the delete is verified.
 
+## Code Phase 1 demo (multi-file editor — ADR 0013)
+
+Implementation + focused UI tests + `build:app` PASS; the boxes below are the remaining **packaged
+PO observation** gate (check only on the packaged Windows app).
+
+- [ ] Rail/surface hiển thị nhãn **`Code`** (không còn `Claude Code`); không có chip "Chạy test/Commit".
+- [ ] Chọn workspace → mở Code → Project Explorer hiện cây tệp của **cùng** active workspace.
+- [ ] Mở ba tệp code/text thành ba tab; chuyển tab giữ nguyên nội dung từng tab.
+- [ ] Sửa hai tệp (nút "Sửa" → textarea), dirty indicator hiện trên tab.
+- [ ] Ctrl+S (hoặc "Lưu") ghi tệp thật qua route file được guard; dirty được xoá.
+- [ ] Đóng một tab còn sửa chưa lưu → hộp thoại Lưu / Không lưu / Huỷ hoạt động đúng.
+- [ ] Từ Workspace dùng **"Mở trong Code"**; từ Code dùng **"Xem trong Workspace"** → đúng tệp,
+      active workspace không đổi.
+- [ ] Agent sửa một tệp đang mở (clean) → tab tự tải lại từ đĩa.
+- [ ] Agent sửa một tệp đang mở (dirty) → banner xung đột, giữ bản đang sửa.
+- [ ] Verified delete tệp đang mở → tab vào trạng thái "đã xóa", không recreate.
+- [ ] Đổi workspace → tab Code reset đúng theo workspace mới.
+- [ ] Quay lại Cowork chat → chat/transcript không regression.
+- Note: PDF/Office/ảnh trong Code hiển thị trạng thái chỉ đọc + "Xem trong Workspace" (không dựng lại
+  viewer). Terminal/Git/test runner/dev-server **không** thuộc Phase 1.
+
+## Code Slice 1 demo (runtime web preview + UI redesign — ADR 0014)
+
+Code/tests/`build:app` PASS; các ô dưới là **packaged PO observation** còn lại (chỉ tích trên
+packaged Windows app). Desktop app launch **không** thuộc slice này (Slice 2).
+
+- [ ] Surface Code: không còn hai tab "Phiên làm việc/Cách hoạt động"; bố cục Explorer | Editor/
+      Preview | Agent; header gọn + workspace badge + runtime status; light/dark khớp Workspace.
+- [ ] Panel Agent dùng composer kiểu Cowork, gửi vào cùng phiên; thu gọn/mở lại được.
+- [ ] **Static:** mở workspace có `index.html` → chế độ Preview → Chạy → trang tĩnh hiển thị nhúng.
+- [ ] **Dev server:** dự án frontend → Chạy → hộp thoại **Cho phép/Từ chối** hiện đúng lệnh + cwd;
+      Cho phép → dev server chạy, phát hiện localhost, trang hiển thị trong app.
+- [ ] **Deny:** Từ chối → không có tiến trình nào chạy; trạng thái trung thực.
+- [ ] **Restart sau crash:** dừng/giết dev server → Khởi động lại hoạt động.
+- [ ] **Port đã bị chiếm / lệnh sai / package manager thiếu / package.json hỏng** → trạng thái lỗi
+      rõ ràng, không crash renderer, không giả "running".
+- [ ] **Đổi workspace khi preview đang chạy** → tiến trình bị dừng, preview reset theo workspace mới.
+- [ ] **Đóng Cowork GHC** khi preview đang chạy → xác nhận **không còn tiến trình con** (tree-kill).
+- [ ] Output log hiển thị (đã redact); Output | Problems chuyển tab được.
+- [ ] Không điều hướng ra remote origin / không popup / không download từ trang preview.
+- [ ] Agent sửa code của dự án đang preview → làm mới/không mất dirty đúng như multi-file editor.
+- Note: nhúng bằng WebContentsView (giữ CSP renderer). Desktop app launch là Slice 2.
+- **Acceptance Slice 1 (tự động, đã chạy trên máy này):** test tiến trình **thật**
+  (`service/tests/runtime-preview-real-process.test.ts`, Windows-only) dựng thật
+  `cmd.exe → npm → node → cháu`, rồi kiểm chứng: đạt `running` với **env curated** (rớt provider/vault
+  secret, giữ PATH + steering), **redact** token/Authorization/URL-userinfo trong Output, **stop
+  không để mồ côi** (cả cây bị taskkill), và script crash → `failed`. Bộ test này **phát hiện một lỗi
+  mồ côi thật** (graceful-kill riêng `cmd.exe` bỏ mồ côi cây con) và lỗi đã được **sửa** (tree-first
+  termination). Fixtures cho các bước PO ở trên: xem `po-fixtures/` (README kèm bảng ánh xạ).
+  Các ô [ ] còn lại vẫn cần **PO quan sát trên packaged app** (render, dialog, Task Manager).
+
+## Code Slice 2 demo (desktop app launch — ADR 0015)
+
+Code/tests/`build:app`/`package:win` PASS; các ô dưới là **packaged PO observation** còn lại (chỉ
+tích trên packaged Windows app). Chạy app **Electron**; app mở **cửa sổ riêng** (không nhúng).
+
+- [ ] Preview mode có selector **Web / Ứng dụng**; chọn **Ứng dụng**.
+- [ ] Workspace là app Electron (có `electron` + script chạy) → pane hiện **Chạy** (và **Build** nếu
+      có script build); workspace không phải Electron → trạng thái unsupported rõ ràng.
+- [ ] **Build** (nếu có): Permission hiện đúng `npm run build` + cwd; Allow → build chạy, exit 0 →
+      "Đã dừng / Build thành công"; build fail → **Failed** trung thực.
+- [ ] **Chạy**: Permission hiện `npm run <script>` + cwd + loại hành động; Allow → app mở **cửa sổ
+      riêng**, trạng thái **Đang chạy** + elapsed; **Từ chối** → không tiến trình nào chạy.
+- [ ] **Dừng** → cửa sổ app đóng, không còn tiến trình con (Task Manager). **Khởi động lại** → app
+      cũ biến mất, app mới mở; bấm Chạy nhiều lần không tạo trùng.
+- [ ] **App crash / thoát** → trạng thái **Failed / Đã dừng** trung thực (không giả "running").
+- [ ] **Đổi workspace** khi app đang chạy → app bị dừng, pane reset.
+- [ ] **Đóng Cowork GHC** khi app đang chạy → **không còn tiến trình con** (tree-kill).
+- [ ] Output log hiển thị (đã redact); Web ↔ Ứng dụng tách biệt rõ; light/dark đúng.
+- [ ] Lệnh/đường dẫn độc hại, project không hợp lệ → bị từ chối / unsupported (không thực thi).
+- **Acceptance Slice 2 (tự động, đã chạy):** `runtime-app-real-process.test.ts` (Windows) dựng thật
+  `cmd→npm→node→cháu`: run đạt running với env curated + output redact + **stop không mồ côi**, build
+  exit 0 → stopped, crash → failed. Fixtures PO: `po-fixtures-app/` (README kèm bảng ánh xạ).
+
 ## Settings / Skills / Inspector
 
 - [ ] Provider actions are understandable without button clutter.

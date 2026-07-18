@@ -18,16 +18,56 @@ import { BadRequestError } from "../server/http-util.js";
 import type { Ms365Connector } from "./ms365-connector.js";
 import { buildMs365View, type Ms365ViewData } from "./ms365-view.js";
 import { handleToolCall, type ToolCall, type ToolDeps, type ToolResult, type Ms365ToolName } from "./ms365-tools.js";
+import type { SiteScopeService } from "./site-scope-service.js";
+import type { Ms365WriteMode, WriteModeStore } from "./write-mode-store.js";
+import type { Ms365SessionScope } from "./ms365-session-scope.js";
 
 export const MS365_TOOL_CALL_PATH = "/v1/ms365/tool-call";
 export const MS365_CONNECT_PATH = "/v1/ms365/connect";
 export const MS365_VIEW_PATH = "/v1/ms365/view";
+export const MS365_DEVICE_BEGIN_PATH = "/v1/ms365/device/begin";
+export const MS365_DEVICE_POLL_PATH = "/v1/ms365/device/poll";
+export const MS365_DISCONNECT_PATH = "/v1/ms365/disconnect";
+export const MS365_SITES_PATH = "/v1/ms365/sites";
+export const MS365_SITES_TOGGLE_PATH = "/v1/ms365/sites/toggle";
+export const MS365_WRITE_MODE_PATH = "/v1/ms365/write-mode";
+export const MS365_SESSION_SCOPE_PATH = "/v1/ms365/session-scope";
 
-const TOOL_NAMES: readonly Ms365ToolName[] = [
+export const TOOL_NAMES: readonly Ms365ToolName[] = [
   "sharepoint_search",
   "sharepoint_list_site_files",
   "sharepoint_get_file_summary",
   "sharepoint_upload_file",
+  "ms365_list_joined_sites",
+  "outlook_search_messages",
+  "outlook_get_message",
+  "outlook_summarize_message",
+  "planner_list_plans",
+  "planner_list_tasks",
+  "planner_create_task",
+  "planner_create_tasks",
+  "planner_edit_task",
+  "planner_delete_task",
+  "lists_get_lists",
+  "lists_get_items",
+  "lists_add_item",
+  "lists_edit_item",
+  "lists_delete_item",
+  "teams_list_chats",
+  "teams_list_teams",
+  "teams_list_channels",
+  "teams_list_members",
+  "teams_get_messages",
+  "teams_post_message",
+  "calendar_list_events",
+  "calendar_search_events",
+  "calendar_create_event",
+  "onedrive_search_files",
+  "onedrive_list_folder",
+  "power_automate_list_flows",
+  "power_automate_trigger_flow",
+  "resolve_user",
+  "get_me",
 ];
 
 /**
@@ -86,10 +126,52 @@ function parseConnectBody(body: unknown): string {
   return record.token;
 }
 
+function parseToggleBody(body: unknown): { siteId: string; enabled: boolean } {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  if (!nonEmptyString(record.siteId)) {
+    throw new Ms365RouterRequestError("siteId is required.");
+  }
+  if (typeof record.enabled !== "boolean") {
+    throw new Ms365RouterRequestError("enabled must be a boolean.");
+  }
+  return { siteId: record.siteId, enabled: record.enabled };
+}
+
+function parseSessionScopeBody(body: unknown): { sessionId: string; enabled: boolean } {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  if (!nonEmptyString(record.sessionId)) {
+    throw new Ms365RouterRequestError("sessionId is required.");
+  }
+  if (typeof record.enabled !== "boolean") {
+    throw new Ms365RouterRequestError("enabled must be a boolean.");
+  }
+  return { sessionId: record.sessionId, enabled: record.enabled };
+}
+
+function parseWriteModeBody(body: unknown): Ms365WriteMode {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const mode = (body as Record<string, unknown>).mode;
+  if (mode !== "manual" && mode !== "auto") {
+    throw new Ms365RouterRequestError('mode must be "manual" or "auto".');
+  }
+  return mode;
+}
+
 export interface Ms365RouterDeps {
   readonly tools: ToolDeps;
   readonly connector: Ms365Connector;
   readonly scopes: readonly string[];
+  readonly siteScope: SiteScopeService;
+  readonly writeMode: WriteModeStore;
+  readonly sessionScope: Ms365SessionScope;
 }
 
 /** Build the MS365 router. The orchestrator mounts it via `service.mount`. */
@@ -122,6 +204,97 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
           status: 200,
           data: buildMs365View(deps.connector, deps.scopes),
         }),
+      },
+      {
+        method: "POST",
+        path: MS365_DISCONNECT_PATH,
+        handler: async (): Promise<RouteResult<Ms365ViewData>> => {
+          // Defense-in-depth: clear every MS365-scoped session so no session retains tool
+          // access after disconnect (independent of the UI's per-session revoke). Done BEFORE
+          // connector.disconnect() so tool access is revoked even if disconnect throws.
+          deps.sessionScope.revokeAll();
+          await deps.connector.disconnect();
+          return { status: 200, data: buildMs365View(deps.connector, deps.scopes) };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_DEVICE_BEGIN_PATH,
+        handler: async (): Promise<RouteResult<{ userCode?: string; verificationUri?: string; expiresInSec?: number; error?: string }>> => {
+          if (!deps.connector.deviceConfigured()) {
+            return { status: 200, data: { error: "not_configured" } };
+          }
+          return { status: 200, data: await deps.connector.beginDeviceCode() };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_DEVICE_POLL_PATH,
+        handler: async (): Promise<RouteResult<{ status: string; view?: Ms365ViewData }>> => {
+          const status = await deps.connector.pollDeviceCode();
+          return {
+            status: 200,
+            data:
+              status === "connected"
+                ? { status, view: buildMs365View(deps.connector, deps.scopes) }
+                : { status },
+          };
+        },
+      },
+      {
+        method: "GET",
+        path: MS365_SITES_PATH,
+        handler: async (): Promise<RouteResult<{ sites: Awaited<ReturnType<SiteScopeService["listJoinedSites"]>> }>> => ({
+          status: 200,
+          data: { sites: await deps.siteScope.listJoinedSites() },
+        }),
+      },
+      {
+        method: "POST",
+        path: MS365_SITES_TOGGLE_PATH,
+        handler: async (
+          ctx: RouteContext,
+        ): Promise<RouteResult<{ sites: Awaited<ReturnType<SiteScopeService["listJoinedSites"]>> }>> => {
+          const { siteId, enabled } = parseToggleBody(ctx.body);
+          await deps.siteScope.setSiteEnabled(siteId, enabled);
+          return { status: 200, data: { sites: await deps.siteScope.listJoinedSites() } };
+        },
+      },
+      {
+        method: "GET",
+        path: MS365_WRITE_MODE_PATH,
+        handler: (): RouteResult<{ mode: Ms365WriteMode }> => ({
+          status: 200,
+          data: { mode: deps.writeMode.mode() },
+        }),
+      },
+      {
+        method: "POST",
+        path: MS365_WRITE_MODE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ mode: Ms365WriteMode }>> => {
+          const mode = parseWriteModeBody(ctx.body);
+          await deps.writeMode.setMode(mode);
+          return { status: 200, data: { mode: deps.writeMode.mode() } };
+        },
+      },
+      {
+        // Registers/revokes a session for MS365 tool access (P5.5 Task 5, PO decision
+        // 2026-07-14). ONLY the Microsoft 365 tab is expected to call this route for its own
+        // session id — the Task 2 scoped child token that the OpenCode child holds is scoped
+        // to `MS365_TOOL_CALL_PATH` ONLY (see `ms365-scoped-token.test.ts`), so that child can
+        // never reach this route to self-register. The main client token (used by the UI
+        // process) does reach it, same as every other MS365 route.
+        method: "POST",
+        path: MS365_SESSION_SCOPE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ allowed: boolean }>> => {
+          const { sessionId, enabled } = parseSessionScopeBody(ctx.body);
+          if (enabled) {
+            deps.sessionScope.allow(sessionId);
+          } else {
+            deps.sessionScope.revoke(sessionId);
+          }
+          return { status: 200, data: { allowed: deps.sessionScope.isAllowed(sessionId) } };
+        },
       },
     ],
   };

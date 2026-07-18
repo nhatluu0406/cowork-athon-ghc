@@ -131,10 +131,10 @@ test("D1-D4 integration slots are passive UI contracts", () => {
   assert.equal(gateway.health, "unknown");
 });
 
-test("code surface is available as Claude Code", () => {
+test("code surface is available and labelled Code (not Claude Code)", () => {
   const code = PRODUCT_SURFACES.find((s) => s.id === "code");
   assert.equal(code?.availability, "available");
-  assert.equal(code?.label, "Claude Code");
+  assert.equal(code?.label, "Code");
   assert.equal(code?.component, "ClaudeCodeSurface");
 });
 

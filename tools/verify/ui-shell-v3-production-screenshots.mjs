@@ -11,7 +11,7 @@ import { packagedChildEnv } from "./packaged-launch-env.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const OUT_DIR = join(REPO, "reports", "ui-shell-v3-commercial-readiness");
 const CDP_PORT = 19228;
 const SAFE_TMP = "C:\\tmp";
@@ -523,15 +523,31 @@ async function assertMicrosoftAssistant(call, label) {
 }
 
 async function assertMicrosoftConnect(call, label) {
+  // The connect card is wired (device-code + manual token fallback both call the real backend
+  // client, per feat(ui): wire MS365 connect view to backend). With no env configured
+  // (CGHC_MS365_CLIENT_ID / CGHC_MS365_TENANT unset), the device sign-in button renders enabled —
+  // it only becomes disabled after being clicked and the backend reports a missing app
+  // registration. We assert the button exists and is in one of those two honest states (enabled,
+  // or disabled with the registration note visible) — never that a live connection occurred.
   const result = await evaluate(
     call,
     `(() => {
       const errors = [];
       const signIn = document.querySelector('.ms-connect__signin');
       if (!signIn) errors.push('ms-connect__signin missing');
-      else if (!signIn.disabled) errors.push('ms-connect__signin is not disabled');
+      else if (signIn.disabled) {
+        const note = document.querySelector('.ms-connect__note');
+        const noteText = note?.textContent ?? '';
+        if (note?.hidden || !noteText.trim()) errors.push('ms-connect__signin is disabled but no registration note is shown');
+      }
+      const manual = document.querySelector('.ms-connect__manual');
+      if (!manual) errors.push('ms-connect__manual (token fallback) missing');
+      else {
+        if (!manual.querySelector('.ms-connect__manual-input')) errors.push('ms-connect__manual-input missing');
+        if (!manual.querySelector('.ms-connect__manual-submit')) errors.push('ms-connect__manual-submit missing');
+      }
       const bodyText = document.body.textContent ?? '';
-      if (!bodyText.includes('Backend D2')) errors.push('page text missing "Backend D2" honesty note');
+      if (!bodyText.includes('Kết nối Microsoft 365')) errors.push('page text missing "Kết nối Microsoft 365" card title');
       return { label: ${JSON.stringify(label)}, passed: errors.length === 0, errors };
     })()`,
   );
@@ -605,7 +621,7 @@ async function main() {
     if (proc.exitCode === null) proc.kill();
     await sleep(1500);
     try {
-      execSync(`taskkill /F /IM "Cowork GHC.exe" /T`, { stdio: "ignore" });
+      execSync(`taskkill /F /IM "coworkghc.exe" /T`, { stdio: "ignore" });
     } catch {
       // already stopped
     }

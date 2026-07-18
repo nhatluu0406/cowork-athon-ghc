@@ -75,6 +75,58 @@ async function mountWithDirtyOpenFile(
   return { container, handle };
 }
 
+test("Workspace → Code handoff: 'Mở trong Code' appears for text and reports the open path", async () => {
+  const { client } = makeClient({ "src/a.ts": textFile("src/a.ts", "code") });
+  const container = document.createElement("div");
+  let handedOff: string | null = null;
+  const handle = mountWorkspaceCompanionPane(container, client, {
+    onOpenInCode: (path) => {
+      handedOff = path;
+    },
+  });
+  await handle.open("src/a.ts");
+  const btn = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__open-in-code");
+  assert.ok(btn, "open-in-code action exists for a text file");
+  assert.equal(btn.hidden, false);
+  btn.click();
+  assert.equal(handedOff, "src/a.ts");
+});
+
+test("Workspace → Code handoff is hidden when no handler is wired", async () => {
+  const { client } = makeClient({ "src/a.ts": textFile("src/a.ts", "code") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("src/a.ts");
+  const btn = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__open-in-code");
+  assert.equal(btn?.hidden, true, "no handler → action stays hidden");
+});
+
+test("Workspace → Cowork handoff: 'Hỏi Cowork' appears for an open file and reports its path", async () => {
+  const { client } = makeClient({ "src/a.ts": textFile("src/a.ts", "code") });
+  const container = document.createElement("div");
+  let asked: string | null = null;
+  const handle = mountWorkspaceCompanionPane(container, client, {
+    onAskCowork: (path) => {
+      asked = path;
+    },
+  });
+  await handle.open("src/a.ts");
+  const btn = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__ask-cowork");
+  assert.ok(btn, "ask-cowork action exists for an open file");
+  assert.equal(btn.hidden, false);
+  btn.click();
+  assert.equal(asked, "src/a.ts");
+});
+
+test("Workspace → Cowork handoff is hidden when no handler is wired", async () => {
+  const { client } = makeClient({ "src/a.ts": textFile("src/a.ts", "code") });
+  const container = document.createElement("div");
+  const handle = mountWorkspaceCompanionPane(container, client);
+  await handle.open("src/a.ts");
+  const btn = container.querySelector<HTMLButtonElement>(".workspace-companion-pane__ask-cowork");
+  assert.equal(btn?.hidden, true, "no handler → action stays hidden");
+});
+
 test("showAgentUpdated on a DIRTY open file raises a conflict banner, does not overwrite", async () => {
   const { container, handle } = await mountWithDirtyOpenFile(
     { "a.txt": textFile("a.txt", "disk v1") },

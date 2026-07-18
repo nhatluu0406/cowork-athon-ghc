@@ -3,11 +3,13 @@
  * nothing is configured yet (first-run onboarding fix).
  */
 
+import { dirname } from "node:path";
 import { startCoworkService, RuntimeSpawnError } from "@cowork-ghc/service";
 
 import type { StartService, StartedService } from "./service-controller.js";
 import { ServiceLaunchNotConfiguredError } from "./launch-config.js";
 import { peekRememberedUnlock, rememberUnlock } from "./session-unlock.js";
+import { readSealedDeviceSecret } from "./device-unlock.js";
 
 export interface TieredStartServiceOptions {
   /**
@@ -41,6 +43,10 @@ export interface SettingsOnlyStartOptions {
 export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions): StartService {
   return async (): Promise<StartedService> => {
     const autoUnlock = peekRememberedUnlock();
+    // Device-bound auto-unlock (login-not-required mode): only when there is no in-process remembered
+    // password. The sealed deviceSecret's presence is the OFF signal; failure to decrypt → password gate.
+    const autoUnlockDeviceSecret =
+      autoUnlock === null ? readSealedDeviceSecret(dirname(options.settingsFilePath)) : null;
     const { running } = await startCoworkService({
       dbPath: options.dbPath,
       settingsFilePath: options.settingsFilePath,
@@ -52,6 +58,7 @@ export function createSettingsOnlyStartService(options: SettingsOnlyStartOptions
         : {}),
       ...(options.skillRoots !== undefined ? { skillRoots: options.skillRoots } : {}),
       ...(autoUnlock !== null ? { autoUnlock } : {}),
+      ...(autoUnlockDeviceSecret !== null ? { autoUnlockDeviceSecret } : {}),
       rememberUnlock,
       allowedOrigins: options.allowedOrigins,
       allowEnvCredentialImport: options.allowEnvCredentialImport === true,

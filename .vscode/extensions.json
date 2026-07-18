@@ -1,0 +1,25 @@
+{
+  "recommendations": [
+    "golang.Go",
+    "golang.go-nightly",
+    "esbenp.prettier-vscode",
+    "dbaeumer.vscode-eslint",
+    "ms-vscode.extension-test-runner",
+    "eamodio.gitlens",
+    "GitHub.copilot",
+    "GitHub.copilot-chat",
+    "anthropic.claude",
+    "ms-playwright.playwright",
+    "redhat.vscode-yaml",
+    "hashicorp.hcl",
+    "ms-vscode.makefile-tools",
+    "ms-vscode-remote.remote-containers",
+    "ms-vscode-remote.remote-ssh",
+    "ms-vscode.remote-explorer",
+    "ms-vscode.vscode-typescript-next",
+    "biomejs.biome",
+    "tamasfe.even-better-toml",
+    "DavidAnson.vscode-markdownlint",
+    "redhat.vscode-xml"
+  ]
+}

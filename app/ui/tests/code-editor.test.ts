@@ -4,11 +4,11 @@ import assert from "node:assert/strict";
 import type { FileReviewArtifact } from "@cowork-ghc/service/file-review";
 import {
   badgeForReview,
-  createCodeEditor,
   fileTabKey,
-  renderCodeEditor,
-  type OpenCodeFile,
+  mountCodeEditor,
+  type CloseDirtyChoice,
 } from "../src/ui-shell/code/code-editor.js";
+import type { ServiceClient, WorkspaceFileContentView } from "../src/service-client.js";
 
 const REVIEW: FileReviewArtifact = {
   id: "review-1",
@@ -27,7 +27,63 @@ const REVIEW: FileReviewArtifact = {
   contentRedacted: false,
 } as FileReviewArtifact;
 
-const NO_HANDLERS = { onSelect: () => undefined, onClose: () => undefined, onLoadFile: () => undefined };
+function textFile(relativePath: string, content: string, editable = true): WorkspaceFileContentView {
+  return {
+    relativePath,
+    kind: "text",
+    editable,
+    content,
+    truncated: false,
+    sizeBytes: content.length,
+  } as WorkspaceFileContentView;
+}
+
+function makeClient(files: Record<string, WorkspaceFileContentView>): {
+  client: ServiceClient;
+  reads: string[];
+  writes: { path: string; content: string }[];
+  failWrite: { on: boolean };
+} {
+  const reads: string[] = [];
+  const writes: { path: string; content: string }[] = [];
+  const failWrite = { on: false };
+  const client = {
+    readWorkspaceFileContent: async (relativePath: string) => {
+      reads.push(relativePath);
+      return (
+        files[relativePath] ??
+        ({ relativePath, kind: "missing", editable: false, truncated: false, sizeBytes: 0 } as WorkspaceFileContentView)
+      );
+    },
+    writeWorkspaceFileContent: async (relativePath: string, input: { kind: string; content?: string }) => {
+      if (failWrite.on) throw new Error("disk full");
+      const content = input.content ?? "";
+      writes.push({ path: relativePath, content });
+      files[relativePath] = textFile(relativePath, content);
+      return { relativePath, sizeBytes: content.length };
+    },
+  } as unknown as ServiceClient;
+  return { client, reads, writes, failWrite };
+}
+
+const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+function button(container: HTMLElement, text: string): HTMLButtonElement | null {
+  return (
+    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
+      (b) => (b.textContent ?? "").trim() === text,
+    ) ?? null
+  );
+}
+
+async function edit(container: HTMLElement, value: string): Promise<HTMLTextAreaElement> {
+  button(container, "Sửa")?.click();
+  const editor = container.querySelector<HTMLTextAreaElement>(".code-editor__textarea");
+  assert.ok(editor, "edit mode reveals a textarea");
+  editor.value = value;
+  editor.dispatchEvent(new Event("input"));
+  return editor;
+}
 
 test("badge mapping", () => {
   assert.equal(badgeForReview({ eventKind: "file_created" }), "A");
@@ -35,85 +91,257 @@ test("badge mapping", () => {
   assert.equal(badgeForReview({ eventKind: "file_modified" }), "M");
 });
 
-test("welcome screen when nothing open", () => {
-  const dom = createCodeEditor();
-  renderCodeEditor(dom, { openFiles: [], activeKey: null, reviews: [] }, NO_HANDLERS);
-  assert.match(dom.body.textContent ?? "", /Chưa mở tệp nào/);
+test("welcome screen when nothing is open", () => {
+  const { client } = makeClient({});
+  const container = document.createElement("div");
+  mountCodeEditor(container, client);
+  assert.match(container.textContent ?? "", /Chưa mở tệp nào/);
 });
 
-test("diff tab renders add/del rows and stats", () => {
-  const dom = createCodeEditor();
-  const open: OpenCodeFile = { key: fileTabKey("review", "src/app.ts"), relativePath: "src/app.ts", kind: "review", reviewId: "review-1" };
-  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [REVIEW] }, NO_HANDLERS);
-  assert.equal(dom.body.querySelectorAll(".code-diff__row--add").length, 1);
-  assert.equal(dom.body.querySelectorAll(".code-diff__row--del").length, 1);
-  assert.match(dom.root.textContent ?? "", /\+1/);
-  assert.equal(dom.root.querySelector(".code-editor__accept"), null); // no fake accept/reject
+test("opening a file loads its content into a read-only, editable-capable tab", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  assert.match(container.textContent ?? "", /const x = 1;/);
+  assert.ok(button(container, "Sửa"), "editable text shows an edit button");
+  assert.equal(ctrl.getActivePath(), "a.ts");
 });
 
-test("redacted review shows notice and no diff content", () => {
-  const dom = createCodeEditor();
-  const redacted = { ...REVIEW, id: "review-2", contentRedacted: true, relativePath: ".env" } as FileReviewArtifact;
-  const open: OpenCodeFile = { key: fileTabKey("review", ".env"), relativePath: ".env", kind: "review", reviewId: "review-2" };
-  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [redacted] }, NO_HANDLERS);
-  assert.match(dom.body.textContent ?? "", /credential hoặc secret/);
-  assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
+test("syntax highlighting applies for a known language", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  assert.ok(container.querySelector(".code-editor__code-content.hljs"), "hljs markup present");
 });
 
-test("missing review id shows missing-review notice", () => {
-  const dom = createCodeEditor();
-  const open: OpenCodeFile = { key: fileTabKey("review", "src/gone.ts"), relativePath: "src/gone.ts", kind: "review", reviewId: "review-missing" };
-  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [REVIEW] }, NO_HANDLERS);
-  assert.match(dom.body.textContent ?? "", /Không tìm thấy dữ liệu review/);
-  assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
+test("opening the same file twice re-activates a single tab", async () => {
+  const { client, reads } = makeClient({ "a.ts": textFile("a.ts", "a") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  ctrl.openFile("a.ts");
+  await flush();
+  assert.equal(container.querySelectorAll(".code-tab").length, 1);
+  assert.equal(reads.filter((r) => r === "a.ts").length, 1);
 });
 
-test("empty diff renders zero stats and no rows without crashing", () => {
-  const dom = createCodeEditor();
-  const emptyDiff = { ...REVIEW, id: "review-3", unifiedDiff: undefined } as FileReviewArtifact;
-  const open: OpenCodeFile = { key: fileTabKey("review", "src/app.ts"), relativePath: "src/app.ts", kind: "review", reviewId: "review-3" };
-  renderCodeEditor(dom, { openFiles: [open], activeKey: open.key, reviews: [emptyDiff] }, NO_HANDLERS);
-  assert.match(dom.body.querySelector(".code-diff__adds")?.textContent ?? "", /\+0/);
-  assert.match(dom.body.querySelector(".code-diff__dels")?.textContent ?? "", /−0/);
-  assert.equal(dom.body.querySelectorAll(".code-diff__row").length, 0);
+test("multiple tabs: switching preserves the dirty buffer of the other tab", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "AA"), "b.ts": textFile("b.ts", "BB") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "AA edited");
+  ctrl.openFile("b.ts");
+  await flush();
+  assert.match(container.textContent ?? "", /BB/);
+  // Back to A: the dirty buffer is preserved (still dirty, still editing).
+  ctrl.openFile("a.ts");
+  await flush();
+  const editor = container.querySelector<HTMLTextAreaElement>(".code-editor__textarea");
+  assert.equal(editor?.value, "AA edited");
+  assert.equal(ctrl.hasDirty(), true);
 });
 
-test("stale activeKey falls back to welcome screen", () => {
-  const dom = createCodeEditor();
-  const open: OpenCodeFile = { key: fileTabKey("file", "README.md"), relativePath: "README.md", kind: "file" };
-  renderCodeEditor(dom, { openFiles: [open], activeKey: "file:does-not-exist.md", reviews: [] }, NO_HANDLERS);
-  assert.match(dom.body.textContent ?? "", /Chưa mở tệp nào/);
+test("Ctrl+S saves the active editable tab and clears dirty", async () => {
+  const { client, writes } = makeClient({ "a.ts": textFile("a.ts", "old") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "new content");
+  ctrl.root.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true }));
+  await flush();
+  assert.equal(writes.length, 1);
+  assert.deepEqual(writes[0], { path: "a.ts", content: "new content" });
+  assert.equal(ctrl.hasDirty(), false);
 });
 
-test("plain file tab shows read-only pill and close fires handler", () => {
-  const dom = createCodeEditor();
-  let closed: string | null = null;
-  const open: OpenCodeFile = { key: fileTabKey("file", "README.md"), relativePath: "README.md", kind: "file" };
-  renderCodeEditor(
-    dom,
-    { openFiles: [open], activeKey: open.key, reviews: [] },
-    { ...NO_HANDLERS, onClose: (key) => { closed = key; } },
-  );
-  assert.match(dom.root.textContent ?? "", /Chỉ đọc/);
-  dom.tabBar.querySelector<HTMLButtonElement>(".code-tab__close")?.click();
-  assert.equal(closed, open.key);
+test("Save button writes via the guarded route; unchanged content never writes", async () => {
+  const { client, writes } = makeClient({ "a.ts": textFile("a.ts", "same") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  // Type the identical content: not dirty, save disabled, Ctrl+S is a no-op.
+  await edit(container, "same");
+  assert.equal(ctrl.hasDirty(), false);
+  ctrl.root.dispatchEvent(new KeyboardEvent("keydown", { key: "s", ctrlKey: true, bubbles: true, cancelable: true }));
+  await flush();
+  assert.equal(writes.length, 0);
 });
 
-test("plain file preview loads once per active key, not on every re-render", () => {
-  const dom = createCodeEditor();
-  let loadCount = 0;
-  const openA: OpenCodeFile = { key: fileTabKey("file", "README.md"), relativePath: "README.md", kind: "file" };
-  const openB: OpenCodeFile = { key: fileTabKey("file", "package.json"), relativePath: "package.json", kind: "file" };
-  const handlers = { ...NO_HANDLERS, onLoadFile: () => { loadCount += 1; } };
+test("a failed save keeps the buffer dirty", async () => {
+  const { client, failWrite } = makeClient({ "a.ts": textFile("a.ts", "old") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "new");
+  failWrite.on = true;
+  button(container, "Lưu")?.click();
+  await flush();
+  assert.equal(ctrl.hasDirty(), true);
+});
 
-  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openA.key, reviews: [] }, handlers);
-  assert.equal(loadCount, 1);
+test("closing a clean tab removes it immediately", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "a") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  container.querySelector<HTMLButtonElement>(".code-tab__close")?.click();
+  await flush();
+  assert.equal(container.querySelectorAll(".code-tab").length, 0);
+  assert.equal(ctrl.getActivePath(), null);
+});
 
-  // Re-render with the same active key (simulates a streaming tick) must not refetch.
-  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openA.key, reviews: [] }, handlers);
-  assert.equal(loadCount, 1);
+test("closing a dirty tab offers Save/Discard/Cancel and honours the choice", async () => {
+  let choice: CloseDirtyChoice = "cancel";
+  const { client, writes } = makeClient({ "a.ts": textFile("a.ts", "old") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client, { confirmDirtyClose: async () => choice });
 
-  // Switching the active key must trigger a fresh load.
-  renderCodeEditor(dom, { openFiles: [openA, openB], activeKey: openB.key, reviews: [] }, handlers);
-  assert.equal(loadCount, 2);
+  const closeActive = async (): Promise<void> => {
+    container.querySelector<HTMLButtonElement>(".code-tab__close")?.click();
+    await flush();
+  };
+
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "dirty");
+
+  // Cancel keeps the tab.
+  choice = "cancel";
+  await closeActive();
+  assert.equal(container.querySelectorAll(".code-tab").length, 1);
+
+  // Save writes then closes.
+  choice = "save";
+  await closeActive();
+  await flush();
+  assert.equal(writes.length, 1);
+  assert.equal(container.querySelectorAll(".code-tab").length, 0);
+});
+
+test("closing a dirty tab with Discard drops it without writing", async () => {
+  const { client, writes } = makeClient({ "a.ts": textFile("a.ts", "old") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client, { confirmDirtyClose: async () => "discard" });
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "dirty");
+  container.querySelector<HTMLButtonElement>(".code-tab__close")?.click();
+  await flush();
+  assert.equal(writes.length, 0);
+  assert.equal(container.querySelectorAll(".code-tab").length, 0);
+});
+
+test("verified modify reloads a clean open tab from disk", async () => {
+  const files = { "a.ts": textFile("a.ts", "v1") };
+  const { client } = makeClient(files);
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  files["a.ts"] = textFile("a.ts", "v2 from agent");
+  ctrl.applyVerifiedMutation("a.ts", "modify");
+  await flush();
+  assert.match(container.textContent ?? "", /v2 from agent/);
+});
+
+test("verified modify on a DIRTY tab raises a conflict and keeps the buffer", async () => {
+  const files = { "a.ts": textFile("a.ts", "v1") };
+  const { client } = makeClient(files);
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  await edit(container, "my local edit");
+  files["a.ts"] = textFile("a.ts", "agent v2");
+  ctrl.applyVerifiedMutation("a.ts", "modify");
+  await flush();
+  assert.ok(container.querySelector(".code-editor__conflict"), "conflict banner shown");
+  const editor = container.querySelector<HTMLTextAreaElement>(".code-editor__textarea");
+  assert.equal(editor?.value, "my local edit");
+  assert.equal(ctrl.hasDirty(), true);
+});
+
+test("verified delete puts the open tab into a deleted state and blocks save", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "x") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  ctrl.applyVerifiedMutation("a.ts", "delete");
+  await flush();
+  assert.match(container.textContent ?? "", /đã bị xóa/);
+  assert.equal(ctrl.getActivePath(), null);
+  assert.equal(button(container, "Lưu"), null);
+});
+
+test("non-text file hands off to Workspace instead of duplicating a viewer", async () => {
+  const { client } = makeClient({
+    "a.pdf": { relativePath: "a.pdf", kind: "pdf", editable: false, truncated: false, sizeBytes: 10 } as WorkspaceFileContentView,
+  });
+  let handedOff: string | null = null;
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client, { onOpenInWorkspace: (p) => (handedOff = p) });
+  ctrl.openFile("a.pdf");
+  await flush();
+  assert.match(container.textContent ?? "", /xem trong Workspace/i);
+  button(container, "Xem trong Workspace")?.click();
+  assert.equal(handedOff, "a.pdf");
+});
+
+test("a text tab offers Hỏi Cowork and hands the active path to the callback", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  let asked: string | null = null;
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client, { onAskCowork: (p) => (asked = p) });
+  ctrl.openFile("a.ts");
+  await flush();
+  const askBtn = button(container, "Hỏi Cowork");
+  assert.ok(askBtn, "a text tab exposes the Hỏi Cowork handoff");
+  askBtn!.click();
+  assert.equal(asked, "a.ts");
+});
+
+test("Hỏi Cowork is absent when no onAskCowork handler is wired", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "const x = 1;") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  await flush();
+  assert.equal(button(container, "Hỏi Cowork"), null);
+});
+
+test("openReview shows a diff tab; getActivePath is null for a review", () => {
+  const container = document.createElement("div");
+  const { client } = makeClient({});
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.setReviews([REVIEW]);
+  ctrl.openReview(REVIEW);
+  assert.equal(container.querySelectorAll(".code-diff__row--add").length, 1);
+  assert.equal(container.querySelectorAll(".code-diff__row--del").length, 1);
+  assert.equal(ctrl.getActivePath(), null);
+  assert.equal(fileTabKey("review", "src/app.ts"), "review:src/app.ts");
+});
+
+test("reset clears every tab (workspace change)", async () => {
+  const { client } = makeClient({ "a.ts": textFile("a.ts", "a"), "b.ts": textFile("b.ts", "b") });
+  const container = document.createElement("div");
+  const ctrl = mountCodeEditor(container, client);
+  ctrl.openFile("a.ts");
+  ctrl.openFile("b.ts");
+  await flush();
+  ctrl.reset();
+  assert.equal(container.querySelectorAll(".code-tab").length, 0);
+  assert.match(container.textContent ?? "", /Chưa mở tệp nào/);
+  assert.equal(ctrl.getActivePath(), null);
 });
