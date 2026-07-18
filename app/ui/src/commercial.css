@@ -2557,17 +2557,53 @@ button {
   min-width: 0;
   min-height: 0;
   padding: 0;
-  place-items: center;
+  place-items: start center;
+  overflow-y: auto;
 }
 
 .integration-surface__mount {
   display: grid;
   width: 100%;
-  height: 100%;
+  height: auto;
+  min-height: 100%;
   min-width: 0;
-  min-height: 0;
   place-items: center;
   padding: 40px;
+}
+
+/* Dispatch surface only: two columns — phone pairing (main) + task board (right sidebar).
+   Overrides the centered single-card layout above; other integration surfaces keep it. The
+   surface (.integration-surface) owns the scroll, so the columns just top-align and grow. */
+.integration-surface__mount--dispatch {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 360px);
+  align-items: start;
+  justify-items: stretch;
+  align-content: start;
+  gap: 28px;
+  width: min(1200px, 100%);
+  padding: 32px 40px 48px;
+}
+
+.integration-surface__col {
+  min-width: 0;
+  width: 100%;
+}
+
+.integration-surface__col--aside {
+  border-left: 1px solid var(--cghc-border-subtle);
+  padding-left: 28px;
+}
+
+@media (max-width: 1024px) {
+  .integration-surface__mount--dispatch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .integration-surface__col--aside {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--cghc-border-subtle);
+    padding-top: 20px;
+  }
 }
 
 .integration-empty {

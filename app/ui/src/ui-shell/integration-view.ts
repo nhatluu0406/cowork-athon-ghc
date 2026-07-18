@@ -104,8 +104,15 @@ export function renderIntegrationSurface(
   // remote; the quick-access renders its own honest "remote chưa bật" note when the gateway is
   // off, so nothing here pretends to be connectable when it is not.
   if (surface.id === "dispatch" && remoteClient != null) {
-    appendDispatchBoard(mount, remoteClient, dispatchGate);
-    appendRemoteQuickAccess(mount, remoteClient);
+    // Two-column dispatch layout (pr14): phone pairing on the left (main), the task board on
+    // the right (a sidebar). The board KEEPS the F3 DispatchRunGate (main-wins) — pr14 dropped
+    // that arg; we restore it so the provider/readiness gate still governs runs.
+    mount.classList.add("integration-surface__mount--dispatch");
+    const mainCol = el("div", "integration-surface__col integration-surface__col--main");
+    const asideCol = el("aside", "integration-surface__col integration-surface__col--aside");
+    appendRemoteQuickAccess(mainCol, remoteClient);
+    appendDispatchBoard(asideCol, remoteClient, dispatchGate);
+    mount.append(mainCol, asideCol);
   } else {
     mount.append(card);
   }
