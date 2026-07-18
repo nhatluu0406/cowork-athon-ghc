@@ -136,6 +136,12 @@ export interface MentionTypeaheadOptions {
   readonly getWorkspace: () => string | null;
   /** Called after a mention is inserted (composer chrome resync). */
   readonly onApplied: () => void;
+  /**
+   * Called with the picked file's workspace-relative path after it is inserted. The composer
+   * uses this to also attach the file's content (so `@file` both references the path in the
+   * prompt AND pulls the file into context, like Claude Code). Optional — omit to only insert text.
+   */
+  readonly onPicked?: (relativePath: string) => void;
 }
 
 export interface MentionTypeahead {
@@ -210,6 +216,7 @@ export function createMentionTypeahead(options: MentionTypeaheadOptions): Mentio
     placeCaret(options.input, applied.caret);
     hide();
     options.onApplied();
+    options.onPicked?.(path);
   }
 
   function render(): void {

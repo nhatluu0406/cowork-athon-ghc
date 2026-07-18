@@ -88,6 +88,7 @@ import {
 } from "./file-action-integrity.js";
 import {
   createPendingAttachmentId,
+  isPendingRelativePath,
   totalValidBytes,
   type PendingAttachment,
 } from "./attachment-pending.js";
@@ -1881,6 +1882,56 @@ async function pickAttachment(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Attach a workspace file by its workspace-RELATIVE path (from the `@`-mention picker), reusing
+ * the same guarded read + pending-chip flow as {@link pickAttachment}. Deduped so mentioning a
+ * file already attached is a no-op. Silent on missing client/workspace — the `@` popup only opens
+ * when both are present, so this is defensive.
+ */
+async function attachWorkspaceRelativePath(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): Promise<void> {
+  if (state.client === null || state.activeWorkspace === null) return;
+  if (isPendingRelativePath(state.pendingAttachments, relativePath)) return;
+
+  // The attachment-read endpoint takes an absolute path inside the workspace and re-derives the
+  // relative path itself (it normalizes `/`→`\` and checks the root prefix), so joining the root
+  // with a forward slash is safe on Windows.
+  const absolutePath = `${state.activeWorkspace}/${relativePath}`;
+  const priorBytes = totalValidBytes(state.pendingAttachments);
+  const result = await state.client.readWorkspaceAttachment(absolutePath, priorBytes);
+  if (!result.ok) {
+    const isSecret = result.reason === "secret_file";
+    state.pendingAttachments = [
+      ...state.pendingAttachments,
+      {
+        id: createPendingAttachmentId(),
+        relativePath,
+        filename: relativePath.split(/[\\/]/).pop() ?? relativePath,
+        status: "error",
+        errorMessage: isSecret ? SECRET_ATTACHMENT_MESSAGE : result.message,
+      },
+    ];
+    renderState(dom, state, handlers);
+    return;
+  }
+
+  state.pendingAttachments = [
+    ...state.pendingAttachments,
+    {
+      id: createPendingAttachmentId(),
+      relativePath: result.metadata.relativePath,
+      filename: result.metadata.filename,
+      status: "valid",
+      metadata: result.metadata,
+    },
+  ];
+  renderState(dom, state, handlers);
+}
+
 function recordAttachmentActivity(
   state: AppState,
   included: readonly AttachmentMetadata[],
@@ -3165,14 +3216,21 @@ export function mountCoworkApp(root: HTMLElement): void {
     });
   });
   // @-mention typeahead: typing `@` in the composer suggests active-workspace files; picking one
-  // inserts `@<relativePath> ` as plain text (the agent resolves it with its normal read tools — no
-  // new capability boundary). The file list comes from the guarded /v1/workspace/list walk.
+  // inserts `@<relativePath> ` as text AND attaches the file's content (guarded workspace read,
+  // same pending-chip flow as the paperclip) so `@file` both references the path and pulls the
+  // file into context. The file list comes from the guarded /v1/workspace/list walk.
   const mentionTypeahead = createMentionTypeahead({
     input: dom.composerInput,
     anchor: dom.composer,
     getClient: () => state.client,
     getWorkspace: () => state.activeWorkspace,
     onApplied: () => syncComposerChrome(dom, state),
+    onPicked: (relativePath) => {
+      void attachWorkspaceRelativePath(state, dom, handlers, relativePath).catch((error) => {
+        appendMessage(dom, "assistant", safeError(error));
+        renderState(dom, state, handlers);
+      });
+    },
   });
   dom.composerInput.addEventListener("input", () => {
     syncComposerChrome(dom, state);
