@@ -80,6 +80,7 @@ import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import { renderAssistantMarkdown } from "./markdown-message.js";
 import {
   detectFileActionIntent,
   hasVerifiedFileAction,
@@ -441,9 +442,14 @@ function appendMessage(
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
   const textBox = el("div", "msg__text");
-  const p = document.createElement("p");
-  p.textContent = text;
-  textBox.append(p);
+  if (role === "assistant") {
+    // Assistant prose is rendered as SAFE Markdown (sanitized). User text stays plain.
+    renderAssistantMarkdown(textBox, text);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = text;
+    textBox.append(p);
+  }
   body.append(textBox);
 
   // Skills remain persisted for provenance; do not render chips/versions in the visible transcript.
@@ -1147,8 +1153,10 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
 }
 
 function updateAssistantBubble(state: AppState, text: string): void {
-  const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
-  if (assistant !== null) assistant.textContent = text;
+  // Full-text repaint each tick → re-render the whole Markdown block (streaming-safe: partial
+  // Markdown just renders partially, never throws or duplicates).
+  const textBox = state.activeAssistant?.querySelector<HTMLElement>(".msg__text") ?? null;
+  if (textBox !== null) renderAssistantMarkdown(textBox, text);
   if (text.trim().length > 0 && state.activeAssistant !== null) {
     state.activeAssistant.classList.remove("msg--awaiting");
     const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");

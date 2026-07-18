@@ -631,6 +631,123 @@ button {
   margin-top: .8em;
 }
 
+/* --- Assistant Markdown (.msg__text.md) — scoped so user bubbles stay plain. --- */
+.msg__text.md > *:first-child { margin-top: 0; }
+.msg__text.md > *:last-child { margin-bottom: 0; }
+.msg__text.md h1,
+.msg__text.md h2,
+.msg__text.md h3,
+.msg__text.md h4,
+.msg__text.md h5,
+.msg__text.md h6 { margin: 1.1em 0 .5em; line-height: 1.3; font-weight: 650; }
+.msg__text.md h1 { font-size: 1.38em; }
+.msg__text.md h2 { font-size: 1.24em; }
+.msg__text.md h3 { font-size: 1.12em; }
+.msg__text.md h4 { font-size: 1em; }
+.msg__text.md p { margin: 0 0 .7em; }
+.msg__text.md ul,
+.msg__text.md ol { margin: 0 0 .7em; padding-left: 1.4em; }
+.msg__text.md li { margin: .2em 0; }
+.msg__text.md li > ul,
+.msg__text.md li > ol { margin: .2em 0; }
+.msg__text.md li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; }
+.msg__text.md input[type="checkbox"] { margin-right: .5em; vertical-align: middle; }
+.msg__text.md a { color: var(--cghc-accent); text-decoration: underline; text-underline-offset: 2px; }
+.msg__text.md blockquote {
+  margin: 0 0 .7em;
+  padding: .2em 0 .2em 1em;
+  border-left: 3px solid color-mix(in srgb, var(--cghc-accent) 45%, var(--cghc-border));
+  color: color-mix(in srgb, var(--cghc-text-primary) 66%, transparent);
+}
+.msg__text.md hr { border: 0; border-top: 1px solid var(--cghc-border); margin: 1.1em 0; }
+.msg__text.md code {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+  font-size: .9em;
+  background: color-mix(in srgb, var(--cghc-text-primary) 8%, transparent);
+  padding: .12em .38em;
+  border-radius: 5px;
+}
+.msg__text.md pre {
+  margin: 0 0 .8em;
+  padding: 12px 14px;
+  border: 1px solid var(--cghc-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cghc-text-primary) 5%, transparent);
+  overflow-x: auto;
+}
+.msg__text.md pre code {
+  display: block;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: .86em;
+  line-height: 1.55;
+  white-space: pre;
+}
+.msg__text.md table {
+  border-collapse: collapse;
+  margin: 0 0 .8em;
+  max-width: 100%;
+  display: block;
+  overflow-x: auto;
+}
+.msg__text.md th,
+.msg__text.md td { border: 1px solid var(--cghc-border); padding: 6px 10px; text-align: left; }
+.msg__text.md th { background: color-mix(in srgb, var(--cghc-text-primary) 6%, transparent); font-weight: 600; }
+.msg__text.md strong { font-weight: 650; }
+.msg__text.md del { opacity: .7; }
+
+/* Syntax-highlight palette for message code blocks (GitHub-like light), mirrors the workspace pane. */
+.msg__text.md .hljs-comment,
+.msg__text.md .hljs-quote { color: #6a737d; font-style: italic; }
+.msg__text.md .hljs-keyword,
+.msg__text.md .hljs-selector-tag,
+.msg__text.md .hljs-subst,
+.msg__text.md .hljs-type { color: #d73a49; }
+.msg__text.md .hljs-number,
+.msg__text.md .hljs-literal,
+.msg__text.md .hljs-variable,
+.msg__text.md .hljs-template-variable,
+.msg__text.md .hljs-attr { color: #005cc5; }
+.msg__text.md .hljs-string,
+.msg__text.md .hljs-doctag { color: #032f62; }
+.msg__text.md .hljs-title,
+.msg__text.md .hljs-section,
+.msg__text.md .hljs-selector-id { color: #6f42c1; }
+.msg__text.md .hljs-tag,
+.msg__text.md .hljs-name,
+.msg__text.md .hljs-attribute { color: #22863a; }
+.msg__text.md .hljs-built_in,
+.msg__text.md .hljs-symbol,
+.msg__text.md .hljs-meta { color: #e36209; }
+.msg__text.md .hljs-emphasis { font-style: italic; }
+.msg__text.md .hljs-strong { font-weight: 600; }
+
+:root[data-theme="dark"] .msg__text.md .hljs-comment,
+:root[data-theme="dark"] .msg__text.md .hljs-quote { color: #8b949e; }
+:root[data-theme="dark"] .msg__text.md .hljs-keyword,
+:root[data-theme="dark"] .msg__text.md .hljs-selector-tag,
+:root[data-theme="dark"] .msg__text.md .hljs-subst,
+:root[data-theme="dark"] .msg__text.md .hljs-type { color: #ff7b72; }
+:root[data-theme="dark"] .msg__text.md .hljs-number,
+:root[data-theme="dark"] .msg__text.md .hljs-literal,
+:root[data-theme="dark"] .msg__text.md .hljs-variable,
+:root[data-theme="dark"] .msg__text.md .hljs-template-variable,
+:root[data-theme="dark"] .msg__text.md .hljs-attr { color: #79c0ff; }
+:root[data-theme="dark"] .msg__text.md .hljs-string,
+:root[data-theme="dark"] .msg__text.md .hljs-doctag { color: #a5d6ff; }
+:root[data-theme="dark"] .msg__text.md .hljs-title,
+:root[data-theme="dark"] .msg__text.md .hljs-section,
+:root[data-theme="dark"] .msg__text.md .hljs-selector-id { color: #d2a8ff; }
+:root[data-theme="dark"] .msg__text.md .hljs-tag,
+:root[data-theme="dark"] .msg__text.md .hljs-name,
+:root[data-theme="dark"] .msg__text.md .hljs-attribute { color: #7ee787; }
+:root[data-theme="dark"] .msg__text.md .hljs-built_in,
+:root[data-theme="dark"] .msg__text.md .hljs-symbol,
+:root[data-theme="dark"] .msg__text.md .hljs-meta { color: #ffa657; }
+:root[data-theme="dark"] .msg__text.md .hljs-string,
+:root[data-theme="dark"] .msg__text.md .hljs-doctag { color: #a5d6ff; }
+
 .msg__attachments,
 .msg__skills,
 .attachment-chip {
