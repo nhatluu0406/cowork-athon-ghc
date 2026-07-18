@@ -1556,8 +1556,13 @@ async function ensureLive(
     state.bootstrap.clientToken
   ) {
     try {
-      await state.client.health();
-      return state.client;
+      const health = await state.client.health();
+      if (health.runtimeReady === true) return state.client;
+      state.liveAttached = false;
+      // Fall through: the boundary answers but the supervised runtime is not attached yet
+      // (e.g. the OpenCode child is still starting) — never trust health() alone (see
+      // HealthData.runtimeReady doc comment: the socket answering only proves the LOCAL
+      // service is up, not the runtime).
     } catch {
       state.liveAttached = false;
       // Fall through to a real reconnect.
@@ -1593,7 +1598,11 @@ async function ensureLive(
         }
         const client = state.client;
         if (client === null) throw new Error("client missing");
-        await client.health();
+        const health = await client.health();
+        // Require the supervised runtime itself, not just the boundary — health() can answer
+        // OK (service up) before the OpenCode child is ready to accept `POST /session`, which
+        // otherwise surfaces "Runtime chưa sẵn sàng" on the very first send after a reconnect.
+        if (health.runtimeReady !== true) throw new Error("runtime not ready yet");
         state.liveAttached = true;
         return client;
       } catch {
@@ -1664,11 +1673,26 @@ async function ensureRuntimeSession(
     await state.conv.startContinuation();
   }
 
-  const meta = await client.createSession({
+  const createSessionInput = {
     workspaceId: state.activeWorkspace,
     title: (state.conv.state.activeRecord ?? record).title,
     model,
-  });
+  };
+  let meta;
+  try {
+    meta = await client.createSession(createSessionInput);
+  } catch (error) {
+    // The supervised OpenCode child can report itself alive/healthy just before its own
+    // `/session` endpoint is truly serving (an internal startup race `ensureLive`'s
+    // `runtimeReady` check cannot fully close) — wait for a fresh readiness signal and
+    // retry ONCE before surfacing the honest "Runtime chưa sẵn sàng" failure to the user.
+    const retriable =
+      error instanceof ServiceClientError &&
+      (error.code === "runtime_not_attached" || error.code === "runtime_unavailable");
+    if (!retriable) throw error;
+    await awaitRuntimeReady(state, 12_000);
+    meta = await client.createSession(createSessionInput);
+  }
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
   // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
