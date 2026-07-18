@@ -89,7 +89,8 @@ test("integration adapters declare stable mount boundaries", () => {
   assert.equal(getIntegrationSurfaceAdapter("gateway")?.statusLabel, "Đã tích hợp");
   assert.equal(getIntegrationSurfaceAdapter("knowledge")?.statusLabel, "Chờ tích hợp D3");
   assert.equal(getIntegrationSurfaceAdapter("microsoft")?.statusLabel, "Chờ tích hợp D2");
-  assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã lên kế hoạch");
+  // Code is a fully implemented surface; its adapter fallback is no longer "planned".
+  assert.equal(getIntegrationSurfaceAdapter("code")?.statusLabel, "Đã tích hợp");
   assert.equal(getIntegrationSurfaceAdapter("dispatch")?.mountId, "d1-dispatch-root");
   assert.equal(getIntegrationSurfaceAdapter("cowork"), null);
 });

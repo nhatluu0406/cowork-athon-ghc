@@ -61,9 +61,12 @@ const ADAPTERS: Readonly<Record<ExternalSurfaceId, IntegrationSurfaceAdapter>> =
     surfaceId: "code",
     mountId: "code-surface-root",
     component: "CodeIntegrationSlot",
-    statusLabel: "Đã lên kế hoạch",
+    // Code is a fully implemented surface (Project Explorer, multi-tab editor, Web Preview); the
+    // running app renders the real ClaudeCodeSurface, so this adapter fallback is never user-visible.
+    // Kept honest: no longer "planned".
+    statusLabel: "Đã tích hợp",
     description:
-      "Surface làm việc mã nguồn nâng cao. Đã lên kế hoạch sau navigator/preview; chưa có backend hay dữ liệu giả.",
+      "Surface project-centric: Project Explorer, editor nhiều tab (sửa + lưu), Web Preview và panel Agent dùng chung phiên với Cowork.",
   },
 });
 
