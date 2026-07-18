@@ -734,6 +734,8 @@ export interface ServiceClient {
   ): Promise<McpServerListItem>;
   deleteMcpServer(id: string): Promise<void>;
   setMcpServerEnabled(id: string, enabled: boolean): Promise<McpServerListItem>;
+  /** Re-probe reachability/health for one server (issue #28 health badge). */
+  mcpServerHealth(id: string): Promise<{ readonly id: string; readonly connection: string }>;
   readWorkspaceAttachment(
     absolutePath: string,
     priorBytesUsed?: number,
@@ -1290,6 +1292,9 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
           { method: "POST", body: "{}" },
         )
       ).server,
+
+    mcpServerHealth: async (id) =>
+      call<{ id: string; connection: string }>(`/v1/mcp/servers/${encodeURIComponent(id)}/health`),
 
     readWorkspaceAttachment: async (absolutePath, priorBytesUsed = 0) =>
       call<AttachmentReadResult>("/v1/workspace/attachment-read", {

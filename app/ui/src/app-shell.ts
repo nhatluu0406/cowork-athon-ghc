@@ -3092,6 +3092,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                   ? "error"
                   : "unknown",
             toolCount: server.toolCount,
+            ...(server.updatedAt !== undefined ? { lastChecked: server.updatedAt } : {}),
           });
           const mcpCallbacks: McpPanelCallbacks = {
             listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
@@ -3132,6 +3133,14 @@ export function mountCoworkApp(root: HTMLElement): void {
             deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
             setMcpServerEnabled: async (id, enabled) =>
               toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+            checkMcpServerHealth: async (id) => {
+              // Re-probe reachability, then return the refreshed row (the panel re-lists after).
+              await dynamicClient.mcpServerHealth(id);
+              const rows = await dynamicClient.listMcpServers();
+              const updated = rows.find((s) => s.id === id);
+              if (updated === undefined) throw new Error("MCP không còn tồn tại.");
+              return toMcpView(updated);
+            },
           };
           mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
