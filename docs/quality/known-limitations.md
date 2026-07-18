@@ -232,6 +232,41 @@ no-op for all sessions — no action needed, and adding a gate here today would 
 checks `deps.sessionAllowed(sessionId)` first, before any tool-specific logic. This is the
 production authorization boundary.
 
+## Sửa lỗi đợt issues (2026-07-18, đợt 2) — giới hạn còn lại
+
+- **Chat từ web/điện thoại không gửi được cho Cowork (#21, core FIXED, để OPEN):** root cause =
+  OpenCode session **single-turn**; PWA (web local hoặc điện thoại) chỉ POST được vào một session
+  đang sống nên hầu hết hội thoại để composer bị khoá / trả 409 → **cả chat từ web local cũng
+  fail**, không riêng mobile. Fix: route server-side **`POST /v1/conversations/{id}/turn`** chạy
+  đúng vũ điệu của desktop (tạo session bound **active workspace** → link → lưu tin nhắn người dùng →
+  dispatch → **lưu tóm tắt trả lời khi terminal** qua subscribe streamHub), tái dùng cơ chế session
+  duy nhất. Trung thực: 409 `workspace_mismatch` (hội thoại khác workspace — runtime bound 1 cwd),
+  409 `turn_in_progress` (đang có lượt chạy), 503 khi runtime chưa sẵn sàng — **không giả 202**.
+  Gateway allowlist route; PWA composer tạo lượt mới thay vì đòi session sống. **Independent security
+  review** sửa 2 lỗi: backstop timer treo → phantom assistant message (nay cancel khi dispatch fail);
+  lượt chồng lượt ghi đè status (nay chặn + chỉ đổi status khi còn là lượt active). **Còn lại:** một
+  **round-trip web/điện thoại chạy thật** trên bản đóng gói (theo đúng chỉ đạo "để #21 open tới khi
+  phone/web-initiated turn chạy thật"). Issue **để mở**.
+- **Đổi workspace → cây workspace fetch fail, phải reload tay (#31, FIXED):** đổi workspace buộc
+  OpenCode stop+restart (#26) → đổi baseURL/token loopback; navigator được refresh **trước** restart
+  (nhắm service sắp chết) nên "fetch fail". Fix: refresh workspace + code navigator **sau khi**
+  `ensureLive` nhận bootstrap mới; bỏ refresh trước-restart.
+- **Gateway lưu prompt của Agent (#38, FIXED):** Gateway (proxy định tuyến API key) từng trích + lưu
+  prompt người dùng vào `gateway.json` (`promptPreview`) và hiển thị lại — nhân đôi nội dung chat ra
+  ngoài kho hội thoại. Fix: gỡ `promptPreview` end-to-end; chỉ parse **model id** + ghi metric định
+  tuyến. Nội dung chat chỉ nằm trong kho hội thoại.
+- **Tab Code không render Markdown/bảng (#33) + xuống hàng quá nhiều (#32, FIXED):** panel Agent tab
+  Code render text bằng `<p>` thuần → bảng không hiện; nay dùng **MarkdownView chung**. Renderer
+  chung nay **gộp 3+ dòng mới thành 1 ngắt đoạn** (giữ code fenced) → hết dòng trống thừa.
+- **Tab Workspace+Code thiếu điều khiển phiên (#35, FIXED):** thêm **thanh phiên dùng chung** (nút
+  Phiên mới + dropdown chọn phiên cũ) vào header tab Code và tab Workspace, nối vào luồng hội thoại
+  Cowork (không tạo hệ session riêng — vẫn một session dùng chung theo ADR 0013).
+- **Tab Code — khung chat nhỏ + AI miss tạo .py (#36, PARTIAL, để OPEN):** **đã sửa layout** (panel
+  Agent 372px → `clamp(420px,30vw,560px)`, ô soạn lớn hơn). **Chưa xử lý:** "AI bị miss việc tạo file
+  .py" là vấn đề **agent chọn/gọi tool tạo file**, phụ thuộc độ tin cậy tool của bản OpenCode pin
+  (xem mục "Xoá file không đáng tin" + tool coverage ở trên) — cần quan sát trên bản đóng gói; giữ
+  issue **mở** cho phần này.
+
 ## Sửa lỗi đợt issues (2026-07-18) — giới hạn còn lại
 
 - **Chatbox disable sau khi tạo/chuyển cuộc trò chuyện (#27, FIXED):** root cause = nút tạo/chuyển
