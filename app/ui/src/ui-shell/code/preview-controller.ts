@@ -17,6 +17,7 @@ import type {
 } from "@cowork-ghc/contracts";
 import type { ServiceClient } from "../../service-client.js";
 import { el, icon } from "../dom-utils.js";
+import { renderProblems } from "./problems-view.js";
 
 export interface PreviewControllerCallbacks {
   /** Called when the confirmed loopback preview URL appears/disappears (for Agent context). */
@@ -49,7 +50,7 @@ export function mountPreviewController(
 
   // --- Status bar ---
   const statusBar = el("div", "code-preview__bar");
-  const kindLabel = el("span", "code-preview__kind", "Preview");
+  const kindLabel = el("span", "code-preview__kind", "Xem trước");
   const statusPill = el("span", "code-preview__status code-preview__status--idle", "Tắt");
   const scriptSelect = el("select", "code-preview__script") as HTMLSelectElement;
   scriptSelect.setAttribute("aria-label", "Chọn script dev server");
@@ -69,8 +70,8 @@ export function mountPreviewController(
   // --- Output drawer ---
   const drawer = el("div", "code-preview__drawer");
   const drawerHead = el("div", "code-preview__drawer-head");
-  const tabOutput = drawerTab("Output", true);
-  const tabProblems = drawerTab("Problems", false);
+  const tabOutput = drawerTab("Kết quả", true);
+  const tabProblems = drawerTab("Vấn đề", false);
   const drawerToggle = el("button", "code-preview__drawer-toggle") as HTMLButtonElement;
   drawerToggle.type = "button";
   drawerToggle.setAttribute("aria-expanded", "true");
@@ -78,7 +79,8 @@ export function mountPreviewController(
   drawerHead.append(tabOutput, tabProblems, el("span", "code-preview__spacer"), drawerToggle);
   const outputBody = el("pre", "code-preview__output");
   outputBody.setAttribute("aria-live", "polite");
-  const problemsBody = el("div", "code-preview__problems", "Không có problem nào (Phase 1 chưa có phân tích lỗi).");
+  const problemsBody = el("div", "code-preview__problems");
+  problemsBody.append(el("div", "code-preview__problems-empty", "Không có vấn đề nào."));
   problemsBody.hidden = true;
   drawer.append(drawerHead, outputBody, problemsBody);
 
@@ -93,6 +95,8 @@ export function mountPreviewController(
   let loadedUrl: string | null = null;
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let confirmOpen = false;
+  // Accumulated captured output, reduced to the "Vấn đề" (Problems) tab (redacted upstream).
+  const outputLines: RuntimePreviewOutputLine[] = [];
 
   function emptyState(): RuntimePreviewState {
     return { status: "idle", kind: null, url: null, port: null, command: null, startedAt: null, error: null, outputSeq: 0 };
@@ -121,7 +125,7 @@ export function mountPreviewController(
     statusPill.textContent =
       s === "running" ? "Đang chạy" : s === "starting" ? "Đang khởi động…" : s === "failed" ? "Lỗi" : s === "stopped" ? "Đã dừng" : "Tắt";
     kindLabel.textContent =
-      state.kind === "dev-server" ? (state.command ?? "Dev server") : state.kind === "static" ? "Static" : "Preview";
+      state.kind === "dev-server" ? (state.command ?? "Dev server") : state.kind === "static" ? "Static" : "Xem trước";
 
     const busy = s === "starting";
     const running = s === "running";
@@ -161,7 +165,7 @@ export function mountPreviewController(
         : info?.kind === "static"
           ? "Bấm Chạy để phục vụ index.html tĩnh và xem trước."
           : "Chọn workspace là dự án web để xem trước.";
-    overlay.append(overlayCard("eye", "Web preview", hint));
+    overlay.append(overlayCard("eye", "Xem trước web", hint));
   }
 
   function updateHeaderRuntime(): void {
@@ -173,21 +177,25 @@ export function mountPreviewController(
     pill.className = `cc-surface__runtime cc-surface__runtime--${s}`;
     pill.textContent =
       s === "running" && state.port !== null
-        ? `Preview: :${state.port}`
+        ? `Xem trước: :${state.port}`
         : s === "starting"
-          ? "Preview: đang khởi động"
+          ? "Xem trước: đang khởi động"
           : s === "failed"
-            ? "Preview: lỗi"
-            : "Preview: tắt";
+            ? "Xem trước: lỗi"
+            : "Xem trước: tắt";
   }
 
   function appendOutput(lines: readonly RuntimePreviewOutputLine[]): void {
     for (const line of lines) {
       const row = el("span", `code-preview__line code-preview__line--${line.stream}`, line.text + "\n");
       outputBody.append(row);
+      outputLines.push(line);
       lastSeq = Math.max(lastSeq, line.seq);
     }
-    if (lines.length > 0) outputBody.scrollTop = outputBody.scrollHeight;
+    if (lines.length > 0) {
+      outputBody.scrollTop = outputBody.scrollHeight;
+      renderProblems(problemsBody, tabProblems, outputLines);
+    }
   }
 
   async function applyRunningTransition(): Promise<void> {
@@ -393,6 +401,8 @@ export function mountPreviewController(
       info = null;
       state = emptyState();
       outputBody.replaceChildren();
+      outputLines.length = 0;
+      renderProblems(problemsBody, tabProblems, outputLines);
       callbacks.onPreviewUrlChange?.(null);
       renderStatus();
     },

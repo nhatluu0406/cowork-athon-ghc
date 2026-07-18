@@ -10,7 +10,12 @@ import { SERVICE_NAME, type BoundaryRouter, type HealthData } from "../boundary/
 
 export const HEALTH_PATH = "/v1/health";
 
-export function createHealthRouter(startedAt: Date): BoundaryRouter {
+/**
+ * @param runtimeReady optional live getter for supervised-runtime liveness (Tier 2). When provided,
+ *   its current value is reported as {@link HealthData.runtimeReady} on every poll so the renderer
+ *   can gate the first send / time a single safe retry. Omitted → the field is absent (Tier 1).
+ */
+export function createHealthRouter(startedAt: Date, runtimeReady?: () => boolean): BoundaryRouter {
   return {
     name: "health",
     routes: [
@@ -25,6 +30,7 @@ export function createHealthRouter(startedAt: Date): BoundaryRouter {
             service: SERVICE_NAME,
             startedAt: startedAt.toISOString(),
             uptimeMs: Date.now() - startedAt.getTime(),
+            ...(runtimeReady !== undefined ? { runtimeReady: runtimeReady() } : {}),
           };
           return { status: 200, data };
         },

@@ -184,8 +184,89 @@ export function mountSettingsView(container: HTMLElement, deps: SettingsViewDeps
       diagnosticsPanel,
     );
 
-    generalBox.append(appearance.root, diagnostics.root);
+    // --- Security: "Require login at startup" (device-bound secure auto-unlock when OFF). ---
+    const security = settingSection(
+      "Bảo mật",
+      "Kiểm soát việc hỏi mật khẩu mỗi khi mở ứng dụng.",
+    );
+    security.body.append(authToggleRow(view.general.requireLoginOnStartup));
+
+    generalBox.append(appearance.root, security.root, diagnostics.root);
     void refreshDiagnostics(diagnosticsPanel);
+  }
+
+  const startupAuthReason = (reason?: string): string => {
+    switch (reason) {
+      case "invalid_password":
+        return "Mật khẩu không đúng.";
+      case "secure_storage_unavailable":
+        return "Máy này chưa hỗ trợ mở khoá an toàn gắn với thiết bị — không thể tắt yêu cầu đăng nhập.";
+      case "seal_failed":
+        return "Không lưu được khoá thiết bị — giữ nguyên yêu cầu đăng nhập.";
+      case "password_required":
+        return "Cần nhập mật khẩu hiện tại.";
+      case "service_not_ready":
+        return "Dịch vụ chưa sẵn sàng — thử lại sau.";
+      default:
+        return "Không đổi được chế độ đăng nhập.";
+    }
+  };
+
+  /**
+   * The "Yêu cầu đăng nhập khi khởi động" switch. A security-sensitive change: it confirms the
+   * current password and delegates the safeStorage work to the shell (setStartupAuthMode), reverting
+   * the switch on any failure. `current` tracks the last-confirmed state for honest reverts.
+   */
+  function authToggleRow(initial: boolean): HTMLElement {
+    let current = initial;
+    const row = el("label", "settings-switch-row");
+    const text = el("span", "settings-switch-row__copy");
+    text.append(
+      el("span", "settings-switch-row__title", "Yêu cầu đăng nhập khi khởi động"),
+      el(
+        "span",
+        "settings-switch-row__description",
+        "Bật: luôn hỏi mật khẩu khi mở app. Tắt: mở thẳng vào Cowork — kho khoá vẫn được mã hoá và mở bằng khoá gắn với thiết bị (không lưu khoá dạng thô).",
+      ),
+    );
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = current;
+    input.className = "settings-switch-row__input";
+    const visual = el("span", "settings-switch-row__visual");
+    visual.setAttribute("aria-hidden", "true");
+    input.addEventListener("change", () => {
+      const desiredRequireLogin = input.checked;
+      void (async () => {
+        const password = window.prompt(
+          desiredRequireLogin
+            ? "Nhập mật khẩu hiện tại để bật lại yêu cầu đăng nhập:"
+            : "Nhập mật khẩu hiện tại để tắt yêu cầu đăng nhập (dùng mở khoá gắn thiết bị):",
+        );
+        if (password === null || password.length === 0) {
+          input.checked = current;
+          return;
+        }
+        setStatus("Đang cập nhật bảo mật khởi động…");
+        try {
+          const result = await getShellBridge().setStartupAuthMode(desiredRequireLogin, password);
+          if (!result.ok) {
+            input.checked = current;
+            setStatus(startupAuthReason(result.reason));
+            return;
+          }
+          current = result.requireLogin;
+          input.checked = result.requireLogin;
+          setStatus("Đã lưu");
+          window.setTimeout(() => setStatus(""), 1800);
+        } catch {
+          input.checked = current;
+          setStatus("Không đổi được chế độ đăng nhập trên bản dựng này.");
+        }
+      })();
+    });
+    row.append(text, input, visual);
+    return row;
   }
 
   async function refreshDiagnostics(panel: HTMLElement): Promise<void> {

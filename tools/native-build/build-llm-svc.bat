@@ -3,7 +3,7 @@ setlocal EnableExtensions
 rem Cowork GHC - build-llm-svc.bat : Compile the Rust LLM service (llm-svc.exe).
 rem Requires Rust / cargo on PATH with MSVC toolchain. Outputs to app\llm-svc\target\x86_64-pc-windows-msvc\release\llm-svc.exe.
 rem Resolve project root from this script's own location.
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - build-llm-svc
 set "LLM_SVC_DIR=%ROOT%\app\llm-svc"
 set "OUT=%LLM_SVC_DIR%\target\x86_64-pc-windows-msvc\release\llm-svc.exe"
@@ -21,7 +21,7 @@ echo   Output:      %OUT%
 echo.
 
 rem TDM-GCC workaround: create stub libgcc_eh.a if missing (one-time, idempotent).
-powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\fix-tdm-gcc-libgcc-eh.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\tools\native-build\fix-tdm-gcc-libgcc-eh.ps1"
 if errorlevel 1 (
   echo [build-llm-svc] WARN: TDM-GCC libgcc_eh.a workaround failed — build may fail.
   echo   If so, install MSYS2 mingw-w64 or MSVC Build Tools instead of TDM-GCC.
@@ -34,7 +34,7 @@ if not errorlevel 1 (
   echo [build-llm-svc] protoc found on PATH.
 ) else (
   echo [build-llm-svc] protoc not on PATH — ensuring local copy ...
-  for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\scripts\ensure-protoc.ps1" -Root "%ROOT%"`) do set "PROTOC=%%P"
+  for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%\tools\native-build\ensure-protoc.ps1" -Root "%ROOT%"`) do set "PROTOC=%%P"
   if not defined PROTOC (
     echo [build-llm-svc] ERROR: could not obtain protoc. Install protobuf-compiler or check your internet connection.
     exit /b 1

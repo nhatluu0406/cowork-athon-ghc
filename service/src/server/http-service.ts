@@ -78,6 +78,12 @@ export interface ServiceOptions {
    * the routes it was scoped to. Default: none (baseline behavior unchanged).
    */
   readonly pathScopedTokens?: readonly PathScopedToken[];
+  /**
+   * Live getter for supervised-runtime liveness, surfaced as {@link HealthData.runtimeReady} on the
+   * built-in `/v1/health` route. Read on every poll (not captured), so a service constructed before
+   * the runtime is up reports the current value each time. Omitted → the field is absent (Tier 1).
+   */
+  readonly runtimeReady?: () => boolean;
 }
 
 /** A token that is valid only for the exact request paths listed in {@link paths}. */
@@ -129,7 +135,7 @@ class LocalServiceImpl implements LocalService {
         ? assertConfiguredToken(options.clientToken)
         : generateClientToken();
     this.registry = new RouterRegistry(options.onAudit);
-    this.registry.mount(createHealthRouter(this.startedAt));
+    this.registry.mount(createHealthRouter(this.startedAt, options.runtimeReady));
     this.server = createServer((req, res) => {
       void this.handle(req, res);
     });

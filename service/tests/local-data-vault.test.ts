@@ -39,8 +39,8 @@ import { defaultSettings } from "../src/diagnostics/settings-types.js";
 test("migrations apply initial_local_vault idempotently", () => {
   const db = openMemorySqliteDatabase();
   const first = runMigrations(db);
-  assert.deepEqual(first, [1, 2]);
-  assert.deepEqual(appliedMigrationIds(db), [1, 2]);
+  assert.deepEqual(first, [1, 2, 3, 4]);
+  assert.deepEqual(appliedMigrationIds(db), [1, 2, 3, 4]);
   const second = runMigrations(db);
   assert.deepEqual(second, []);
   closeSqliteDatabase(db);
@@ -64,6 +64,7 @@ test("setup / unlock / wrong password", async () => {
   const auth = createLocalAuthService({
     users: createLocalUserRepository(db),
     vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
     now: () => "2026-07-15T00:00:00.000Z",
     id: () => "user-1",
   });
@@ -90,6 +91,7 @@ test("encryption round-trip and vault credential store", async () => {
   const auth = createLocalAuthService({
     users: createLocalUserRepository(db),
     vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
   });
   await auth.setup("bob", "password12");
   const vault = createVaultCredentialStore({
@@ -109,6 +111,7 @@ test("secrets table never stores plaintext", async () => {
   const auth = createLocalAuthService({
     users: createLocalUserRepository(db),
     vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
   });
   await auth.setup("carol", "password12");
   const vault = createVaultCredentialStore({
@@ -178,6 +181,7 @@ test("provider + MS365 keyring secrets migrate after unlock; failed migration ro
   const auth = createLocalAuthService({
     users: createLocalUserRepository(db),
     vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
   });
   await auth.setup("erin", "password12");
   const vault = createVaultCredentialStore({
@@ -244,6 +248,7 @@ test("provider + MS365 keyring secrets migrate after unlock; failed migration ro
   const auth2 = createLocalAuthService({
     users: createLocalUserRepository(db2),
     vaultKeys: createVaultKeyRepository(db2),
+    appMeta: createAppMetaRepository(db2),
   });
   await auth2.setup("frank", "password12");
   const vault2 = createVaultCredentialStore({
@@ -292,6 +297,7 @@ test("secret scrubber still redacts vault-stored values", async () => {
   const auth = createLocalAuthService({
     users: createLocalUserRepository(db),
     vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
   });
   await auth.setup("gina", "password12");
   const vault = createVaultCredentialStore({
@@ -374,5 +380,90 @@ test("sqlite settings fs mirrors provider tables", async () => {
   const verifications = db.prepare("SELECT profile_id FROM provider_verifications").all();
   assert.equal(profiles.length, 1);
   assert.equal(verifications.length, 1);
+  closeSqliteDatabase(db);
+});
+
+test("device-bound auto-unlock: round-trip restores the same master key without a password", async () => {
+  const db = openMemorySqliteDatabase();
+  runMigrations(db);
+  const deps = () => ({
+    users: createLocalUserRepository(db),
+    vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
+  });
+  const auth = createLocalAuthService(deps());
+  await auth.setup("dave", "password12");
+  const vault = createVaultCredentialStore({ auth, secrets: createSecretsRepository(db) });
+  await vault.set("profile:x", "sk-device-secret");
+
+  assert.equal(auth.hasAutoUnlockEnvelope(), false);
+  auth.enableAutoUnlock("device-secret-abcdef0123456789");
+  assert.equal(auth.hasAutoUnlockEnvelope(), true);
+
+  // A fresh service instance over the same DB simulates an app restart.
+  const restarted = createLocalAuthService(deps());
+  assert.equal(restarted.status().state, "locked");
+  const result = restarted.unlockWithAutoUnlock("device-secret-abcdef0123456789");
+  assert.ok(result, "auto-unlock succeeds with the right device secret");
+  assert.equal(restarted.status().state, "unlocked");
+  // The recovered master key decrypts a secret written under the password path.
+  const restartedVault = createVaultCredentialStore({ auth: restarted, secrets: createSecretsRepository(db) });
+  assert.equal(await restartedVault.get("profile:x"), "sk-device-secret");
+  closeSqliteDatabase(db);
+});
+
+test("device-bound auto-unlock: a wrong device secret does not unlock (falls back to password)", async () => {
+  const db = openMemorySqliteDatabase();
+  runMigrations(db);
+  const deps = () => ({
+    users: createLocalUserRepository(db),
+    vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
+  });
+  const auth = createLocalAuthService(deps());
+  await auth.setup("erin", "password12");
+  auth.enableAutoUnlock("correct-device-secret-0123456789");
+
+  const restarted = createLocalAuthService(deps());
+  assert.equal(restarted.unlockWithAutoUnlock("WRONG-device-secret-0123456789"), null);
+  assert.equal(restarted.status().state, "locked", "stays locked so the password gate takes over");
+  // The password path still works (the vault_keys row was never touched).
+  await restarted.unlock("erin", "password12");
+  assert.equal(restarted.status().state, "unlocked");
+  closeSqliteDatabase(db);
+});
+
+test("device-bound auto-unlock: disable removes the envelope", async () => {
+  const db = openMemorySqliteDatabase();
+  runMigrations(db);
+  const deps = () => ({
+    users: createLocalUserRepository(db),
+    vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
+  });
+  const auth = createLocalAuthService(deps());
+  await auth.setup("frank", "password12");
+  auth.enableAutoUnlock("device-secret-abcdef0123456789");
+  assert.equal(auth.hasAutoUnlockEnvelope(), true);
+  auth.disableAutoUnlock();
+  assert.equal(auth.hasAutoUnlockEnvelope(), false);
+  assert.equal(createLocalAuthService(deps()).unlockWithAutoUnlock("device-secret-abcdef0123456789"), null);
+  closeSqliteDatabase(db);
+});
+
+test("device-bound auto-unlock: enable requires an unlocked vault + verifyCurrentPassword works", async () => {
+  const db = openMemorySqliteDatabase();
+  runMigrations(db);
+  const deps = () => ({
+    users: createLocalUserRepository(db),
+    vaultKeys: createVaultKeyRepository(db),
+    appMeta: createAppMetaRepository(db),
+  });
+  const auth = createLocalAuthService(deps());
+  await auth.setup("gina", "password12");
+  assert.equal(auth.verifyCurrentPassword("password12"), true);
+  assert.equal(auth.verifyCurrentPassword("nope"), false);
+  auth.lock();
+  assert.throws(() => auth.enableAutoUnlock("device-secret-abcdef0123456789"), /unlocked/);
   closeSqliteDatabase(db);
 });

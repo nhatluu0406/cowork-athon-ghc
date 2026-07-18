@@ -124,9 +124,9 @@ Constraint: do not inject fake `fileReviews[]` directly into the store to force 
 
 ## 6. Required environment (unchanged)
 
-- Packaged app under `dist-app/win-unpacked/Cowork GHC.exe`.
+- Packaged app under `dist-app/win-unpacked/coworkghc.exe`.
 - Clean isolated profile and fixture workspace.
-- No stale `Cowork GHC.exe` / `opencode.exe`.
+- No stale `coworkghc.exe` / `opencode.exe`.
 - `DEEPSEEK_API_KEY` via environment or `.env` (never in logs/docs).
 - `COWORK_GHC_STARTUP_TRACE` enabled by verifier.
 

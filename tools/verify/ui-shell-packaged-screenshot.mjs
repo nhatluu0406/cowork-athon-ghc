@@ -11,7 +11,7 @@ import { packagedChildEnv } from "./packaged-launch-env.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const OUT = join(REPO, "reports", "cowork-ghc-ui-shell-packaged.png");
 const CDP_PORT = 19226;
 
@@ -95,7 +95,7 @@ async function main() {
     if (proc.exitCode === null) proc.kill();
     await sleep(2000);
     try {
-      execSync(`taskkill /F /IM "Cowork GHC.exe" /T`, { stdio: "ignore" });
+      execSync(`taskkill /F /IM "coworkghc.exe" /T`, { stdio: "ignore" });
     } catch {
       // already stopped
     }
@@ -105,10 +105,10 @@ async function main() {
       // already stopped
     }
     await sleep(1000);
-    const coworkLeft = countProcesses("Cowork GHC.exe");
+    const coworkLeft = countProcesses("coworkghc.exe");
     const opencodeLeft = countProcesses("opencode.exe");
     if (coworkLeft > 0 || opencodeLeft > 0) {
-      throw new Error(`Orphan processes remain: Cowork GHC.exe=${coworkLeft}, opencode.exe=${opencodeLeft}`);
+      throw new Error(`Orphan processes remain: coworkghc.exe=${coworkLeft}, opencode.exe=${opencodeLeft}`);
     }
     console.log("process cleanup: OK");
   }

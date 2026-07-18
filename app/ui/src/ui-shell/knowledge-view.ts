@@ -43,28 +43,17 @@ export function setKnowledgeGraphCapability(dom: KnowledgeViewDom, enabled: bool
   dom.graphTab.hidden = !enabled;
 }
 
+/**
+ * Update the base/graph tab button active state. The tab BODY is owned by the local Knowledge panel
+ * (`knowledge-local-panel.ts`), which renders the real index/search/graph content — this only styles
+ * the tabs so app-shell can keep the two concerns separate.
+ */
 export function renderKnowledgeTab(dom: KnowledgeViewDom, tab: KnowledgeTab): void {
   for (const btn of dom.root.querySelectorAll<HTMLButtonElement>("[data-knowledge-tab]")) {
     const active = btn.dataset["knowledgeTab"] === tab;
     btn.classList.toggle("knowledge-tabs__btn--active", active);
     btn.setAttribute("aria-selected", active ? "true" : "false");
   }
-  dom.body.replaceChildren();
-  const empty = el("div", "knowledge-empty");
-  if (tab === "graph") {
-    empty.append(
-      el("h2", "knowledge-empty__title", "Đồ thị tri thức"),
-      el("p", "knowledge-empty__copy", "Graph explorer chỉ hiển thị dữ liệu thật sau tích hợp D3."),
-      el("span", "integration-empty__badge", "Chờ tích hợp D3"),
-    );
-  } else {
-    empty.append(
-      el("h2", "knowledge-empty__title", "Kho tri thức"),
-      el("p", "knowledge-empty__copy", "RAG và retrieval có provenance sẽ bật khi backend D3 sẵn sàng."),
-      el("span", "integration-empty__badge", "Chờ tích hợp D3"),
-    );
-  }
-  dom.body.append(empty);
 }
 
 export function renderIntegrationKnowledgeFallback(

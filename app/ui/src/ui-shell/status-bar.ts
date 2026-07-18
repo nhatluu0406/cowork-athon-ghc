@@ -1,7 +1,7 @@
 import type { RuntimePhase } from "../conversation-controller.js";
 import type { SettingsView } from "../service-client.js";
 import type { ConnectionTestState } from "../provider-readiness.js";
-import { providerStatus } from "../provider-readiness.js";
+import { overallReadiness, providerStatus } from "../provider-readiness.js";
 import { el, icon } from "./dom-utils.js";
 
 export interface StatusBarDom {
@@ -94,9 +94,20 @@ export function renderStatusBar(
     input.workspacePath === null ? "Chưa chọn workspace" : shortWorkspaceLabel(input.workspacePath);
   dom.workspace.dataset["tooltip"] = input.workspacePath ?? "Chưa chọn workspace";
 
-  dom.serviceLabel.textContent = input.serviceLabel.replace(/^Local service:\s*/i, "").replace(/^Service\s*·\s*/i, "");
-  dom.service.classList.toggle("is-ok", input.serviceOk);
-  dom.service.classList.toggle("is-danger", !input.serviceOk);
+  // Aggregate readiness (service + workspace + provider) so the chip never reads "Sẵn sàng"
+  // while a required dependency is missing (ui-ux-audit F4).
+  const overall = overallReadiness({
+    serviceOk: input.serviceOk,
+    serviceLabel: input.serviceLabel,
+    activeWorkspace: input.workspacePath,
+    settings: input.settings,
+    connectionTestState: input.connectionTestState,
+  });
+  dom.serviceLabel.textContent = overall.label;
+  dom.service.dataset["tooltip"] = overall.detail;
+  dom.service.classList.toggle("is-ok", overall.tone === "ok");
+  dom.service.classList.toggle("is-warn", overall.tone === "warn");
+  dom.service.classList.toggle("is-danger", overall.tone === "danger");
 
   dom.runtimeLabel.textContent = runtimeStatusLabel(input.runtimePhase, input.hasPendingPermission);
   dom.runtime.classList.toggle("is-running", input.runtimePhase === "running" || input.runtimePhase === "starting");

@@ -91,6 +91,11 @@ import {
 import { LIVE_SESSION_PERMISSION_POLICY } from "../runtime/index.js";
 import { createFileReviewRouter } from "../file-review/index.js";
 import {
+  createKnowledgeLocalRepository,
+  createKnowledgeLocalRouter,
+  createKnowledgeLocalService,
+} from "../knowledge-local/index.js";
+import {
   createPreviewGate,
   createPreviewService,
   createRuntimePreviewRouter,
@@ -281,7 +286,12 @@ export async function createCoworkService(
       });
     }
 
-    localAuth = createLocalAuthService({ users: usersRepo, vaultKeys: vaultKeysRepo, now });
+    localAuth = createLocalAuthService({
+      users: usersRepo,
+      vaultKeys: vaultKeysRepo,
+      appMeta,
+      now,
+    });
     vaultStore = createVaultCredentialStore({ auth: localAuth, secrets: secretsRepo, now });
 
     if (options.autoUnlock !== undefined) {
@@ -289,6 +299,16 @@ export async function createCoworkService(
         await localAuth.unlock(options.autoUnlock.username, options.autoUnlock.password);
       } catch {
         // Leave locked; renderer lock gate will prompt again.
+      }
+    } else if (options.autoUnlockDeviceSecret !== undefined) {
+      // Device-bound auto-unlock (login-not-required mode): unwrap the vault from the app_meta
+      // envelope using the shell's safeStorage-sealed deviceSecret. Failure leaves the vault locked
+      // so the renderer lock gate prompts for the password (recovery on a different device / corrupt
+      // envelope).
+      try {
+        localAuth.unlockWithAutoUnlock(options.autoUnlockDeviceSecret);
+      } catch {
+        // Leave locked; recovery via the password gate.
       }
     }
 
@@ -453,9 +473,12 @@ export async function createCoworkService(
   };
 
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
+  // Resolve the runtime-health seam once so the built-in /v1/health route can honestly report
+  // `runtimeReady` (Tier 1 → downRuntimeHealth → false; live → supervisor.isAlive()).
+  const runtimeHealthSeam = options.runtimeHealth ?? downRuntimeHealth();
   const sessionService = createSessionService({
     store: options.sessionStore ?? notAttachedSessionStore(),
-    health: options.runtimeHealth ?? downRuntimeHealth(),
+    health: runtimeHealthSeam,
     canceller: providerPort,
     now,
     redactError,
@@ -741,6 +764,17 @@ export async function createCoworkService(
     });
   })();
 
+  // Local Knowledge Base + Graph (MVP) — only when the SQLite DB is present. Scoped to the active
+  // workspace; purely local (no network, no embeddings).
+  const knowledgeLocalService =
+    sqliteDatabase !== undefined
+      ? createKnowledgeLocalService({
+          repo: createKnowledgeLocalRepository(sqliteDatabase),
+          activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+          now,
+        })
+      : undefined;
+
   const routers = [
     ...(localAuth !== undefined
       ? [
@@ -809,6 +843,9 @@ export async function createCoworkService(
         return ws?.rootPath;
       },
     }),
+    ...(knowledgeLocalService !== undefined
+      ? [createKnowledgeLocalRouter(knowledgeLocalService)]
+      : []),
     createRuntimePreviewRouter(previewService),
     createRuntimeAppRouter(appService),
     createDiagnosticsRouter({
@@ -873,7 +910,11 @@ export async function createCoworkService(
     deps,
     // The service auto-mounts the (token-guarded) health router itself; we never re-mount it.
     start: async (): Promise<RunningService> => {
-      const running = await startService({ ...options, routers });
+      const running = await startService({
+        ...options,
+        routers,
+        runtimeReady: () => runtimeHealthSeam.isAlive(),
+      });
       if (!ownsSqlite || sqliteDatabase === undefined) return running;
       const db = sqliteDatabase;
       const originalStop = running.service.stop.bind(running.service);

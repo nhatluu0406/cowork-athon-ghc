@@ -31,7 +31,7 @@ export const CONTINUATION_UNLOCK_SELECTOR =
 
 /** Packaged executable that all packaged tests must launch (never a temp copy). */
 export function packagedExecutablePath(repoRoot = process.cwd()) {
-  return join(repoRoot, "dist-app", "win-unpacked", "Cowork GHC.exe");
+  return join(repoRoot, "dist-app", "win-unpacked", "coworkghc.exe");
 }
 
 /**

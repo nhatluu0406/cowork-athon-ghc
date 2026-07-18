@@ -175,9 +175,21 @@ Deferred: terminal/PTY, Git UI, debugger, LSP; app không phải Electron; mở 
 
 ## WAITING
 
-- [ ] D1 Dispatch integration.
+- [x] D1 Dispatch integration — wired into main (pairing + board + gate); `start.bat` bật cho demo.
+      Live phone round-trip chưa quan sát (WIRED — LIVE DEVICE UNVERIFIED).
 - [ ] D2 Microsoft 365 product acceptance.
-- [ ] D3 Knowledge/RAG integration.
+- [x] D3 **Local** Knowledge Base + Graph MVP — **kho tri thức thống nhất theo active Workspace**
+      (SQLite FTS5 + deterministic graph; provenance badge + bộ lọc nguồn; chỉ 2 tab `Kho tri thức`/
+      `Đồ thị`, không tab nguồn; code+tests+build PASS, **data-rich packaged acceptance PASS** qua UI
+      audit 21/21 / 33 ảnh với seed workspace cô lập — index/list/search/graph/prune/clear, 2026-07-18).
+      Microsoft 365 = nguồn bổ sung tương lai với
+      readiness trung thực (không fake data/network); contracts sẵn sàng ingest vào cùng kho.
+      Deferred: embeddings/semantic (needs `llm-svc`, LF-3), PDF text, external M365KG/Neo4j path,
+      MS365 ingestion thật.
+- [ ] D3 M365 Knowledge Graph (PR #13) — **bảo tồn ở branch `experimental/m365-knowledge-graph`**
+      (tag `m365-kg-pr13-integration-2026-07`), default OFF, không start trong packaged app. Blocker:
+      source `llm-svc` vắng mặt + chưa orchestration/package verification. Exhibition Knowledge dùng
+      **SQLite Local KB** ở trên (`feature/local-knowledge-mvp`).
 - [ ] D4 Gateway integration.
 
 ## DEFERRED

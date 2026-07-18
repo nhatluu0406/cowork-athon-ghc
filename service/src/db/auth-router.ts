@@ -11,6 +11,9 @@ export const AUTH_STATUS_PATH = "/v1/auth/status";
 export const AUTH_SETUP_PATH = "/v1/auth/setup";
 export const AUTH_UNLOCK_PATH = "/v1/auth/unlock";
 export const AUTH_LOCK_PATH = "/v1/auth/lock";
+export const AUTH_AUTO_UNLOCK_STATUS_PATH = "/v1/auth/auto-unlock";
+export const AUTH_AUTO_UNLOCK_ENABLE_PATH = "/v1/auth/auto-unlock/enable";
+export const AUTH_AUTO_UNLOCK_DISABLE_PATH = "/v1/auth/auto-unlock/disable";
 
 export class AuthRequestError extends BadRequestError {
   constructor(message: string) {
@@ -92,6 +95,53 @@ export function createAuthRouter(options: AuthRouterOptions): BoundaryRouter {
     return { status: 200, data: auth.status() };
   };
 
+  // --- Device-bound auto-unlock (login-not-required mode). Shell-orchestrated: the shell supplies
+  // the user's password (confirmation) + a self-generated deviceSecret (which it seals with
+  // safeStorage). The deviceSecret is never returned or logged. ---
+
+  const autoUnlockStatus = (): RouteResult => ({
+    status: 200,
+    data: { hasEnvelope: auth.hasAutoUnlockEnvelope() },
+  });
+
+  const requireField = (body: unknown, field: string): string => {
+    if (typeof body !== "object" || body === null) {
+      throw new AuthRequestError("Request body must be a JSON object.");
+    }
+    const value = (body as Record<string, unknown>)[field];
+    if (typeof value !== "string" || value.length === 0) {
+      throw new AuthRequestError(`${field} is required.`);
+    }
+    return value;
+  };
+
+  const enableAutoUnlock = (ctx: RouteContext): RouteResult => {
+    try {
+      const password = requireField(ctx.body, "password");
+      const deviceSecret = requireField(ctx.body, "deviceSecret");
+      if (!auth.verifyCurrentPassword(password)) {
+        throw new AuthRequestError("Invalid password.");
+      }
+      auth.enableAutoUnlock(deviceSecret);
+      return { status: 200, data: { ok: true, hasEnvelope: true } };
+    } catch (err) {
+      rethrowAuth(err);
+    }
+  };
+
+  const disableAutoUnlock = (ctx: RouteContext): RouteResult => {
+    try {
+      const password = requireField(ctx.body, "password");
+      if (!auth.verifyCurrentPassword(password)) {
+        throw new AuthRequestError("Invalid password.");
+      }
+      auth.disableAutoUnlock();
+      return { status: 200, data: { ok: true, hasEnvelope: false } };
+    } catch (err) {
+      rethrowAuth(err);
+    }
+  };
+
   return {
     name: "auth",
     routes: [
@@ -99,6 +149,9 @@ export function createAuthRouter(options: AuthRouterOptions): BoundaryRouter {
       { method: "POST", path: AUTH_SETUP_PATH, handler: setup },
       { method: "POST", path: AUTH_UNLOCK_PATH, handler: unlock },
       { method: "POST", path: AUTH_LOCK_PATH, handler: lock },
+      { method: "GET", path: AUTH_AUTO_UNLOCK_STATUS_PATH, handler: autoUnlockStatus },
+      { method: "POST", path: AUTH_AUTO_UNLOCK_ENABLE_PATH, handler: enableAutoUnlock },
+      { method: "POST", path: AUTH_AUTO_UNLOCK_DISABLE_PATH, handler: disableAutoUnlock },
     ],
   };
 }

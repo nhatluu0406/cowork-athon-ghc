@@ -18,6 +18,18 @@ export interface DispatchBoardClient {
   cancelDispatchRun(runId: string): Promise<void>;
 }
 
+/**
+ * Whether a dispatch task may be started, and if not, the honest reason. A fan-out run drives real
+ * LLM agents in the active workspace, so it needs the same prerequisites as a Cowork send (service +
+ * workspace + provider). Gating the "Chạy" button here avoids the run-then-fail UX (ui-ux-audit F3).
+ */
+export interface DispatchRunGate {
+  readonly canRun: boolean;
+  readonly reason: string;
+}
+
+const DISPATCH_RUN_READY: DispatchRunGate = { canRun: true, reason: "" };
+
 const POLL_MS = 3_000;
 
 const RUN_STATUS_LABEL: Record<DispatchRunView["status"], string> = {
@@ -52,6 +64,7 @@ function describeAgents(task: DispatchTaskView): string {
 
 function renderTasks(
   tasks: readonly DispatchTaskView[],
+  gate: DispatchRunGate,
   onRun: (taskId: string, note: HTMLElement) => void,
 ): HTMLElement {
   const section = el("div", "dispatch-section");
@@ -59,6 +72,10 @@ function renderTasks(
   if (tasks.length === 0) {
     section.appendChild(el("p", "dispatch-note", "Chưa có task nào."));
     return section;
+  }
+  if (!gate.canRun) {
+    const blocked = el("p", "dispatch-note dispatch-note--blocked", gate.reason);
+    section.appendChild(blocked);
   }
   for (const task of tasks) {
     const row = el("div", "dispatch-task");
@@ -73,8 +90,14 @@ function renderTasks(
       `${task.id} · ${LOOP_MODE_LABEL[task.loop.mode]} · ${describeAgents(task)}`,
     );
     const note = el("span", "dispatch-task__note", "");
-    const runBtn = el("button", "dispatch-btn", "Chạy");
+    const runBtn = el("button", "dispatch-btn", "Chạy") as HTMLButtonElement;
+    if (!gate.canRun) {
+      runBtn.disabled = true;
+      runBtn.dataset["tooltip"] = gate.reason;
+      runBtn.setAttribute("aria-disabled", "true");
+    }
     runBtn.addEventListener("click", () => {
+      if (!gate.canRun) return;
       runBtn.disabled = true;
       note.textContent = "";
       onRun(task.id, note);
@@ -131,7 +154,11 @@ function renderRun(run: DispatchRunView, onCancel: (runId: string) => void): HTM
  * Replace `body` with the current dispatch catalog + runs. Never throws: an unreachable service
  * renders an honest note. Re-polls while a run is live and `body` stays connected to the DOM.
  */
-export async function renderDispatchBoard(client: DispatchBoardClient, body: HTMLElement): Promise<void> {
+export async function renderDispatchBoard(
+  client: DispatchBoardClient,
+  body: HTMLElement,
+  gate: DispatchRunGate = DISPATCH_RUN_READY,
+): Promise<void> {
   let tasks: readonly DispatchTaskView[];
   let runs: readonly DispatchRunView[];
   try {
@@ -143,10 +170,10 @@ export async function renderDispatchBoard(client: DispatchBoardClient, body: HTM
 
   const refresh = (): void => {
     if (!body.isConnected) return;
-    void renderDispatchBoard(client, body);
+    void renderDispatchBoard(client, body, gate);
   };
 
-  const tasksSection = renderTasks(tasks, (taskId, note) => {
+  const tasksSection = renderTasks(tasks, gate, (taskId, note) => {
     void client
       .runDispatchTask(taskId)
       .then(() => refresh())

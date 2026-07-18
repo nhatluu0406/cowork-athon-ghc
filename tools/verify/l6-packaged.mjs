@@ -1,5 +1,5 @@
 /**
- * L6 packaged acceptance (CGHC-028 slices 5A–5E) — uses dist-app/win-unpacked/Cowork GHC.exe.
+ * L6 packaged acceptance (CGHC-028 slices 5A–5E) — uses dist-app/win-unpacked/coworkghc.exe.
  *
  * Live inference budget: at most 3 successful completions (short deterministic prompts).
  */
@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19226;
 const TRACE = join(REPO, ".runtime", "l6-packaged.trace");
 const FIXTURE_APPROVE = "cghc-l6-approve.txt";
@@ -146,7 +146,7 @@ function launch(extraEnv = {}, userDataDir) {
 async function stop(proc) {
   if (proc.exitCode === null) proc.kill();
   await sleep(3000);
-  for (const image of ["Cowork GHC.exe", "opencode.exe"]) {
+  for (const image of ["coworkghc.exe", "opencode.exe"]) {
     try {
       execSync(`taskkill /F /IM "${image}" /T`, { stdio: "ignore" });
     } catch {
@@ -318,7 +318,7 @@ async function main() {
   await sleep(1500);
   proc.kill();
   await sleep(4000);
-  let coworkLeft = countProcesses("Cowork GHC.exe");
+  let coworkLeft = countProcesses("coworkghc.exe");
   let opencodeLeft = countProcesses("opencode.exe");
   if (coworkLeft > 0 || opencodeLeft > 0) {
     await stop(proc);

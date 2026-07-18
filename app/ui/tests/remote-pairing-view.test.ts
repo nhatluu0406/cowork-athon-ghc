@@ -41,7 +41,8 @@ test("a remote gateway that is off is reported honestly, not as a pairing screen
     client({ remoteStatus: async () => ({ enabled: false, url: null, lanUrls: [], devices: [] }) }),
     body,
   );
-  assert.match(body.textContent ?? "", /chưa chạy/i);
+  assert.match(body.textContent ?? "", /chưa bật/i);
+  assert.doesNotMatch(body.textContent ?? "", /CGHC_REMOTE/);
   assert.equal(body.querySelector("button"), null, "must not offer pairing when the gateway is off");
 });
 
@@ -55,7 +56,9 @@ test("an unreachable service does not render a broken pairing screen", async () 
     }),
     body,
   );
-  assert.match(body.textContent ?? "", /CGHC_REMOTE_ENABLED/);
+  // Honest, non-technical copy — no developer env-var/restart instructions (F2).
+  assert.match(body.textContent ?? "", /Điều phối từ xa chưa sẵn sàng/);
+  assert.doesNotMatch(body.textContent ?? "", /CGHC_REMOTE_ENABLED/);
 });
 
 test("issuing a code renders the code and adopts the QR svg", async () => {
@@ -94,14 +97,17 @@ test("a qr payload carrying script is refused, and pairing still reports the cod
   assert.match(body.textContent ?? "", /không dựng được QR/);
 });
 
-test("the Dispatch surface offers phone pairing while still reporting D1 as unintegrated", () => {
+test("the Dispatch surface renders real phone pairing + the local dispatch board", () => {
   const container = document.createElement("div");
   renderIntegrationSurface(container, dispatchSurface, client());
 
-  // The honest D1 status must survive: pairing a phone does not mean D1 landed.
-  assert.match(container.textContent ?? "", /Chờ tích hợp D1/);
+  // D1 is INTEGRATED (ADR 0011): the Dispatch surface shows its REAL content — phone pairing
+  // plus the local dispatch board — not the "Chờ tích hợp D1" awaiting-integration placeholder
+  // that only fits the genuinely-empty surfaces. Honesty is preserved by the board/pairing
+  // rendering their own empty/loading states, not by faking a D1 backend that has not landed.
   assert.ok(container.querySelector(".integration-remote"), "dispatch must render the pairing section");
   assert.ok(container.querySelector(".integration-dispatch"), "dispatch must render the board section");
+  assert.doesNotMatch(container.textContent ?? "", /Chờ tích hợp D1/);
 });
 
 test("other awaiting-integration surfaces do not grow a pairing section", () => {

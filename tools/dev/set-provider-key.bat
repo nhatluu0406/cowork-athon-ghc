@@ -4,7 +4,7 @@ rem Cowork GHC - set-provider-key.bat : store a provider API key in Windows Cred
 rem Manager via a HIDDEN local prompt. The key is typed (no echo) at the prompt below and
 rem is NEVER passed on the command line, written to a file, or put in an env var.
 rem Resolve project root from this script's own location (independent of current dir).
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - set provider key
 
 where node >nul 2>nul

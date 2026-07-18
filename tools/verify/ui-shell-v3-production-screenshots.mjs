@@ -11,7 +11,7 @@ import { packagedChildEnv } from "./packaged-launch-env.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = join(HERE, "..", "..");
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const OUT_DIR = join(REPO, "reports", "ui-shell-v3-commercial-readiness");
 const CDP_PORT = 19228;
 const SAFE_TMP = "C:\\tmp";
@@ -630,7 +630,7 @@ async function main() {
     if (proc.exitCode === null) proc.kill();
     await sleep(1500);
     try {
-      execSync(`taskkill /F /IM "Cowork GHC.exe" /T`, { stdio: "ignore" });
+      execSync(`taskkill /F /IM "coworkghc.exe" /T`, { stdio: "ignore" });
     } catch {
       // already stopped
     }

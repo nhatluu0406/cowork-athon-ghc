@@ -11,6 +11,8 @@ import type { BuiltInProviderSelection, LiveProviderSelection } from "@cowork-gh
 
 import type { LiveLaunchConfig, LiveLaunchSource } from "./live-launch-resolver.js";
 import { peekRememberedUnlock, rememberUnlock } from "./session-unlock.js";
+import { readSealedDeviceSecret } from "./device-unlock.js";
+import { dirname } from "node:path";
 
 /** Typed, secret-free failure assembling the launch config from env. */
 export class EnvLaunchConfigError extends Error {
@@ -106,6 +108,10 @@ export function createEnvLaunchSource(options: EnvLaunchSourceOptions = {}): Liv
     const settingsFilePath = trimmed(env["COWORK_SETTINGS_FILE"]) ?? trimmed(options.settingsFilePath);
     const dbPath = trimmed(env["COWORK_DB_PATH"]) ?? trimmed(options.dbPath);
     const autoUnlock = peekRememberedUnlock();
+    const autoUnlockDeviceSecret =
+      autoUnlock === null && settingsFilePath !== undefined
+        ? readSealedDeviceSecret(dirname(settingsFilePath))
+        : null;
 
     const injectedStore = options.makeCredentialStore
       ? await options.makeCredentialStore()
@@ -121,6 +127,7 @@ export function createEnvLaunchSource(options: EnvLaunchSourceOptions = {}): Liv
         ...(dbPath !== undefined ? { dbPath } : {}),
         ...(injectedStore !== undefined ? { credentialStore: injectedStore } : {}),
         ...(autoUnlock !== null ? { autoUnlock } : {}),
+        ...(autoUnlockDeviceSecret !== null ? { autoUnlockDeviceSecret } : {}),
         rememberUnlock,
         ...(options.conversationsDir !== undefined
           ? { conversationsDir: options.conversationsDir }

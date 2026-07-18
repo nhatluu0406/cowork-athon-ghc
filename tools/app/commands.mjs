@@ -63,7 +63,7 @@ export function cmdInit(root, deps = {}) {
 
 /** Resolve the app executable to launch, preferring a packaged build when present. */
 function resolveLaunch(root, deps) {
-  const packaged = deps.packagedExe ?? join(root, 'dist-app', 'win-unpacked', 'Cowork GHC.exe');
+  const packaged = deps.packagedExe ?? join(root, 'dist-app', 'win-unpacked', 'coworkghc.exe');
   const exists = deps.exists ?? existsSync;
   if (exists(packaged)) return { exe: packaged, args: [], packaged: true };
   const mainJs = join(root, 'app', 'shell', 'dist', 'main.cjs');

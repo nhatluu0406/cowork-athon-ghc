@@ -27,7 +27,10 @@
     "verify:native-sqlite": "node tools/verify/native-sqlite-electron.mjs",
     "verify:release": "node tools/verify/release-regression.mjs",
     "app": "node tools/app/cli.mjs",
-    "clean": "node tools/app/cli.mjs clean"
+    "clean": "node tools/app/cli.mjs clean",
+    "verify:fast": "npm run typecheck && node --import tsx --test service/tests/provider-profiles.test.ts service/tests/provider-readiness.test.ts service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/skill-catalog.test.ts service/tests/knowledge-local-repository.test.ts service/tests/knowledge-local-indexer.test.ts service/tests/knowledge-local-service.test.ts service/tests/health-router.test.ts service/tests/local-data-vault.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/surface-registry.test.ts app/ui/tests/provider-readiness.test.ts app/ui/tests/mention-typeahead.test.ts app/ui/tests/dispatch-board.test.ts app/ui/tests/remote-pairing-view.test.ts app/ui/tests/knowledge-local-panel.test.ts app/ui/tests/markdown-message.test.ts app/ui/tests/parse-problems.test.ts app/ui/tests/preview-controller.test.ts app/ui/tests/app-controller.test.ts app/shell/tests/startup-auth-mode.test.ts && npm run build:renderer",
+    "demo:seed": "node tools/demo/seed-binary.mjs demo-workspace && node tools/demo/seed-office.mjs demo-workspace",
+    "audit:ui": "node tools/ui-audit/capture.mjs"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1"

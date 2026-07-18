@@ -36,6 +36,12 @@ import {
 } from "@cowork-ghc/contracts";
 import type { SessionView } from "@cowork-ghc/service/execution";
 import type { KnowledgeStatusView } from "@cowork-ghc/service/knowledge/types";
+import type {
+  KnowledgeDocumentView,
+  KnowledgeGraphApiResult,
+  KnowledgeIndexView,
+  KnowledgeSearchHitView,
+} from "@cowork-ghc/service/knowledge-local/types";
 import {
   createPermissionClient,
   type DecidePermissionInput,
@@ -207,6 +213,8 @@ export interface GeneralSettingsView {
   readonly verboseLogging: boolean;
   readonly telemetryEnabled: boolean;
   readonly devtoolsEnabled: boolean;
+  /** Require the local password at startup (false = device-bound secure auto-unlock). */
+  readonly requireLoginOnStartup: boolean;
 }
 
 /**
@@ -783,6 +791,18 @@ export interface ServiceClient {
   configureKnowledgeSource(baseUrl: string, token: string): Promise<KnowledgeStatusView>;
   testKnowledgeConnection(): Promise<{ readonly ok: boolean }>;
   disconnectKnowledgeSource(): Promise<KnowledgeStatusView>;
+  /**
+   * Local Knowledge Base + Graph (offline, workspace-scoped): read index status, start/cancel a
+   * background sync, clear the index, keyword search, and the graph. Distinct from the M365 methods
+   * above — this is the local SQLite index, no network.
+   */
+  knowledgeLocalStatus(): Promise<KnowledgeIndexView>;
+  knowledgeLocalSync(): Promise<KnowledgeIndexView>;
+  knowledgeLocalCancel(): Promise<KnowledgeIndexView>;
+  knowledgeLocalClear(): Promise<KnowledgeIndexView>;
+  knowledgeLocalSearch(query: string, limit?: number): Promise<readonly KnowledgeSearchHitView[]>;
+  knowledgeLocalGraph(limit?: number): Promise<KnowledgeGraphApiResult>;
+  knowledgeLocalDocuments(): Promise<readonly KnowledgeDocumentView[]>;
   /** Connect an MS365 account using a Bearer token. */
   connectMs365Token(token: string): Promise<Ms365ViewData>;
   /** Fetch the current MS365 connection state and services. */
@@ -1382,6 +1402,26 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
       });
       return { status: "not_configured", baseUrl: null, lastHealthCheckAt: null };
     },
+
+    knowledgeLocalStatus: async () =>
+      (await call<{ status: KnowledgeIndexView }>("/v1/knowledge-local/status")).status,
+    knowledgeLocalSync: async () =>
+      (await call<{ status: KnowledgeIndexView }>("/v1/knowledge-local/sync", { method: "POST" })).status,
+    knowledgeLocalCancel: async () =>
+      (await call<{ status: KnowledgeIndexView }>("/v1/knowledge-local/cancel", { method: "POST" })).status,
+    knowledgeLocalClear: async () =>
+      (await call<{ status: KnowledgeIndexView }>("/v1/knowledge-local/clear", { method: "POST" })).status,
+    knowledgeLocalSearch: async (query, limit) => {
+      const params = new URLSearchParams({ q: query });
+      if (limit !== undefined) params.set("limit", String(limit));
+      return (await call<{ hits: readonly KnowledgeSearchHitView[] }>(`/v1/knowledge-local/search?${params.toString()}`)).hits;
+    },
+    knowledgeLocalGraph: async (limit) => {
+      const suffix = limit !== undefined ? `?limit=${String(limit)}` : "";
+      return (await call<{ graph: KnowledgeGraphApiResult }>(`/v1/knowledge-local/graph${suffix}`)).graph;
+    },
+    knowledgeLocalDocuments: async () =>
+      (await call<{ documents: readonly KnowledgeDocumentView[] }>("/v1/knowledge-local/documents")).documents,
 
     connectMs365Token: async (token) =>
       call<Ms365ViewData>("/v1/ms365/connect", {

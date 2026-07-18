@@ -107,6 +107,12 @@ export interface CoworkServiceOptions extends ServiceOptions {
    */
   readonly autoUnlock?: { readonly username: string; readonly password: string };
   /**
+   * Device-bound auto-unlock secret (shell main only): the plaintext deviceSecret the shell just
+   * decrypted from its safeStorage-sealed blob. When set (and no password autoUnlock), composition
+   * unwraps the vault from the app_meta envelope. Never log or persist; the shell holds it sealed.
+   */
+  readonly autoUnlockDeviceSecret?: string;
+  /**
    * Called after a successful setup/unlock with the plaintext password (shell main only).
    * Used to re-unlock after live restart. Never log or persist to disk.
    */

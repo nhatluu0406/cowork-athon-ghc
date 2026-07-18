@@ -40,6 +40,7 @@ import {
   assessConfigPreflight,
   assessSendPreflight,
   buildReadinessInput,
+  dispatchGateReason,
   localServiceStatus,
   providerModelLabel,
   providerStatus,
@@ -61,6 +62,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
+import { createMentionTypeahead } from "./mention-typeahead.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -78,6 +80,7 @@ import { planRuntimeTurn } from "./runtime-turn-planner.js";
 import { planDispatchPrompt, type AttachmentSnapshot } from "./attachment-context.js";
 import { SECRET_ATTACHMENT_MESSAGE } from "./attachment-secret-policy.js";
 import { sanitizeAssistantForDisplay } from "./assistant-output.js";
+import { renderAssistantMarkdown } from "./markdown-message.js";
 import {
   detectFileActionIntent,
   hasVerifiedFileAction,
@@ -86,6 +89,7 @@ import {
 } from "./file-action-integrity.js";
 import {
   createPendingAttachmentId,
+  isPendingRelativePath,
   totalValidBytes,
   type PendingAttachment,
 } from "./attachment-pending.js";
@@ -125,11 +129,13 @@ import { renderSkillsMcpTab, type SkillsMcpTab } from "./ui-shell/skills-mcp-vie
 import { renderConversationProviderControl } from "./ui-shell/conversation-provider-control.js";
 import { renderStatusBar } from "./ui-shell/status-bar.js";
 import { mountWorkspaceCompanionPane, type WorkspaceCompanionPaneHandle } from "./workspace-companion-pane.js";
+import { mountKnowledgeLocalPanel, type KnowledgeLocalPanelHandle } from "./knowledge-local-panel.js";
 import { ensureAppUnlocked } from "./app-lock.js";
 import type { WorkspaceNavigatorHandle } from "./workspace-navigator.js";
 import type { PermissionMode } from "./ui-shell/permission-mode-control.js";
 
 let workspaceCompanionHandle: WorkspaceCompanionPaneHandle | null = null;
+let knowledgeLocalPanel: KnowledgeLocalPanelHandle | null = null;
 // Module-level so the verified-mutation handler (finalizeFileMutationReview) can auto-refresh the
 // file trees after an agent create/modify/delete, not just the mount closure.
 let workspaceNavigator: WorkspaceNavigatorHandle | null = null;
@@ -362,8 +368,10 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   const copy = dom.emptyState.querySelector<HTMLElement>(".empty-state__copy");
   if (state.activeWorkspace === null) {
     if (title !== null) title.textContent = "Chọn workspace để bắt đầu";
-    if (copy !== null) copy.textContent = "Chọn một workspace ở sidebar trước khi gửi yêu cầu đầu tiên.";
-    dom.emptyStateCta.hidden = true;
+    if (copy !== null) copy.textContent = "Chọn một workspace dùng chung cho mọi màn hình trước khi gửi yêu cầu đầu tiên.";
+    dom.emptyStateCta.textContent = "Chọn Workspace";
+    dom.emptyStateCta.dataset["action"] = "pick-workspace";
+    dom.emptyStateCta.hidden = false;
     return;
   }
   if (
@@ -374,6 +382,8 @@ function renderCoworkEmptyState(dom: AppDom, state: AppState, preflight: ReturnT
   ) {
     if (title !== null) title.textContent = "Cấu hình provider để bắt đầu";
     if (copy !== null) copy.textContent = preflight.message;
+    dom.emptyStateCta.textContent = "Mở Settings";
+    dom.emptyStateCta.dataset["action"] = "open-settings";
     dom.emptyStateCta.hidden = false;
     return;
   }
@@ -432,9 +442,14 @@ function appendMessage(
   const body = el("div", "msg__body");
   body.append(el("div", "msg__name", role === "user" ? "Bạn" : "Cowork GHC"));
   const textBox = el("div", "msg__text");
-  const p = document.createElement("p");
-  p.textContent = text;
-  textBox.append(p);
+  if (role === "assistant") {
+    // Assistant prose is rendered as SAFE Markdown (sanitized). User text stays plain.
+    renderAssistantMarkdown(textBox, text);
+  } else {
+    const p = document.createElement("p");
+    p.textContent = text;
+    textBox.append(p);
+  }
   body.append(textBox);
 
   // Skills remain persisted for provenance; do not render chips/versions in the visible transcript.
@@ -1014,6 +1029,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   if (isKnowledgeSurface) {
     setKnowledgeGraphCapability(dom.knowledgeView, hasKnowledgeGraphCapability());
     renderKnowledgeTab(dom.knowledgeView, state.knowledgeTab);
+    knowledgeLocalPanel?.show(state.knowledgeTab);
   } else if (isMicrosoftSurface) {
     renderMicrosoftSurfaceBound(dom, state, handlers);
   } else if (isCodeSurface) {
@@ -1021,7 +1037,13 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
   } else if (!isCoworkSurface) {
-    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client);
+    // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
+    // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
+    const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
+    renderIntegrationSurface(dom.integrationSurface, activeSurface, state.client, {
+      canRun: dispatchCfg.canSend,
+      reason: dispatchCfg.canSend ? "" : dispatchGateReason(dispatchCfg.blockKind),
+    });
   }
 
   if (isCoworkSurface) {
@@ -1131,8 +1153,10 @@ async function refreshSettings(state: AppState, dom: AppDom, handlers: Parameter
 }
 
 function updateAssistantBubble(state: AppState, text: string): void {
-  const assistant = state.activeAssistant?.querySelector<HTMLElement>(".msg__text p") ?? null;
-  if (assistant !== null) assistant.textContent = text;
+  // Full-text repaint each tick → re-render the whole Markdown block (streaming-safe: partial
+  // Markdown just renders partially, never throws or duplicates).
+  const textBox = state.activeAssistant?.querySelector<HTMLElement>(".msg__text") ?? null;
+  if (textBox !== null) renderAssistantMarkdown(textBox, text);
   if (text.trim().length > 0 && state.activeAssistant !== null) {
     state.activeAssistant.classList.remove("msg--awaiting");
     const thinking = state.activeAssistant.querySelector<HTMLElement>(".thinking");
@@ -1869,6 +1893,56 @@ async function pickAttachment(
   renderState(dom, state, handlers);
 }
 
+/**
+ * Attach a workspace file by its workspace-RELATIVE path (from the `@`-mention picker), reusing
+ * the same guarded read + pending-chip flow as {@link pickAttachment}. Deduped so mentioning a
+ * file already attached is a no-op. Silent on missing client/workspace — the `@` popup only opens
+ * when both are present, so this is defensive.
+ */
+async function attachWorkspaceRelativePath(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): Promise<void> {
+  if (state.client === null || state.activeWorkspace === null) return;
+  if (isPendingRelativePath(state.pendingAttachments, relativePath)) return;
+
+  // The attachment-read endpoint takes an absolute path inside the workspace and re-derives the
+  // relative path itself (it normalizes `/`→`\` and checks the root prefix), so joining the root
+  // with a forward slash is safe on Windows.
+  const absolutePath = `${state.activeWorkspace}/${relativePath}`;
+  const priorBytes = totalValidBytes(state.pendingAttachments);
+  const result = await state.client.readWorkspaceAttachment(absolutePath, priorBytes);
+  if (!result.ok) {
+    const isSecret = result.reason === "secret_file";
+    state.pendingAttachments = [
+      ...state.pendingAttachments,
+      {
+        id: createPendingAttachmentId(),
+        relativePath,
+        filename: relativePath.split(/[\\/]/).pop() ?? relativePath,
+        status: "error",
+        errorMessage: isSecret ? SECRET_ATTACHMENT_MESSAGE : result.message,
+      },
+    ];
+    renderState(dom, state, handlers);
+    return;
+  }
+
+  state.pendingAttachments = [
+    ...state.pendingAttachments,
+    {
+      id: createPendingAttachmentId(),
+      relativePath: result.metadata.relativePath,
+      filename: result.metadata.filename,
+      status: "valid",
+      metadata: result.metadata,
+    },
+  ];
+  renderState(dom, state, handlers);
+}
+
 function recordAttachmentActivity(
   state: AppState,
   included: readonly AttachmentMetadata[],
@@ -1926,6 +2000,29 @@ function recordAttachmentActivity(
 interface SendPromptOptions {
   readonly promptOverride?: string;
   readonly skipAttachments?: boolean;
+  /** Set by the manual retry affordance so a user-initiated resend does not itself auto-retry. */
+  readonly skipStartupRetry?: boolean;
+}
+
+/**
+ * Poll `/v1/health` until the supervised runtime reports ready (Tier 2 attached + alive), bounded by
+ * `timeoutMs`. Used before the single first-turn retry so we wait on a REAL signal, never a blind
+ * sleep. Resolves `true` when ready; `false` on timeout / no live client / no runtime tier.
+ */
+async function awaitRuntimeReady(state: AppState, timeoutMs: number): Promise<boolean> {
+  const client = state.client;
+  if (client === null) return false;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const health = await client.health();
+      if (health.runtimeReady === true) return true;
+    } catch {
+      // transient during startup — keep polling until the deadline
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
 }
 
 async function sendPrompt(
@@ -2059,7 +2156,7 @@ async function sendPrompt(
     renderState(dom, state, handlers);
 
     const dispatchText = dispatchPlan.text;
-    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    let result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     if (result.accepted) {
       state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
     }
@@ -2069,6 +2166,41 @@ async function sendPrompt(
       (result.reason === "session_completed" ||
         ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
           state.lastView.terminal !== null));
+
+    // First-turn startup race: OpenCode passed `/global/health` but could not serve the prompt yet
+    // (transient 503 `runtime_unavailable`/`runtime_not_attached`). If NOTHING has happened on this
+    // session (no EV frame/stream/tool/mutation), the send never reached a run — so it is safe to
+    // wait for the runtime to report ready (bounded health poll, not a blind sleep) and resend the
+    // SAME text to the SAME session exactly ONCE. A 503 guarantees no duplicate turn.
+    const transientRuntime =
+      !result.accepted &&
+      (result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached");
+    const freshNoActivity =
+      state.lastView.terminal === null &&
+      state.lastView.lastSeq === 0 &&
+      state.lastView.text.length === 0 &&
+      state.lastView.toolCalls.length === 0 &&
+      state.lastView.fileMutations.length === 0;
+    if (
+      transientRuntime &&
+      !needsContinuation &&
+      freshNoActivity &&
+      options?.skipStartupRetry !== true
+    ) {
+      updateAssistantBubble(state, "Đang khởi động Agent…");
+      renderState(dom, state, handlers);
+      await awaitRuntimeReady(state, 12_000);
+      const startupRetry = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+      if (startupRetry.accepted) {
+        state.turnTiming.mark("PROMPT_ACCEPTED", "startup-retry-ok");
+        permissionRefreshNow?.();
+        updateAssistantBubble(state, ""); // clear the placeholder; the EV stream now drives the bubble
+        refreshActivityUi(state, dom);
+        return;
+      }
+      result = startupRetry; // fall through to the honest failure UI with the retry's reason
+    }
+
     if (!result.accepted) {
       if (needsContinuation) {
         await state.conv.startContinuation();
@@ -2126,7 +2258,11 @@ async function sendPrompt(
             | undefined;
           if (lastUser !== undefined) {
             attachSendRetry(lastUser, () => {
-              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+              void sendPrompt(state, dom, readiness, handlers, {
+                promptOverride: prompt,
+                skipAttachments: true,
+                skipStartupRetry: true,
+              });
             });
           }
         }
@@ -2193,6 +2329,38 @@ function openWorkspaceFileFromCowork(
     void workspaceCompanion?.open(relativePath);
   }
   renderState(dom, state, handlers);
+}
+
+/**
+ * Cross-surface "Hỏi Cowork về tệp này": switch to Cowork and seed the composer with a question
+ * scoped to `relativePath`. The shared active workspace is unchanged; the agent reads the file via
+ * its normal workspace tools, so nothing here fabricates content or an attachment. If the composer
+ * already holds a draft it is preserved (the reference is prepended once, not duplicated).
+ */
+function askCoworkAboutFile(
+  state: AppState,
+  dom: AppDom,
+  handlers: Parameters<typeof renderState>[2],
+  relativePath: string,
+): void {
+  state.activeSurface = "cowork";
+  state.workMode = "cowork";
+  const lead = `Về tệp \`${relativePath}\`: `;
+  const existing = textFromComposer(dom.composerInput);
+  if (!existing.startsWith(`Về tệp \`${relativePath}\``)) {
+    setComposerText(dom.composerInput, existing.length > 0 ? `${lead}${existing}` : lead);
+  }
+  renderState(dom, state, handlers);
+  // Focus + caret to end so the user just types the question.
+  dom.composerInput.focus();
+  const sel = window.getSelection();
+  if (sel !== null) {
+    const range = document.createRange();
+    range.selectNodeContents(dom.composerInput);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
 }
 
 function createShell(root: HTMLElement): AppDom {
@@ -2624,6 +2792,8 @@ export function mountCoworkApp(root: HTMLElement): void {
                 renderState(dom, state, handlers);
               },
             });
+            // The Cowork empty-state primary action opens this same picker (no-workspace state).
+            dom.pickWorkspace = () => void workspacePicker?.choose();
             workspaceNavigator = mountWorkspaceNavigator(dom.workspaceNavigatorSlot, {
             client: dynamicClient,
             getWorkspaceRoot: () => state.activeWorkspace,
@@ -2650,6 +2820,8 @@ export function mountCoworkApp(root: HTMLElement): void {
               void workspaceCompanionHandle?.open(relativePath);
               renderState(dom, state, handlers);
             },
+            // Code → Cowork handoff: ask the agent about the active file.
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
           });
           previewController = mountPreviewController(
             dom.codeView.previewPaneHost,
@@ -2689,8 +2861,23 @@ export function mountCoworkApp(root: HTMLElement): void {
                 codeEditor?.openFile(relativePath);
                 renderState(dom, state, handlers);
               },
+              // Workspace → Cowork handoff: ask the agent about the open file.
+              onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
             },
           );
+          knowledgeLocalPanel = mountKnowledgeLocalPanel(dom.knowledgeView, dynamicClient, {
+            // Knowledge result → Workspace (open the source file) using the shared active workspace.
+            onOpenSource: (relativePath) => {
+              state.activeSurface = "cowork";
+              state.workMode = "workspace";
+              workspaceNavigator?.selectPath(relativePath);
+              void workspaceCompanionHandle?.open(relativePath);
+              renderState(dom, state, handlers);
+            },
+            // Knowledge result → Cowork (ask about the source file).
+            onAskCowork: (relativePath) => askCoworkAboutFile(state, dom, handlers, relativePath),
+            onChooseWorkspace: () => void workspacePicker?.choose(),
+          });
           mountProviderProfilesPanel(dom.settingsProviderBody, {
             client: dynamicClient,
             onSettingsUpdated: (view) => {
@@ -3114,9 +3301,32 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
+  // @-mention typeahead: typing `@` in the composer suggests active-workspace files; picking one
+  // inserts `@<relativePath> ` as text AND attaches the file's content (guarded workspace read,
+  // same pending-chip flow as the paperclip) so `@file` both references the path and pulls the
+  // file into context. The file list comes from the guarded /v1/workspace/list walk.
+  const mentionTypeahead = createMentionTypeahead({
+    input: dom.composerInput,
+    anchor: dom.composer,
+    getClient: () => state.client,
+    getWorkspace: () => state.activeWorkspace,
+    onApplied: () => syncComposerChrome(dom, state),
+    onPicked: (relativePath) => {
+      void attachWorkspaceRelativePath(state, dom, handlers, relativePath).catch((error) => {
+        appendMessage(dom, "assistant", safeError(error));
+        renderState(dom, state, handlers);
+      });
+    },
+  });
+  dom.composerInput.addEventListener("input", () => {
+    syncComposerChrome(dom, state);
+    mentionTypeahead.refresh();
+  });
+  dom.composerInput.addEventListener("click", () => mentionTypeahead.refresh());
+  dom.composerInput.addEventListener("blur", () => mentionTypeahead.hide());
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
+    if (mentionTypeahead.handleKeydown(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       dom.sendButton.click();
