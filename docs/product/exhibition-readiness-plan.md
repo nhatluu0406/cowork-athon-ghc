@@ -85,6 +85,15 @@ it as the **immediate next slice**:
 **Scope.** `tools/ui-audit/` + `npm run audit:ui`. Drive the packaged `coworkghc.exe` and capture
 every surface/state; then a human UI/UX review against `ui-ux-audit.md`.
 
+**Latest run (2026-07-18, PR #16 Gateway + issue-fixes + rail/sidebar + docx pass).** `audit:ui`
+**52/52 checks PASS, 45 screenshots, exit 0, no orphan** (app + opencode across phases A–D) on the
+packaged build that includes: Gateway integrated, product-flow rail reorder, shared sidebar tokens,
+Skill row toggle/delete, MS365 shared MarkdownView, MS365↔Knowledge source reflect, @mention refresh,
+workspace-switch runtime relaunch, and the `create_docx` document tool. This confirms the packaged app
+launches and every surface mounts with all changes and cleans up processes. **Still PO-pending
+(harness not yet extended):** driving Gateway ON/OFF/account/metrics, an agent `create_docx` round-trip
+(permission card → Word opens), and DPI 125/150% — recommended next audit extensions.
+
 **Approach (built 2026-07-18).** In-process `webContents.capturePage` + `executeJavaScript`, gated by
 `COWORK_GHC_UI_AUDIT=1` (`app/shell/src/audit/ui-capture.ts`). CDP/Playwright was rejected: this
 Electron build refuses `--remote-debugging-port` ("bad option") and `app.commandLine.appendSwitch`
