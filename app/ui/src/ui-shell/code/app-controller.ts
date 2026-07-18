@@ -171,7 +171,7 @@ export function mountAppController(
     const s = state.status;
     pill.className = `cc-surface__runtime cc-surface__runtime--${appPillClass(s)}`;
     pill.textContent =
-      s === "running" ? "App: đang chạy" : s === "building" ? "App: đang build" : s === "starting" ? "App: khởi động" : s === "failed" ? "App: lỗi" : "App: tắt";
+      s === "running" ? "Ứng dụng: đang chạy" : s === "building" ? "Ứng dụng: đang build" : s === "starting" ? "Ứng dụng: khởi động" : s === "failed" ? "Ứng dụng: lỗi" : "Ứng dụng: tắt";
   }
 
   function appendOutput(lines: readonly RuntimePreviewOutputLine[]): void {

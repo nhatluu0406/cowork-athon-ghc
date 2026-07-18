@@ -27,7 +27,7 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 | Permission + File Work Review | WORKS | Hỏi trước / Tự động / Chỉ đọc; mutation phải có verified tool result. |
 | Inspector | WORKS (Phase 1) | Kế hoạch/Hoạt động/Tệp từ normalized EV events; PO-observed 2026-07-17. |
 | Logging/telemetry | WORKS (Wave 6) | Local rotating redacted logs + SQLite counters; no network egress; PO-observed 2026-07-17. |
-| Inspector/Code/Web Preview/Desktop App | Code+tests+build PASS, **packaged PO obs pending** | ADR 0013/0014/0015. Chưa claim WORKS tới khi có packaged PO observation. |
+| Inspector/Code/Web Preview/Desktop App | Code+tests+build PASS, **packaged PO obs pending** | ADR 0013/0014/0015. Chưa claim WORKS tới khi có packaged PO observation. **Exhibition audit 2026-07-18** đã chụp packaged các **panel runtime Code** (Xem trước/Web + drawer Kết quả/Vấn đề, Ứng dụng/desktop, thu gọn Explorer+Agent — shots 32–35): layout sạch, empty/unsupported trung thực, không clip/overflow; **đã sửa** rò rỉ nhãn tiếng Anh `Preview`/`App` → `Xem trước`/`Ứng dụng` (F10). **Live-run** (serve dự án thật + Kết quả/Vấn đề có output) vẫn chờ PO. |
 | OpenCode runtime | PINNED v1.18.1 | Fallback 1.17.20 PASS. Không upgrade trước compatibility matrix. |
 | **D1 Dispatch** | WIRED — LIVE DEVICE UNVERIFIED | Loop runner + fan-out + board + `/dispatch` composed; two-column pairing+board surface; `DispatchRunGate` (provider chưa ready → Run bị chặn). `start.bat` bật Remote/LAN cho demo (HTTP no-TLS, có warning). Round-trip unit/integration PASS; **live phone round-trip chưa quan sát**. |
 | **D2 Microsoft 365** | PARTIAL | Manual-token chat + history + in-tab permission cards. Device-code OAuth gated (chưa Azure app reg). **Chưa live tenant/packaged.** |

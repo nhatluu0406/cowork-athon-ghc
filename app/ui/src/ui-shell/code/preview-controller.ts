@@ -50,7 +50,7 @@ export function mountPreviewController(
 
   // --- Status bar ---
   const statusBar = el("div", "code-preview__bar");
-  const kindLabel = el("span", "code-preview__kind", "Preview");
+  const kindLabel = el("span", "code-preview__kind", "Xem trước");
   const statusPill = el("span", "code-preview__status code-preview__status--idle", "Tắt");
   const scriptSelect = el("select", "code-preview__script") as HTMLSelectElement;
   scriptSelect.setAttribute("aria-label", "Chọn script dev server");
@@ -125,7 +125,7 @@ export function mountPreviewController(
     statusPill.textContent =
       s === "running" ? "Đang chạy" : s === "starting" ? "Đang khởi động…" : s === "failed" ? "Lỗi" : s === "stopped" ? "Đã dừng" : "Tắt";
     kindLabel.textContent =
-      state.kind === "dev-server" ? (state.command ?? "Dev server") : state.kind === "static" ? "Static" : "Preview";
+      state.kind === "dev-server" ? (state.command ?? "Dev server") : state.kind === "static" ? "Static" : "Xem trước";
 
     const busy = s === "starting";
     const running = s === "running";
@@ -165,7 +165,7 @@ export function mountPreviewController(
         : info?.kind === "static"
           ? "Bấm Chạy để phục vụ index.html tĩnh và xem trước."
           : "Chọn workspace là dự án web để xem trước.";
-    overlay.append(overlayCard("eye", "Web preview", hint));
+    overlay.append(overlayCard("eye", "Xem trước web", hint));
   }
 
   function updateHeaderRuntime(): void {
@@ -177,12 +177,12 @@ export function mountPreviewController(
     pill.className = `cc-surface__runtime cc-surface__runtime--${s}`;
     pill.textContent =
       s === "running" && state.port !== null
-        ? `Preview: :${state.port}`
+        ? `Xem trước: :${state.port}`
         : s === "starting"
-          ? "Preview: đang khởi động"
+          ? "Xem trước: đang khởi động"
           : s === "failed"
-            ? "Preview: lỗi"
-            : "Preview: tắt";
+            ? "Xem trước: lỗi"
+            : "Xem trước: tắt";
   }
 
   function appendOutput(lines: readonly RuntimePreviewOutputLine[]): void {

@@ -69,7 +69,7 @@ export function createClaudeCodeView(handlers: ClaudeCodeViewHandlers): ClaudeCo
   logoChip.append(icon("code", "Code"));
   const repoChip = el("span", "cc-surface__repo");
   repoChip.append(icon("folder", ""), el("span", "cc-surface__repo-name", "Chưa chọn workspace"));
-  const runtimeStatus = el("span", "cc-surface__runtime cc-surface__runtime--idle", "Preview: tắt");
+  const runtimeStatus = el("span", "cc-surface__runtime cc-surface__runtime--idle", "Xem trước: tắt");
   runtimeStatus.setAttribute("role", "status");
   titleWrap.append(logoChip, el("h1", "cc-surface__title", "Code"), repoChip, runtimeStatus);
 

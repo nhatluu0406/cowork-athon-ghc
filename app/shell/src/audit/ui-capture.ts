@@ -478,6 +478,38 @@ async function runAudit(window: BrowserWindow): Promise<void> {
       await delay(400);
       await capture({ id: "31-code-large-light", title: "Code — large", theme: "light", viewport: "large", expectSelector: ".product-rail" });
 
+      // 5b) Code runtime panels — the exact surfaces the exhibition evaluation must see: the right-of-
+      // editor "Xem trước" (web) pane + its "Kết quả"/"Vấn đề" drawer, the "Ứng dụng" (desktop) pane,
+      // and a collapsed Explorer+Agent layout. No workspace is a web/app project here, so the panes
+      // render their honest empty/unsupported overlays — that is the layout under evaluation, captured
+      // packaged. Nothing is launched (no process, no floating view when not running).
+      await clickSel('button[data-surface-id="code"]');
+      await delay(300);
+      if (await clickSel('.code-mode__item[data-mode="preview"]')) {
+        await waitFor("document.querySelector('.code-preview-host:not([hidden]) .code-preview__bar')", 6_000);
+        await capture({ id: "32-code-preview-web-light", title: "Code — Xem trước (web) + Kết quả/Vấn đề", theme: "light", viewport: "desktop", expectSelector: ".code-preview-host:not([hidden]) .code-preview__bar" });
+        // Switch the output drawer to the "Vấn đề" (Problems) tab — honest empty state, packaged.
+        await evalJs(`(() => { const t = document.querySelectorAll('.code-preview-host:not([hidden]) .code-preview__drawer-tab'); if (t[1]) t[1].click(); })()`);
+        await delay(250);
+        await capture({ id: "33-code-preview-problems-light", title: "Code — tab Vấn đề (trống, trung thực)", theme: "light", viewport: "desktop", expectSelector: ".code-preview-host:not([hidden]) .code-preview__problems" });
+        // Ứng dụng (desktop app) runtime pane.
+        if (await clickSel('.code-runtime-mode .code-mode__item[data-runtime-mode="app"]')) {
+          await waitFor("document.querySelector('.code-app-host:not([hidden]).code-app')", 6_000);
+          await capture({ id: "34-code-app-light", title: "Code — Ứng dụng (desktop) trạng thái trung thực", theme: "light", viewport: "desktop", expectSelector: ".code-app-host:not([hidden]).code-app" });
+        }
+        // Collapse Explorer + Agent → the compact editor-forward layout (resize/collapse evidence).
+        await clickSel('.code-explorer__collapse');
+        await clickSel('.cc-surface__panel-toggle');
+        await delay(300);
+        await capture({ id: "35-code-collapsed-light", title: "Code — thu gọn Explorer + Agent", theme: "light", viewport: "desktop", expectSelector: ".cc-surface--panel-collapsed" });
+        // Restore a clean Code state for any later steps.
+        await clickSel('.cc-surface__panel-toggle');
+        await clickSel('.code-mode__item[data-mode="code"]');
+        await delay(200);
+      } else {
+        check("nav:code-panels", false, "preview mode button missing");
+      }
+
       // 6) Auth OFF enable (phase 1 of the auth-OFF packaged smoke). Turn the requirement OFF via the
       // real bridge (safeStorage seal + service envelope), capture the Settings toggle, and LEAVE it
       // OFF so the phase-2 relaunch (COWORK_GHC_UI_AUDIT_AUTOUNLOCK=verify) can prove straight-to-Cowork.

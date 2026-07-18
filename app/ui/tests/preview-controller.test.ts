@@ -172,6 +172,17 @@ test("captured error output surfaces in the Vấn đề (Problems) tab with a lo
   controller.dispose();
 });
 
+test("preview pane labels stay Vietnamese (commercial UI): kind + overlay title", async () => {
+  const host = document.createElement("div");
+  const shell = fakeShell();
+  const controller = mountPreviewController(host, fakeClient({}), shell.bridge);
+  controller.setActive(true);
+  await flush();
+  assert.equal(host.querySelector(".code-preview__kind")?.textContent, "Xem trước", "no English 'Preview' in the status bar");
+  assert.doesNotMatch(host.querySelector(".code-preview__overlay")?.textContent ?? "", /Web preview/, "overlay title localized");
+  controller.dispose();
+});
+
 test("inactive controller hides the embedded view (visible=false)", async () => {
   const host = document.createElement("div");
   const shell = fakeShell();

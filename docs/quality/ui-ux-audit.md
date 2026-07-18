@@ -11,13 +11,24 @@ Findings from reviewing **real screenshots of the packaged app**, against
 `.agents/skills/cowork-ghc-commercial-ui/SKILL.md` and the current design tokens.
 
 > **Status: evidence captured (2026-07-18).** The ER-013 tool (`npm run audit:ui`,
-> `tools/ui-audit/`) captured **33 screenshots** of the packaged `coworkghc.exe` across every rail
-> surface, both themes, first-run and Settings states, **plus data-rich Knowledge** (an isolated
+> `tools/ui-audit/`) captured **38 screenshots** of the packaged `coworkghc.exe` across every rail
+> surface, both themes, first-run and Settings states, **data-rich Knowledge** (an isolated
 > seed workspace indexed in audit mode: document list, detail, FTS search, graph node/edge + select,
-> re-sync prune, safe clear). Raw output is git-ignored under `reports/ui-audit/<run-id>/` (contact
-> sheet: `contact-sheet.html`). The cold-start findings below are from a **fresh, unconfigured**
-> profile (no provider) — the honest cold-start a newcomer sees. States requiring a live provider /
-> Cowork streaming / error injection are not yet covered (see Gaps).
+> re-sync prune, safe clear), **plus the Code runtime panels** (Xem trước/Web + Kết quả/Vấn đề
+> drawer, Ứng dụng/desktop, and the collapsed Explorer+Agent layout — shots 32–35). Raw output is
+> git-ignored under `reports/ui-audit/<run-id>/` (contact sheet: `contact-sheet.html`). The cold-start
+> findings below are from a **fresh, unconfigured** profile (no provider) — the honest cold-start a
+> newcomer sees. States requiring a live provider / Cowork streaming / error injection / DPI scaling
+> are not yet covered (see Gaps).
+>
+> **Re-audit 2026-07-18 (`audit/exhibition-live-states`):** Full packaged re-capture confirms the
+> product is exhibition-clean — every surface renders in both themes with honest empty states + a
+> clear next action, no white screens, no clipping/overflow, no wrong-enabled buttons, no raw
+> developer text. Several prior MEDIUM findings are now **resolved** in the shipped build: **F2**
+> (Dispatch remote pane no longer exposes `CGHC_REMOTE_ENABLED` env-vars — friendly "mở lại bằng lối
+> tắt Cowork GHC" copy), **F4** (status bar reads the blocking dependency "Cần chọn workspace", not a
+> green "Sẵn sàng" contradiction), **F3** (Dispatch Chạy actions render gated). One new bounded
+> commercial-consistency defect was found **and fixed** this pass — see **F10**.
 
 ## Quality bar to preserve
 
@@ -65,6 +76,7 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 | F7 | Cowork | 03-surface-cowork | LOW | Provider-not-configured is stated twice (composer "Provider chưa cấu hình" + status bar "Provider · Chưa cấu hình"). | Minor redundancy/visual noise. | Keep one primary indicator + one actionable CTA. | cowork | Single clear provider-config affordance. |
 | F8 | Settings · Chung | 22-settings-general | LOW | "Giao diện" column is sparse (control at top, large empty area) while "Chẩn đoán" is full — unbalanced. | Wasted whitespace; asymmetric density. | Balance the two-column layout or add theme-preview/description to the left column. | settings | Columns visually balanced. |
 | F9 | Top bar | 03 vs 05 vs 06/08/09 | LOW | Top-right controls vary by surface (Cowork: inspector-toggle + settings; Code: sparkle + settings; placeholders: settings only). | Slightly inconsistent affordance placement. | Standardise the top-bar control set / order across surfaces. | shared topbar | Consistent top-bar controls. |
+| F10 | Code · Xem trước / Ứng dụng | 32/34-code | MEDIUM (**FIXED 2026-07-18**) | The Code runtime panes leaked English into the fully-Vietnamese commercial UI: preview status-bar kind label `"Preview"`, overlay title `"Web preview"`, and header runtime pills `"Preview: tắt"` / `"App: tắt"` — none matched the localized mode buttons (`Xem trước` / `Ứng dụng`). | Off-brand raw English on a demo surface; inconsistent with the commercial-UI standard. | Localize to `Xem trước` / `Ứng dụng` across the status bar, overlay title, and header pills. | code preview/app | No English `Preview`/`App` label in the Code runtime panes; header pill mirrors the active mode. **Done** (`preview-controller.ts`, `app-controller.ts`, `code-view.ts`; test `preview-controller` + packaged shots 32–35). |
 
 ## Roll-ups
 
@@ -87,14 +99,19 @@ UI/UX only; none of these are functional crashes (the packaged app renders every
 Readiness signalling (F3/F4/F5) and placeholder treatment (F6) recur across surfaces — fix once in
 the shared status bar + a shared "awaiting integration"/"needs config" component (ER-007, ER-010).
 
-### Top exhibition items (from this cold-start pass)
+### Top exhibition items (updated after the 2026-07-18 re-audit)
 
-1. F2 — remove developer env-var instructions from the Dispatch remote pane.
-2. F4/F3 — coherent readiness model so "Ready" never contradicts "provider not configured".
-3. F1 — first-run card should honour the light theme (or document the intent).
+1. ~~F2 — developer env-var instructions in the Dispatch remote pane.~~ **Resolved** (friendly copy).
+2. ~~F4/F3 — "Ready" contradicting "provider not configured".~~ **Resolved** (status bar shows the
+   blocking dependency; Dispatch actions gated).
+3. F10 — English `Preview`/`App` labels in the Code runtime panes. **Resolved** (localized).
+4. Remaining, lower priority: F1 (first-run card theme — likely intentional dark "spotlight"), F5
+   (MS365 interactive-while-disconnected), F8/F9 (settings whitespace / top-bar consistency).
 
-No BLOCKER-severity UI defects in the cold-start set: every surface renders in both themes, and the
-D1–D4 placeholders are honest (no fabricated capability).
+No BLOCKER- or HIGH-severity UI defects in either pass: every surface renders in both themes, the
+D1–D4 placeholders are honest (no fabricated capability), and the fix-now bounded categories
+(readiness contradiction, wrong-enabled buttons, blank/confusing screens, clipping/overflow,
+first-run errors, raw developer text, missing next action, commercial regressions) are all clear.
 
 ### Preserve (do not redesign)
 
@@ -106,13 +123,43 @@ keep the explicit "not integrated / no fake data" messaging when consolidating l
 All findings are **polish-only** (gating, theming, layout balance, copy). No surface needs a
 redesign based on the cold-start evidence.
 
+## Code screen — exhibition evaluation (2026-07-18)
+
+Answers to the four Code-screen questions, from the packaged shots 05/31 (editor) + 32–35 (runtime
+panels):
+
+- **Is the current layout enough for the exhibition? — Yes.** The three-pane shell (Explorer +
+  Source Control on the left, Code/Xem trước center with a Web/Ứng dụng segmented control and a
+  Kết quả/Vấn đề output drawer, Agent on the right) renders cleanly, with honest empty states and a
+  clear next action on every pane. No white screen, clipping, or overflow at 1440×900 or 1920×1080.
+- **Does the left sidebar need to become `Workspace | Agent` now? — No.** The Explorer already owns
+  Workspace (file tree + Tất cả/Gần đây/Đã đổi + Source Control) on the left and Agent has its own
+  collapsible right panel; folding them into one tab set would *reduce* usable width and add a
+  WebContentsView bounds-sync risk. Defer.
+- **Does the right-side `Xem trước | Kết quả | Vấn đề` layout block anything? — No.** It ships today
+  as `Xem trước` (a center mode) + a `Kết quả`/`Vấn đề` drawer; both render honest empty/unsupported
+  states packaged (shots 32/33). Restructuring into a single right panel is polish, not a blocker.
+- **Are dependency-install and the Python tier needed before the exhibition? — No.** With a non-web/
+  non-app workspace the panes show clear, honest guidance ("Chưa xem trước được: thiếu index.html và
+  package.json", "Chưa chạy được ứng dụng: thiếu package.json"). Node/TS + Electron detection is the
+  demoable path; dependency-install and Python/Go/Rust/Java/.NET tiers stay deferred (no fake
+  capability). See `current-status.md` and `feature-matrix.md`.
+
+**Verdict:** the Code screen is exhibition-ready as-is; the only Code defect this pass was the F10
+English-label leak, now fixed. The remaining Code work (right-panel restructure, dependency install,
+Python tier) is optional polish/scope, not exhibition-blocking.
+
 ## Gaps (next capture passes)
 
-The first pass used a fresh, unconfigured profile. Not yet captured, needed before exhibition sign-off:
+Automated audit mode cannot exercise these — they need a live provider / real device / DPI harness /
+fault injection and are **Product-Owner manual** acceptance steps. Not yet captured, needed before
+exhibition sign-off:
 
 - Provider **configured + connected**: Cowork streaming a turn, model switcher, provider status green.
-- **Workspace loaded**: Code editor with a file open + dirty edit + diff; Workspace Companion preview.
+- **Workspace loaded**: Code editor with a file open + dirty edit + diff; Workspace Companion Office/
+  PDF preview; Code **live run** (Xem trước serving a real project, Kết quả/Vấn đề with real output).
 - **Permission + File Work Review** dialogs; Inspector plan/activity/files populated.
 - **Error/recovery** states (N1–N20 in `release-acceptance.md`): provider offline, DB locked,
   OpenCode crash, permission denied — needs fault injection in audit mode.
+- **Dispatch** live phone round-trip via `start.bat` (Remote/LAN); **MS365** live tenant connect.
 - **DPI 125/150%** and larger displays (this run's "large" viewport clamped to the work area).
