@@ -132,6 +132,18 @@ export function mapToolToActionKind(tool: string): PermissionActionKind | undefi
   }
 }
 
+/** True when the web-access tool is a search (query string) rather than a fetch (URL). */
+function isWebSearchTool(tool: string): boolean {
+  const t = tool.trim().toLowerCase();
+  return t === "websearch" || t === "web_search";
+}
+
+/** Bound a search query for the permission card (non-secret display, avoid an unbounded card). */
+function truncateQuery(query: string): string {
+  const oneLine = query.replace(/\s+/gu, " ").trim();
+  return oneLine.length > 120 ? `${oneLine.slice(0, 117)}…` : oneLine;
+}
+
 export class ToolPermissionProxy {
   private readonly guard: WorkspaceGuard;
   private readonly gate: PermissionGate;
@@ -168,10 +180,16 @@ export class ToolPermissionProxy {
       return this.submit(event, kind, undefined);
     }
 
-    // Agent web access (#29): SSRF-guard the target BEFORE the gate so an internal/loopback URL
+    // Agent web access (#29). websearch = a query string (no host to probe) → surface the raw text
+    // on the card. webfetch = a URL → SSRF-guard it BEFORE the gate so an internal/loopback target
     // never even reaches an Allow prompt. On block, refuse (explicit deny reply → runtime unstuck).
     if (kind === "web_access") {
-      const decision = evaluateWebAccess(event.url ?? "");
+      const raw = (event.url ?? "").trim();
+      if (isWebSearchTool(event.tool)) {
+        if (raw.length === 0) return this.refuse(event.requestId, "web_target_blocked");
+        return this.submitWeb(event, `truy vấn: ${truncateQuery(raw)}`);
+      }
+      const decision = evaluateWebAccess(raw);
       if (!decision.allowed) return this.refuse(event.requestId, "web_target_blocked");
       return this.submitWeb(event, decision.url.href);
     }
@@ -223,16 +241,17 @@ export class ToolPermissionProxy {
   }
 
   /**
-   * Submit an agent web-access request (#29). The card shows the target URL (non-secret; already
-   * SSRF-validated) in the description rather than a `targetPath`, which is filesystem-only.
+   * Submit an agent web-access request (#29). The card shows the target (an SSRF-validated https
+   * URL for webfetch, or the raw search query for websearch) in the description rather than a
+   * `targetPath`, which is filesystem-only.
    */
-  private submitWeb(event: OpencodeToolPermissionEvent, safeUrl: string): ProxyOutcome {
+  private submitWeb(event: OpencodeToolPermissionEvent, safeTarget: string): ProxyOutcome {
     const request = createPermissionRequest({
       requestId: event.requestId,
       sessionId: event.sessionId,
       action: {
         kind: "web_access",
-        description: `Tool ${event.tool} muốn truy cập web: ${safeUrl}`,
+        description: `Tool ${event.tool} muốn truy cập web (${safeTarget})`,
       },
       requestedAt: this.now(),
     });

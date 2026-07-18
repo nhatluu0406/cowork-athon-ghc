@@ -40,9 +40,25 @@ test("http (plaintext) is refused — only https fetches are allowed", () => {
   if (!d.allowed) assert.equal(d.reason, "scheme_not_https");
 });
 
-test("a bare search query (no scheme/host) is allowed — the card still gates it", () => {
-  const d = evaluateWebAccess("latest typescript release notes");
-  assert.equal(d.allowed, true);
+test("fetch is fail-closed: empty / schemeless / non-https targets are refused", () => {
+  // Empty → missing_target; schemeless (incl. a bare internal host) → scheme_not_https, never
+  // silently allowed (security review #29 critical: no fail-open bare-query path for webfetch).
+  assert.deepEqual(evaluateWebAccess(""), { allowed: false, reason: "missing_target" });
+  assert.deepEqual(evaluateWebAccess("   "), { allowed: false, reason: "missing_target" });
+  assert.deepEqual(evaluateWebAccess("127.0.0.1:8080/admin"), { allowed: false, reason: "scheme_not_https" });
+  assert.deepEqual(evaluateWebAccess("latest typescript release notes"), {
+    allowed: false,
+    reason: "scheme_not_https",
+  });
+});
+
+test("trailing-dot internal hostnames cannot bypass the blocklist", () => {
+  // review #29 important: localhost. / metadata.google.internal. resolve like the blocked host.
+  assert.deepEqual(evaluateWebAccess("https://localhost./x"), { allowed: false, reason: "internal_hostname" });
+  assert.deepEqual(evaluateWebAccess("https://metadata.google.internal./x"), {
+    allowed: false,
+    reason: "internal_hostname",
+  });
 });
 
 test("garbage with a scheme but no host is rejected", () => {

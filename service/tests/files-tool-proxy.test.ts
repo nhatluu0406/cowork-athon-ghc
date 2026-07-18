@@ -175,3 +175,31 @@ test("webfetch to a loopback URL is refused pre-gate (SSRF), never shown, runtim
   assert.equal(fx.gate.pending().length, 0);
   assert.deepEqual(fx.reply.replies, [{ requestId: "web-ssrf", decision: "deny" }]);
 });
+
+test("webfetch with a missing/schemeless URL is refused (fail-closed, review #29)", async () => {
+  const fx = await makeFixture();
+  const empty = await fx.proxy.handle({ requestId: "web-empty", sessionId: "s", tool: "webfetch" });
+  assert.deepEqual(empty, { outcome: "refused", requestId: "web-empty", reason: "web_target_blocked" });
+  const schemeless = await fx.proxy.handle({
+    requestId: "web-schemeless",
+    sessionId: "s",
+    tool: "webfetch",
+    url: "169.254.169.254/latest/meta-data",
+  });
+  assert.equal(schemeless.outcome, "refused");
+  assert.equal(fx.gate.pending().length, 0);
+});
+
+test("websearch surfaces the raw query on an elevated card (no SSRF host to probe, #29)", async () => {
+  const fx = await makeFixture();
+  const outcome = await fx.proxy.handle({
+    requestId: "search-1",
+    sessionId: "s",
+    tool: "websearch",
+    url: "latest typescript release notes",
+  });
+  assert.deepEqual(outcome, { outcome: "submitted", requestId: "search-1", actionKind: "web_access" });
+  const pending = fx.gate.pending();
+  assert.equal(pending[0]?.approvalLevel, "elevated");
+  assert.match(pending[0]?.action.description ?? "", /latest typescript release notes/);
+});
