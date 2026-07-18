@@ -8,9 +8,10 @@
  */
 
 import { writeFile } from "node:fs/promises";
-import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent, type OpenDialogOptions } from "electron";
 import type {
   ConnectLiveResult,
+  OpenExternalResult,
   PickedWorkspaceFile,
   PickedWorkspaceFolder,
   PreviewLoadResult,
@@ -23,6 +24,7 @@ import type {
 } from "@cowork-ghc/contracts";
 
 import { IpcChannel } from "./channels.js";
+import { evaluateExternalUrl } from "../security/external-url.js";
 import type { ShellBootstrap } from "../bootstrap.js";
 import { createPreviewViewController, type PreviewViewController } from "../preview/preview-view.js";
 import {
@@ -148,6 +150,23 @@ export function registerIpcHandlers(deps: IpcHandlerDeps): void {
     },
   );
 
+
+  ipcMain.handle(
+    IpcChannel.OpenExternal,
+    async (_event: IpcMainInvokeEvent, url: unknown): Promise<OpenExternalResult> => {
+      // Fail-closed: only https:// URLs on the Microsoft-owned allowlist are ever opened.
+      const decision = evaluateExternalUrl(url);
+      if (!decision.allowed) {
+        return { ok: false, ...(decision.reason !== undefined ? { reason: decision.reason } : {}) };
+      }
+      try {
+        await shell.openExternal((url as string).trim());
+        return { ok: true };
+      } catch {
+        return { ok: false, reason: "open_failed" };
+      }
+    },
+  );
 
   ipcMain.handle(IpcChannel.GetBootstrap, (): RendererBootstrap => {
     const bootstrap = getBootstrap();

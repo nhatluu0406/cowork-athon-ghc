@@ -235,8 +235,11 @@
  * visible and the toggle button appears to do nothing. */
 .ms-connect__manual-body[hidden] { display: none; }
 .ms-connect__manual-guide { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--cghc-text-muted); }
-.ms-connect__manual-guide-link { color: var(--cghc-accent); font-weight: 600; text-decoration: none; }
+.ms-connect__manual-guide-link { color: var(--cghc-accent); font-weight: 600; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .ms-connect__manual-guide-link:hover { text-decoration: underline; }
+.ms-connect__device-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.ms-connect__open-link { padding: 6px 12px; border-radius: 8px; border: 0; background: var(--cghc-accent); color: var(--cghc-accent-contrast); font-weight: 600; cursor: pointer; }
+.ms-connect__open-link:hover { background: var(--cghc-accent-hover); }
 .ms-connect__manual-input {
   width: 100%;
   box-sizing: border-box;

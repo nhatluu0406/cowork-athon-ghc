@@ -75,6 +75,17 @@ export interface SaveTextFileResult {
   readonly path?: string;
 }
 
+/**
+ * Result of asking the shell to open an external link in the OS browser. The shell only opens
+ * `https://` URLs whose host is on a small Microsoft-owned allowlist (sign-in / docs); anything
+ * else is refused with a non-secret reason. There is no generic "open any URL" capability.
+ */
+export interface OpenExternalResult {
+  readonly ok: boolean;
+  /** Non-secret reason when refused (e.g. "not_https", "host_not_allowed", "invalid_url"). */
+  readonly reason?: string;
+}
+
 /** Visual theme used to keep the native Windows title-bar overlay aligned with the renderer. */
 export type WindowTheme = "light" | "dark";
 
@@ -166,6 +177,13 @@ export interface CoworkShellBridge {
     requireLogin: boolean,
     password: string,
   ) => Promise<StartupAuthModeResult>;
+  /**
+   * Open an external link in the OS default browser. The shell fail-closes: only `https://` URLs
+   * on a small Microsoft-owned host allowlist (sign-in / docs, e.g. Graph Explorer) are opened;
+   * everything else is refused. Used by the Microsoft 365 surface instead of a dead
+   * `<a target=_blank>` (renderer navigation/`window.open` is denied by the shell).
+   */
+  readonly openExternal: (url: string) => Promise<OpenExternalResult>;
 }
 
 /** Result of {@link CoworkShellBridge.setStartupAuthMode}. */

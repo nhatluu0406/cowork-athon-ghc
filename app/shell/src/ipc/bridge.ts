@@ -40,6 +40,7 @@ export function createShellBridge(ipc: BridgeIpc): CoworkShellBridge {
     isSecureAutoUnlockAvailable: () => ipc.invoke(IpcChannel.IsSecureAutoUnlockAvailable),
     setStartupAuthMode: (requireLogin, password) =>
       ipc.invoke(IpcChannel.SetStartupAuthMode, { requireLogin, password }),
+    openExternal: (url) => ipc.invoke(IpcChannel.OpenExternal, url),
   };
 }
 

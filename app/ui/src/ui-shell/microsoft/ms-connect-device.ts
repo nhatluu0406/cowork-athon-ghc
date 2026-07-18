@@ -1,6 +1,7 @@
 import { el } from "../dom-utils.js";
+import { getShellBridge } from "../../bridge.js";
 
-/** Renders the "device_pending" card: user code + copy-link + waiting note. */
+/** Renders the "device_pending" card: user code + open/copy-link + waiting note. */
 export function renderDevicePendingCard(userCode: string, verificationUri: string): HTMLElement {
   const card = el("section", "ms-card ms-connect__device-code");
   card.append(el("h2", "ms-card__title", "Hoàn tất đăng nhập trên trình duyệt"));
@@ -14,12 +15,26 @@ export function renderDevicePendingCard(userCode: string, verificationUri: strin
   const codeEl = el("code", "ms-connect__device-code-value", userCode);
   card.append(codeEl);
 
+  const actions = el("div", "ms-connect__device-actions");
+  // Open directly via the shell's allowlisted openExternal (Microsoft sign-in host); on failure
+  // fall back to copying the link (PHASE 3).
+  const openLink = el("button", "ms-connect__open-link", "Mở liên kết") as HTMLButtonElement;
+  openLink.type = "button";
+  openLink.addEventListener("click", () => {
+    void getShellBridge()
+      .openExternal(verificationUri)
+      .then((result) => {
+        if (!result.ok) void copyToClipboard(verificationUri);
+      })
+      .catch(() => void copyToClipboard(verificationUri));
+  });
   const copyLink = el("button", "ms-connect__copy-link", "Sao chép liên kết") as HTMLButtonElement;
   copyLink.type = "button";
   copyLink.addEventListener("click", () => {
     void copyToClipboard(verificationUri);
   });
-  card.append(copyLink);
+  actions.append(openLink, copyLink);
+  card.append(actions);
 
   card.append(el("p", "ms-connect__device-waiting", "Đang chờ xác nhận…"));
   return card;

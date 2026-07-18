@@ -5,6 +5,7 @@ import type {
   Ms365SiteView,
 } from "../../service-client.js";
 import { el } from "../dom-utils.js";
+import { getShellBridge } from "../../bridge.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
 import { renderDevicePendingCard } from "./ms-connect-device.js";
 
@@ -135,10 +136,23 @@ function renderManualFallback(container: HTMLElement, deps: RenderMsConnectDeps,
   guide.append(
     document.createTextNode("Chưa có token? Mở "),
   );
-  const guideLink = el("a", "ms-connect__manual-guide-link", "Microsoft Graph Explorer") as HTMLAnchorElement;
-  guideLink.href = GRAPH_EXPLORER_URL;
-  guideLink.target = "_blank";
-  guideLink.rel = "noopener noreferrer";
+  // A renderer `<a target=_blank>` is a dead no-op in Electron (navigation/window.open denied), so
+  // open Graph Explorer through the shell's allowlisted `openExternal` bridge instead (PHASE 3).
+  const guideLink = el("button", "ms-connect__manual-guide-link") as HTMLButtonElement;
+  guideLink.type = "button";
+  guideLink.textContent = "Microsoft Graph Explorer";
+  guideLink.addEventListener("click", () => {
+    void getShellBridge()
+      .openExternal(GRAPH_EXPLORER_URL)
+      .then((result) => {
+        if (!result.ok) {
+          guide.setAttribute("data-open-error", "Không mở được liên kết ngoài.");
+        }
+      })
+      .catch(() => {
+        guide.setAttribute("data-open-error", "Không mở được liên kết ngoài.");
+      });
+  });
   guide.append(
     guideLink,
     document.createTextNode(", đăng nhập tài khoản của bạn, chuyển sang tab “Access token”, sao chép rồi dán vào ô bên dưới."),

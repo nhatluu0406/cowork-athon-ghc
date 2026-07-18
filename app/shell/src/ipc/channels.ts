@@ -37,6 +37,8 @@ export const IpcChannel = {
   IsSecureAutoUnlockAvailable: "cowork:is-secure-auto-unlock-available",
   /** Renderer asks the shell to flip the "Require login at startup" mode (safeStorage-owned). */
   SetStartupAuthMode: "cowork:set-startup-auth-mode",
+  /** Renderer asks the shell to open an allowlisted https:// URL in the OS browser (MS365 links). */
+  OpenExternal: "cowork:open-external",
 } as const;
 
 /** Union of the allowed channel name literals. */
