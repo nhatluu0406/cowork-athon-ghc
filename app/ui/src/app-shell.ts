@@ -751,6 +751,7 @@ async function capturePermissionBeforeSnapshot(
 
 const FILE_MUTATION_TOOL_NAMES = new Set([
   "write",
+  "create_docx",
   "edit",
   "patch",
   "apply_patch",

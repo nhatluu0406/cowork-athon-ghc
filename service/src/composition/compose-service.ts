@@ -147,6 +147,7 @@ import {
   createDeviceCodeProvider,
   readMs365DeviceConfig,
 } from "../ms365/index.js";
+import { createDocxRouter } from "../documents/docx-tool-router.js";
 import {
   closeSqliteDatabase,
   collectCredentialAccounts,
@@ -937,6 +938,13 @@ export async function createCoworkService(
       ? [createMcpRouter({ registry: extensions.mcp, store: mcpStore, credentials: credentialStore, now })]
       : []),
     ...(ms365Router !== undefined ? [ms365Router] : []),
+    // Docx document-generation tool bridge — mounted next to MS365, sharing the SAME permission
+    // gate so a create_docx write runs only behind a recorded Allow (File Work Review).
+    createDocxRouter({
+      gate: permissionGate,
+      workspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+      now,
+    }),
     createGatewayRouter(gatewayService),
     ...(options.extraRouters ?? []),
   ];

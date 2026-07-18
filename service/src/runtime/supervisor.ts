@@ -26,6 +26,7 @@ import { nodeChildSpawner, type ChildSpawner, type SupervisedChild } from "./chi
 import { fetchHealthProbe, netPortChecker, win32ProcessTimesProbe, type HealthProbe, type PortChecker, type ProcessTimesProbe } from "./probes.js";
 import { writeOpencodeConfig } from "./opencode-config.js";
 import { writeMs365Plugin, seedMs365PluginDeps } from "./ms365-plugin-file.js";
+import { writeDocxPlugin } from "./docx-plugin-file.js";
 import { clearRuntimeState, writeRuntimeState } from "./runtime-state.js";
 import { awaitReady, waitForExit } from "./lifecycle-wait.js";
 import type { OpencodeSupervisorOptions, SupervisorStartSpec } from "./supervisor-types.js";
@@ -141,6 +142,10 @@ export class OpencodeSupervisor implements RuntimeHealth {
       // MS365 tool bridge: the child learns the 25 MS365 tools from a plugin file in its configDir.
       // The endpoint+token come from baseEnv at plugin-load time (never written into this file).
       writeMs365Plugin(spec.configDir, forbidden);
+      // Docx tool bridge: the child learns the create_docx tool from a plugin file in its configDir.
+      // Same shape as the MS365 plugin — endpoint+token come from baseEnv at plugin-load time (never
+      // written into this file). Reuses the @opencode-ai/plugin deps seeded just below for MS365.
+      writeDocxPlugin(spec.configDir, forbidden);
       seedMs365PluginDeps(
         spec.configDir,
         join(spec.binPath, "..", "..", ".."), // node_modules root: opencode.exe -> bin -> opencode-ai -> node_modules
