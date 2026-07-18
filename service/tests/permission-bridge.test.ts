@@ -97,6 +97,49 @@ test("duplicate permission.asked for the same id is ignored", async () => {
   }
 });
 
+test("webfetch permission.asked forwards the URL as a web_access request (#29)", async () => {
+  const fx = bridgeFixture();
+  try {
+    await fx.bridge.handleFrame({
+      type: "permission.asked",
+      properties: {
+        id: "web-1",
+        sessionID: "sess-web",
+        permission: "webfetch",
+        tool: "webfetch",
+        metadata: { url: "https://example.com/page" },
+      },
+    });
+    const pending = fx.gate.pending();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0]?.action.kind, "web_access");
+    assert.equal(pending[0]?.approvalLevel, "elevated");
+    assert.match(pending[0]?.action.description ?? "", /example\.com\/page/);
+  } finally {
+    rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
+test("webfetch permission.asked to an internal URL is refused pre-gate (#29)", async () => {
+  const fx = bridgeFixture();
+  try {
+    await fx.bridge.handleFrame({
+      type: "permission.asked",
+      properties: {
+        id: "web-ssrf",
+        sessionID: "sess-web",
+        permission: "webfetch",
+        tool: "webfetch",
+        metadata: { url: "https://169.254.169.254/latest/meta-data" },
+      },
+    });
+    assert.equal(fx.gate.pending().length, 0);
+    assert.deepEqual(fx.captured, [{ requestId: "web-ssrf", decision: "deny" }]);
+  } finally {
+    rmSync(fx.dir, { recursive: true, force: true });
+  }
+});
+
 test("non-permission frames are ignored", async () => {
   const fx = bridgeFixture();
   try {

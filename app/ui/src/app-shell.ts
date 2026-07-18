@@ -75,6 +75,7 @@ import { mountCodeEditor, type CodeEditorController } from "./ui-shell/code/code
 import { mountPreviewController, type PreviewController } from "./ui-shell/code/preview-controller.js";
 import { mountAppController, type AppController } from "./ui-shell/code/app-controller.js";
 import { setClaudePanelStreaming } from "./ui-shell/code/claude-panel.js";
+import { confirmModal } from "./ui-shell/confirm-modal.js";
 import { mountSkillsSettingsPanel } from "./skills-settings-panel.js";
 import { mountMcpSettingsPanel, type McpPanelCallbacks } from "./mcp-panel.js";
 import { planRuntimeTurn } from "./runtime-turn-planner.js";
@@ -1719,7 +1720,11 @@ async function switchConversation(
   if (currentId === id) return;
   const unsent = textFromComposer(dom.composerInput);
   if (unsent.length > 0 && currentId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và chuyển cuộc trò chuyện?");
+    const ok = await confirmModal({
+      title: "Chuyển cuộc trò chuyện?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Chuyển",
+    });
     if (!ok) return;
   }
   saveComposerDraft(state, dom);
@@ -1814,7 +1819,11 @@ async function newConversation(
     return;
   }
   if (unsent.length > 0 && state.conv.state.activeConversationId !== null) {
-    const ok = window.confirm("Bỏ nội dung chưa gửi và tạo cuộc trò chuyện mới?");
+    const ok = await confirmModal({
+      title: "Tạo cuộc trò chuyện mới?",
+      message: "Nội dung bạn đang soạn nhưng chưa gửi sẽ được lưu nháp cho cuộc trò chuyện hiện tại.",
+      confirmLabel: "Tạo cuộc trò chuyện mới",
+    });
     if (!ok) return;
   }
 
@@ -3083,6 +3092,7 @@ export function mountCoworkApp(root: HTMLElement): void {
                   ? "error"
                   : "unknown",
             toolCount: server.toolCount,
+            ...(server.updatedAt !== undefined ? { lastChecked: server.updatedAt } : {}),
           });
           const mcpCallbacks: McpPanelCallbacks = {
             listMcpServers: async () => (await dynamicClient.listMcpServers()).map(toMcpView),
@@ -3123,6 +3133,14 @@ export function mountCoworkApp(root: HTMLElement): void {
             deleteMcpServer: (id) => dynamicClient.deleteMcpServer(id),
             setMcpServerEnabled: async (id, enabled) =>
               toMcpView(await dynamicClient.setMcpServerEnabled(id, enabled)),
+            checkMcpServerHealth: async (id) => {
+              // Re-probe reachability, then return the refreshed row (the panel re-lists after).
+              await dynamicClient.mcpServerHealth(id);
+              const rows = await dynamicClient.listMcpServers();
+              const updated = rows.find((s) => s.id === id);
+              if (updated === undefined) throw new Error("MCP không còn tồn tại.");
+              return toMcpView(updated);
+            },
           };
           mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;

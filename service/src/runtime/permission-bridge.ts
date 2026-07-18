@@ -48,6 +48,33 @@ function mapPermissionToTool(permission: string): string {
   }
 }
 
+/**
+ * Extract the agent web-access target (webfetch URL / websearch query, #29) from an OpenCode
+ * permission.asked frame. OpenCode carries tool arguments under `metadata`; the URL/query keys
+ * differ across tool versions, so probe the common shapes. Returns undefined when none is present
+ * (the proxy then treats it as no-target and the SSRF guard refuses an empty URL).
+ */
+function resolveWebTarget(props: Record<string, unknown>): string | undefined {
+  const metadata = asRecord(props.metadata);
+  const candidate =
+    readString(metadata, "url") ??
+    readString(metadata, "uri") ??
+    readString(metadata, "query") ??
+    readString(props, "url") ??
+    readString(props, "query");
+  if (candidate !== undefined && candidate.length > 0) return candidate;
+  return undefined;
+}
+
+/** True when an OpenCode permission key/tool denotes agent web access (webfetch/websearch). */
+function isWebAccess(permission: string, tool: string | undefined): boolean {
+  const p = permission.trim().toLowerCase();
+  const t = (tool ?? "").trim().toLowerCase();
+  return (
+    p === "webfetch" || p === "websearch" || t === "webfetch" || t === "websearch"
+  );
+}
+
 /** Prefer a concrete filepath from metadata; fall back to the first non-glob pattern. */
 function resolveTargetPath(props: Record<string, unknown>): string | undefined {
   const metadata = asRecord(props.metadata);
@@ -97,6 +124,29 @@ export function createPermissionBridge(options: PermissionBridgeOptions): Permis
       const runtimeTool = readString(props, "tool");
       if (requestId === undefined || sessionId === undefined || permission === undefined) return;
       if (seen.has(requestId)) return;
+
+      // Agent web access (#29): the target is a URL, not a workspace path — forward it verbatim so
+      // the proxy can SSRF-guard it and show it on the card. Skip filepath resolution for these.
+      if (isWebAccess(permission, runtimeTool)) {
+        const webUrl = resolveWebTarget(props);
+        const webEvent: OpencodeToolPermissionEvent = {
+          requestId,
+          sessionId,
+          tool: runtimeTool ?? permission,
+          ...(webUrl !== undefined ? { url: webUrl } : {}),
+        };
+        seen.add(requestId);
+        try {
+          const outcome = await options.proxy.handle(webEvent);
+          if (outcome.outcome === "refused") {
+            options.onDiagnostic?.(`permission proxy refused ${outcome.reason} for ${requestId}`);
+          }
+        } catch (err) {
+          seen.delete(requestId);
+          options.onDiagnostic?.(err instanceof Error ? err.message : "permission bridge failed");
+        }
+        return;
+      }
 
       const rawPath = resolveTargetPath(props);
       const resolved =

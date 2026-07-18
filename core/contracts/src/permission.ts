@@ -25,7 +25,12 @@ export type PermissionActionKind =
   | "command_exec"
   | "ms365_write"
   // Read-only external-data access (e.g. the m365_knowledge_search tool). Additive (REQ-205 T0.3).
-  | "network_access";
+  | "network_access"
+  // Arbitrary web fetch/search by the agent (OpenCode `webfetch`/`websearch`, #29). Distinct from
+  // `network_access` (a scoped MS365 read): the target URL is agent-chosen, so this is classified
+  // `elevated` — it ALWAYS surfaces a permission card (explicit network approval) even in
+  // workspace-auto mode, and read-only mode denies it. See approval-level.ts + tool-permission-proxy.ts.
+  | "web_access";
 
 /** What the user is being asked to Allow or Deny (P2 describes action + target). */
 export interface PermissionAction {

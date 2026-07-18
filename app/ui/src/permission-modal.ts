@@ -34,6 +34,7 @@ const ACTION_LABEL: Record<PermissionActionKind, string> = {
   command_exec: "Chạy lệnh",
   ms365_write: "Tải lên SharePoint",
   network_access: "Truy vấn tri thức M365",
+  web_access: "Truy cập web",
 };
 
 const ACTION_LEAD: Record<PermissionActionKind, string> = {
@@ -44,6 +45,7 @@ const ACTION_LEAD: Record<PermissionActionKind, string> = {
   command_exec: "Cowork muốn chạy một lệnh trong workspace của bạn.",
   ms365_write: "Cowork muốn ghi dữ liệu lên Microsoft 365 (SharePoint).",
   network_access: "Cowork muốn truy vấn tri thức Microsoft 365 (chỉ đọc).",
+  web_access: "Cowork muốn truy cập một địa chỉ web bên ngoài.",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(

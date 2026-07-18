@@ -29,13 +29,17 @@ const ALL_PERMISSION_ACTION_KINDS: readonly PermissionActionKind[] = [
   "command_exec",
   "ms365_write",
   "network_access",
+  "web_access",
 ];
 
 /**
  * Map a boundary action kind to the preset key that governs it. `ms365_write` and `network_access`
  * map here only for exhaustiveness — neither flows through `ToolPermissionProxy` (both submit
  * directly to the `PermissionGate`), so a preset never actually governs an MS365 write or an M365
- * knowledge query today; the mapping keeps `ENFORCEABLE_PRESET_KEYS` unchanged (`edit`/`bash`).
+ * knowledge query today. `web_access` (agent webfetch/websearch, #29) DOES flow through the proxy,
+ * but it maps onto the existing `edit` key rather than a new one so `ENFORCEABLE_PRESET_KEYS` stays
+ * `{edit, bash}`: a dispatch branch preset that denies `edit` also denies agent web access (safe,
+ * fail-closed), and no new agent-definition key surface is introduced.
  */
 export function presetKeyForActionKind(kind: PermissionActionKind): string {
   switch (kind) {
@@ -45,6 +49,7 @@ export function presetKeyForActionKind(kind: PermissionActionKind): string {
     case "file_move":
     case "ms365_write":
     case "network_access":
+    case "web_access":
       return "edit";
     case "command_exec":
       return "bash";
