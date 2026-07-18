@@ -118,11 +118,19 @@ Danh sách giới hạn sản phẩm chưa xử lý. Chi tiết kỹ thuật/for
 ## Local Knowledge Base/Graph MVP (D3 local, 2026-07-18) — giới hạn
 
 Đây là hệ Knowledge **local mới** (`service/src/knowledge-local` + `/v1/knowledge-local` + surface
-Knowledge thật), **tách biệt** với Go backend/M365KG bên dưới. Code+tests+build PASS; packaged PO
-observation còn pending. Giới hạn có chủ ý của MVP:
+Knowledge thật), **tách biệt** với Go backend/M365KG bên dưới. Đây là **một kho tri thức thống nhất
+theo active Workspace** — chỉ hai tab `Kho tri thức` / `Đồ thị`, **không** có tab nguồn tách biệt.
+Code+tests+build PASS; packaged no-workspace + đồ thị states đã capture (UI audit 8/8), **data-rich
+packaged PO observation còn pending** (cần PO chọn Workspace thật). Giới hạn có chủ ý của MVP:
 
 - **Chỉ keyword FTS5 — không semantic/vector/embedding.** Không gọi LLM để index; `llm-svc` (LF-3)
   chưa bundle. Không bịa "semantic similarity". Tìm kiếm là prefix AND trên token.
+- **Microsoft 365 là nguồn bổ sung tương lai, chưa kết nối.** Provenance có mặt hôm nay (mỗi tài
+  liệu/kết quả/node mang badge nguồn = **Workspace**); bộ lọc nguồn hiện `Microsoft 365` dạng option
+  **disabled** + tóm tắt readiness trung thực ("Chưa kết nối"). **Không fake count/data MS365**, không
+  gọi backend, không phát network request từ Knowledge khi MS365 chưa bật (có test proxy khẳng định
+  renderer chỉ gọi route `knowledgeLocal*`). Contracts (`KnowledgeSourceRef`) sẵn sàng ingest MS365
+  vào cùng kho sau này, không cần migration lớn. M365 KG backend nâng cao vẫn bảo tồn off-main (dưới).
 - **Không trích text PDF.** PDF được Workspace hiển thị dạng bytes; indexer **không** đọc text PDF nên
   PDF không vào chỉ mục (md/text/code/docx/xlsx/pptx thì có).
 - **Đồ thị chỉ deterministic:** workspace→folder→file (`contains`) + link Markdown đã resolve
