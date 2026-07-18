@@ -2000,6 +2000,29 @@ function recordAttachmentActivity(
 interface SendPromptOptions {
   readonly promptOverride?: string;
   readonly skipAttachments?: boolean;
+  /** Set by the manual retry affordance so a user-initiated resend does not itself auto-retry. */
+  readonly skipStartupRetry?: boolean;
+}
+
+/**
+ * Poll `/v1/health` until the supervised runtime reports ready (Tier 2 attached + alive), bounded by
+ * `timeoutMs`. Used before the single first-turn retry so we wait on a REAL signal, never a blind
+ * sleep. Resolves `true` when ready; `false` on timeout / no live client / no runtime tier.
+ */
+async function awaitRuntimeReady(state: AppState, timeoutMs: number): Promise<boolean> {
+  const client = state.client;
+  if (client === null) return false;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const health = await client.health();
+      if (health.runtimeReady === true) return true;
+    } catch {
+      // transient during startup — keep polling until the deadline
+    }
+    await new Promise((resolve) => setTimeout(resolve, 400));
+  }
+  return false;
 }
 
 async function sendPrompt(
@@ -2133,7 +2156,7 @@ async function sendPrompt(
     renderState(dom, state, handlers);
 
     const dispatchText = dispatchPlan.text;
-    const result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+    let result = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
     if (result.accepted) {
       state.turnTiming.mark("PROMPT_ACCEPTED", "ok");
     }
@@ -2143,6 +2166,41 @@ async function sendPrompt(
       (result.reason === "session_completed" ||
         ((result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached") &&
           state.lastView.terminal !== null));
+
+    // First-turn startup race: OpenCode passed `/global/health` but could not serve the prompt yet
+    // (transient 503 `runtime_unavailable`/`runtime_not_attached`). If NOTHING has happened on this
+    // session (no EV frame/stream/tool/mutation), the send never reached a run — so it is safe to
+    // wait for the runtime to report ready (bounded health poll, not a blind sleep) and resend the
+    // SAME text to the SAME session exactly ONCE. A 503 guarantees no duplicate turn.
+    const transientRuntime =
+      !result.accepted &&
+      (result.reason === "runtime_unavailable" || result.reason === "runtime_not_attached");
+    const freshNoActivity =
+      state.lastView.terminal === null &&
+      state.lastView.lastSeq === 0 &&
+      state.lastView.text.length === 0 &&
+      state.lastView.toolCalls.length === 0 &&
+      state.lastView.fileMutations.length === 0;
+    if (
+      transientRuntime &&
+      !needsContinuation &&
+      freshNoActivity &&
+      options?.skipStartupRetry !== true
+    ) {
+      updateAssistantBubble(state, "Đang khởi động Agent…");
+      renderState(dom, state, handlers);
+      await awaitRuntimeReady(state, 12_000);
+      const startupRetry = await state.client.sendSessionMessage(runtimeSessionId, dispatchText);
+      if (startupRetry.accepted) {
+        state.turnTiming.mark("PROMPT_ACCEPTED", "startup-retry-ok");
+        permissionRefreshNow?.();
+        updateAssistantBubble(state, ""); // clear the placeholder; the EV stream now drives the bubble
+        refreshActivityUi(state, dom);
+        return;
+      }
+      result = startupRetry; // fall through to the honest failure UI with the retry's reason
+    }
+
     if (!result.accepted) {
       if (needsContinuation) {
         await state.conv.startContinuation();
@@ -2200,7 +2258,11 @@ async function sendPrompt(
             | undefined;
           if (lastUser !== undefined) {
             attachSendRetry(lastUser, () => {
-              void sendPrompt(state, dom, readiness, handlers, { promptOverride: prompt, skipAttachments: true });
+              void sendPrompt(state, dom, readiness, handlers, {
+                promptOverride: prompt,
+                skipAttachments: true,
+                skipStartupRetry: true,
+              });
             });
           }
         }

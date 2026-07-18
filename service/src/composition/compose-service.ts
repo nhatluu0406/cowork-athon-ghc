@@ -451,9 +451,12 @@ export async function createCoworkService(
   };
 
   // --- Session service (Tier 2 store/health seams) + live stream hub bound to it. ---
+  // Resolve the runtime-health seam once so the built-in /v1/health route can honestly report
+  // `runtimeReady` (Tier 1 → downRuntimeHealth → false; live → supervisor.isAlive()).
+  const runtimeHealthSeam = options.runtimeHealth ?? downRuntimeHealth();
   const sessionService = createSessionService({
     store: options.sessionStore ?? notAttachedSessionStore(),
-    health: options.runtimeHealth ?? downRuntimeHealth(),
+    health: runtimeHealthSeam,
     canceller: providerPort,
     now,
     redactError,
@@ -866,7 +869,11 @@ export async function createCoworkService(
     deps,
     // The service auto-mounts the (token-guarded) health router itself; we never re-mount it.
     start: async (): Promise<RunningService> => {
-      const running = await startService({ ...options, routers });
+      const running = await startService({
+        ...options,
+        routers,
+        runtimeReady: () => runtimeHealthSeam.isAlive(),
+      });
       if (!ownsSqlite || sqliteDatabase === undefined) return running;
       const db = sqliteDatabase;
       const originalStop = running.service.stop.bind(running.service);
