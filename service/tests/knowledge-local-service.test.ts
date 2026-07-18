@@ -35,6 +35,36 @@ test("status reports no workspace when none is active", () => {
   assert.deepEqual(svc.graph().nodes, []);
 });
 
+test("Microsoft 365 source reflects the live connection state, never fakes a count (#19)", async () => {
+  const root = await tempWorkspace();
+  try {
+    const db = openMemorySqliteDatabase();
+    runMigrations(db);
+    const repo = createKnowledgeLocalRepository(db);
+    let connected = false;
+    const svc = createKnowledgeLocalService({
+      repo,
+      activeWorkspaceRoot: () => root,
+      microsoft365Connected: () => connected,
+    });
+
+    const ms = () => svc.status().sources.find((s) => s.type === "microsoft365");
+    // Disconnected: not connected, zero documents.
+    assert.equal(ms()?.connected, false);
+    assert.equal(ms()?.documentCount, 0);
+
+    // Connected: reflect the real state — but STILL zero documents (no importer exists yet).
+    connected = true;
+    assert.equal(ms()?.connected, true);
+    assert.equal(ms()?.documentCount, 0, "connection must never fabricate a document count");
+
+    // The workspace source is independent of MS365 and stays connected.
+    assert.equal(svc.status().sources.find((s) => s.type === "workspace")?.connected, true);
+  } finally {
+    await rm(join(root, ".."), { recursive: true, force: true });
+  }
+});
+
 test("sync runs in the background then reports ready with counts; search + graph work", async () => {
   const root = await tempWorkspace();
   try {

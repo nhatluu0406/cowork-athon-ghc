@@ -750,6 +750,10 @@ export async function createCoworkService(
   // `CGHC_MS365_ENABLED` env gate has been removed; there is no default-OFF switch. NOTE: this is a
   // local flag-removal only — it is NOT the team-level D2 boundary merge described in CLAUDE.md.
   // The SAME `ssrf` policy instance built above is reused here; no second SsrfPolicy is created.
+  // Hoisted so the Knowledge service can honestly reflect the MS365 connection state in its source
+  // summary (issue #19) without reaching the dormant backend. Defaults to false until the connector
+  // below is built; the IIFE runs+awaits before the Knowledge service is created, so it is set by then.
+  let ms365Connected: () => boolean = () => false;
   const ms365Router = await (async () => {
     const ms365Manual = createManualTokenProvider();
     const ms365DeviceConfig = readMs365DeviceConfig(process.env);
@@ -769,6 +773,8 @@ export async function createCoworkService(
       makeGraph: (getToken) => createHttpGraphClient({ ssrf, getToken }),
       ...(ms365Device !== undefined ? { device: ms365Device } : {}),
     });
+    // Expose the live connection state to the Knowledge source summary (issue #19).
+    ms365Connected = () => ms365Connector.connectionState() === "connected";
     const siteScopeStore = await createSiteScopeStore({
       persistence: createSiteScopeFilePersistence(DEFAULT_MS365_SITE_SCOPE_PATH),
     });
@@ -837,6 +843,7 @@ export async function createCoworkService(
       ? createKnowledgeLocalService({
           repo: createKnowledgeLocalRepository(sqliteDatabase),
           activeWorkspaceRoot: () => settingsStore.activeWorkspace()?.rootPath,
+          microsoft365Connected: ms365Connected,
           now,
         })
       : undefined;
