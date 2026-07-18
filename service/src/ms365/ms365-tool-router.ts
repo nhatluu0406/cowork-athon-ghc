@@ -22,6 +22,7 @@ import { handleToolCall, type ToolCall, type ToolDeps, type ToolResult, type Ms3
 import type { SiteScopeService } from "./site-scope-service.js";
 import type { Ms365WriteMode, WriteModeStore } from "./write-mode-store.js";
 import type { Ms365SessionScope } from "./ms365-session-scope.js";
+import { DEFAULT_FLOW_TIMEOUT_MS, type PowerAutomateStore } from "./power-automate-store.js";
 
 export const MS365_TOOL_CALL_PATH = "/v1/ms365/tool-call";
 export const MS365_CONNECT_PATH = "/v1/ms365/connect";
@@ -33,6 +34,11 @@ export const MS365_SITES_PATH = "/v1/ms365/sites";
 export const MS365_SITES_TOGGLE_PATH = "/v1/ms365/sites/toggle";
 export const MS365_WRITE_MODE_PATH = "/v1/ms365/write-mode";
 export const MS365_SESSION_SCOPE_PATH = "/v1/ms365/session-scope";
+export const MS365_FLOWS_PATH = "/v1/ms365/flows";
+export const MS365_FLOWS_DELETE_PATH = "/v1/ms365/flows/delete";
+export const MS365_FLOWS_TOGGLE_PATH = "/v1/ms365/flows/toggle";
+export const MS365_FLOWS_TIMEOUT_PATH = "/v1/ms365/flows/timeout";
+export const MS365_FLOWS_UPDATE_PATH = "/v1/ms365/flows/update";
 
 export const TOOL_NAMES: readonly Ms365ToolName[] = [
   "sharepoint_search",
@@ -166,6 +172,88 @@ function parseWriteModeBody(body: unknown): Ms365WriteMode {
   return mode;
 }
 
+interface PublicFlow {
+  name: string;
+  enabled: boolean;
+  timeoutMs: number;
+  description: string;
+  payloadSchema: string;
+}
+
+function publicFlows(store: PowerAutomateStore): PublicFlow[] {
+  return store.list().map((f) => ({ name: f.name, enabled: f.enabled, timeoutMs: f.timeoutMs, description: f.description, payloadSchema: f.payloadSchema }));
+}
+
+/** Empty is allowed; otherwise the text must be parseable JSON. Returns the text or throws 400. */
+function validateSchemaText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new Ms365RouterRequestError("payloadSchema must be a string.");
+  if (value.length === 0) return "";
+  try {
+    JSON.parse(value);
+  } catch {
+    throw new Ms365RouterRequestError("payloadSchema must be valid JSON.");
+  }
+  return value;
+}
+
+function parseAddFlowBody(body: unknown): { name: string; url: string; description: string; payloadSchema: string; timeoutMs?: number } {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  if (!nonEmptyString(record.name)) throw new Ms365RouterRequestError("name is required.");
+  if (!nonEmptyString(record.url)) throw new Ms365RouterRequestError("url is required.");
+  const out: { name: string; url: string; description: string; payloadSchema: string; timeoutMs?: number } = {
+    name: record.name,
+    url: record.url,
+    description: typeof record.description === "string" ? record.description : "",
+    payloadSchema: validateSchemaText(record.payloadSchema),
+  };
+  if (typeof record.timeoutMs === "number") out.timeoutMs = record.timeoutMs;
+  return out;
+}
+
+function parseUpdateFlowBody(body: unknown): { name: string; description: string; timeoutMs: number; payloadSchema: string; url?: string } {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  if (!nonEmptyString(record.name)) throw new Ms365RouterRequestError("name is required.");
+  if (typeof record.timeoutMs !== "number") throw new Ms365RouterRequestError("timeoutMs must be a number.");
+  const out: { name: string; description: string; timeoutMs: number; payloadSchema: string; url?: string } = {
+    name: record.name,
+    description: typeof record.description === "string" ? record.description : "",
+    timeoutMs: record.timeoutMs,
+    payloadSchema: validateSchemaText(record.payloadSchema),
+  };
+  if (nonEmptyString(record.url)) out.url = record.url;
+  return out;
+}
+
+function parseFlowNameBody(body: unknown): { name: string } {
+  if (typeof body !== "object" || body === null) {
+    throw new Ms365RouterRequestError("Request body must be a JSON object.");
+  }
+  const record = body as Record<string, unknown>;
+  if (!nonEmptyString(record.name)) throw new Ms365RouterRequestError("name is required.");
+  return { name: record.name };
+}
+
+function parseFlowToggleBody(body: unknown): { name: string; enabled: boolean } {
+  const { name } = parseFlowNameBody(body);
+  const enabled = (body as Record<string, unknown>).enabled;
+  if (typeof enabled !== "boolean") throw new Ms365RouterRequestError("enabled must be a boolean.");
+  return { name, enabled };
+}
+
+function parseFlowTimeoutBody(body: unknown): { name: string; timeoutMs: number } {
+  const { name } = parseFlowNameBody(body);
+  const timeoutMs = (body as Record<string, unknown>).timeoutMs;
+  if (typeof timeoutMs !== "number") throw new Ms365RouterRequestError("timeoutMs must be a number.");
+  return { name, timeoutMs };
+}
+
 export interface Ms365RouterDeps {
   readonly tools: ToolDeps;
   readonly connector: Ms365Connector;
@@ -173,6 +261,7 @@ export interface Ms365RouterDeps {
   readonly siteScope: SiteScopeService;
   readonly writeMode: WriteModeStore;
   readonly sessionScope: Ms365SessionScope;
+  readonly powerAutomateStore: PowerAutomateStore;
 }
 
 /** Build the MS365 router. The orchestrator mounts it via `service.mount`. */
@@ -299,6 +388,65 @@ export function createMs365Router(deps: Ms365RouterDeps): BoundaryRouter {
             deps.sessionScope.revoke(sessionId);
           }
           return { status: 200, data: { allowed: deps.sessionScope.isAllowed(sessionId) } };
+        },
+      },
+      {
+        method: "GET",
+        path: MS365_FLOWS_PATH,
+        handler: (): RouteResult<{ flows: PublicFlow[] }> => ({
+          status: 200,
+          data: { flows: publicFlows(deps.powerAutomateStore) },
+        }),
+      },
+      {
+        method: "POST",
+        path: MS365_FLOWS_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ flows: PublicFlow[] }>> => {
+          const { name, url, description, payloadSchema, timeoutMs } = parseAddFlowBody(ctx.body);
+          if (deps.powerAutomateStore.resolve(name) !== null) {
+            throw new Ms365RouterRequestError("A flow with this name already exists.");
+          }
+          await deps.powerAutomateStore.add({ name, url, description, payloadSchema, timeoutMs: timeoutMs ?? DEFAULT_FLOW_TIMEOUT_MS });
+          return { status: 200, data: { flows: publicFlows(deps.powerAutomateStore) } };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_FLOWS_DELETE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ flows: PublicFlow[] }>> => {
+          const { name } = parseFlowNameBody(ctx.body);
+          await deps.powerAutomateStore.remove(name);
+          return { status: 200, data: { flows: publicFlows(deps.powerAutomateStore) } };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_FLOWS_TOGGLE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ flows: PublicFlow[] }>> => {
+          const { name, enabled } = parseFlowToggleBody(ctx.body);
+          await deps.powerAutomateStore.setEnabled(name, enabled);
+          return { status: 200, data: { flows: publicFlows(deps.powerAutomateStore) } };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_FLOWS_TIMEOUT_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ flows: PublicFlow[] }>> => {
+          const { name, timeoutMs } = parseFlowTimeoutBody(ctx.body);
+          await deps.powerAutomateStore.setTimeout(name, timeoutMs);
+          return { status: 200, data: { flows: publicFlows(deps.powerAutomateStore) } };
+        },
+      },
+      {
+        method: "POST",
+        path: MS365_FLOWS_UPDATE_PATH,
+        handler: async (ctx: RouteContext): Promise<RouteResult<{ flows: PublicFlow[] }>> => {
+          const { name, description, timeoutMs, payloadSchema, url } = parseUpdateFlowBody(ctx.body);
+          if (deps.powerAutomateStore.resolve(name) === null) {
+            throw new Ms365RouterRequestError("No flow with this name exists.");
+          }
+          await deps.powerAutomateStore.update(name, url !== undefined ? { description, timeoutMs, payloadSchema, url } : { description, timeoutMs, payloadSchema });
+          return { status: 200, data: { flows: publicFlows(deps.powerAutomateStore) } };
         },
       },
     ],

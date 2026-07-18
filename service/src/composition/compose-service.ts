@@ -817,6 +817,7 @@ export async function createCoworkService(
       siteScope,
       writeMode: writeModeStore,
       sessionScope,
+      powerAutomateStore,
       tools: {
         sharepoint,
         siteScope: { listJoinedSites: () => siteScope.listJoinedSites() },

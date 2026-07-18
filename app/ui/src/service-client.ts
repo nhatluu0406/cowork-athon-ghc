@@ -472,6 +472,15 @@ export interface Ms365SiteView {
   readonly enabled: boolean;
 }
 
+/** A configured Power Automate flow, without its secret trigger URL. */
+export interface Ms365FlowView {
+  readonly name: string;
+  readonly enabled: boolean;
+  readonly timeoutMs: number;
+  readonly description: string;
+  readonly payloadSchema: string;
+}
+
 /** Result of initiating MS365 device-code flow. */
 export type Ms365DeviceBeginResult =
   | { readonly userCode: string; readonly verificationUri: string; readonly expiresInSec: number }
@@ -825,6 +834,27 @@ export interface ServiceClient {
   listMs365Sites(): Promise<readonly Ms365SiteView[]>;
   /** Enable/disable a site for search scope; returns the refreshed site list. */
   setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+  /** List configured Power Automate flows (no URL — that is a server-side secret). */
+  listMs365Flows(): Promise<readonly Ms365FlowView[]>;
+  /** Add a custom flow (name + HTTP-trigger URL + description + payload schema + optional timeout ms); returns refreshed list. */
+  addMs365Flow(
+    name: string,
+    url: string,
+    description: string,
+    payloadSchema: string,
+    timeoutMs?: number,
+  ): Promise<readonly Ms365FlowView[]>;
+  /** Update an existing flow's description/timeout/payload schema (and optionally its URL); returns refreshed list. */
+  updateMs365Flow(
+    name: string,
+    fields: { readonly description: string; readonly timeoutMs: number; readonly payloadSchema: string; readonly url?: string },
+  ): Promise<readonly Ms365FlowView[]>;
+  /** Delete a flow by name; returns refreshed list. */
+  deleteMs365Flow(name: string): Promise<readonly Ms365FlowView[]>;
+  /** Enable/disable a flow; returns refreshed list. */
+  setMs365FlowEnabled(name: string, enabled: boolean): Promise<readonly Ms365FlowView[]>;
+  /** Set a flow's per-trigger timeout (ms); returns refreshed list. */
+  setMs365FlowTimeout(name: string, timeoutMs: number): Promise<readonly Ms365FlowView[]>;
   /** Đọc chế độ ghi hàng loạt MS365 hiện tại. */
   fetchMs365WriteMode(): Promise<{ mode: Ms365WriteMode }>;
   /** Đổi chế độ ghi hàng loạt MS365 (nguồn sự thật ở service). */
@@ -1467,6 +1497,68 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
           body: JSON.stringify({ siteId, enabled }),
         })
       ).sites,
+
+    listMs365Flows: async () =>
+      (await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows")).flows,
+
+    addMs365Flow: async (name, url, description, payloadSchema, timeoutMs) =>
+      (
+        await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows", {
+          method: "POST",
+          body: JSON.stringify(
+            timeoutMs !== undefined
+              ? { name, url, description, payloadSchema, timeoutMs }
+              : { name, url, description, payloadSchema },
+          ),
+        })
+      ).flows,
+
+    updateMs365Flow: async (name, fields) =>
+      (
+        await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows/update", {
+          method: "POST",
+          body: JSON.stringify(
+            fields.url !== undefined && fields.url.length > 0
+              ? {
+                  name,
+                  description: fields.description,
+                  timeoutMs: fields.timeoutMs,
+                  payloadSchema: fields.payloadSchema,
+                  url: fields.url,
+                }
+              : {
+                  name,
+                  description: fields.description,
+                  timeoutMs: fields.timeoutMs,
+                  payloadSchema: fields.payloadSchema,
+                },
+          ),
+        })
+      ).flows,
+
+    deleteMs365Flow: async (name) =>
+      (
+        await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows/delete", {
+          method: "POST",
+          body: JSON.stringify({ name }),
+        })
+      ).flows,
+
+    setMs365FlowEnabled: async (name, enabled) =>
+      (
+        await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows/toggle", {
+          method: "POST",
+          body: JSON.stringify({ name, enabled }),
+        })
+      ).flows,
+
+    setMs365FlowTimeout: async (name, timeoutMs) =>
+      (
+        await call<{ flows: readonly Ms365FlowView[] }>("/v1/ms365/flows/timeout", {
+          method: "POST",
+          body: JSON.stringify({ name, timeoutMs }),
+        })
+      ).flows,
 
     fetchMs365WriteMode: () => call<{ mode: Ms365WriteMode }>("/v1/ms365/write-mode"),
     setMs365WriteMode: (mode) =>

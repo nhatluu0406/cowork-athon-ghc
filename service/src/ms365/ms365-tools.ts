@@ -36,6 +36,7 @@ import { createPermissionRequest, type PermissionGate } from "../permission/inde
 import { handlePlannerCreateTasks } from "./ms365-batch-tools.js";
 import { awaitGateDecision, defaultWait } from "./ms365-gate-wait.js";
 import type { Ms365WriteMode } from "./write-mode-store.js";
+import { DEFAULT_FLOW_TIMEOUT_MS } from "./power-automate-store.js";
 
 export { defaultWait };
 
@@ -320,15 +321,18 @@ function readCreateEventArgs(args: Record<string, unknown>): CreateEventInput | 
 }
 
 interface TriggerFlowArgs {
-  url: string;
+  name?: string;
+  url?: string;
   payload?: unknown;
 }
 
-/** Validates + narrows `power_automate_trigger_flow` args; null when url is not a non-empty
- * string. `payload` is passed through unchanged (any JSON value is valid). */
+/** Validates `power_automate_trigger_flow` args; null when neither `name` nor `url` is a
+ * non-empty string. `payload` passes through unchanged (any JSON value is valid). */
 function readTriggerFlowArgs(args: Record<string, unknown>): TriggerFlowArgs | null {
-  if (!nonEmptyString(args.url)) return null;
-  const out: TriggerFlowArgs = { url: args.url };
+  const out: TriggerFlowArgs = {};
+  if (nonEmptyString(args.name)) out.name = args.name;
+  if (nonEmptyString(args.url)) out.url = args.url;
+  if (out.name === undefined && out.url === undefined) return null;
   if (args.payload !== undefined) out.payload = args.payload;
   return out;
 }
@@ -666,14 +670,49 @@ async function handlePowerAutomateWrite(
 ): Promise<ToolResult> {
   const input = readTriggerFlowArgs(call.args);
   if (input === null) {
-    return invalid("power_automate_trigger_flow cần url là chuỗi không rỗng.");
+    return invalid("power_automate_trigger_flow cần 'name' hoặc 'url'.");
   }
+
+  let url: string;
+  let timeoutMs: number;
+  let label: string;
+  if (input.name !== undefined) {
+    const flow = deps.powerAutomate.resolveFlow(input.name);
+    if (flow === null) {
+      return {
+        ok: false,
+        error: {
+          kind: "not_found",
+          message: `Không tìm thấy flow "${input.name}".`,
+          recovery: "Kiểm tra tên hoặc thêm flow trong tab Microsoft 365.",
+        },
+      };
+    }
+    if (!flow.enabled) {
+      return {
+        ok: false,
+        error: {
+          kind: "endpoint_blocked",
+          message: `Flow "${input.name}" đang tắt.`,
+          recovery: "Bật flow trong tab Microsoft 365 rồi thử lại.",
+        },
+      };
+    }
+    url = flow.url;
+    timeoutMs = flow.timeoutMs;
+    label = `"${input.name}"`;
+  } else {
+    url = input.url as string;
+    timeoutMs = DEFAULT_FLOW_TIMEOUT_MS;
+    // Redacted host + path (SAS `sig` stripped) — a meaningful label for a direct-URL trigger.
+    label = redactFlowUrlForDisplay(url);
+  }
+
   const action: PermissionAction = {
     kind: "ms365_write",
-    // A flow trigger URL's query string carries a SAS `sig` (a bearer secret). Show only the
-    // host + path in the approval card so consent stays meaningful without leaking the secret
-    // into the renderer.
-    description: `Kích hoạt Power Automate flow ${redactFlowUrlForDisplay(input.url)}`,
+    // `label` is the flow name or the redacted host+path — never the raw trigger URL, whose query
+    // string carries a SAS `sig` (a bearer secret). Consent stays meaningful without leaking it.
+    description: `Kích hoạt Power Automate flow ${label}`,
   };
   deps.gate.submit(
     createPermissionRequest({ requestId: call.requestId, sessionId: call.sessionId, action, requestedAt: deps.now() }),
@@ -682,9 +721,8 @@ async function handlePowerAutomateWrite(
   if (decision === "denied") {
     return deniedResult("Yêu cầu kích hoạt flow chưa được cho phép.");
   }
-  const outcome = deps.gate.proceed(call.requestId, () =>
-    deps.powerAutomate.triggerFlow(input.payload !== undefined ? { url: input.url, payload: input.payload } : { url: input.url }),
-  );
+  const payloadArg = input.payload !== undefined ? { url, payload: input.payload, timeoutMs } : { url, timeoutMs };
+  const outcome = deps.gate.proceed(call.requestId, () => deps.powerAutomate.triggerFlow(payloadArg));
   if (!outcome.performed) {
     return deniedResult("Yêu cầu kích hoạt flow chưa được cho phép.");
   }
