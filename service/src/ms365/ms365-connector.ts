@@ -13,7 +13,7 @@ import type { AuthSource, TokenProvider } from "./token-provider.js";
 import type { GraphClient } from "./graph-client.js";
 import type { DeviceCodePrompt } from "./device-code-provider.js";
 import { Ms365Error } from "./ms365-errors.js";
-import { decodeTokenScopes } from "./token-scopes.js";
+import { decodeTokenScopes, decodeTokenIdentity, decodeTokenExpiry, type TokenIdentity } from "./token-scopes.js";
 
 export type Ms365ConnectionState =
   | "disconnected"
@@ -34,6 +34,10 @@ export interface Ms365Connector {
   deviceConfigured(): boolean;
   /** The permissions the connected account actually holds (decoded from the token's `scp`/`roles`). Empty when not connected. */
   grantedScopes(): readonly string[];
+  /** The connected account's non-secret display identity (name/username), or `null`. */
+  accountIdentity(): TokenIdentity | null;
+  /** The active token's expiry as epoch milliseconds, or `null` when unknown/not connected. */
+  tokenExpiresAtMs(): number | null;
 }
 
 export interface Ms365ConnectorDeps {
@@ -81,14 +85,21 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
   // Permissions the connected account actually holds, decoded from the active token's scp/roles
   // claims after a successful verify. Reset whenever the connection is not established.
   let grantedScopeList: string[] = [];
+  let identity: TokenIdentity | null = null;
+  let expiresAtMs: number | null = null;
 
-  /** Decode the active provider's token scopes for display (never stores/logs the token). */
+  /** Decode the active provider's token scopes + identity + expiry (never stores/logs the token). */
   async function captureGrantedScopes(): Promise<void> {
     try {
       const token = await activeProvider.getAccessToken();
       grantedScopeList = decodeTokenScopes(token);
+      const id = decodeTokenIdentity(token);
+      identity = id.name !== undefined || id.username !== undefined ? id : null;
+      expiresAtMs = decodeTokenExpiry(token);
     } catch {
       grantedScopeList = [];
+      identity = null;
+      expiresAtMs = null;
     }
   }
 
@@ -145,6 +156,8 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
         await captureGrantedScopes();
       } catch (err) {
         grantedScopeList = [];
+        identity = null;
+        expiresAtMs = null;
         if (err instanceof Ms365Error && err.kind === "auth_expired") {
           state = "needs_reconnect";
           activeSource = null;
@@ -166,10 +179,20 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
       cachedGraph = null;
       activeProvider = deps.manual.provider;
       grantedScopeList = [];
+      identity = null;
+      expiresAtMs = null;
     },
 
     grantedScopes(): readonly string[] {
       return grantedScopeList;
+    },
+
+    accountIdentity(): TokenIdentity | null {
+      return identity;
+    },
+
+    tokenExpiresAtMs(): number | null {
+      return expiresAtMs;
     },
 
     deviceConfigured(): boolean {
@@ -209,6 +232,8 @@ export function createMs365Connector(deps: Ms365ConnectorDeps): Ms365Connector {
         return "connected";
       } catch (err) {
         grantedScopeList = [];
+        identity = null;
+        expiresAtMs = null;
         if (err instanceof Ms365Error && err.kind === "auth_expired") {
           state = "disconnected";
           activeSource = null;

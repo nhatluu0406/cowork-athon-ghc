@@ -29,6 +29,39 @@ function decodePayload(token: string): Record<string, unknown> | null {
   }
 }
 
+/** Non-secret account identity decoded from a Graph token for display (never the token itself). */
+export interface TokenIdentity {
+  readonly name?: string;
+  readonly username?: string;
+}
+
+/**
+ * Decode the connected account's display identity (`name` + `preferred_username`/`upn`) from a
+ * Graph token. These are the user's OWN non-secret identity claims (shown as "Đã kết nối: …"),
+ * never a credential. Malformed input → `{}`.
+ */
+export function decodeTokenIdentity(accessToken: string): TokenIdentity {
+  const payload = decodePayload(accessToken);
+  if (payload === null) return {};
+  const name = typeof payload["name"] === "string" ? payload["name"] : undefined;
+  const usernameClaim = ["preferred_username", "upn", "unique_name", "email"].find(
+    (claim) => typeof payload[claim] === "string" && (payload[claim] as string).length > 0,
+  );
+  const username = usernameClaim !== undefined ? (payload[usernameClaim] as string) : undefined;
+  return {
+    ...(name !== undefined ? { name } : {}),
+    ...(username !== undefined ? { username } : {}),
+  };
+}
+
+/** Decode the token's expiry (`exp`, seconds) as epoch milliseconds; `null` when absent/malformed. */
+export function decodeTokenExpiry(accessToken: string): number | null {
+  const payload = decodePayload(accessToken);
+  if (payload === null) return null;
+  const exp = payload["exp"];
+  return typeof exp === "number" && Number.isFinite(exp) ? exp * 1000 : null;
+}
+
 /** Extract the granted scopes (`scp` delegated + `roles` app permissions) from a Graph token. */
 export function decodeTokenScopes(accessToken: string): string[] {
   const payload = decodePayload(accessToken);

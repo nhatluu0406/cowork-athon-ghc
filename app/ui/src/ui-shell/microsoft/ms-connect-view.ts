@@ -12,6 +12,17 @@ import { renderDevicePendingCard } from "./ms-connect-device.js";
 /** Nơi lấy access token thủ công (Graph Explorer → "Access token"). */
 const GRAPH_EXPLORER_URL = "https://developer.microsoft.com/en-us/graph/graph-explorer";
 
+/** Honest expiry line: past → cần đăng nhập lại; else the local time it expires. */
+function formatExpiry(expiresAtMs: number): string {
+  if (expiresAtMs <= Date.now()) return "Phiên đã hết hạn — cần đăng nhập lại.";
+  try {
+    const t = new Date(expiresAtMs).toLocaleString("vi-VN");
+    return `Phiên hợp lệ tới: ${t}`;
+  } catch {
+    return "Phiên đang hợp lệ.";
+  }
+}
+
 /** Minimal service-client slice the connect view needs (structural — real ServiceClient satisfies it). */
 export interface Ms365ConnectClient {
   connectMs365Token(token: string): Promise<Ms365ViewData>;
@@ -267,8 +278,28 @@ function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {
   const view = deps.view;
   const card = el("section", "ms-card ms-connect__summary");
   const header = el("div", "ms-connect__summary-header");
-  header.append(el("h2", "ms-card__title", "Microsoft 365"), el("span", "ms-pill ms-pill--ok", "Đã kết nối"));
+  const expired = typeof view.expiresAtMs === "number" && view.expiresAtMs <= Date.now();
+  header.append(
+    el("h2", "ms-card__title", "Microsoft 365"),
+    el(
+      "span",
+      expired ? "ms-pill ms-pill--warn" : "ms-pill ms-pill--ok",
+      expired ? "Cần đăng nhập lại" : "Đã kết nối",
+    ),
+  );
   card.append(header);
+
+  // Account identity (the user's own non-secret claims) + token expiry — honest session status.
+  const account = view.account;
+  if (account !== undefined && (account.name !== undefined || account.username !== undefined)) {
+    const who = account.name !== undefined && account.username !== undefined
+      ? `${account.name} · ${account.username}`
+      : (account.name ?? account.username ?? "");
+    card.append(el("p", "ms-connect__account", `Tài khoản: ${who}`));
+  }
+  if (typeof view.expiresAtMs === "number") {
+    card.append(el("p", "ms-connect__expiry", formatExpiry(view.expiresAtMs)));
+  }
 
   const services = el("div", "ms-service-grid");
   for (const service of view.services) {

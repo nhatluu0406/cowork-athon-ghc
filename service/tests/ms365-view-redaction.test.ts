@@ -18,6 +18,8 @@ function conn(state: "connected" | "disconnected"): Ms365Connector {
     pollDeviceCode: async () => "pending",
     deviceConfigured: () => false,
     grantedScopes: () => [],
+    accountIdentity: () => null,
+    tokenExpiresAtMs: () => null,
   };
 }
 

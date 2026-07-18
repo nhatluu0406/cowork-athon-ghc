@@ -13,6 +13,10 @@ export interface Ms365ViewData {
   services: Array<{ id: string; label: string; connected: boolean }>;
   scopes: string[];
   actionHistory: Array<{ label: string; source: string; at?: string }>;
+  /** Connected account's non-secret display identity (name/username), when known. */
+  account?: { name?: string; username?: string };
+  /** Active token expiry as epoch milliseconds, when known (for an honest "hết hạn" state). */
+  expiresAtMs?: number;
   error?: string;
 }
 
@@ -41,6 +45,19 @@ export function buildMs365View(
     scopes: effectiveScopes,
     actionHistory: [],
   };
+
+  // Account identity + token expiry (non-secret display claims), only while connected.
+  if (connectionState === "connected") {
+    const identity = connector.accountIdentity();
+    if (identity !== null && (identity.name !== undefined || identity.username !== undefined)) {
+      view.account = {
+        ...(identity.name !== undefined ? { name: identity.name } : {}),
+        ...(identity.username !== undefined ? { username: identity.username } : {}),
+      };
+    }
+    const exp = connector.tokenExpiresAtMs();
+    if (exp !== null) view.expiresAtMs = exp;
+  }
 
   // Only include error if it exists (non-null)
   if (lastError !== null) {
