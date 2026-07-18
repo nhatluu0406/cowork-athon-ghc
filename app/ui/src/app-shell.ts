@@ -178,6 +178,12 @@ const NULL_MS365_CLIENT: Ms365ConnectClient = {
   disconnectMs365: () => Promise.reject(new Error("service_not_ready")),
   listMs365Sites: () => Promise.reject(new Error("service_not_ready")),
   setMs365SiteEnabled: () => Promise.reject(new Error("service_not_ready")),
+  listMs365Flows: () => Promise.reject(new Error("service_not_ready")),
+  addMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  updateMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  deleteMs365Flow: () => Promise.reject(new Error("service_not_ready")),
+  setMs365FlowEnabled: () => Promise.reject(new Error("service_not_ready")),
+  setMs365FlowTimeout: () => Promise.reject(new Error("service_not_ready")),
 };
 
 interface RuntimeSessionReady {

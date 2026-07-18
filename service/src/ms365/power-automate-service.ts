@@ -16,18 +16,28 @@
  * hostname at connect time and defeat the SSRF DNS-rebinding guard (check-time public IP,
  * connect-time private IP). After dialing we assert the socket used one of the validated IPs.
  *
- * Name→URL resolution against the configured flow list happens at the tool-call boundary
- * (ms365-tools.ts), not here — this service only ever receives an already-resolved URL.
+ * The trigger awaits the flow's response (bounded body) so the caller sees the flow's feedback,
+ * and aborts after the per-flow timeout so a slow/hung flow never holds the request open. A 2xx
+ * returns { status, body }; a non-2xx throws an Ms365Error whose message folds in the flow's own
+ * (bounded) response body, so the caller sees WHY it failed. Name→URL resolution against the
+ * configured (enabled) flow list happens at the tool-call boundary (ms365-tools.ts), not here —
+ * this service only ever receives a resolved URL.
  */
 import type { ConnectTarget, SsrfPolicy } from "../provider/index.js";
 import { orderConnectCandidates } from "../provider/index.js";
-import { createHttpsDialer, type HttpDialer } from "../provider/http-dialer.js";
+import { createHttpsDialer, ProbeTimeoutError, type HttpDialer } from "../provider/http-dialer.js";
 import { Ms365Error } from "./ms365-errors.js";
 import type { PowerAutomateStore } from "./power-automate-store.js";
 
+export const MAX_FLOW_BODY_CHARS = 65_536;
+/** How much of a failed flow's response body to fold into the error message (the rest is noise
+ * for a one-line diagnostic; the full bounded body still returns on success). */
+export const MAX_ERROR_BODY_CHARS = 500;
+
 export interface PowerAutomateService {
-  listFlows(): { readonly name: string }[];
-  triggerFlow(input: { url: string; payload?: unknown }): Promise<{ status: number }>;
+  listFlows(): { readonly name: string; readonly description: string; readonly payloadSchema: string }[];
+  resolveFlow(name: string): { url: string; timeoutMs: number; enabled: boolean } | null;
+  triggerFlow(input: { url: string; payload?: unknown; timeoutMs: number }): Promise<{ status: number; body: string }>;
 }
 
 /**
@@ -42,9 +52,6 @@ const POWER_AUTOMATE_HOST_SUFFIXES: readonly string[] = [
   ".logic.azure.de",
 ];
 
-/** Hard upper bound on a flow trigger (ms); bounded, no retry loop. */
-const TRIGGER_TIMEOUT_MS = 15_000;
-
 function isAllowedFlowHost(host: string): boolean {
   const lower = host.toLowerCase();
   return POWER_AUTOMATE_HOST_SUFFIXES.some((suffix) => lower.endsWith(suffix));
@@ -58,7 +65,11 @@ export function createPowerAutomateService(deps: {
 }): PowerAutomateService {
   const dialer = deps.dialer ?? createHttpsDialer();
 
-  async function dialPinned(target: ConnectTarget, body: string): Promise<number> {
+  async function dialPinned(
+    target: ConnectTarget,
+    body: string,
+    timeoutMs: number,
+  ): Promise<{ status: number; body: string }> {
     // IP-pinned Happy-Eyeballs: try the first validated address, then a different family. Every
     // candidate is an SSRF-validated IP, so the socket can only ever reach a vetted address.
     const candidates = orderConnectCandidates(target.resolved);
@@ -73,9 +84,12 @@ export function createPowerAutomateService(deps: {
           ip: pin.address,
           family: pin.family,
           headers: { "content-type": "application/json" },
-          timeoutMs: TRIGGER_TIMEOUT_MS,
+          timeoutMs,
           method: "POST",
           body,
+          // Await the flow's feedback (bounded) so the caller sees the response payload.
+          readBody: true,
+          maxBodyBytes: MAX_FLOW_BODY_CHARS,
         });
         // F2: refuse a socket that reached an IP the SSRF policy never validated (rebinding guard).
         if (!target.resolved.some((a) => a.address === response.dialedIp)) {
@@ -86,18 +100,21 @@ export function createPowerAutomateService(deps: {
             false,
           );
         }
-        if (response.status < 200 || response.status >= 300) {
+        // A non-2xx is a real answer from the flow, not a transport failure: return the bounded
+        // body so the tool layer can surface the flow's own error payload.
+        return { status: response.status, body: response.bodyText ?? "" };
+      } catch (cause) {
+        // An Ms365Error is a real answer (validation/pin), not a transport failure — do not fall back.
+        if (cause instanceof Ms365Error) throw cause;
+        // A per-flow timeout is a real, non-retryable outcome — surface it, don't try other IPs.
+        if (cause instanceof ProbeTimeoutError) {
           throw new Ms365Error(
-            "graph_error",
-            `Flow trả lỗi HTTP ${response.status}.`,
-            "Kiểm tra lại flow/URL rồi thử lại.",
-            false,
+            "timeout",
+            `Flow không phản hồi trong ${Math.round(timeoutMs / 1000)}s.`,
+            "Tăng timeout của flow hoặc để flow trả action Response sớm hơn, rồi thử lại.",
+            true,
           );
         }
-        return response.status;
-      } catch (cause) {
-        // An Ms365Error is a real answer (status/pin), not a transport failure — do not fall back.
-        if (cause instanceof Ms365Error) throw cause;
         lastError = cause;
       }
     }
@@ -113,7 +130,13 @@ export function createPowerAutomateService(deps: {
 
   return {
     listFlows() {
-      return deps.store.list().map((f) => ({ name: f.name }));
+      return deps.store.list().filter((f) => f.enabled).map((f) => ({ name: f.name, description: f.description, payloadSchema: f.payloadSchema }));
+    },
+
+    resolveFlow(name) {
+      const flow = deps.store.resolve(name);
+      if (flow === null) return null;
+      return { url: flow.url, timeoutMs: flow.timeoutMs, enabled: flow.enabled };
     },
 
     async triggerFlow(input) {
@@ -128,8 +151,23 @@ export function createPowerAutomateService(deps: {
           false,
         );
       }
-      const status = await dialPinned(target, JSON.stringify(input.payload ?? {}));
-      return { status };
+      // The pinned dialer reads the bounded body WITHIN the per-flow timeout; it returns
+      // { status, body } for any status, and this layer decides how to treat a non-2xx.
+      const { status, body } = await dialPinned(target, JSON.stringify(input.payload ?? {}), input.timeoutMs);
+      if (status < 200 || status >= 300) {
+        // Surface the flow's own response body (bounded) so the caller sees WHY it failed — a 401
+        // body usually explains the auth failure, which "HTTP 401" alone hides.
+        const snippet = body.trim().slice(0, MAX_ERROR_BODY_CHARS);
+        throw new Ms365Error(
+          "graph_error",
+          snippet.length > 0 ? `Flow trả lỗi HTTP ${status}: ${snippet}` : `Flow trả lỗi HTTP ${status}.`,
+          status === 401
+            ? "401 = URL/chữ ký SAS sai hoặc trigger yêu cầu xác thực. Kiểm tra lại URL flow (đủ query string) và cấu hình 'Who can trigger'."
+            : "Kiểm tra lại flow/URL rồi thử lại.",
+          false,
+        );
+      }
+      return { status, body };
     },
   };
 }

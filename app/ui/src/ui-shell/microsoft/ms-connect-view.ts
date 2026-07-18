@@ -3,10 +3,12 @@ import type {
   Ms365DeviceBeginResult,
   Ms365DevicePollResult,
   Ms365SiteView,
+  Ms365FlowView,
 } from "../../service-client.js";
 import { el } from "../dom-utils.js";
 import { createMicrosoftLogo } from "./ms-logo.js";
 import { renderDevicePendingCard } from "./ms-connect-device.js";
+import { openFlowDialog } from "./ms-flow-dialog.js";
 
 /** Nơi lấy access token thủ công (Graph Explorer → "Access token"). */
 const GRAPH_EXPLORER_URL = "https://developer.microsoft.com/en-us/graph/graph-explorer";
@@ -20,6 +22,12 @@ export interface Ms365ConnectClient {
   disconnectMs365(): Promise<Ms365ViewData>;
   listMs365Sites(): Promise<readonly Ms365SiteView[]>;
   setMs365SiteEnabled(siteId: string, enabled: boolean): Promise<readonly Ms365SiteView[]>;
+  listMs365Flows(): Promise<readonly Ms365FlowView[]>;
+  addMs365Flow(name: string, url: string, description: string, payloadSchema: string, timeoutMs?: number): Promise<readonly Ms365FlowView[]>;
+  updateMs365Flow(name: string, fields: { description: string; timeoutMs: number; payloadSchema: string; url?: string }): Promise<readonly Ms365FlowView[]>;
+  deleteMs365Flow(name: string): Promise<readonly Ms365FlowView[]>;
+  setMs365FlowEnabled(name: string, enabled: boolean): Promise<readonly Ms365FlowView[]>;
+  setMs365FlowTimeout(name: string, timeoutMs: number): Promise<readonly Ms365FlowView[]>;
 }
 
 export interface RenderMsConnectDeps {
@@ -63,7 +71,7 @@ function paint(container: HTMLElement, deps: RenderMsConnectDeps, state: ViewSta
   container.replaceChildren();
   const wrap = el("div", "ms-connect");
   if (deps.view.connectionState === "connected") {
-    wrap.append(renderConnectedSummary(deps));
+    wrap.append(renderConnectedSummary(container, deps));
   } else if (state.mode === "device_pending" && state.deviceCode !== null && state.verificationUri !== null) {
     wrap.append(renderDevicePendingCard(state.deviceCode, state.verificationUri));
   } else {
@@ -249,7 +257,7 @@ function stopPolling(state: ViewState): void {
   }
 }
 
-function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {
+function renderConnectedSummary(container: HTMLElement, deps: RenderMsConnectDeps): HTMLElement {
   const view = deps.view;
   const card = el("section", "ms-card ms-connect__summary");
   const header = el("div", "ms-connect__summary-header");
@@ -296,6 +304,7 @@ function renderConnectedSummary(deps: RenderMsConnectDeps): HTMLElement {
   });
   card.append(disconnect, disconnectError);
   card.append(renderSiteScopeSection(deps));
+  card.append(renderPowerAutomateSection(container, deps));
   return card;
 }
 
@@ -362,5 +371,125 @@ function renderSiteRow(
   });
 
   row.append(toggle);
+  return row;
+}
+
+/**
+ * "Power Automate (tùy chỉnh)" — read-only flow list (name + description + timeout badge +
+ * schema badge + enable/disable toggle + Sửa/Xóa) plus a "＋ Thêm flow" button that opens the
+ * add/edit modal (`openFlowDialog`). The flow URL is a bearer secret and is NEVER rendered back
+ * — the list carries only name/description/enabled/timeoutMs/payloadSchema, and the edit dialog
+ * never pre-fills the URL. Loads on mount via `listMs365Flows()` and re-renders in place from
+ * each mutating call's refreshed list.
+ */
+function renderPowerAutomateSection(container: HTMLElement, deps: RenderMsConnectDeps): HTMLElement {
+  const wrap = el("div", "ms-flows");
+  const header = el("div", "ms-flows__header");
+  header.append(el("h3", "ms-section-label", "Power Automate (tùy chỉnh)"));
+  const addBtn = el("button", "ms-flows__add-btn", "＋ Thêm flow") as HTMLButtonElement;
+  addBtn.type = "button";
+  header.append(addBtn);
+  wrap.append(header);
+
+  const list = el("div", "ms-flows__list");
+  const status = el("p", "ms-flows__status", "Đang tải danh sách flow…");
+  wrap.append(status, list);
+
+  const paint = (flows: readonly Ms365FlowView[]): void => {
+    status.hidden = true;
+    list.replaceChildren();
+    if (flows.length === 0) {
+      status.textContent = "Chưa có flow nào — bấm “Thêm flow”.";
+      status.hidden = false;
+      return;
+    }
+    for (const flow of flows) list.append(renderFlowRow(container, deps, flow, paint));
+  };
+
+  addBtn.addEventListener("click", () => {
+    openFlowDialog(container, {
+      mode: "add",
+      onSubmit: async (v) => {
+        paint(await deps.client.addMs365Flow(v.name, v.url, v.description, v.payloadSchema, v.timeoutSec * 1000));
+      },
+    });
+  });
+
+  void deps.client
+    .listMs365Flows()
+    .then(paint)
+    .catch(() => {
+      status.textContent = "Không thể tải danh sách flow, thử lại sau.";
+      status.hidden = false;
+    });
+
+  return wrap;
+}
+
+function renderFlowRow(
+  container: HTMLElement,
+  deps: RenderMsConnectDeps,
+  flow: Ms365FlowView,
+  onRefresh: (flows: readonly Ms365FlowView[]) => void,
+): HTMLElement {
+  const row = el("div", "ms-flows__row");
+  const info = el("div", "ms-flows__info");
+  info.append(el("span", "ms-flows__name", flow.name));
+  if (flow.description.length > 0) info.append(el("span", "ms-flows__desc", flow.description));
+  info.append(el("span", "ms-flows__timeout-badge", `${Math.round(flow.timeoutMs / 1000)}s`));
+  if (flow.payloadSchema.length > 0) info.append(el("span", "ms-flows__schema-badge", "schema"));
+
+  const controls = el("div", "ms-flows__controls");
+  const toggle = el("input", "ms-flows__toggle") as HTMLInputElement;
+  toggle.type = "checkbox";
+  toggle.checked = flow.enabled;
+  toggle.setAttribute("aria-label", `Bật/tắt ${flow.name}`);
+  toggle.addEventListener("change", () => {
+    const next = toggle.checked;
+    toggle.disabled = true;
+    void deps.client
+      .setMs365FlowEnabled(flow.name, next)
+      .then(onRefresh)
+      .catch(() => {
+        toggle.checked = !next;
+        toggle.disabled = false;
+      });
+  });
+
+  const editBtn = el("button", "ms-flows__edit", "Sửa") as HTMLButtonElement;
+  editBtn.type = "button";
+  editBtn.addEventListener("click", () => {
+    openFlowDialog(container, {
+      mode: "edit",
+      initial: {
+        name: flow.name,
+        description: flow.description,
+        payloadSchema: flow.payloadSchema,
+        timeoutSec: Math.round(flow.timeoutMs / 1000),
+      },
+      onSubmit: async (v) => {
+        onRefresh(
+          await deps.client.updateMs365Flow(v.name, {
+            description: v.description,
+            timeoutMs: v.timeoutSec * 1000,
+            payloadSchema: v.payloadSchema,
+            url: v.url,
+          }),
+        );
+      },
+    });
+  });
+
+  const delBtn = el("button", "ms-flows__delete", "Xóa") as HTMLButtonElement;
+  delBtn.type = "button";
+  delBtn.addEventListener("click", () => {
+    delBtn.disabled = true;
+    void deps.client.deleteMs365Flow(flow.name).then(onRefresh).catch(() => {
+      delBtn.disabled = false;
+    });
+  });
+
+  controls.append(toggle, editBtn, delBtn);
+  row.append(info, controls);
   return row;
 }

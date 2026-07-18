@@ -22,6 +22,12 @@ function fakeDeps(): MicrosoftSurfaceDeps {
     disconnectMs365: async () => DISCONNECTED,
     listMs365Sites: async () => [],
     setMs365SiteEnabled: async () => [],
+    listMs365Flows: async () => [],
+    addMs365Flow: async () => [],
+    updateMs365Flow: async () => [],
+    deleteMs365Flow: async () => [],
+    setMs365FlowEnabled: async () => [],
+    setMs365FlowTimeout: async () => [],
   };
   const chat = createMsChatController({
     preflight: () => ({ canSend: true, message: "" }),

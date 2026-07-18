@@ -21,6 +21,12 @@ function fakeClient(over: Partial<Ms365ConnectClient> = {}): Ms365ConnectClient 
       ({ connectionState: "disconnected", services: [], scopes: [], actionHistory: [] }) as Ms365ViewData,
     listMs365Sites: async () => [],
     setMs365SiteEnabled: async () => [],
+    listMs365Flows: async () => [],
+    addMs365Flow: async () => [],
+    updateMs365Flow: async () => [],
+    deleteMs365Flow: async () => [],
+    setMs365FlowEnabled: async () => [],
+    setMs365FlowTimeout: async () => [],
     ...over,
   };
 }
