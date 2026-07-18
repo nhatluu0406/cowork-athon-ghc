@@ -9,6 +9,7 @@ import (
 
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 	"github.com/rad-system/m365-knowledge-graph/internal/connectors"
+	"github.com/rad-system/m365-knowledge-graph/internal/websocket"
 )
 
 // M365Deps bundles the dependencies HandleM365* handlers need to reach real
@@ -18,6 +19,7 @@ type M365Deps struct {
 	DB           *sql.DB
 	M365ClientID string // used along with each connection's own tenant_id to mint an app-only Graph token for sync
 	M365Secret   string
+	Hub          *websocket.Hub // for broadcasting sync progress events (T038)
 }
 
 type M365ConnectRequest struct {
@@ -86,15 +88,14 @@ type m365SyncRequest struct {
 }
 
 // HandleM365Sync wires POST /api/m365/sync to the real connectors (tasks.md
-// T187): it loads the connection's persisted config, builds an app-only
+// T038): it returns HTTP 202 Accepted immediately, then performs the sync in
+// the background, emitting WebSocket progress events to connected clients.
+//
+// The endpoint loads the connection's persisted config, builds an app-only
 // Microsoft Graph token via the client-credentials grant, and calls
 // OneDriveConnector.GetDelta / TeamsConnector.ListTeams before recording the
-// resulting delta token via DeltaSyncCoordinator.SaveChangeToken.
-//
-// This performs the sync synchronously and reports how many items were seen
-// rather than truly backgrounding a job (there is no job queue in this
-// service yet) — the response still reports job_started for API
-// compatibility with the documented contract.
+// resulting delta token via DeltaSyncCoordinator.SaveChangeToken. Progress
+// updates are broadcast to all WebSocket clients in real-time.
 func HandleM365Sync(deps *M365Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -118,61 +119,101 @@ func HandleM365Sync(deps *M365Deps) http.HandlerFunc {
 			return
 		}
 
-		tokenFunc := graphTokenFunc(deps.M365ClientID, deps.M365Secret, conn.TenantID)
-		client := connectors.NewGraphClient(tokenFunc)
-
 		sourceKey := fmt.Sprintf("%s:%d", conn.Type, conn.ID)
-		itemCount := 0
 
-		switch conn.Type {
-		case "onedrive":
-			driveID := req.DriveID
-			if driveID == "" {
-				driveID = conn.Config["drive_id"]
-			}
-			if driveID == "" {
-				http.Error(w, "drive_id is required for onedrive sync (pass it in the request or store it in the connection config)", http.StatusBadRequest)
-				return
-			}
-
-			oneDrive := connectors.NewOneDriveConnector(client)
-			teams := connectors.NewTeamsConnector(client)
-			coordinator := connectors.NewDeltaSyncCoordinator(deps.DB, oneDrive, teams)
-
-			count, err := coordinator.SyncOneDrive(r.Context(), conn.TenantID, driveID)
-			if err != nil {
-				http.Error(w, "onedrive sync failed: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			itemCount = count
-
-		case "teams":
-			teams := connectors.NewTeamsConnector(client)
-			teamList, err := teams.ListTeams(r.Context())
-			if err != nil {
-				http.Error(w, "teams sync failed: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-			itemCount = len(teamList)
-
-			if err := saveDeltaState(r.Context(), deps.DB, sourceKey, ""); err != nil {
-				http.Error(w, "failed to record sync state: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-		default:
-			http.Error(w, "unsupported connection type: "+conn.Type, http.StatusBadRequest)
-			return
-		}
-
-		resp := map[string]interface{}{
+		// Return 202 Accepted immediately and background the sync operation
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(map[string]interface{}{
 			"job_started": true,
 			"source":      sourceKey,
-			"items_seen":  itemCount,
-		}
+		})
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		// Launch sync in a separate goroutine to avoid blocking the response
+		go func() {
+			// Use a background context for the sync operation so it continues
+			// even if the client disconnects
+			syncCtx := context.Background()
+
+			tokenFunc := graphTokenFunc(deps.M365ClientID, deps.M365Secret, conn.TenantID)
+			client := connectors.NewGraphClient(tokenFunc)
+
+			// Emit sync_running event
+			if deps.Hub != nil {
+				_ = deps.Hub.BroadcastSyncProgress(websocket.SyncProgressEvent{
+					Source:        sourceKey,
+					Status:        "SYNC_RUNNING",
+					FilesProcessed: 0,
+					PercentComplete: 0,
+					Message:       "Sync started",
+				})
+			}
+
+			itemCount := 0
+			syncErr := ""
+
+			switch conn.Type {
+			case "onedrive":
+				driveID := req.DriveID
+				if driveID == "" {
+					driveID = conn.Config["drive_id"]
+				}
+				if driveID == "" {
+					syncErr = "drive_id is required for onedrive sync"
+					break
+				}
+
+				oneDrive := connectors.NewOneDriveConnector(client)
+				teams := connectors.NewTeamsConnector(client)
+				coordinator := connectors.NewDeltaSyncCoordinator(deps.DB, oneDrive, teams)
+
+				count, err := coordinator.SyncOneDrive(syncCtx, conn.TenantID, driveID)
+				if err != nil {
+					syncErr = fmt.Sprintf("onedrive sync failed: %v", err)
+					break
+				}
+				itemCount = count
+
+			case "teams":
+				teams := connectors.NewTeamsConnector(client)
+				teamList, err := teams.ListTeams(syncCtx)
+				if err != nil {
+					syncErr = fmt.Sprintf("teams sync failed: %v", err)
+					break
+				}
+				itemCount = len(teamList)
+
+				if err := saveDeltaState(syncCtx, deps.DB, sourceKey, ""); err != nil {
+					syncErr = fmt.Sprintf("failed to record sync state: %v", err)
+					break
+				}
+
+			default:
+				syncErr = fmt.Sprintf("unsupported connection type: %s", conn.Type)
+			}
+
+			// Emit final sync event (completed or failed)
+			if deps.Hub != nil {
+				status := "SYNC_COMPLETED"
+				message := fmt.Sprintf("Sync completed: %d items processed", itemCount)
+				errorMsg := ""
+
+				if syncErr != "" {
+					status = "SYNC_FAILED"
+					message = syncErr
+					errorMsg = syncErr
+				}
+
+				_ = deps.Hub.BroadcastSyncProgress(websocket.SyncProgressEvent{
+					Source:        sourceKey,
+					Status:        status,
+					FilesProcessed: itemCount,
+					PercentComplete: 100,
+					Message:       message,
+					Error:         errorMsg,
+				})
+			}
+		}()
 	}
 }
 

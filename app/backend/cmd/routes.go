@@ -11,6 +11,7 @@ import (
 	"github.com/rad-system/m365-knowledge-graph/internal/feedback"
 	"github.com/rad-system/m365-knowledge-graph/internal/graph"
 	"github.com/rad-system/m365-knowledge-graph/internal/localimport"
+	"github.com/rad-system/m365-knowledge-graph/internal/nlp"
 	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 	"github.com/rad-system/m365-knowledge-graph/internal/websocket"
 )
@@ -44,7 +45,7 @@ func (a similaritySearcherAdapter) SearchSimilar(ctx context.Context, modelID in
 // JWT), Neo4j graph/entity queries with Stage-0 permission filtering, and
 // M365 connection persistence/connector triggering. /api/knowledge/query
 // was wired to the real Retriever earlier (Group D remediation).
-func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedback.FeedbackStore, feedbackAnalyzer *feedback.FeedbackAnalyzer, retriever *retrieval.Retriever, entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, oauthRedirectURI, devUsername, devPassword string, queryBuilder *graph.QueryBuilder, statsDB *sql.DB, permFilter *retrieval.PermissionFilter, m365Deps *api.M365Deps, localImportDeps *localimport.LocalImportDeps) {
+func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedback.FeedbackStore, feedbackAnalyzer *feedback.FeedbackAnalyzer, retriever *retrieval.Retriever, entraAuth *auth.EntraIDAuth, jwtAuth *auth.JWTAuth, oauthRedirectURI, devUsername, devPassword string, queryBuilder *graph.QueryBuilder, statsDB *sql.DB, permFilter *retrieval.PermissionFilter, m365Deps *api.M365Deps, localImportDeps *localimport.LocalImportDeps, entityExtractDeps *api.EntityExtractDeps, extractor *nlp.Extractor, graphBuilder *graph.GraphBuilder) {
 	// Health check
 	router.Register("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -55,7 +56,12 @@ func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedb
 	router.Register("/api/auth/login", api.HandleLogin(entraAuth, jwtAuth, oauthRedirectURI, devUsername, devPassword))
 	router.Register("/api/auth/token/refresh", api.HandleRefreshToken(jwtAuth))
 
-	// M365 connectors
+	// M365 connectors (T037-T040)
+	// T037: POST /api/m365/connect — configure M365 connection
+	// T040: GET /api/m365/sources — list connected M365 sources
+	// T038: POST /api/m365/sync — trigger sync, returns 202 + WebSocket progress
+	// T039: GET /api/m365/sync/status — get sync state for all sources
+	m365Deps.Hub = hub // wire the WebSocket hub for sync progress broadcasts (T038)
 	router.Register("/api/m365/connect", api.HandleM365Connect(m365Deps))
 	router.Register("/api/m365/sources", api.HandleM365Sources(m365Deps))
 	router.Register("/api/m365/sync", api.HandleM365Sync(m365Deps))
@@ -77,6 +83,18 @@ func registerRoutes(router *api.Router, hub *websocket.Hub, feedbackStore *feedb
 	router.Register("/api/knowledge/query", api.HandleKnowledgeQuery(retriever, jwtAuth))
 	router.Register("/api/entities", api.HandleEntities(queryBuilder, permFilter, jwtAuth))
 	router.Register("/api/entities/", api.HandleEntityDetail(queryBuilder, jwtAuth))
+
+	// Entity extraction (T056): POST /api/entities/extract to trigger NLP extraction
+	if entityExtractDeps == nil {
+		entityExtractDeps = &api.EntityExtractDeps{
+			DB:              statsDB,
+			Extractor:       extractor,
+			GraphBuilder:    graphBuilder,
+			Hub:             hub,
+			ExtractionQueue: make(chan api.ExtractionTask, 100),
+		}
+	}
+	router.Register("/api/entities/extract", api.HandleEntitiesExtract(entityExtractDeps, jwtAuth))
 
 	// Graph
 	router.Register("/api/graph/nodes", api.HandleGraphNodes(queryBuilder, permFilter, jwtAuth))

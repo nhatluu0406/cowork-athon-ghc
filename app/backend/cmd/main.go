@@ -35,7 +35,7 @@ func main() {
 	logger := slog.Default()
 	logger.Info("m365-knowledge-graph starting")
 
-	// T113: Load config from environment
+	// Load config from environment
 	cfg, err := common.LoadConfig()
 	if err != nil {
 		logger.Error("failed to load config", "err", err)
@@ -46,46 +46,54 @@ func main() {
 		os.Exit(1)
 	}
 
-	// T113: Initialize PostgreSQL connection pool
-	db, err := metadata.New(cfg.DBUrl)
+	logger.Info("starting with dual-stack database configuration", "db_type", cfg.DBType)
+
+	// Use factory pattern to instantiate the right database driver based on DB_TYPE
+	repo, err := metadata.NewRepository(cfg.DBType, cfg.DBUrl)
 	if err != nil {
-		logger.Error("failed to connect to PostgreSQL", "err", err)
+		logger.Error("failed to initialize database", "err", err, "db_type", cfg.DBType)
 		os.Exit(1)
 	}
-	defer db.Close()
-	logger.Info("PostgreSQL connected")
+	defer repo.Close(context.Background())
+	logger.Info("database repository initialized", "db_type", cfg.DBType)
 
-	// T113: Initialize Neo4j driver (legacy neo4j.Driver wrapper, used by
-	// internal/graph's builder/migration code)
-	neoStore, err := graph.NewNeo4jStore(cfg.Neo4jUri, cfg.Neo4jUser, cfg.Neo4jPass)
-	if err != nil {
-		logger.Error("failed to connect to Neo4j", "err", err)
-		os.Exit(1)
+	// Initialize graph store and driver based on DB_TYPE
+	var graphStore interface{} // will be either *Neo4jStore or *LanceDBStore
+	var neoDriver neo4j.DriverWithContext // will be nil for sqlite_lancedb
+
+	if cfg.DBType == "postgres_neo4j" {
+		neoStore, err := graph.NewNeo4jStore(cfg.Neo4jUri, cfg.Neo4jUser, cfg.Neo4jPass)
+		if err != nil {
+			logger.Error("failed to connect to Neo4j", "err", err)
+			os.Exit(1)
+		}
+		defer neoStore.Close(context.Background())
+		graphStore = neoStore
+		neoDriver = neoStore.Driver() // Extract the driver for use in retrieval stages
+		logger.Info("Neo4j graph store initialized")
+	} else if cfg.DBType == "sqlite_lancedb" {
+		// For Option 2, get the underlying SQLite DB to pass to LanceDB
+		sqliteDB, err := getUnderlyingSQLiteDB(repo)
+		if err != nil {
+			logger.Error("failed to extract SQLite DB for LanceDB", "err", err)
+			os.Exit(1)
+		}
+		lanceStore, err := graph.NewLanceDBStore(sqliteDB)
+		if err != nil {
+			logger.Error("failed to initialize LanceDB vector store", "err", err)
+			os.Exit(1)
+		}
+		defer lanceStore.Close(context.Background())
+		graphStore = lanceStore
+		logger.Info("LanceDB vector store initialized")
 	}
-	defer neoStore.Close()
-	logger.Info("Neo4j connected")
 
-	// Also construct a modern neo4j.DriverWithContext for the retrieval
-	// package (QueryEntityRecognizer/GraphExpander use the context-aware API
-	// that internal/graph.QueryBuilder also uses). This duplicates the Neo4j
-	// connection alongside neoStore above — tracked as known tech debt to
-	// consolidate onto a single driver type (see tasks.md Group D notes).
-	neoDriver, err := neo4j.NewDriverWithContext(cfg.Neo4jUri, neo4j.BasicAuth(cfg.Neo4jUser, cfg.Neo4jPass, ""))
-	if err != nil {
-		logger.Error("failed to create Neo4j context driver", "err", err)
-		os.Exit(1)
-	}
-	defer neoDriver.Close(context.Background())
-
-	// T115: Initialize WebSocket hub and start its run loop
-	hub := websocket.NewHub()
-	go hub.Run()
-	logger.Info("WebSocket hub started")
+	// T115: Initialize WebSocket hub early (after auth is created below)
 
 	// Build dependent services used by handlers
-	feedbackStore := feedback.NewFeedbackStore(db.Conn())
-	feedbackAnalyzer := feedback.NewFeedbackAnalyzer(db.Conn())
-	improver := feedback.NewImprover(db.Conn())
+	feedbackStore := feedback.NewFeedbackStore(repo.Conn())
+	feedbackAnalyzer := feedback.NewFeedbackAnalyzer(repo.Conn())
+	improver := feedback.NewImprover(repo.Conn())
 
 	// Group C/D wiring: embedding client + store + retrieval pipeline.
 	// LLMSVC_ADDR may be unset in some environments — SemanticSearch and
@@ -127,7 +135,7 @@ func main() {
 	// (LLMSVC_ADDR); LLM_API_BASE_URL is no longer read by the Go backend at all
 	// (per spec §3.5).
 
-	embeddingStore := embedding.NewStore(db.Conn())
+	embeddingStore := embedding.NewStore(repo.Conn())
 
 	embeddingModelID, err := embeddingStore.EnsureModel(context.Background(), cfg.LLMEmbedModel, "", 1536)
 	if err != nil {
@@ -148,7 +156,7 @@ func main() {
 		}
 	}
 
-	permissionFilter := retrieval.NewPermissionFilter(db.Conn())
+	permissionFilter := retrieval.NewPermissionFilter(repo.Conn())
 
 	// T178: Create intent detector with optional brain client for task-type tagging
 	var intentDetector *retrieval.IntentDetector
@@ -158,9 +166,15 @@ func main() {
 		intentDetector = retrieval.NewIntentDetector()
 	}
 
-	entityRecognizer := retrieval.NewQueryEntityRecognizer(neoDriver)
-	semanticSearch := retrieval.NewSemanticSearch(db.Conn(), embedRuntime, similaritySearcherAdapter{store: embeddingStore}, embeddingModelID)
-	graphExpander := retrieval.NewGraphExpander(neoDriver)
+	// Only create Neo4j-dependent components if using postgres_neo4j option
+	var entityRecognizer *retrieval.QueryEntityRecognizer
+	var graphExpander *retrieval.GraphExpander
+	if neoDriver != nil {
+		entityRecognizer = retrieval.NewQueryEntityRecognizer(neoDriver)
+		graphExpander = retrieval.NewGraphExpander(neoDriver)
+	}
+
+	semanticSearch := retrieval.NewSemanticSearch(repo.Conn(), embedRuntime, similaritySearcherAdapter{store: embeddingStore}, embeddingModelID)
 
 	// T173: Create reranker with optional brain client for LLM-based reranking
 	var reranker *retrieval.Reranker
@@ -186,7 +200,7 @@ func main() {
 		answerGenerator = retrieval.NewAnswerGenerator(llmClient)
 	}
 
-	retriever := retrieval.NewRetriever(db.Conn(), permissionFilter, intentDetector, entityRecognizer,
+	retriever := retrieval.NewRetriever(repo.Conn(), permissionFilter, intentDetector, entityRecognizer,
 		semanticSearch, graphExpander, reranker, contextPacker, answerGenerator)
 
 	// T184: Auth deps — Entra ID OIDC (user-delegated auth-code flow) + our
@@ -194,13 +208,41 @@ func main() {
 	entraAuth := auth.NewEntraIDAuth(cfg.M365TenantID, cfg.M365ClientID, cfg.M365ClientSecret)
 	jwtAuth := auth.NewJWTAuth(cfg.JWTSecret)
 
+	// T115: Initialize WebSocket hub with JWT auth and start its run loop
+	hub := websocket.NewHub(jwtAuth)
+	go hub.Run()
+	logger.Info("WebSocket hub started")
+
 	// T185/T186: real graph query layer (shared QueryBuilder over the
 	// context-aware Neo4j driver already constructed above for retrieval).
-	queryBuilder := graph.NewQueryBuilder(neoDriver)
+	// For sqlite_lancedb, queryBuilder will be nil and graph queries will be unsupported.
+	var queryBuilder *graph.QueryBuilder
+	if neoDriver != nil {
+		queryBuilder = graph.NewQueryBuilder(neoDriver)
+	}
+
+	// T056: Create graph builder for entity extraction (Option 1 only)
+	var graphBuilder *graph.GraphBuilder
+	if cfg.DBType == "postgres_neo4j" {
+		if neoStore, ok := graphStore.(*graph.Neo4jStore); ok {
+			graphBuilder = graph.NewGraphBuilder(neoStore)
+			logger.Info("Graph builder initialized for Neo4j entity extraction")
+		}
+	}
+
+	// T047: Create NLP extractor for entity extraction via llm-svc
+	var extractor *nlp.Extractor
+	if brainClient != nil {
+		extractor = nlp.NewExtractorWithLLMSvc(brainClient, llmClient)
+		logger.Info("NLP extractor initialized with llm-svc")
+	} else if llmClient != nil {
+		extractor = nlp.NewExtractor(llmClient)
+		logger.Info("NLP extractor initialized with fallback LLM client")
+	}
 
 	// T187: M365 connection persistence + connector triggering deps.
 	m365Deps := &api.M365Deps{
-		DB:           db.Conn(),
+		DB:           repo.Conn(),
 		M365ClientID: cfg.M365ClientID,
 		M365Secret:   cfg.M365ClientSecret,
 	}
@@ -215,12 +257,12 @@ func main() {
 		}
 		return tokenResp.AccessToken, nil
 	})
-	permissionExtractor := connectors.NewPermissionExtractor(db.Conn(), graphClient)
+	permissionExtractor := connectors.NewPermissionExtractor(repo.Conn(), graphClient)
 
 	// T022: Initialize local import components (Phase 3)
-	localSourceStore := localimport.NewLocalSourceStore(db.Conn())
-	localJobStore := localimport.NewImportJobStore(db.Conn())
-	localFileStore := localimport.NewLocalFileStore(db.Conn())
+	localSourceStore := localimport.NewLocalSourceStore(repo.Conn())
+	localJobStore := localimport.NewImportJobStore(repo.Conn())
+	localFileStore := localimport.NewLocalFileStore(repo.Conn())
 
 	// Create extractor and chunker for local import
 	localExtractor := localimport.NewExtractor()
@@ -230,7 +272,11 @@ func main() {
 	localDeltaResolver := localimport.NewDeltaResolver(localFileStore)
 
 	// T044: Create Neo4j client for local documents
-	localNeo4jClient := localimport.NewLocalNeo4jClient(neoDriver)
+	// For sqlite_lancedb, localNeo4jClient will be nil and entity extraction to Neo4j will be skipped.
+	var localNeo4jClient *localimport.LocalNeo4jClient
+	if neoDriver != nil {
+		localNeo4jClient = localimport.NewLocalNeo4jClient(neoDriver)
+	}
 
 	// T046: Create NLP extractor for entity extraction
 	// Note: nlpExtractor can be nil if neither brainClient nor llmClient is available;
@@ -272,10 +318,27 @@ func main() {
 	}
 
 	// T114: Initialize router and register all handler groups
-	router := api.NewRouter()
+	// T022: Pass allowed origins from config for CORS middleware
+	router := api.NewRouter(cfg.AllowedOrigins)
+
+	// T056: Create entity extraction dependencies
+	entityExtractDeps := &api.EntityExtractDeps{
+		DB:              repo.Conn(),
+		Extractor:       extractor,
+		GraphBuilder:    graphBuilder,
+		Hub:             hub,
+		ExtractionQueue: make(chan api.ExtractionTask, 100),
+	}
+
 	registerRoutes(router, hub, feedbackStore, feedbackAnalyzer, retriever,
 		entraAuth, jwtAuth, cfg.OAuthRedirectURI, cfg.DevLoginUsername, cfg.DevLoginPassword,
-		queryBuilder, db.Conn(), permissionFilter, m365Deps, localImportDeps)
+		queryBuilder, repo.Conn(), permissionFilter, m365Deps, localImportDeps, entityExtractDeps, extractor, graphBuilder)
+
+	// T056: Start extraction worker pool for asynchronous entity extraction
+	if entityExtractDeps != nil && entityExtractDeps.Extractor != nil {
+		api.InitExtractionWorker(context.Background(), entityExtractDeps, 2) // 2 worker threads
+		logger.Info("entity extraction workers started")
+	}
 
 	// T115: Start background scheduler jobs
 	schedulerCtx, cancelSchedulers := context.WithCancel(context.Background())
@@ -344,4 +407,13 @@ func main() {
 	}
 
 	logger.Info("server shutdown complete")
+}
+
+// Helper function to extract the underlying SQLite DB from the SQLiteDriver
+// This is needed to pass to LanceDBStore since it expects a *sql.DB directly
+func getUnderlyingSQLiteDB(repo metadata.Repository) (*sql.DB, error) {
+	if sqliteDriver, ok := repo.(*metadata.SQLiteDriver); ok {
+		return sqliteDriver.GetDB()
+	}
+	return nil, fmt.Errorf("repository is not an SQLiteDriver")
 }
