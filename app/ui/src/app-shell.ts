@@ -62,6 +62,7 @@ import { mountSettingsView } from "./settings-view.js";
 import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
+import { createMentionTypeahead } from "./mention-typeahead.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -3163,9 +3164,25 @@ export function mountCoworkApp(root: HTMLElement): void {
       renderState(dom, state, handlers);
     });
   });
-  dom.composerInput.addEventListener("input", () => syncComposerChrome(dom, state));
+  // @-mention typeahead: typing `@` in the composer suggests active-workspace files; picking one
+  // inserts `@<relativePath> ` as plain text (the agent resolves it with its normal read tools — no
+  // new capability boundary). The file list comes from the guarded /v1/workspace/list walk.
+  const mentionTypeahead = createMentionTypeahead({
+    input: dom.composerInput,
+    anchor: dom.composer,
+    getClient: () => state.client,
+    getWorkspace: () => state.activeWorkspace,
+    onApplied: () => syncComposerChrome(dom, state),
+  });
+  dom.composerInput.addEventListener("input", () => {
+    syncComposerChrome(dom, state);
+    mentionTypeahead.refresh();
+  });
+  dom.composerInput.addEventListener("click", () => mentionTypeahead.refresh());
+  dom.composerInput.addEventListener("blur", () => mentionTypeahead.hide());
   dom.composerInput.addEventListener("keydown", (event) => {
     if (!(event instanceof KeyboardEvent)) return;
+    if (mentionTypeahead.handleKeydown(event)) return;
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       dom.sendButton.click();

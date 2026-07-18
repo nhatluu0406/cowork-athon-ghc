@@ -28,7 +28,7 @@
     "verify:release": "node tools/verify/release-regression.mjs",
     "app": "node tools/app/cli.mjs",
     "clean": "node tools/app/cli.mjs clean",
-    "verify:fast": "npm run typecheck && node --import tsx --test service/tests/provider-profiles.test.ts service/tests/provider-readiness.test.ts service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/surface-registry.test.ts app/ui/tests/provider-readiness.test.ts && npm run build:renderer",
+    "verify:fast": "npm run typecheck && node --import tsx --test service/tests/provider-profiles.test.ts service/tests/provider-readiness.test.ts service/tests/conversation-store.test.ts service/tests/conversation-router.test.ts service/tests/skill-catalog.test.ts app/ui/tests/conversation-controller.test.ts app/ui/tests/surface-registry.test.ts app/ui/tests/provider-readiness.test.ts app/ui/tests/mention-typeahead.test.ts && npm run build:renderer",
     "demo:seed": "node tools/demo/seed-binary.mjs demo-workspace && node tools/demo/seed-office.mjs demo-workspace",
     "audit:ui": "node tools/ui-audit/capture.mjs"
   },
