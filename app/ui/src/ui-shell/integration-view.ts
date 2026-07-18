@@ -2,10 +2,11 @@ import { getIntegrationSurfaceAdapter } from "../integration-surface-adapters.js
 import type { ProductSurfaceDefinition } from "../surface-registry.js";
 import { renderRemotePairing, type RemotePairingClient } from "../remote-pairing-view.js";
 import { renderDispatchBoard, type DispatchBoardClient, type DispatchRunGate } from "../dispatch-board.js";
+import { appendWorkflowCreator, type WorkflowCreatorClient } from "../workflow-creator.js";
 import { el, icon } from "./dom-utils.js";
 
-/** The client surface the Dispatch panel needs: phone pairing + the dispatch board. */
-export type IntegrationSurfaceClient = RemotePairingClient & DispatchBoardClient;
+/** The client surface the Dispatch panel needs: phone pairing + the dispatch board + workflow creator. */
+export type IntegrationSurfaceClient = RemotePairingClient & DispatchBoardClient & WorkflowCreatorClient;
 
 export function createIntegrationView(): HTMLElement {
   const root = el("section", "view view--integration integration-surface");
@@ -19,13 +20,19 @@ export function createIntegrationView(): HTMLElement {
  * REAL local-service data (agent-harness-plan.md Tasks 4.1/5.1/5.2), not the external D1 backend
  * — the D1 dependency badge above stays honest about what has not landed.
  */
-function appendDispatchBoard(mount: HTMLElement, client: DispatchBoardClient, gate: DispatchRunGate): void {
+function appendDispatchBoard(
+  mount: HTMLElement,
+  client: DispatchBoardClient,
+  gate: DispatchRunGate,
+): () => void {
   const section = el("section", "integration-dispatch");
   section.append(el("h2", "integration-dispatch__title", "Dispatch nội bộ"));
   const body = el("div", "integration-dispatch__body", "Đang tải danh sách task…");
   section.append(body);
   mount.append(section);
-  void renderDispatchBoard(client, body, gate);
+  const refresh = (): void => void renderDispatchBoard(client, body, gate);
+  refresh();
+  return refresh;
 }
 
 /**
@@ -111,7 +118,11 @@ export function renderIntegrationSurface(
     const mainCol = el("div", "integration-surface__col integration-surface__col--main");
     const asideCol = el("aside", "integration-surface__col integration-surface__col--aside");
     appendRemoteQuickAccess(mainCol, remoteClient);
-    appendDispatchBoard(asideCol, remoteClient, dispatchGate);
+    // Right column: create-from-description panel on top, the live board below. onCreated refreshes
+    // the board so a just-saved workflow appears immediately (and is 1-touch runnable on the phone).
+    let refreshBoard = (): void => {};
+    appendWorkflowCreator(asideCol, remoteClient, () => refreshBoard());
+    refreshBoard = appendDispatchBoard(asideCol, remoteClient, dispatchGate);
     mount.append(mainCol, asideCol);
   } else {
     mount.append(card);
