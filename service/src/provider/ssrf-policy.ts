@@ -16,6 +16,7 @@
 
 import net from "node:net";
 import { classifyIp, type IpClass } from "./ip-classify.js";
+import { isGatewayProxyUrl } from "../gateway/gateway-proxy-url.js";
 
 /** One resolved address for a hostname (mirrors `dns.lookup` all-results shape). */
 export interface ResolvedAddress {
@@ -169,6 +170,15 @@ export function createSsrfPolicy(options: SsrfPolicyOptions): SsrfPolicy {
       url.protocol === "http:" &&
       url.hostname === "127.0.0.1"
     ) {
+      return {
+        allowed: true,
+        target: { url, resolved: [{ address: "127.0.0.1", family: 4 }] },
+      };
+    }
+    // Second fixed exception, same shape as the E2E-mock-LLM escape above: the Gateway proxy
+    // is an internally-known loopback address (never user input) that Cowork itself forwards
+    // from — a probe/test-connection against it must be allowed the same way live chat is.
+    if (url.protocol === "http:" && url.hostname === "127.0.0.1" && isGatewayProxyUrl(url.href)) {
       return {
         allowed: true,
         target: { url, resolved: [{ address: "127.0.0.1", family: 4 }] },

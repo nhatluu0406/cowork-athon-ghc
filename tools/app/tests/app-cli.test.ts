@@ -36,6 +36,7 @@ test("init is idempotent: fake deps return OK on first AND repeat run", () => {
     const deps = {
       toolPresent: () => true,
       install: () => { installs += 1; },
+      rebuildNative: () => {},
       build: () => { builds += 1; },
       binExists: () => true,
     };
@@ -55,6 +56,7 @@ test("init reports MISSING_TOOLCHAIN when npm is absent (no build attempted)", (
     const code = cmdInit(root, {
       toolPresent: () => false,
       install: () => {},
+      rebuildNative: () => {},
       build: () => { builds += 1; },
       binExists: () => true,
     });
@@ -71,6 +73,7 @@ test("init reports MISSING_BINARY when the pinned OpenCode binary is absent", ()
     const code = cmdInit(root, {
       toolPresent: () => true,
       install: () => {},
+      rebuildNative: () => {},
       build: () => {},
       binExists: () => false,
     });

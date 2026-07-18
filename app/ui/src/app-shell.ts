@@ -63,6 +63,7 @@ import { applyThemePreference } from "./theme-manager.js";
 import { mountWorkspacePicker, type WorkspacePickerHandle } from "./workspace-picker.js";
 import { mountWorkspaceNavigator } from "./workspace-navigator.js";
 import { createMentionTypeahead } from "./mention-typeahead.js";
+import { mountGatewayIntegrationSlot } from "./gateway-surface.js";
 import { renderMicrosoftSurface, type MicrosoftSurfaceDeps } from "./ui-shell/microsoft/microsoft-view.js";
 import type { Ms365ConnectClient } from "./ui-shell/microsoft/ms-connect-view.js";
 import { createMsChatController, type MsChatController, type MsChatDeps } from "./ui-shell/microsoft/ms-chat-controller.js";
@@ -992,6 +993,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
   const isMicrosoftSurface = state.activeSurface === "microsoft";
   const isCodeSurface = state.activeSurface === "code";
   const isSkillsMcpSurface = state.activeSurface === "skills-mcp";
+  const isGatewaySurface = state.activeSurface === "gateway";
   const settingsOpen = !dom.settingsSurface.hidden;
   const inspectorAvailable = isCoworkSurface && state.workMode === "cowork" && !settingsOpen;
   const inspectorOpen = inspectorAvailable && !dom.rightPanel.hidden;
@@ -1016,10 +1018,12 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     isKnowledgeSurface ||
     isMicrosoftSurface ||
     isCodeSurface ||
-    isSkillsMcpSurface;
+    isSkillsMcpSurface ||
+    isGatewaySurface;
   dom.microsoftView.root.hidden = settingsOpen || !isMicrosoftSurface;
   dom.codeView.root.hidden = settingsOpen || !isCodeSurface;
   dom.skillsMcpView.root.hidden = settingsOpen || !isSkillsMcpSurface;
+  dom.gatewayView.hidden = settingsOpen || !isGatewaySurface;
   // Drive the runtime panes: only in Code surface + Preview mode; Web drives the embedded preview,
   // Ứng dụng drives the desktop-app pane. Exactly one is active at a time.
   const codePreviewActive = isCodeSurface && !settingsOpen && dom.codeView.mode === "preview";
@@ -1036,7 +1040,7 @@ function renderState(dom: AppDom, state: AppState, handlers: {
     renderCodeSurface(dom, state, handlers);
   } else if (isSkillsMcpSurface) {
     renderSkillsMcpTab(dom.skillsMcpView, state.skillsMcpTab);
-  } else if (!isCoworkSurface) {
+  } else if (!isCoworkSurface && !isGatewaySurface) {
     // Gate dispatch runs on the same prerequisites as a Cowork send (service + workspace +
     // provider) so the "Chạy" button never invites a run that will fail (ui-ux-audit F3).
     const dispatchCfg = assessConfigPreflight(buildReadinessInput(state.localServiceReady, state));
@@ -1552,8 +1556,13 @@ async function ensureLive(
     state.bootstrap.clientToken
   ) {
     try {
-      await state.client.health();
-      return state.client;
+      const health = await state.client.health();
+      if (health.runtimeReady === true) return state.client;
+      state.liveAttached = false;
+      // Fall through: the boundary answers but the supervised runtime is not attached yet
+      // (e.g. the OpenCode child is still starting) — never trust health() alone (see
+      // HealthData.runtimeReady doc comment: the socket answering only proves the LOCAL
+      // service is up, not the runtime).
     } catch {
       state.liveAttached = false;
       // Fall through to a real reconnect.
@@ -1589,7 +1598,11 @@ async function ensureLive(
         }
         const client = state.client;
         if (client === null) throw new Error("client missing");
-        await client.health();
+        const health = await client.health();
+        // Require the supervised runtime itself, not just the boundary — health() can answer
+        // OK (service up) before the OpenCode child is ready to accept `POST /session`, which
+        // otherwise surfaces "Runtime chưa sẵn sàng" on the very first send after a reconnect.
+        if (health.runtimeReady !== true) throw new Error("runtime not ready yet");
         state.liveAttached = true;
         return client;
       } catch {
@@ -1660,11 +1673,26 @@ async function ensureRuntimeSession(
     await state.conv.startContinuation();
   }
 
-  const meta = await client.createSession({
+  const createSessionInput = {
     workspaceId: state.activeWorkspace,
     title: (state.conv.state.activeRecord ?? record).title,
     model,
-  });
+  };
+  let meta;
+  try {
+    meta = await client.createSession(createSessionInput);
+  } catch (error) {
+    // The supervised OpenCode child can report itself alive/healthy just before its own
+    // `/session` endpoint is truly serving (an internal startup race `ensureLive`'s
+    // `runtimeReady` check cannot fully close) — wait for a fresh readiness signal and
+    // retry ONCE before surfacing the honest "Runtime chưa sẵn sàng" failure to the user.
+    const retriable =
+      error instanceof ServiceClientError &&
+      (error.code === "runtime_not_attached" || error.code === "runtime_unavailable");
+    if (!retriable) throw error;
+    await awaitRuntimeReady(state, 12_000);
+    meta = await client.createSession(createSessionInput);
+  }
   await state.conv.linkRuntimeSession(meta.id);
   state.lastView = initialSessionView(meta.id);
   // Keep "starting" while sendPrompt owns the turn; it advances to "running" after Prompt is accepted.
@@ -3051,6 +3079,28 @@ export function mountCoworkApp(root: HTMLElement): void {
           mountMcpSettingsPanel(dom.skillsMcpView.mcpBody, mcpCallbacks, (servers) => {
             mcpEnabledCount = servers.filter((server) => server.enabled).length;
             updateSkillsMcpChip();
+          });
+          // Read `state.bootstrap` fresh on every call, not a snapshot captured at mount time:
+          // a tier transition (settings-only → live) REPLACES `state.bootstrap` with a new
+          // object on a new port (see `readiness`'s `createClient` above) — a captured `const`
+          // here would keep pointing at the old, now-dead port forever ("Failed to fetch").
+          mountGatewayIntegrationSlot(dom.gatewayView, {
+            getBaseUrl: () => state.bootstrap?.serviceBaseUrl ?? "",
+            getClientToken: () => state.bootstrap?.clientToken ?? "",
+            listProfiles: async () => (await dynamicClient.listProviderProfiles()).profiles,
+            // Reuse the SAME reconnect flow the chat composer uses (`ensureLive`): restarts the
+            // live service (fresh OpenCode child, re-reads `opencode.json`) and polls until
+            // `state.bootstrap`/`state.client` actually reflect the new session — a bare
+            // `connectLive()` IPC call resolves once the SERVICE has restarted, but the
+            // renderer's own bootstrap adoption is a separate step this also waits out.
+            // `ensureLive`'s FAST PATH skips reconnecting entirely when the existing client
+            // already health-checks OK — exactly the common case here (a healthy session that
+            // just needs its OpenCode child respawned for the new Gateway config) — so force past
+            // it by marking the current attachment stale first.
+            reconnectLive: async () => {
+              state.liveAttached = false;
+              await ensureLive(state, readiness).catch(() => undefined);
+            },
           });
           const permissions = createPermissionController({
             client: dynamicClient,

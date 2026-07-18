@@ -44,7 +44,8 @@ test("production default exposes all navigable product rail surfaces", () => {
     ["cowork", "available"],
     ["skills-mcp", "available"],
     ["dispatch", "awaiting_integration"],
-    ["gateway", "awaiting_integration"],
+    // Gateway backend (PR #16 multi-account proxy) is now integrated — no longer a mount boundary.
+    ["gateway", "available"],
     ["knowledge", "awaiting_integration"],
     ["microsoft", "awaiting_integration"],
     ["code", "available"],
@@ -61,7 +62,12 @@ test("skills-mcp surface sits directly below Cowork in the rail", () => {
 
 test("onlyAvailable hides awaiting integration and planned slots for demo mode", () => {
   const visible = visibleProductSurfaces(createSurfaceRegistry(), { onlyAvailable: true });
-  assert.deepEqual(visible.map((surface) => surface.id), ["cowork", "skills-mcp", "code"]);
+  assert.deepEqual(visible.map((surface) => surface.id), [
+    "cowork",
+    "skills-mcp",
+    "gateway",
+    "code",
+  ]);
 });
 
 test("external surfaces carry dependency-specific awaiting integration copy", () => {
@@ -69,8 +75,12 @@ test("external surfaces carry dependency-specific awaiting integration copy", ()
   assert.equal(visible.find((surface) => surface.id === "dispatch")?.dependency, "D1");
   assert.equal(visible.find((surface) => surface.id === "microsoft")?.dependency, "D2");
   assert.equal(visible.find((surface) => surface.id === "knowledge")?.dependency, "D3");
-  assert.equal(visible.find((surface) => surface.id === "gateway")?.dependency, "D4");
-  assert.match(visible.find((surface) => surface.id === "gateway")?.description ?? "", /D4/u);
+  // Gateway keeps its D4 origin tag, but PR #16's backend is integrated so it is now `available`
+  // and no longer carries "chưa được tích hợp" copy.
+  const gateway = visible.find((surface) => surface.id === "gateway");
+  assert.equal(gateway?.dependency, "D4");
+  assert.equal(gateway?.availability, "available");
+  assert.doesNotMatch(gateway?.description ?? "", /chưa được tích hợp/u);
 });
 
 test("integration adapters declare stable mount boundaries", () => {
