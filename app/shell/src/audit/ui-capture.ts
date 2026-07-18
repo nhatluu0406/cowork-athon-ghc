@@ -1,0 +1,258 @@
+/**
+ * In-process packaged-UI capture (ER-013), gated OFF by default.
+ *
+ * Activated ONLY when `COWORK_GHC_UI_AUDIT === "1"`. The packaged app's remote-debugging port is not
+ * usable on this Electron build (the browser process rejects `--remote-debugging-port` as a "bad
+ * option" and `app.commandLine.appendSwitch` does not open the endpoint either), so the UI-audit
+ * tool drives capture from INSIDE the main process using only Electron APIs: `webContents
+ * .capturePage()` for screenshots and `executeJavaScript()` for navigation/theme/synthetic unlock.
+ *
+ * This code never runs in a normal launch (the env flag is set solely by `tools/ui-audit`). It reads
+ * no credentials, opens no network, and the caller isolates the data root via
+ * `COWORK_GHC_RUNTIME_ROOT`. When done it writes `steps.json` + `checks.json` to
+ * `COWORK_GHC_UI_AUDIT_OUT` and quits the app (so `before-quit` stops the service + child cleanly).
+ */
+
+import { app, screen, type BrowserWindow } from "electron";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const AUDIT_ENV = "COWORK_GHC_UI_AUDIT";
+const OUT_ENV = "COWORK_GHC_UI_AUDIT_OUT";
+const SYNTH_USER = "audit";
+const SYNTH_PASS = "cowork-audit-2026"; // throwaway; isolated disposable data root; >= 8 chars
+
+interface StepInput {
+  readonly id: string;
+  readonly title: string;
+  readonly theme: "light" | "dark";
+  readonly viewport: "desktop" | "large";
+  readonly expectSelector?: string;
+}
+interface StepResult extends StepInput {
+  readonly size: string;
+  readonly file: string;
+  readonly bytes: number;
+  readonly selectorFound: boolean;
+  readonly contentOk: boolean;
+}
+interface CheckResult {
+  readonly name: string;
+  readonly ok: boolean;
+  readonly detail: string;
+}
+
+const SURFACES: ReadonlyArray<{ id: string; label: string }> = [
+  { id: "cowork", label: "Cowork" },
+  { id: "skills-mcp", label: "Skill & MCP" },
+  { id: "code", label: "Code" },
+  { id: "knowledge", label: "Knowledge (D3 chờ tích hợp)" },
+  { id: "dispatch", label: "Dispatch (D1 chờ tích hợp)" },
+  { id: "gateway", label: "Gateway (D4 chờ tích hợp)" },
+  { id: "microsoft", label: "Microsoft 365 (D2 chờ tích hợp)" },
+];
+
+/** Returns true when audit mode ran (and the app will quit); false when disabled (normal launch). */
+export function runUiAuditIfEnabled(window: BrowserWindow): boolean {
+  if (process.env[AUDIT_ENV] !== "1") return false;
+  void runAudit(window);
+  return true;
+}
+
+async function runAudit(window: BrowserWindow): Promise<void> {
+  const outDir = process.env[OUT_ENV]?.trim() || join(app.getPath("temp"), "cowork-ghc-ui-audit");
+  const shotsDir = join(outDir, "screenshots");
+  mkdirSync(shotsDir, { recursive: true });
+
+  const steps: StepResult[] = [];
+  const checks: CheckResult[] = [];
+  const logLines: string[] = [];
+  const wc = window.webContents;
+
+  const log = (line: string): void => {
+    const stamped = `${new Date().toISOString()} ${line}`;
+    logLines.push(stamped);
+    console.log(`[ui-audit] ${line}`);
+  };
+  const check = (name: string, ok: boolean, detail = ""): void => {
+    checks.push({ name, ok, detail });
+    log(`${ok ? "PASS" : "FAIL"} check:${name}${detail ? ` — ${detail}` : ""}`);
+  };
+  const evalJs = <T>(expr: string): Promise<T> => wc.executeJavaScript(expr, true) as Promise<T>;
+  const clickSel = (sel: string): Promise<boolean> =>
+    evalJs<boolean>(
+      `(() => { const n = document.querySelector(${JSON.stringify(sel)}); if (!n) return false; n.click(); return true; })()`,
+    );
+  // Tolerant poll: executeJavaScript can reject while the document is mid-navigation; treat any
+  // error as "not yet" rather than aborting the whole run.
+  const waitFor = async (expr: string, timeoutMs = 15_000): Promise<boolean> => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      try {
+        if (await evalJs<boolean>(`!!(${expr})`)) return true;
+      } catch {
+        /* page not ready yet */
+      }
+      await delay(250);
+    }
+    return false;
+  };
+  const waitForLoad = (): Promise<void> =>
+    new Promise((resolve) => {
+      if (!wc.isLoadingMainFrame()) {
+        resolve();
+        return;
+      }
+      wc.once("did-finish-load", () => resolve());
+      setTimeout(resolve, 30_000); // bounded fallback
+    });
+
+  const work = screen.getPrimaryDisplay().workAreaSize;
+  const clamp = (w: number, h: number): { width: number; height: number } => ({
+    width: Math.min(w, work.width),
+    height: Math.min(h, work.height),
+  });
+  const sizes = {
+    desktop: clamp(1440, 900),
+    large: clamp(1920, 1080),
+  } as const;
+
+  const capture = async (s: StepInput): Promise<void> => {
+    const vp = sizes[s.viewport];
+    window.setContentSize(vp.width, vp.height);
+    await delay(250);
+    await evalJs(`document.documentElement.setAttribute('data-theme', ${JSON.stringify(s.theme)})`);
+    await delay(450); // layout + transitions settle
+    const box = s.expectSelector
+      ? await evalJs<{ w: number; h: number } | null>(
+          `(() => { const n = document.querySelector(${JSON.stringify(s.expectSelector)}); if (!n) return null; const r = n.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; })()`,
+        )
+      : { w: vp.width, h: vp.height };
+    const selectorFound = box !== null && box.w > 0 && box.h > 0;
+    const image = await wc.capturePage();
+    const png = image.toPNG();
+    const file = `${s.id}.png`;
+    writeFileSync(join(shotsDir, file), png);
+    const bodyText = await evalJs<number>("document.body.innerText.trim().length");
+    const contentOk = png.length >= 2000 && bodyText >= 5;
+    if (s.expectSelector && !selectorFound) check(`selector:${s.id}`, false, `missing ${s.expectSelector}`);
+    if (!contentOk) check(`content:${s.id}`, false, `png=${png.length}B text=${bodyText}`);
+    steps.push({
+      ...s,
+      size: `${vp.width}x${vp.height}`,
+      file: `screenshots/${file}`,
+      bytes: png.length,
+      selectorFound,
+      contentOk,
+    });
+    log(`captured ${s.id} (${s.theme}, ${vp.width}x${vp.height}) ${png.length}B selector=${selectorFound}`);
+  };
+
+  try {
+    log(`audit start; out=${outDir}; workArea=${work.width}x${work.height}`);
+    await waitForLoad();
+    const mounted = await waitFor(
+      "document.querySelector('#app') && document.querySelector('#app').childElementCount > 0",
+      30_000,
+    );
+    check("renderer-mounted", mounted, mounted ? "" : "#app never populated");
+
+    // 1) First-run lock/setup screen (honest onboarding evidence — ER-002).
+    const lockShown = await waitFor("document.querySelector('.app-lock')", 10_000);
+    if (lockShown) {
+      await capture({ id: "01-first-run-setup-light", title: "First run — create local account", theme: "light", viewport: "desktop", expectSelector: ".app-lock__card" });
+      await capture({ id: "02-first-run-setup-dark", title: "First run — create local account (dark)", theme: "dark", viewport: "desktop", expectSelector: ".app-lock__card" });
+
+      const submitted = await evalJs<boolean>(`(() => {
+        const setVal = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+        const user = document.querySelector('.app-lock input[type=text]');
+        const pass = document.querySelector('.app-lock input[type=password]');
+        if (!user || !pass) return false;
+        setVal(user, ${JSON.stringify(SYNTH_USER)});
+        setVal(pass, ${JSON.stringify(SYNTH_PASS)});
+        const btn = document.querySelector('.app-lock__submit');
+        if (!btn) return false;
+        btn.click();
+        return true;
+      })()`);
+      check("unlock-submitted", submitted, submitted ? "" : "lock inputs/submit missing");
+      const unlocked = await waitFor("!document.querySelector('.app-lock')", 20_000);
+      if (!unlocked) {
+        const err = await evalJs<string>(
+          "(document.querySelector('.app-lock__error') && !document.querySelector('.app-lock__error').hidden) ? document.querySelector('.app-lock__error').textContent : ''",
+        );
+        check("unlocked", false, `still locked${err ? `: ${err}` : ""}`);
+      } else {
+        check("unlocked", true);
+      }
+    } else {
+      check("first-run-lock", false, ".app-lock not shown (unexpected on fresh data root)");
+    }
+
+    // 2) Product rail interactive?
+    const railReady = await waitFor(
+      "document.querySelector('.product-rail') && !document.querySelector('.app-lock')",
+      20_000,
+    );
+    check("product-rail", railReady, railReady ? "" : "rail not interactive");
+
+    if (railReady) {
+      // 3) Each surface, both themes.
+      let n = 3;
+      for (const s of SURFACES) {
+        const clicked = await clickSel(`button[data-surface-id="${s.id}"]`);
+        if (!clicked) {
+          check(`nav:${s.id}`, false, "rail button missing");
+          continue;
+        }
+        await delay(500);
+        const idx = String(n).padStart(2, "0");
+        await capture({ id: `${idx}-surface-${s.id}-light`, title: `${s.label} — light`, theme: "light", viewport: "desktop", expectSelector: ".product-rail" });
+        await capture({ id: `${idx}-surface-${s.id}-dark`, title: `${s.label} — dark`, theme: "dark", viewport: "desktop", expectSelector: ".product-rail" });
+        n += 1;
+      }
+
+      // 4) Settings surface (provider + general tabs).
+      await clickSel('button[data-surface-id="cowork"]');
+      await delay(300);
+      const settingsOpened = await clickSel(".topbar__settings");
+      if (settingsOpened) {
+        await waitFor("document.querySelector('.settings-surface') && !document.querySelector('.settings-surface').hidden", 8_000);
+        await capture({ id: "20-settings-provider-light", title: "Settings — Nhà cung cấp", theme: "light", viewport: "desktop", expectSelector: ".settings-surface" });
+        await capture({ id: "21-settings-provider-dark", title: "Settings — Nhà cung cấp (dark)", theme: "dark", viewport: "desktop", expectSelector: ".settings-surface" });
+        await evalJs("(() => { const tabs = document.querySelectorAll('.settings-surface__tab'); if (tabs[1]) tabs[1].click(); })()");
+        await delay(300);
+        await capture({ id: "22-settings-general-light", title: "Settings — Chung", theme: "light", viewport: "desktop", expectSelector: ".settings-surface" });
+        await evalJs("(() => { const b = document.querySelector('.settings-surface__close'); if (b) b.click(); })()");
+      } else {
+        check("settings-open", false, ".topbar__settings missing");
+      }
+
+      // 5) Key surfaces at the largest fitting viewport (light).
+      await clickSel('button[data-surface-id="cowork"]');
+      await delay(400);
+      await capture({ id: "30-cowork-large-light", title: "Cowork — large", theme: "light", viewport: "large", expectSelector: ".product-rail" });
+      await clickSel('button[data-surface-id="code"]');
+      await delay(400);
+      await capture({ id: "31-code-large-light", title: "Code — large", theme: "light", viewport: "large", expectSelector: ".product-rail" });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+    check("audit-exception", false, message.slice(0, 300));
+    log(`ERROR: ${message}`);
+  } finally {
+    try {
+      writeFileSync(join(outDir, "steps.json"), JSON.stringify(steps, null, 2));
+      writeFileSync(join(outDir, "checks.json"), JSON.stringify(checks, null, 2));
+      writeFileSync(join(outDir, "audit-shell.log"), logLines.join("\n") + "\n");
+    } catch {
+      /* best effort */
+    }
+    log(`audit done: ${steps.length} screenshots, ${checks.filter((c) => !c.ok).length} failed checks`);
+    app.quit();
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

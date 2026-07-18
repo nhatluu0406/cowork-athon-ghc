@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const REPO = process.cwd();
-const EXE = join(REPO, "dist-app", "win-unpacked", "Cowork GHC.exe");
+const EXE = join(REPO, "dist-app", "win-unpacked", "coworkghc.exe");
 const CDP_PORT = 19227;
 const TRACE = join(REPO, ".runtime", "provider-recovery.trace");
 const INVALID_KEY = "sk-cghc-invalid-probe-000000000000000000000000";
@@ -247,7 +247,7 @@ async function main() {
   await cdpEvaluate(`document.querySelector('.modal .icon-btn')?.click()`);
   await stop(proc);
 
-  const coworkLeft = countProcesses("Cowork GHC.exe");
+  const coworkLeft = countProcesses("coworkghc.exe");
   const opencodeLeft = countProcesses("opencode.exe");
   if (coworkLeft > 0 || opencodeLeft > 0) {
     throw new Error(`Orphans after close: cowork=${coworkLeft} opencode=${opencodeLeft}`);

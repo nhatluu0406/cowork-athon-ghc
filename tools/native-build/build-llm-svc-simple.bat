@@ -2,7 +2,7 @@
 setlocal EnableExtensions
 rem Cowork GHC - build-llm-svc-simple.bat : Simple build without external dependencies.
 
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 title Cowork GHC - build-llm-svc (simple)
 set "LLM_SVC_DIR=%ROOT%\app\llm-svc"
 set "OUT=%LLM_SVC_DIR%\target\x86_64-pc-windows-msvc\release\llm-svc.exe"

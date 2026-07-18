@@ -28,6 +28,7 @@ if (remoteDebugPort) {
 }
 
 import { createMainWindow } from "./create-window.js";
+import { runUiAuditIfEnabled } from "./audit/ui-capture.js";
 import { registerIpcHandlers } from "./ipc/register-handlers.js";
 import { runShellLifecycle, type LifecycleApp } from "./lifecycle.js";
 import { hardenWebContents } from "./security/navigation.js";
@@ -345,7 +346,10 @@ void runShellLifecycle({
       getBootstrap: () => shellController!.getBootstrap(),
       connectLive: createConnectLive(shellController),
     });
-    createMainWindow();
+    const mainWindow = createMainWindow();
+    // Off by default; only the ER-013 UI-audit tool sets COWORK_GHC_UI_AUDIT=1. When enabled it
+    // drives capture in-process then quits the app; skip normal activate wiring in that mode.
+    runUiAuditIfEnabled(mainWindow);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) {

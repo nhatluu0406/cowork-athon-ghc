@@ -17,6 +17,13 @@
 # test. This file only DECLARES the packaging contract; it is validated by a config parse here.
 appId: com.coworkghc.desktop
 productName: Cowork GHC
+# The Windows EXE file name is decoupled from the display name: the packaged binary is
+# `coworkghc.exe` (lowercase, no space — friendlier for PATH/scripts/process matching), while the
+# product/display name shown in the titlebar, installer, shortcuts, and %APPDATA%\Cowork GHC
+# userData folder stays "Cowork GHC" (driven by productName, not executableName). electron-builder
+# derives appInfo.productFilename from executableName, so afterPack (after-pack-win-icon.cjs) finds
+# coworkghc.exe automatically. Output: dist-app\win-unpacked\coworkghc.exe.
+executableName: coworkghc
 copyright: Copyright (c) 2026 Cowork GHC
 
 directories:
@@ -77,7 +84,7 @@ extraResources:
 # Keep `signAndEditExecutable: false` on developer Windows: enabling it downloads winCodeSign
 # and fails extracting Darwin symlinks without SeCreateSymbolicLinkPrivilege / Developer Mode.
 # Exe icon + VERSIONINFO are applied instead by `afterPack` → `scripts/after-pack-win-icon.cjs`
-# via `@electron/rcedit` (Explorer then shows cowork-ghc.ico on Cowork GHC.exe).
+# via `@electron/rcedit` (Explorer then shows cowork-ghc.ico on coworkghc.exe).
 win:
   icon: app/shell/assets/cowork-ghc.ico
   target:

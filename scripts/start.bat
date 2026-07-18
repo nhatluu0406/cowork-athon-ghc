@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableExtensions
 rem Cowork GHC - start.bat : start the packaged desktop app. Double-click safe.
-rem Requires scripts\build.bat output at dist-app\win-unpacked\Cowork GHC.exe.
+rem Requires scripts\build.bat output at dist-app\win-unpacked\coworkghc.exe.
 rem Does not auto-build and does not fall back to the dev Electron entry.
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 title Cowork GHC - start
-set "EXE=%ROOT%\dist-app\win-unpacked\Cowork GHC.exe"
+set "EXE=%ROOT%\dist-app\win-unpacked\coworkghc.exe"
 
 rem --- Remote / phone access for the live demo (agent-harness ADR 0010) ----------
 rem The phone dispatch + chat surface needs the gateway ENABLED at boot
@@ -35,8 +35,8 @@ if not errorlevel 1 (
 )
 
 rem Clear stale packaged helper/main processes that have no restorable window.
-echo [Cowork GHC] Clearing any stale Cowork GHC.exe processes...
-taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+echo [Cowork GHC] Clearing any stale coworkghc.exe processes...
+taskkill /F /T /IM "coworkghc.exe" >nul 2>nul
 
 echo [Cowork GHC] Starting packaged app...
 echo Project root: %ROOT%

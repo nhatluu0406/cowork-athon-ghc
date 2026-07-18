@@ -4,7 +4,7 @@ rem Cowork GHC - build.bat : typecheck + package the Windows desktop app. Double
 rem Resolve project root from this script's own location (independent of current dir).
 for %%I in ("%~dp0..") do set "ROOT=%%~fI"
 title Cowork GHC - build
-set "EXE=%ROOT%\dist-app\win-unpacked\Cowork GHC.exe"
+set "EXE=%ROOT%\dist-app\win-unpacked\coworkghc.exe"
 set "STAGE=Precheck"
 
 where node >nul 2>nul
@@ -31,7 +31,7 @@ cd /d "%ROOT%"
 set "STAGE=stop-running-app"
 echo [Cowork GHC] Stage: stop any running packaged app
 node "%ROOT%\tools\app\cli.mjs" stop --root "%ROOT%" >nul 2>nul
-taskkill /F /T /IM "Cowork GHC.exe" >nul 2>nul
+taskkill /F /T /IM "coworkghc.exe" >nul 2>nul
 call :wait_exe_unlocked
 if errorlevel 1 goto :locked
 echo [Cowork GHC] Stage: packaged app is stopped

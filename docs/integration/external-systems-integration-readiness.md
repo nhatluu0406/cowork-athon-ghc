@@ -273,7 +273,7 @@ External code **must not** weaken these without explicit Product Owner + securit
 | **Conversation store** | `service/src/conversation-store`; atomic PATCH; no credential fields | D1/D3 provenance extends schema; no breaking migration without rollback |
 | **File Review** | Service-owned snapshots; UI coordinates but does not own `pendingBeforeSnapshots` long-term | No change to secret redaction or diff limits without quality doc update |
 | **OpenCode runtime** | Child process; one active execution per conversation (baseline) | D1 must not spawn unbounded processes; lifecycle scripts must still pass |
-| **Process lifecycle** | `tools/app/cli.mjs`, `start.bat` / `stop.bat` / `clean.bat` | No orphan `Cowork GHC.exe` after integration tests |
+| **Process lifecycle** | `tools/app/cli.mjs`, `start.bat` / `stop.bat` / `clean.bat` | No orphan `coworkghc.exe` after integration tests |
 | **Secret policy** | `.env`, `*.pem`, `credentials.json`, attachment/review redaction | D2 tokens and D4 keys follow same non-leak rules |
 
 ---

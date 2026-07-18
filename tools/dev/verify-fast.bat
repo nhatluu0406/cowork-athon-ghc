@@ -1,7 +1,7 @@
 @echo off
 setlocal EnableExtensions
 rem Fast pre-commit checks: typecheck, focused tests, renderer build.
-for %%I in ("%~dp0..") do set "ROOT=%%~fI"
+for %%I in ("%~dp0..\..") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
 title Cowork GHC - verify-fast
 

@@ -20,7 +20,7 @@
 
 ## Overview
 
-Cowork GHC is a Windows desktop AI cowork environment. It connects a local workspace to an LLM through a supervised OpenCode runtime, keeps credentials in Windows Credential Manager, asks for permission before sensitive actions, and preserves conversations and file-work evidence locally.
+Cowork GHC is a Windows desktop AI cowork environment. It connects a local workspace to an LLM through a supervised OpenCode runtime, keeps secrets in a local **encrypted vault** (AES-256-GCM, in SQLite), asks for permission before sensitive actions, and preserves conversations and file-work evidence locally.
 
 The current target is a polished, local-first POC for product demonstration—not a cloud multi-user release.
 
@@ -48,7 +48,7 @@ The current target is a polished, local-first POC for product demonstration—no
 - Multiple saved provider connections
 - DeepSeek preset
 - Custom OpenAI-compatible endpoint, model ID, and API token
-- API keys stored in Windows Credential Manager
+- API keys stored in the local encrypted vault (no plaintext in DB/JSON/logs)
 - Active provider/model presentation and readiness state
 
 ### Skills
@@ -63,7 +63,7 @@ The current target is a polished, local-first POC for product demonstration—no
 - Commercial light and dark visual system
 - Native Windows titlebar controls and Snap Layout compatibility
 - Product surfaces for Cowork, Dispatch, Gateway, Knowledge, Microsoft 365, and Code
-- D1–D4 surfaces are integration mount points; their backends are not yet merged
+- D-track truth: **D1 Dispatch** composed (PARTIAL, no packaged/live fan-out yet), **D2 Microsoft 365** PARTIAL (manual-token chat/history), **D3 Knowledge** code present but **dormant/not wired/not bundled**, **D4 Gateway** not implemented. See [feature-matrix](docs/product/feature-matrix.md) and [dependencies-and-services](docs/architecture/dependencies-and-services.md).
 
 ## Screenshots
 
@@ -106,9 +106,9 @@ See [System overview](docs/architecture/system-overview.md).
 | Renderer | TypeScript, Vite, DOM-based UI modules |
 | Local service | Node.js, TypeScript, loopback HTTP/SSE |
 | Agent runtime | OpenCode child process |
-| Packaging | electron-builder |
-| Credential storage | Windows Credential Manager via `@napi-rs/keyring` |
-| Application persistence | Local JSON files written atomically; no SQL database in the current POC |
+| Packaging | electron-builder (packaged exe: `coworkghc.exe`; display name `Cowork GHC`) |
+| Credential storage | Local encrypted vault (scrypt KEK + AES-256-GCM) in SQLite; `@napi-rs/keyring` retained only for Wave-0A migration |
+| Application persistence | **SQLite** (`<userData>/cowork-ghc.db`) as the local source of truth + encrypted vault |
 | Tests | Node test runner through `tsx` |
 
 ## Repository structure
@@ -151,7 +151,7 @@ scripts\stop.bat
 Create a safe demo workspace:
 
 ```bat
-scripts\demo-seed.bat
+npm run demo:seed
 ```
 
 ## Configuration
@@ -164,7 +164,7 @@ scripts\demo-seed.bat
 4. Enter display name, endpoint, model ID, and API token.
 5. Test the connection and set the desired profile active.
 
-Saved API tokens are stored in Windows Credential Manager. Profile JSON contains only non-secret metadata and credential status/handles.
+Saved API tokens are stored in the local encrypted vault. The database stores only non-secret metadata and credential status/handles — never plaintext secrets.
 
 ### Permission mode
 
@@ -195,31 +195,32 @@ npm run package:win
 npm run verify:release
 ```
 
-Fast pre-commit verification on Windows:
+Fast pre-commit verification:
 
-```bat
-scripts\verify-fast.bat
+```bash
+npm run verify:fast
 ```
 
 ## Windows scripts
 
+There are **four** user-facing lifecycle scripts. Everything else is an npm script or a helper under
+`tools/`.
+
 | Script | Purpose |
 |---|---|
 | `scripts/init.bat` | Prepare the local environment idempotently |
-| `scripts/build.bat` | Typecheck and package the Windows application |
+| `scripts/build.bat` | Typecheck and package the Windows application (`coworkghc.exe`) |
 | `scripts/start.bat` | Start the packaged application |
 | `scripts/stop.bat` | Stop only Cowork-owned processes |
-| `scripts/clean.bat` | Remove allowlisted generated artifacts |
-| `scripts/demo-reset.bat` | Reset demo-safe state without deleting keyring credentials |
-| `scripts/demo-seed.bat` | Create representative demo files |
-| `scripts/verify-fast.bat` | Run the normal focused pre-commit checks |
 
-See [scripts/README.md](scripts/README.md).
+Other helpers: `npm run clean` / `verify:fast` / `demo:seed`, and `tools/dev/` (clean, verify-fast,
+demo-seed, demo-reset, set-provider-key) + `tools/native-build/` (Go/Rust/MSVC). See
+[scripts/README.md](scripts/README.md).
 
 ## Security model
 
-- Credentials are stored in Windows Credential Manager.
-- Renderer state never receives saved plaintext API keys.
+- Secrets are stored in a local encrypted vault (scrypt-derived KEK wraps an AES-256-GCM master key held only in memory after unlock); no plaintext secret in the database, JSON, renderer, logs, or screenshots.
+- Renderer state never receives saved plaintext API keys, and never touches the database or secret bytes.
 - Workspace paths are validated and confined by the local service.
 - Secret-like attachments and previews are blocked or redacted.
 - Diagnostics use secret scrubbing.
@@ -279,7 +280,7 @@ loại built-in; loại user-local đi qua router CRUD và lưu vào `.runtime/`
 Cowork GHC có một **cổng remote** để theo dõi và điều khiển từ điện thoại/trình duyệt khác, tương tự
 Remote Control của Claude Code. **Tắt mặc định**; bật bằng biến môi trường. Chi tiết kiến trúc:
 [ADR 0010](docs/architecture/decisions/0010-remote-gateway-and-pwa-surface.md) và
-[`agent-harness-plan.md`](docs/superpowers/plans/agent-harness-plan.md).
+[`agent-harness-plan.md`](docs/archive/legacy-design/superpowers/plans/agent-harness-plan.md).
 
 Một feature, **3 channel** (dùng chung một pairing registry + một permission gate):
 
