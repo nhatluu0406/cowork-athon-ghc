@@ -114,7 +114,7 @@ extraResources:
   - from: "vendors/bge-m3"
     to: "m365kg-stack/llm-svc/models/bge-m3"
   # llm-svc model registry pointing to the BGE-M3 model (committed, uses relative path).
-  - from: "vendors/bge-m3-config/models.yaml"
+  - from: "app/llm-svc/models.yaml"
     to: "m365kg-stack/llm-svc/models.yaml"
 
 # Windows only; no code-signing (no certificate available). electron-builder skips signing
