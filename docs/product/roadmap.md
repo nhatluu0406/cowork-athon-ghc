@@ -175,9 +175,13 @@ Deferred: terminal/PTY, Git UI, debugger, LSP; app không phải Electron; mở 
 
 ## WAITING
 
-- [ ] D1 Dispatch integration.
+- [x] D1 Dispatch integration — wired into main (pairing + board + gate); `start.bat` bật cho demo.
+      Live phone round-trip chưa quan sát (WIRED — LIVE DEVICE UNVERIFIED).
 - [ ] D2 Microsoft 365 product acceptance.
-- [ ] D3 Knowledge/RAG integration.
+- [ ] D3 Knowledge/RAG integration — **M365 Knowledge Graph (PR #13) bảo tồn ở branch
+      `experimental/m365-knowledge-graph`** (tag `m365-kg-pr13-integration-2026-07`), default OFF,
+      không start trong packaged app. Blocker: source `llm-svc` vắng mặt + chưa orchestration/package
+      verification. Exhibition dùng **SQLite Workspace Knowledge** (Phase 2, `feature/local-knowledge-mvp`).
 - [ ] D4 Gateway integration.
 
 ## DEFERRED

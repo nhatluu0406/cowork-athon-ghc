@@ -28,9 +28,9 @@ nằm trong Git history (nguồn phục hồi cuối) và `docs/archive/`.
 | Logging/telemetry | WORKS (Wave 6) | Local rotating redacted logs + SQLite counters; no network egress; PO-observed 2026-07-17. |
 | Inspector/Code/Web Preview/Desktop App | Code+tests+build PASS, **packaged PO obs pending** | ADR 0013/0014/0015. Chưa claim WORKS tới khi có packaged PO observation. |
 | OpenCode runtime | PINNED v1.18.1 | Fallback 1.17.20 PASS. Không upgrade trước compatibility matrix. |
-| **D1 Dispatch** | PARTIAL | Loop runner + fan-out + board + `/dispatch` composed; unit/integration với fake seams. **Chưa packaged/live** (Checkpoint 5 mở). |
+| **D1 Dispatch** | WIRED — LIVE DEVICE UNVERIFIED | Loop runner + fan-out + board + `/dispatch` composed; two-column pairing+board surface; `DispatchRunGate` (provider chưa ready → Run bị chặn). `start.bat` bật Remote/LAN cho demo (HTTP no-TLS, có warning). Round-trip unit/integration PASS; **live phone round-trip chưa quan sát**. |
 | **D2 Microsoft 365** | PARTIAL | Manual-token chat + history + in-tab permission cards. Device-code OAuth gated (chưa Azure app reg). **Chưa live tenant/packaged.** |
-| **D3 Knowledge/RAG/Graph** | **DORMANT / chưa wired** | Có nhiều code (Go backend + Rust llm-svc + TS stack supervisor/initializer/provisioning) nhưng **không composed, không bundled, chưa chạy với binary thật**. Xem `dependencies-and-services.md §5` + `local-first-strategy.md`. |
+| **D3 Knowledge/RAG/Graph (M365 KG)** | **OPTIONAL / bảo tồn ngoài main** | Full impl (Go backend + PostgreSQL + Neo4j + JRE provisioning + Rust/Python llm-svc contracts) **bảo tồn ở branch `experimental/m365-knowledge-graph`** (tag `m365-kg-pr13-integration-2026-07`). Default **OFF**; packaged app **KHÔNG** start Go/PG/Neo4j/JRE. Blocker: **source `llm-svc` vắng mặt** trong repo, chưa orchestration/package verification. Xem `known-limitations.md`. |
 | **D4 Gateway** | NOT IMPLEMENTED | Mount boundary only (chủ ý). |
 | Remote/PWA/Discord | DEV/DEMO only | Sau flag; LAN chưa TLS; chưa packaged verification. |
 | Packaged executable | `coworkghc.exe` | Display name giữ **Cowork GHC**; userData `%APPDATA%\Cowork GHC`. |
