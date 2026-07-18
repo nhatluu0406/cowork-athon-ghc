@@ -1,24 +1,17 @@
 # M365 Knowledge Graph Backend
 
-Enterprise-grade knowledge graph from Microsoft 365 data with dual-stack architecture supporting both server deployments and desktop applications.
+Enterprise-grade knowledge graph from Microsoft 365 data with a unified, lightweight architecture optimized for local-first deployments.
 
 ## Architecture Overview
 
-This backend implements a **dual-stack architecture** with two independent database + graph stacks, selectable at runtime:
+This backend implements a **unified stack** based on SQLite + LanceDB:
 
-### Option 1: PostgreSQL + Neo4j (Server Deployments)
-- **Use Case**: Multi-user, server-based deployments with complex entity relationships
-- **Database**: PostgreSQL 15+ for metadata and embeddings
-- **Graph Store**: Neo4j 5.x for entity relationships and traversal
-- **Scale**: 500K+ documents, concurrent user queries
-- **Selection**: `DB_TYPE=postgres_neo4j`
-
-### Option 2: SQLite + LanceDB (Desktop Applications) — **DEFAULT**
-- **Use Case**: Single-user, file-based, no external services (Cowork GHC Windows app)
+### SQLite + LanceDB (Single Stack)
+- **Use Case**: Local-first, file-based, no external services (Cowork GHC Windows desktop app)
 - **Database**: SQLite with WAL mode for concurrent read/write
-- **Vector Store**: LanceDB for in-memory vector similarity search
-- **Scale**: 10K-100K documents on desktop
-- **Selection**: `DB_TYPE=sqlite_lancedb` (default)
+- **Vector Store**: LanceDB for in-memory vector similarity search and embedding storage
+- **Scale**: 10K-500K documents with efficient local processing
+- **Deployment**: Windows desktop app, single-user, offline-capable
 
 ## Getting Started
 
@@ -27,14 +20,14 @@ This backend implements a **dual-stack architecture** with two independent datab
 - For Option 1 only: PostgreSQL 15+ and Neo4j 5.x
 - For Option 2 only: LanceDB dependencies (automatic via go.mod)
 
-### Quick Start (SQLite + LanceDB — Default)
+### Quick Start (SQLite + LanceDB)
 
 ```bash
 # 1. Build the backend
 cd /home/dungpham/m365-knowledge-graph/app/backend
 go build -o m365kg ./cmd
 
-# 2. Run with SQLite (default)
+# 2. Run with SQLite
 ./m365kg
 
 # The app will create m365kg.db in the current directory
@@ -42,9 +35,8 @@ go build -o m365kg ./cmd
 
 **Environment Variables**:
 ```bash
-# Core settings (defaults work for SQLite)
-DB_TYPE=sqlite_lancedb              # (default)
-DATABASE_URL=file:./m365kg.db?cache=shared  # (default)
+# Core settings (defaults work with no configuration needed)
+DATABASE_URL=file:./m365kg.db?cache=shared  # (default, created automatically)
 PORT=8080
 JWT_SECRET=your-32-character-secret-key
 ENVIRONMENT=development
@@ -54,28 +46,8 @@ M365_TENANT_ID=your-tenant-id
 M365_CLIENT_ID=your-app-registration-id
 M365_CLIENT_SECRET=your-app-secret
 
-# Optional: Connect to local llm-svc for embeddings
+# Optional: Connect to local llm-svc for embeddings and entity extraction
 LLMSVC_ADDR=localhost:50051
-```
-
-### Option 1: PostgreSQL + Neo4j (Server Deployments)
-
-```bash
-# 1. Start PostgreSQL and Neo4j
-docker-compose -f docker-compose.yml up -d
-
-# 2. Run migrations (creates tables)
-go run ./cmd migrate
-
-# 3. Build and run with PostgreSQL
-export DB_TYPE=postgres_neo4j
-export DATABASE_URL=postgres://postgres:password@localhost:5432/m365kg
-export NEO4J_URI=bolt://localhost:7687
-export NEO4J_USERNAME=neo4j
-export NEO4J_PASSWORD=password
-
-go build -o m365kg ./cmd
-./m365kg
 ```
 
 ## API Surface
@@ -86,16 +58,13 @@ go build -o m365kg ./cmd
 - `GET /api/m365/sync/status` - Get sync progress
 - `GET /api/m365/sources` - List connected sources
 
-### Knowledge Graph (Option 1 Only)
+### Entity Management
 - `GET /api/entities` - List entities with filters
-- `GET /api/entities/{id}` - Entity details + related entities
-- `POST /api/entities/extract` - Extract entities from documents
-- `GET /api/graph/nodes` - List graph nodes
-- `GET /api/graph/edges` - List relationships
-- `GET /api/graph/path` - Find entity paths
+- `GET /api/entities/{id}` - Entity details with related vectors
+- `POST /api/entities/extract` - Extract entities from documents via LLM
 
 ### Retrieval & Q&A
-- `POST /api/knowledge/query` - Query knowledge graph (8-stage pipeline)
+- `POST /api/knowledge/query` - Query knowledge graph (8-stage hybrid pipeline)
 - `GET /api/knowledge/query/{id}` - Retrieve past query results
 - `POST /api/feedback/{query_id}` - Submit feedback (like/dislike/flag)
 - `GET /api/feedback/stats` - Feedback analytics
@@ -108,16 +77,11 @@ go build -o m365kg ./cmd
 
 ### Environment Variables
 
-**Database & Graph Stack**:
-- `DB_TYPE`: `postgres_neo4j` (Option 1) or `sqlite_lancedb` (Option 2, default)
-- `DATABASE_URL`: Database connection string
-  - SQLite: `file:./m365kg.db?cache=shared` (default)
-  - PostgreSQL: `postgres://user:pass@localhost:5432/m365kg`
-
-**Neo4j (Option 1 only)**:
-- `NEO4J_URI`: `bolt://localhost:7687`
-- `NEO4J_USERNAME`: neo4j username
-- `NEO4J_PASSWORD`: neo4j password
+**Database**:
+- `DATABASE_URL`: SQLite file path (default: `file:./m365kg.db?cache=shared`)
+  - Automatically created if it doesn't exist
+  - Can be absolute or relative path
+  - For Windows: `file:///C:/Users/YourUsername/AppData/Local/Cowork GHC/m365kg.db?cache=shared`
 
 **Microsoft 365**:
 - `M365_TENANT_ID`: Azure AD tenant ID
@@ -144,11 +108,14 @@ go build -o m365kg ./cmd
 ### Local Development
 
 ```bash
-# Run with default SQLite
+# Build and run with SQLite (default)
+go build -o m365kg ./cmd
+./m365kg
+
+# Or run directly
 go run ./cmd
 
-# Run with PostgreSQL + Neo4j
-DB_TYPE=postgres_neo4j go run ./cmd
+# Database file m365kg.db will be created automatically
 ```
 
 ### Docker Build
@@ -157,7 +124,7 @@ DB_TYPE=postgres_neo4j go run ./cmd
 # Build Docker image
 docker build -t m365kg:latest .
 
-# Run with SQLite (default, no external services needed)
+# Run (no external services needed)
 docker run -p 8080:8080 \
   -e JWT_SECRET=your-secret \
   -e M365_TENANT_ID=your-tenant \
@@ -168,17 +135,12 @@ docker run -p 8080:8080 \
 
 ### Production Deployment
 
-**For Cowork GHC (Windows Desktop) — Use SQLite**:
+**Cowork GHC (Windows Desktop)**:
 - Install app with embedded SQLite + LanceDB
 - Database file stored in: `%APPDATA%/Cowork GHC/m365kg.db`
 - No external services required
-- Offline-capable with periodic sync
-
-**For Server Deployments — Use PostgreSQL + Neo4j**:
-- Provision PostgreSQL 15+ and Neo4j 5.x
-- Set `DB_TYPE=postgres_neo4j`
-- Configure load balancing and replication
-- Enable TLS for all connections
+- Offline-capable with periodic M365 sync
+- Single-user, file-based architecture
 
 ## Testing
 
@@ -225,14 +187,11 @@ go test -bench=. -benchmem ./...
 
 ## Performance Targets
 
-- **Query Latency**: P95 ≤ 30 seconds (8-stage pipeline end-to-end)
-- **Sync Throughput**: 1K documents per minute (delta sync)
-- **Memory Usage**:
-  - SQLite + LanceDB: < 500MB (desktop)
-  - PostgreSQL + Neo4j: < 2GB (server)
-- **Concurrent Connections**: 
-  - SQLite: 100+ concurrent reads (WAL mode)
-  - PostgreSQL: 1000+ concurrent connections
+- **Query Latency**: P95 ≤ 30 seconds (8-stage hybrid retrieval pipeline)
+- **Sync Throughput**: 1K documents per minute (M365 delta sync)
+- **Memory Usage**: < 500MB (SQLite + LanceDB on desktop)
+- **Concurrent Connections**: 100+ concurrent reads (SQLite WAL mode)
+- **Vector Search**: Cosine similarity over embeddings (sub-second latency)
 
 ## License
 
