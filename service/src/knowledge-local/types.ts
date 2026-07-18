@@ -13,8 +13,46 @@ export type KnowledgeIndexStatus =
   | "indexing"
   | "ready"
   | "stale"
+  | "partial"
   | "interrupted"
   | "error";
+
+/**
+ * Where a piece of Knowledge came from. Knowledge is ONE unified store per active workspace; a
+ * source is a provenance tag on each document/hit/node — never a separate screen. The workspace's
+ * own files are the default source; Microsoft 365 (OneDrive/SharePoint/Teams/Outlook) is a future
+ * source that will ingest INTO the same store. This contract is forward-compatible today: the MVP
+ * only ever emits `workspace`, but the renderer can already show provenance and offer a source
+ * filter without any schema migration.
+ */
+export type KnowledgeSourceType = "workspace" | "microsoft365";
+
+/** Fine-grained Microsoft 365 origin, when known. `null` for plain workspace files. */
+export type KnowledgeSourceDetail = "onedrive" | "sharepoint" | "teams" | "outlook";
+
+/** Provenance tag carried by every document/search hit/graph node. */
+export interface KnowledgeSourceRef {
+  readonly type: KnowledgeSourceType;
+  readonly detail: KnowledgeSourceDetail | null;
+  /** Short human label for the source badge, e.g. "Workspace", "OneDrive". */
+  readonly label: string;
+}
+
+/** The workspace-local provenance every MVP document carries. */
+export const WORKSPACE_SOURCE: KnowledgeSourceRef = {
+  type: "workspace",
+  detail: null,
+  label: "Workspace",
+};
+
+/** Compact per-source rollup for the header's honest source summary + the source filter. */
+export interface KnowledgeSourceSummary {
+  readonly type: KnowledgeSourceType;
+  readonly label: string;
+  /** Whether this source is connected/configured. Microsoft 365 is `false` in the MVP. */
+  readonly connected: boolean;
+  readonly documentCount: number;
+}
 
 /** Document kinds we index; mirrors the safe reader's extractable kinds. */
 export type KnowledgeDocumentKind = "markdown" | "text" | "code" | "docx" | "xlsx" | "pptx";
@@ -42,7 +80,7 @@ export interface KnowledgeChunkRow {
   readonly text: string;
 }
 
-/** A search result: the matching chunk + its document, with a highlighted snippet. */
+/** A search result: the matching chunk + its document, with a highlighted snippet (repo row). */
 export interface KnowledgeSearchHit {
   readonly documentId: string;
   readonly chunkId: string;
@@ -54,6 +92,11 @@ export interface KnowledgeSearchHit {
   readonly snippet: string;
   /** bm25 score (lower = better match); exposed for deterministic ordering only. */
   readonly score: number;
+}
+
+/** A search hit projected for the renderer, with provenance attached (see {@link KnowledgeSourceRef}). */
+export interface KnowledgeSearchHitView extends KnowledgeSearchHit {
+  readonly source: KnowledgeSourceRef;
 }
 
 /** A graph node — workspace / folder / document. */
@@ -110,6 +153,8 @@ export interface KnowledgeIndexView {
   readonly error: string | null;
   /** Present only while a job is running, so the renderer can show real progress. */
   readonly indexing: { readonly processed: number; readonly total: number | null } | null;
+  /** Per-source rollup (workspace + honest Microsoft 365 readiness). Drives the source summary + filter. */
+  readonly sources: readonly KnowledgeSourceSummary[];
 }
 
 /** One indexed document, projected for the renderer's document list (no secret bytes, no raw text). */
@@ -121,6 +166,8 @@ export interface KnowledgeDocumentView {
   readonly chunkCount: number;
   readonly sizeBytes: number;
   readonly indexedAt: string;
+  /** Provenance of this document (workspace-local in the MVP). */
+  readonly source: KnowledgeSourceRef;
 }
 
 export interface KnowledgeGraphApiNode {
@@ -128,6 +175,8 @@ export interface KnowledgeGraphApiNode {
   readonly label: string;
   readonly kind: string;
   readonly relativePath: string | null;
+  /** Provenance of this node (workspace-local in the MVP). */
+  readonly source: KnowledgeSourceRef;
 }
 export interface KnowledgeGraphApiEdge {
   readonly from: string;

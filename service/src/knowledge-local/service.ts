@@ -14,9 +14,10 @@ import type {
   KnowledgeGraphApiResult,
   KnowledgeIndexStatus,
   KnowledgeIndexView,
-  KnowledgeSearchHit,
+  KnowledgeSearchHitView,
+  KnowledgeSourceSummary,
 } from "./types.js";
-import { KNOWLEDGE_GRAPH_MAX_NODES, KNOWLEDGE_SEARCH_DEFAULT_LIMIT } from "./types.js";
+import { KNOWLEDGE_GRAPH_MAX_NODES, KNOWLEDGE_SEARCH_DEFAULT_LIMIT, WORKSPACE_SOURCE } from "./types.js";
 
 export type { KnowledgeIndexView, KnowledgeGraphApiResult } from "./types.js";
 
@@ -33,7 +34,7 @@ export interface KnowledgeLocalService {
   sync(): KnowledgeIndexView;
   cancel(): KnowledgeIndexView;
   clear(): KnowledgeIndexView;
-  search(query: string, limit?: number): readonly KnowledgeSearchHit[];
+  search(query: string, limit?: number): readonly KnowledgeSearchHitView[];
   graph(limit?: number): KnowledgeGraphApiResult;
   /** The indexed documents for the active workspace (for the renderer's document list). */
   documents(): readonly KnowledgeDocumentView[];
@@ -48,6 +49,16 @@ interface ActiveJob {
   readonly done: Promise<unknown>;
 }
 
+/**
+ * Per-source rollup. The MVP has exactly one connected source (the workspace); Microsoft 365 is
+ * reported as a real-but-not-connected source so the renderer can show honest readiness and offer a
+ * (disabled) source filter option without ever faking a count or reaching the dormant backend.
+ */
+const buildSources = (workspaceDocumentCount: number): readonly KnowledgeSourceSummary[] => [
+  { type: "workspace", label: "Workspace", connected: true, documentCount: workspaceDocumentCount },
+  { type: "microsoft365", label: "Microsoft 365", connected: false, documentCount: 0 },
+];
+
 const EMPTY_STATUS = (hasWorkspace: boolean, status: KnowledgeIndexStatus): KnowledgeIndexView => ({
   status,
   hasWorkspace,
@@ -58,6 +69,7 @@ const EMPTY_STATUS = (hasWorkspace: boolean, status: KnowledgeIndexStatus): Know
   lastIndexedAt: null,
   error: null,
   indexing: null,
+  sources: buildSources(0),
 });
 
 export function createKnowledgeLocalService(
@@ -83,6 +95,7 @@ export function createKnowledgeLocalService(
       lastIndexedAt: state.lastIndexedAt,
       error: state.error,
       indexing: running ? job!.progress : null,
+      sources: buildSources(state.documentCount),
     };
   };
 
@@ -159,10 +172,11 @@ export function createKnowledgeLocalService(
       repo.clearWorkspace(ws);
       return EMPTY_STATUS(true, "not_initialized");
     },
-    search(query, limit = KNOWLEDGE_SEARCH_DEFAULT_LIMIT): readonly KnowledgeSearchHit[] {
+    search(query, limit = KNOWLEDGE_SEARCH_DEFAULT_LIMIT): readonly KnowledgeSearchHitView[] {
       const ws = activeWorkspaceRoot();
       if (ws === undefined) return [];
-      return repo.search(ws, query, limit);
+      // All MVP hits are workspace-local; attach provenance so the renderer shows an honest badge.
+      return repo.search(ws, query, limit).map((hit) => ({ ...hit, source: WORKSPACE_SOURCE }));
     },
     graph(limit = KNOWLEDGE_GRAPH_MAX_NODES): KnowledgeGraphApiResult {
       const ws = activeWorkspaceRoot();
@@ -174,6 +188,7 @@ export function createKnowledgeLocalService(
           label: n.label,
           kind: n.kind,
           relativePath: n.relativePath,
+          source: WORKSPACE_SOURCE,
         })),
         edges: view.edges.map((e) => ({ from: e.fromId, to: e.toId, type: e.type })),
         truncated: view.truncated,
@@ -191,6 +206,7 @@ export function createKnowledgeLocalService(
         chunkCount: counts[d.id] ?? 0,
         sizeBytes: d.sizeBytes,
         indexedAt: d.indexedAt,
+        source: WORKSPACE_SOURCE,
       }));
     },
     async whenIdle(): Promise<void> {

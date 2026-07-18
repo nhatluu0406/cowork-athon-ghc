@@ -3754,7 +3754,7 @@ button {
 }
 .klp-search__input:focus { outline: none; border-color: var(--cghc-accent); }
 .klp-search__input:disabled { opacity: 0.5; cursor: not-allowed; }
-.klp-filter { padding: 0 14px 10px; }
+.klp-filter { padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px; }
 .klp-filter__select {
   width: 100%;
   height: 32px;
@@ -3766,6 +3766,7 @@ button {
   font-size: 12.5px;
   cursor: pointer;
 }
+.klp-filter__select:focus { outline: none; border-color: var(--cghc-accent); }
 .klp-docs { flex: 1; min-height: 0; overflow: auto; padding: 4px 10px 12px; display: flex; flex-direction: column; gap: 3px; }
 .klp-doc {
   display: flex;
@@ -3806,7 +3807,41 @@ button {
 .klp-doc__body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .klp-doc__name { font-size: 13px; font-weight: 600; color: var(--cghc-text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .klp-doc__path { font-size: 11.5px; color: var(--cghc-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.klp-doc__meta { font-size: 11px; color: var(--cghc-text-subtle); }
+.klp-doc__meta { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 11px; color: var(--cghc-text-subtle); }
+.klp-doc__meta-text { font-size: 11px; color: var(--cghc-text-subtle); }
+
+/* Provenance / source badge — shared by doc list, search hits, detail + graph node aside. */
+.klp-source {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  background: var(--cghc-surface-muted);
+  color: var(--cghc-text-secondary);
+  border: 1px solid var(--cghc-border-subtle);
+}
+.klp-source::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.8; }
+.klp-source--workspace { color: var(--cghc-accent); background: var(--cghc-accent-soft); border-color: transparent; }
+.klp-source--microsoft365,
+.klp-source--onedrive,
+.klp-source--sharepoint,
+.klp-source--teams,
+.klp-source--outlook { color: var(--cghc-info); background: color-mix(in srgb, var(--cghc-info) 12%, transparent); border-color: transparent; }
+
+/* Compact per-source summary in the status bar (honest Microsoft 365 readiness, no fake counts). */
+.klp-status__sources { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--cghc-text-muted); }
+.klp-status__sources-label { color: var(--cghc-text-subtle); }
+.klp-status__source { display: inline-flex; align-items: center; gap: 6px; }
+.klp-status__source-note { color: var(--cghc-text-muted); }
+.klp-status__source--microsoft365 .klp-status__source-note { color: var(--cghc-text-subtle); font-style: italic; }
+.klp-status__source-sep { color: var(--cghc-border-strong, var(--cghc-text-subtle)); opacity: 0.6; }
 
 /* right pane */
 .klp-kb__main { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 20px 24px; }

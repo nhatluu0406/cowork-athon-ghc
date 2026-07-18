@@ -13,7 +13,13 @@ export type {
   KnowledgeGraphApiResult,
   KnowledgeGraphApiNode,
   KnowledgeGraphApiEdge,
+  KnowledgeSourceType,
+  KnowledgeSourceDetail,
+  KnowledgeSourceRef,
+  KnowledgeSourceSummary,
+  KnowledgeSearchHitView,
 } from "./types.js";
+export { WORKSPACE_SOURCE } from "./types.js";
 export {
   createKnowledgeLocalRouter,
   KNOWLEDGE_LOCAL_STATUS_PATH,

@@ -40,7 +40,7 @@ import type {
   KnowledgeDocumentView,
   KnowledgeGraphApiResult,
   KnowledgeIndexView,
-  KnowledgeSearchHit,
+  KnowledgeSearchHitView,
 } from "@cowork-ghc/service/knowledge-local/types";
 import {
   createPermissionClient,
@@ -798,7 +798,7 @@ export interface ServiceClient {
   knowledgeLocalSync(): Promise<KnowledgeIndexView>;
   knowledgeLocalCancel(): Promise<KnowledgeIndexView>;
   knowledgeLocalClear(): Promise<KnowledgeIndexView>;
-  knowledgeLocalSearch(query: string, limit?: number): Promise<readonly KnowledgeSearchHit[]>;
+  knowledgeLocalSearch(query: string, limit?: number): Promise<readonly KnowledgeSearchHitView[]>;
   knowledgeLocalGraph(limit?: number): Promise<KnowledgeGraphApiResult>;
   knowledgeLocalDocuments(): Promise<readonly KnowledgeDocumentView[]>;
   /** Connect an MS365 account using a Bearer token. */
@@ -1412,7 +1412,7 @@ export function createServiceClient(baseUrl: string, clientToken: string): Servi
     knowledgeLocalSearch: async (query, limit) => {
       const params = new URLSearchParams({ q: query });
       if (limit !== undefined) params.set("limit", String(limit));
-      return (await call<{ hits: readonly KnowledgeSearchHit[] }>(`/v1/knowledge-local/search?${params.toString()}`)).hits;
+      return (await call<{ hits: readonly KnowledgeSearchHitView[] }>(`/v1/knowledge-local/search?${params.toString()}`)).hits;
     },
     knowledgeLocalGraph: async (limit) => {
       const suffix = limit !== undefined ? `?limit=${String(limit)}` : "";

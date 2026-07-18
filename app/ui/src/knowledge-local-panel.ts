@@ -17,7 +17,9 @@ import type {
   KnowledgeDocumentView,
   KnowledgeGraphApiResult,
   KnowledgeIndexView,
-  KnowledgeSearchHit,
+  KnowledgeSearchHitView,
+  KnowledgeSourceRef,
+  KnowledgeSourceType,
 } from "@cowork-ghc/service/knowledge-local/types";
 import type { KnowledgeViewDom, KnowledgeTab } from "./ui-shell/knowledge-view.js";
 import {
@@ -47,9 +49,14 @@ const STATUS_LABEL: Record<KnowledgeIndexView["status"], string> = {
   indexing: "Đang lập chỉ mục",
   ready: "Sẵn sàng",
   stale: "Cần đồng bộ",
+  partial: "Đồng bộ một phần",
   interrupted: "Bị gián đoạn",
   error: "Lỗi",
 };
+
+/** Source-filter label; `all` is the "every source" option. */
+const SOURCE_FILTER_ALL = "all" as const;
+type SourceFilter = KnowledgeSourceType | typeof SOURCE_FILTER_ALL;
 
 const KIND_BADGE: Record<KnowledgeDocumentView["kind"], string> = {
   markdown: "MD",
@@ -93,11 +100,12 @@ export function mountKnowledgeLocalPanel(
   let status: KnowledgeIndexView | null = null;
   let tab: KnowledgeTab = "base";
   let searchQuery = "";
-  let hits: readonly KnowledgeSearchHit[] = [];
+  let hits: readonly KnowledgeSearchHitView[] = [];
   let searchState: "idle" | "loading" | "done" = "idle";
   let documents: readonly KnowledgeDocumentView[] = [];
   let documentsLoaded = false;
   let kindFilter: KnowledgeDocumentView["kind"] | "all" = "all";
+  let sourceFilter: SourceFilter = SOURCE_FILTER_ALL;
   let selectedDocPath: string | null = null;
   let graph: KnowledgeGraphApiResult | null = null;
   let graphRenderedKey = "";
@@ -251,6 +259,12 @@ export function mountKnowledgeLocalPanel(
     return b;
   }
 
+  /** A compact provenance chip. Detail (OneDrive/SharePoint/…) refines the workspace/m365 type. */
+  function sourceBadge(source: KnowledgeSourceRef): HTMLElement {
+    const variant = source.detail ?? source.type;
+    return el("span", `klp-source klp-source--${variant}`, source.label);
+  }
+
   // ---- status bar ---------------------------------------------------------------------------
 
   function renderStatus(): void {
@@ -277,9 +291,29 @@ export function mountKnowledgeLocalPanel(
       left.append(
         el("span", "klp-status__progress", total === null ? `Đang quét… (${processed})` : `${processed}/${total} tệp`),
       );
-    } else if ((s === "ready" || s === "stale") && status?.lastIndexedAt != null) {
+    } else if ((s === "ready" || s === "stale" || s === "partial") && status?.lastIndexedAt != null) {
       const t = formatTime(status.lastIndexedAt);
       if (t !== null) left.append(el("span", "klp-status__sync", `Đồng bộ: ${t}`));
+    }
+
+    // Compact, honest per-source summary — Workspace has data; Microsoft 365 shows readiness only.
+    if (status !== null && status.hasWorkspace) {
+      const sources = el("span", "klp-status__sources");
+      sources.append(el("span", "klp-status__sources-label", "Nguồn:"));
+      status.sources.forEach((src, i) => {
+        const item = el("span", `klp-status__source klp-status__source--${src.type}`);
+        item.append(sourceBadge({ type: src.type, detail: null, label: src.label }));
+        item.append(
+          el(
+            "span",
+            "klp-status__source-note",
+            src.connected ? `${src.documentCount} tài liệu` : "Chưa kết nối",
+          ),
+        );
+        sources.append(item);
+        if (i < status!.sources.length - 1) sources.append(el("span", "klp-status__source-sep", "·"));
+      });
+      left.append(sources);
     }
 
     statusHost.append(left);
@@ -404,6 +438,7 @@ export function mountKnowledgeLocalPanel(
   let kbMainHost: HTMLElement | null = null;
   let searchInput: HTMLInputElement | null = null;
   let filterSelect: HTMLSelectElement | null = null;
+  let sourceSelect: HTMLSelectElement | null = null;
 
   function buildBase(): void {
     const kb = el("div", "klp-kb");
@@ -426,6 +461,19 @@ export function mountKnowledgeLocalPanel(
     side.append(searchWrap);
 
     const filterRow = el("div", "klp-filter");
+
+    // Source filter — Workspace has data today; Microsoft 365 appears as an honest, disabled option.
+    const srcSel = document.createElement("select");
+    srcSel.className = "klp-filter__select klp-filter__select--source";
+    srcSel.setAttribute("aria-label", "Lọc theo nguồn dữ liệu");
+    sourceSelect = srcSel;
+    srcSel.addEventListener("change", () => {
+      sourceFilter = (srcSel.value as SourceFilter) || SOURCE_FILTER_ALL;
+      patchDocList();
+      patchKbMain();
+    });
+    filterRow.append(srcSel);
+
     const select = document.createElement("select");
     select.className = "klp-filter__select";
     select.setAttribute("aria-label", "Lọc theo loại tài liệu");
@@ -455,6 +503,31 @@ export function mountKnowledgeLocalPanel(
   function patchDocList(): void {
     if (docListHost === null || bodyKind !== "base") return;
 
+    // Keep the search box enabled-state in sync with the live status (it is built before the first
+    // status poll resolves, so it must be re-evaluated on every patch — not frozen at build time).
+    if (searchInput !== null) searchInput.disabled = status === null || status.documentCount === 0;
+
+    // Source filter options: "Tất cả nguồn" + one option per known source. A source with no data yet
+    // (Microsoft 365 in the MVP) is shown but disabled — honest readiness, never a fake selectable count.
+    if (sourceSelect !== null) {
+      const summaries = status?.sources ?? [];
+      const selectable = new Set<string>([SOURCE_FILTER_ALL, ...summaries.filter((s) => s.connected).map((s) => s.type)]);
+      if (!selectable.has(sourceFilter)) sourceFilter = SOURCE_FILTER_ALL;
+      sourceSelect.replaceChildren();
+      const allOpt = document.createElement("option");
+      allOpt.value = SOURCE_FILTER_ALL;
+      allOpt.textContent = "Tất cả nguồn";
+      sourceSelect.append(allOpt);
+      for (const src of summaries) {
+        const opt = document.createElement("option");
+        opt.value = src.type;
+        opt.textContent = src.connected ? src.label : `${src.label} · Chưa kết nối`;
+        opt.disabled = !src.connected;
+        sourceSelect.append(opt);
+      }
+      sourceSelect.value = sourceFilter;
+    }
+
     // Refresh the filter options to reflect the kinds actually present.
     if (filterSelect !== null) {
       const present = [...new Set(documents.map((d) => d.kind))];
@@ -476,7 +549,11 @@ export function mountKnowledgeLocalPanel(
     }
 
     docListHost.replaceChildren();
-    const filtered = documents.filter((d) => kindFilter === "all" || d.kind === kindFilter);
+    const filtered = documents.filter(
+      (d) =>
+        (kindFilter === "all" || d.kind === kindFilter) &&
+        (sourceFilter === SOURCE_FILTER_ALL || d.source.type === sourceFilter),
+    );
 
     if (!documentsLoaded && status?.status === "indexing") {
       docListHost.append(el("p", "klp-note", "Đang lập chỉ mục…"));
@@ -501,7 +578,10 @@ export function mountKnowledgeLocalPanel(
       const bodyCol = el("span", "klp-doc__body");
       bodyCol.append(el("span", "klp-doc__name", doc.title));
       bodyCol.append(el("span", "klp-doc__path", doc.relativePath));
-      bodyCol.append(el("span", "klp-doc__meta", `${doc.chunkCount} đoạn`));
+      const meta = el("span", "klp-doc__meta");
+      meta.append(sourceBadge(doc.source));
+      meta.append(el("span", "klp-doc__meta-text", `${doc.chunkCount} đoạn`));
+      bodyCol.append(meta);
       item.append(bodyCol);
       item.addEventListener("click", () => selectDocument(doc.relativePath));
       docListHost.append(item);
@@ -556,21 +636,23 @@ export function mountKnowledgeLocalPanel(
       wrap.append(el("p", "klp-note", "Đang tìm…"));
       return wrap;
     }
+    const shown = hits.filter((h) => sourceFilter === SOURCE_FILTER_ALL || h.source.type === sourceFilter);
     wrap.append(
       el(
         "p",
         "klp-results__head",
-        hits.length === 0
+        shown.length === 0
           ? `Không tìm thấy kết quả cho “${searchQuery.trim()}”.`
-          : `${hits.length} kết quả cho “${searchQuery.trim()}”`,
+          : `${shown.length} kết quả cho “${searchQuery.trim()}”`,
       ),
     );
-    for (const hit of hits) {
+    for (const hit of shown) {
       const row = el("div", "klp-hit");
       const head = el("div", "klp-hit__head");
       head.append(el("span", `klp-doc__badge klp-doc__badge--${hit.kind}`, KIND_BADGE[hit.kind]));
       head.append(el("span", "klp-hit__title", hit.title));
       head.append(el("span", "klp-hit__path", hit.relativePath));
+      head.append(sourceBadge(hit.source));
       row.append(head);
       row.append(highlightSnippet(hit.snippet));
       const acts = el("div", "klp-hit__actions");
@@ -594,6 +676,12 @@ export function mountKnowledgeLocalPanel(
     const addMeta = (k: string, v: string): void => {
       meta.append(el("dt", "klp-detail__dt", k), el("dd", "klp-detail__dd", v));
     };
+    // Provenance first: which source + the safe location (relative path for workspace files).
+    meta.append(el("dt", "klp-detail__dt", "Nguồn"));
+    const srcDd = el("dd", "klp-detail__dd");
+    srcDd.append(sourceBadge(doc.source));
+    meta.append(srcDd);
+    addMeta(doc.source.type === "workspace" ? "Đường dẫn" : "Vị trí", doc.relativePath);
     addMeta("Loại", KIND_LABEL[doc.kind]);
     addMeta("Số đoạn", String(doc.chunkCount));
     addMeta("Kích thước", `${Math.max(1, Math.round(doc.sizeBytes / 1024))} KB`);
@@ -700,6 +788,9 @@ export function mountKnowledgeLocalPanel(
     const kindLabel = node.kind === "workspace" ? "Workspace" : node.kind === "folder" ? "Thư mục" : "Tài liệu";
     const meta = el("dl", "klp-detail__meta");
     meta.append(el("dt", "klp-detail__dt", "Loại"), el("dd", "klp-detail__dd", kindLabel));
+    const srcDd = el("dd", "klp-detail__dd");
+    srcDd.append(sourceBadge(node.source));
+    meta.append(el("dt", "klp-detail__dt", "Nguồn"), srcDd);
     if (node.relativePath !== null) {
       meta.append(el("dt", "klp-detail__dt", "Đường dẫn"), el("dd", "klp-detail__dd", node.relativePath));
     }

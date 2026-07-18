@@ -12,11 +12,15 @@
  * window resize while the view is untouched). Nodes are selectable (drives the side detail panel).
  */
 
+import type { KnowledgeSourceRef } from "@cowork-ghc/service/knowledge-local/types";
+
 export interface LocalGraphNodeInput {
   readonly id: string;
   readonly label: string;
   readonly kind: string;
   readonly relativePath: string | null;
+  /** Provenance of the node (workspace-local in the MVP); drives the node-detail source line. */
+  readonly source: KnowledgeSourceRef;
 }
 export interface LocalGraphEdgeInput {
   readonly from: string;
