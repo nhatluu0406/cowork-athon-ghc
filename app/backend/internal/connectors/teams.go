@@ -158,3 +158,89 @@ func (tc *TeamsConnector) ListMessages(ctx context.Context, teamID, channelID st
 
 	return allMessages, nil
 }
+
+// GetMessageReplies fetches replies to a specific message in a channel.
+// Used to capture threaded conversations and build complete chat context.
+func (tc *TeamsConnector) GetMessageReplies(ctx context.Context, teamID, channelID, messageID string) ([]Message, error) {
+	var allReplies []Message
+	nextLink := fmt.Sprintf("/teams/%s/channels/%s/messages/%s/replies?$select=id,createdDateTime,from,body,subject,webLink",
+		teamID, channelID, messageID)
+
+	for nextLink != "" {
+		resp, err := tc.client.GetWithContext(ctx, nextLink)
+		if err != nil {
+			return nil, fmt.Errorf("teams.GetMessageReplies: request failed: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			slog.Warn("teams.GetMessageReplies: non-200 response", "status", resp.StatusCode)
+			resp.Body.Close()
+			break
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("teams.GetMessageReplies: read body: %w", err)
+		}
+
+		var listResp MessagesListResponse
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			return nil, fmt.Errorf("teams.GetMessageReplies: parse response: %w", err)
+		}
+
+		allReplies = append(allReplies, listResp.Value...)
+		nextLink = listResp.NextLink
+	}
+
+	return allReplies, nil
+}
+
+// Member represents a team or channel member
+type Member struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	Email       string `json:"userPrincipalName"`
+	Roles       []string `json:"roles"`
+}
+
+type MembersListResponse struct {
+	Value    []Member `json:"value"`
+	NextLink string   `json:"@odata.nextLink"`
+}
+
+// GetTeamMembers retrieves members of a team with their roles.
+// Used to build permission mappings and identify key stakeholders.
+func (tc *TeamsConnector) GetTeamMembers(ctx context.Context, teamID string) ([]Member, error) {
+	var allMembers []Member
+	nextLink := fmt.Sprintf("/teams/%s/members?$select=id,displayName,userPrincipalName,roles", teamID)
+
+	for nextLink != "" {
+		resp, err := tc.client.GetWithContext(ctx, nextLink)
+		if err != nil {
+			return nil, fmt.Errorf("teams.GetTeamMembers: request failed: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			slog.Warn("teams.GetTeamMembers: non-200 response", "status", resp.StatusCode)
+			resp.Body.Close()
+			break
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, fmt.Errorf("teams.GetTeamMembers: read body: %w", err)
+		}
+
+		var listResp MembersListResponse
+		if err := json.Unmarshal(body, &listResp); err != nil {
+			return nil, fmt.Errorf("teams.GetTeamMembers: parse response: %w", err)
+		}
+
+		allMembers = append(allMembers, listResp.Value...)
+		nextLink = listResp.NextLink
+	}
+
+	return allMembers, nil
+}

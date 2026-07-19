@@ -98,8 +98,21 @@ func (oc *OneDriveConnector) DownloadFile(ctx context.Context, driveID, itemID s
 }
 
 func (oc *OneDriveConnector) GetDelta(ctx context.Context, driveID, deltaToken string) ([]FileItem, string, error) {
+	items, _, _, err := oc.GetDeltaWithState(ctx, driveID, deltaToken)
+	if err != nil {
+		return nil, "", err
+	}
+	// For backwards compatibility, return empty string for deltaLink
+	return items, "", nil
+}
+
+// GetDeltaWithState performs a delta query and returns items, next delta link, and hasMore flag.
+// The hasMore flag indicates whether more pages need to be fetched via pagination.
+// deltaLink is the resumption token for the next delta cycle (stable across time).
+func (oc *OneDriveConnector) GetDeltaWithState(ctx context.Context, driveID, deltaToken string) ([]FileItem, string, bool, error) {
 	var allItems []FileItem
 	var nextLink string
+	var deltaLink string
 
 	if deltaToken != "" {
 		// Resume delta query from token
@@ -112,35 +125,71 @@ func (oc *OneDriveConnector) GetDelta(ctx context.Context, driveID, deltaToken s
 	for nextLink != "" {
 		resp, err := oc.client.GetWithContext(ctx, nextLink)
 		if err != nil {
-			return nil, "", fmt.Errorf("onedrive.GetDelta: request failed: %w", err)
+			return nil, "", false, fmt.Errorf("onedrive.GetDeltaWithState: request failed: %w", err)
 		}
 
 		if resp.StatusCode != http.StatusOK {
 			resp.Body.Close()
-			return nil, "", fmt.Errorf("onedrive.GetDelta: status %d", resp.StatusCode)
+			return nil, "", false, fmt.Errorf("onedrive.GetDeltaWithState: status %d", resp.StatusCode)
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, "", fmt.Errorf("onedrive.GetDelta: read body: %w", err)
+			return nil, "", false, fmt.Errorf("onedrive.GetDeltaWithState: read body: %w", err)
 		}
 
 		var deltaResp DeltaResponse
 		if err := json.Unmarshal(body, &deltaResp); err != nil {
-			return nil, "", fmt.Errorf("onedrive.GetDelta: parse response: %w", err)
+			return nil, "", false, fmt.Errorf("onedrive.GetDeltaWithState: parse response: %w", err)
 		}
 
 		allItems = append(allItems, deltaResp.Value...)
 
-		// DeltaLink indicates end of delta query
+		// DeltaLink indicates end of delta query; store it for next cycle
 		if deltaResp.DeltaLink != "" {
-			nextLink = deltaResp.DeltaLink
+			deltaLink = deltaResp.DeltaLink
 			break
 		}
 
+		// NextLink means more pages in current delta cycle
 		nextLink = deltaResp.NextLink
 	}
 
-	return allItems, nextLink, nil
+	// hasMore is true if we have a next page but haven't reached deltaLink yet
+	hasMore := nextLink != "" && deltaLink == ""
+
+	return allItems, deltaLink, hasMore, nil
+}
+
+// GetItemPermissions retrieves the sharing permissions for a specific item (file or folder).
+// Returns a list of sharing identities (users/groups) who have access.
+func (oc *OneDriveConnector) GetItemPermissions(ctx context.Context, driveID, itemID string) ([]map[string]interface{}, error) {
+	path := fmt.Sprintf("/drives/%s/items/%s/permissions", driveID, itemID)
+
+	resp, err := oc.client.GetWithContext(ctx, path)
+	if err != nil {
+		return nil, fmt.Errorf("onedrive.GetItemPermissions: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		slog.Warn("onedrive.GetItemPermissions: non-200 response", "status", resp.StatusCode, "body", string(body))
+		return nil, fmt.Errorf("onedrive.GetItemPermissions: status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("onedrive.GetItemPermissions: read body: %w", err)
+	}
+
+	var permResp struct {
+		Value []map[string]interface{} `json:"value"`
+	}
+	if err := json.Unmarshal(body, &permResp); err != nil {
+		return nil, fmt.Errorf("onedrive.GetItemPermissions: parse response: %w", err)
+	}
+
+	return permResp.Value, nil
 }

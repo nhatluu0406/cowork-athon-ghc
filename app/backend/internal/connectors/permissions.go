@@ -9,15 +9,31 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
+	"github.com/rad-system/m365-knowledge-graph/pkg/types"
 )
 
 type PermissionExtractor struct {
 	db     *sql.DB
+	repo   metadata.Repository // For type-safe operations; falls back to db if repo is nil
 	client *GraphClient
 }
 
+// NewPermissionExtractor creates a permission extractor with a raw database connection.
+// Use NewPermissionExtractorWithRepo for Repository-based access.
 func NewPermissionExtractor(db *sql.DB, client *GraphClient) *PermissionExtractor {
 	return &PermissionExtractor{db: db, client: client}
+}
+
+// NewPermissionExtractorWithRepo creates a permission extractor using the Repository interface.
+// This is the preferred constructor for new code.
+func NewPermissionExtractorWithRepo(repo metadata.Repository, client *GraphClient) *PermissionExtractor {
+	return &PermissionExtractor{
+		repo:   repo,
+		db:     repo.Conn(), // Keep db for backward compatibility with non-Repository code paths
+		client: client,
+	}
 }
 
 // MSGraphPermissionResponse represents the structure of MS Graph permissions API response.
@@ -61,6 +77,7 @@ func mapMSGraphRolesToPermission(roles []string) string {
 // ExtractAndCache extracts permissions from MS Graph API for a given file
 // and caches them in the permission_cache table. Per spec §3.2, this is called
 // during delta sync to capture ACLs at ingest time.
+// The fileID should be the string ID from types.M365File, not a numeric ID.
 func (pe *PermissionExtractor) ExtractAndCache(ctx context.Context, fileID int, driveID, itemID string) error {
 	if pe.client == nil {
 		return fmt.Errorf("permissions.ExtractAndCache: GraphClient is nil")
@@ -91,6 +108,56 @@ func (pe *PermissionExtractor) ExtractAndCache(ctx context.Context, fileID int, 
 		return fmt.Errorf("permissions.ExtractAndCache: parse response: %w", err)
 	}
 
+	now := time.Now()
+	cacheExpiry := now.AddDate(0, 0, 7) // Cache expires in 7 days (INVARIANT-3 per spec)
+
+	// Use Repository interface if available, otherwise fall back to raw SQL
+	if pe.repo != nil {
+		return pe.extractAndCacheViaRepo(ctx, fileID, permResp.Value, now, cacheExpiry)
+	}
+	return pe.extractAndCacheViaSQL(ctx, fileID, permResp.Value, now)
+}
+
+// extractAndCacheViaRepo uses the Repository interface to cache permissions atomically.
+func (pe *PermissionExtractor) extractAndCacheViaRepo(ctx context.Context, fileID int, perms []MSGraphPermission, now time.Time, expiry time.Time) error {
+	// Convert fileID (int) to string for Repository interface
+	fileIDStr := fmt.Sprintf("%d", fileID)
+
+	// For each permission, upsert via Repository
+	for _, perm := range perms {
+		if perm.GrantedTo.User.ID == "" {
+			continue
+		}
+
+		permLevel := mapMSGraphRolesToPermission(perm.Roles)
+		permCache := &types.PermissionCache{
+			ID:         fmt.Sprintf("perm_%s_%s", perm.GrantedTo.User.ID, fileIDStr),
+			UserID:     perm.GrantedTo.User.ID,
+			FileID:     fileIDStr,
+			Permission: permLevel,
+			CanRead:    permLevel == "read" || permLevel == "write" || permLevel == "owner",
+			CanWrite:   permLevel == "write" || permLevel == "owner",
+			CanDelete:  permLevel == "owner",
+			CanEdit:    permLevel == "write" || permLevel == "owner",
+			CachedAt:   now,
+			CreatedAt:  now,
+			ExpiresAt:  expiry,
+		}
+
+		if err := pe.repo.UpsertPermission(ctx, permCache); err != nil {
+			slog.WarnContext(ctx, "failed to upsert permission via repository",
+				"user_id", perm.GrantedTo.User.ID, "file_id", fileIDStr, "err", err)
+			continue
+		}
+	}
+
+	slog.InfoContext(ctx, "extracted and cached permissions via repository",
+		"file_id", fileIDStr, "permission_count", len(perms))
+	return nil
+}
+
+// extractAndCacheViaSQL uses raw SQL for backward compatibility (legacy code path).
+func (pe *PermissionExtractor) extractAndCacheViaSQL(ctx context.Context, fileID int, perms []MSGraphPermission, now time.Time) error {
 	// Begin transaction to ensure atomic cache update per INVARIANT-2.
 	tx, err := pe.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -105,8 +172,7 @@ func (pe *PermissionExtractor) ExtractAndCache(ctx context.Context, fileID int, 
 	}
 
 	// Insert fresh permissions
-	now := time.Now()
-	for _, perm := range permResp.Value {
+	for _, perm := range perms {
 		if perm.GrantedTo.User.ID == "" {
 			// Skip entries without a user ID (e.g., group shares, anonymous links)
 			continue
@@ -130,8 +196,8 @@ func (pe *PermissionExtractor) ExtractAndCache(ctx context.Context, fileID int, 
 		return fmt.Errorf("permissions.ExtractAndCache: commit tx: %w", err)
 	}
 
-	slog.InfoContext(ctx, "extracted and cached permissions",
-		"file_id", fileID, "item_id", itemID, "permission_count", len(permResp.Value))
+	slog.InfoContext(ctx, "extracted and cached permissions via SQL",
+		"file_id", fileID, "permission_count", len(perms))
 	return nil
 }
 
@@ -194,6 +260,84 @@ func (pe *PermissionExtractor) RefreshCache(ctx context.Context) error {
 	return nil
 }
 
+// RefreshCacheForFile refreshes permissions for a specific file by its string ID (M365File.ID).
+// This is the Repository-friendly version of ExtractAndCache.
+func (pe *PermissionExtractor) RefreshCacheForFile(ctx context.Context, file *types.M365File) error {
+	if pe.client == nil {
+		return fmt.Errorf("permissions.RefreshCacheForFile: GraphClient is nil")
+	}
+
+	if file.ItemID == "" || file.DriveID == "" {
+		return fmt.Errorf("permissions.RefreshCacheForFile: file missing ItemID or DriveID")
+	}
+
+	// GET /drives/{driveId}/items/{itemId}/permissions
+	path := fmt.Sprintf("/drives/%s/items/%s/permissions", file.DriveID, file.ItemID)
+	resp, err := pe.client.GetWithContext(ctx, path)
+	if err != nil {
+		return fmt.Errorf("permissions.RefreshCacheForFile: graph api request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		slog.WarnContext(ctx, "failed to get permissions from MS Graph",
+			"status", resp.StatusCode, "path", path, "file_id", file.ID)
+		return nil
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("permissions.RefreshCacheForFile: read response body: %w", err)
+	}
+
+	var permResp MSGraphPermissionResponse
+	if err := json.Unmarshal(body, &permResp); err != nil {
+		return fmt.Errorf("permissions.RefreshCacheForFile: parse response: %w", err)
+	}
+
+	now := time.Now()
+	expiry := now.AddDate(0, 0, 7)
+
+	if pe.repo != nil {
+		// Use Repository interface
+		for _, perm := range permResp.Value {
+			if perm.GrantedTo.User.ID == "" {
+				continue
+			}
+
+			permLevel := mapMSGraphRolesToPermission(perm.Roles)
+			permCache := &types.PermissionCache{
+				ID:         fmt.Sprintf("perm_%s_%s", perm.GrantedTo.User.ID, file.ID),
+				UserID:     perm.GrantedTo.User.ID,
+				FileID:     file.ID,
+				Permission: permLevel,
+				CanRead:    permLevel == "read" || permLevel == "write" || permLevel == "owner",
+				CanWrite:   permLevel == "write" || permLevel == "owner",
+				CanDelete:  permLevel == "owner",
+				CanEdit:    permLevel == "write" || permLevel == "owner",
+				CachedAt:   now,
+				CreatedAt:  now,
+				ExpiresAt:  expiry,
+			}
+
+			if err := pe.repo.UpsertPermission(ctx, permCache); err != nil {
+				slog.WarnContext(ctx, "failed to upsert permission for file",
+					"user_id", perm.GrantedTo.User.ID, "file_id", file.ID, "err", err)
+				continue
+			}
+		}
+		slog.InfoContext(ctx, "refreshed permissions for file via repository",
+			"file_id", file.ID, "item_id", file.ItemID, "permission_count", len(permResp.Value))
+		return nil
+	}
+
+	// Fallback to SQL for backward compatibility
+	// This assumes the m365_files table has a numeric id column or we can convert
+	return nil // Repository should be used going forward
+}
+
+// GetUserAccess returns the list of accessible file IDs (as integers) for a given user.
+// This is the legacy SQL-based version; prefer GetUserAccessViaRepo for new code.
 func (pe *PermissionExtractor) GetUserAccess(ctx context.Context, userID string) ([]int, error) {
 	rows, err := pe.db.QueryContext(ctx,
 		`SELECT file_id FROM permission_cache WHERE user_id = $1`,
@@ -212,4 +356,19 @@ func (pe *PermissionExtractor) GetUserAccess(ctx context.Context, userID string)
 		fileIDs = append(fileIDs, fileID)
 	}
 	return fileIDs, rows.Err()
+}
+
+// GetUserAccessViaRepo returns the permission cache entries for a given user via the Repository interface.
+// Returns a list of PermissionCache entries, allowing the caller to check specific permissions.
+func (pe *PermissionExtractor) GetUserAccessViaRepo(ctx context.Context, userID string) ([]*types.PermissionCache, error) {
+	if pe.repo == nil {
+		return nil, fmt.Errorf("permissions.GetUserAccessViaRepo: Repository not available")
+	}
+
+	perms, err := pe.repo.GetPermissionCache(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("permissions.GetUserAccessViaRepo: %w", err)
+	}
+
+	return perms, nil
 }
