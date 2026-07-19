@@ -36,7 +36,7 @@
 | POC scope | Single department | ~50 users, ~10K docs, ~500K messages |
 | Data volume | 10K+ docs, 500K+ messages | Batched processing, robust pipeline design |
 | Language | Go (backend) + React/TypeScript (frontend) | Same stack as RAD system for team familiarity |
-| Database | **PostgreSQL** (metadata + embeddings) + Neo4j (graph) | RAD pattern: lightweight metadata store + dedicated graph store |
+| Database + Graph | **Option 1**: PostgreSQL + Neo4j (server, multi-user). **Option 2**: SQLite + LanceDB (Windows app, single-user). Selected by DB_TYPE env var at startup. | Server uses traditional graph model for complex entity relationships. Desktop app uses vector-only retrieval (LanceDB) for simplicity, no separate graph database. |
 | Local LLM orchestration | Brain Platform Smart Router (small local model, e.g. Qwen3-8B-class, ≤8GB RAM, CPU-only) | Pre-processes/routes query planning, compression, and NER before cloud LLM call; cost + latency reduction, reuses REQ-023 pattern |
 | All LLM processing (embedding, rerank, NER, compression, answer generation) | **Rust service** (`llm-svc`, `tonic` gRPC server + `ort`/GGUF/`candle`), **gRPC-only** from Go | Isolates all model-format and LLM-provider churn from the Go monolith; single service boundary for local models (ONNX/GGUF/safetensors) and cloud passthrough; Go never calls an LLM provider directly; model/provider swap via config, no Go redeploy; keeps model-serving internals out of the Go source tree |
 

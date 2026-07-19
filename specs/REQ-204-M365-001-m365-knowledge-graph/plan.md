@@ -11,25 +11,41 @@ Build an Enterprise Knowledge Graph system that ingests company data from Micros
 **Pattern source**: RAD Knowledge Gateway (`/workspace`) — reuses ingestion orchestrator, epoch-style atomic visibility, 7-stage retrieval pipeline, graph builder cycle, LLM runtime interface, and React frontend structure.
 
 **Locked constraints**:
-1. **Database**: PostgreSQL (metadata/embeddings) + Neo4j (graph) — *not SQLite, not LanceDB*
+1. **Database + Graph Store** (configurable via DB_TYPE env var):
+   - **Option 1 (Server)**: PostgreSQL (metadata/embeddings) + Neo4j (graph) — for multi-user, concurrent workloads
+   - **Option 2 (Windows app)**: SQLite (metadata/embeddings) + LanceDB (graph) — for desktop use, no external services
 2. **Architecture**: Standalone `backend/` backend + React frontend — *MergeAssistant (src/MergeAssistant/) is completely independent; zero shared code with src/Backend*
 3. **Auth**: Microsoft Entra ID SSO (OIDC/OAuth2) + Local JWT fallback (demo/test only)
 4. **POC scope**: Single department (~50 users), ~10K docs, ~500K messages
 5. **NLP/Embedding provider mode** (added 2026-07-11, spec.md §3.4/§3.5): runtime-configurable via `NLP_MODE` — `1` cloud_only, `2` cloud_with_local_preprocess (default), `3` local_only. Local inference (modes 2/3) is served by the `llm-svc` Rust service (§3.5) directly (ONNX/GGUF/safetensors) — **no Ollama dependency**, to keep local footprint to a single service process within the ≤8GB RAM budget.
 6. **All LLM processing moves to Rust, gRPC-only** (added 2026-07-11, spec.md §3.5 rewrite): embedding, reranking, NER/entity extraction, context compression, and answer generation all execute inside `llm-svc`. The Go backend has zero direct LLM-provider HTTP clients; it communicates with `llm-svc` exclusively via a generated gRPC client (`internal/llmsvc/`), never HTTP/REST.
 
+**Amendment 3 (2026-07-18)**: **Dual-stack database architecture** — Two independent database + graph configurations, selected at service startup via `DB_TYPE` env var:
+1. **Option 1 (postgres_neo4j)**: PostgreSQL (metadata/embeddings) + Neo4j (full knowledge graph). For server-scale deployments, multi-user, complex entity relationships.
+2. **Option 2 (sqlite_lancedb)**: SQLite (metadata/embeddings) + LanceDB (vector-based retrieval). For Windows desktop app (Cowork GHC), single-user, no external service dependencies.
+
+Each stack is a complete, independent implementation with identical business logic but different persistence layers:
+- **Metadata layer**: Abstract `Repository` interface; drivers for PostgreSQL and SQLite. Schemas in `migrations/schema_postgres.sql` and `migrations/schema_sqlite.sql`. Both support identical CRUD operations via parameterized queries ($N for PostgreSQL, ? for SQLite).
+- **Graph/retrieval layer**: Neo4j-based entity extraction + graph traversal (Option 1); LanceDB vector-only retrieval + semantic search (Option 2). No Option 1 features leak into Option 2 (no Neo4j client imported when DB_TYPE=sqlite_lancedb).
+- **Configuration**: Go init parses `DB_TYPE` env var, instantiates appropriate metadata driver + graph client. All other business logic (M365 ingestion, NLP, retrieval, feedback) operates uniformly across both.
+
 ## Technical Context
 
 **Language/Version**: Go 1.22+ (backend), React 18 + TypeScript 5 (frontend)
 
 **Primary Dependencies**: 
-- Backend: Microsoft Graph SDK, Neo4j driver, PostgreSQL driver (lib/pq), `google.golang.org/grpc` + generated `internal/llmsvc` client (the only path to any LLM, local or cloud) — no direct LLM HTTP client remains in the Go backend
+- Backend: Microsoft Graph SDK, `google.golang.org/grpc` + generated `internal/llmsvc` client (the only path to any LLM, local or cloud) — no direct LLM HTTP client remains in the Go backend.
+  - **Option 1 (Server)**: Neo4j driver, PostgreSQL driver (lib/pq)
+  - **Option 2 (Windows app)**: LanceDB Go client (`lancedb/lancedb` or similar), SQLite driver (`github.com/mattn/go-sqlite3`)
+  - Database/graph selection: driven by DB_TYPE env var (postgres_neo4j / sqlite_lancedb) at service startup
 - `llm-svc/` (new, Rust): `tonic` + `prost` (gRPC/protobuf), `ort` (ONNX Runtime bindings), a llama.cpp-compatible crate (GGUF), `candle` (safetensors), plus an internal HTTP client for cloud LLM passthrough (`reqwest` or similar)
 - Brain integration (new): `internal/brain/` — thin Go wrapper tagging gRPC calls by task type (§3.4); the actual local/cloud routing policy (`NLP_MODE`) is implemented inside `llm-svc`, reusing the Brain Platform (REQ-023) Smart Router pattern as reference
 - Frontend: TanStack Query v5, Zustand v4, Shadcn/ui, React Flow (graph viz)
 - **Reuse directive**: where, **in the parent MiniRag repo**, `src/Backend/internal/llm/` (`onnx.go`, `onnx_embedder.go`, `onnx_planner.go`, `smart_router.go`, `smart_router_onnx.go`, `fallback.go`, tokenizers) and `src/Backend/internal/retriever/` (`bert_reranker.go`, `reranker_onnx*.go`) already implement equivalent model-serving/routing/reranking logic, port their algorithms to Rust rather than designing from scratch (see spec.md §3.5). Where, in the parent MiniRag repo, `src/Frontend/src/pages/` already has a same-shaped page (`BrainChatPage.tsx`, `DataSourcesPage.tsx`, `EntityBrowserPage.tsx`, `FeedbackReviewPage.tsx`, `GraphPage.tsx`, `LoginPage.tsx`, `DashboardPage.tsx`), copy it as the Phase 5 starting point and edit to match this feature's API/data model instead of writing from a blank file.
 
-**Storage**: PostgreSQL (metadata, embeddings, sync state, feedback, queries) + Neo4j (business knowledge graph)
+**Storage** (configurable via DB_TYPE env var):
+- **Option 1**: PostgreSQL (metadata, embeddings, sync state, feedback, queries) + Neo4j (business knowledge graph)
+- **Option 2**: SQLite (metadata, embeddings, sync state, feedback, queries) + LanceDB (vector-based graph retrieval, no explicit entity nodes)
 
 **Testing**: Go unit tests (`go test ./...`), integration tests (`-tags=integration`), Playwright E2E
 
@@ -59,9 +75,11 @@ Build an Enterprise Knowledge Graph system that ingests company data from Micros
 
 ✅ **INVARIANT-3 (Deterministic Indexing)**: Entity dedup keys are deterministic (name + type); edges deduplicated by (from_entity + to_entity + relationship_type).
 
-✅ **INVARIANT-4 (Crash-Safe Writes)**: PostgreSQL with standard transactions; Neo4j upserts within single TX; delta sync persists changeToken only after successful upsert.
+✅ **INVARIANT-4 (Crash-Safe Writes)**: 
+- **Option 1**: PostgreSQL with standard transactions; Neo4j upserts within single TX; delta sync persists changeToken only after successful upsert.
+- **Option 2**: SQLite with WAL mode (PRAGMA journal_mode=WAL + busy_timeout) ensures ACID; delta sync persists changeToken only after successful chunk upsert; LanceDB vector writes are atomic per embedding batch.
 
-✅ **INVARIANT-5 (Source Traceability)**: Every extracted entity/relationship carries source_chunk_id; every citation includes file + line.
+✅ **INVARIANT-5 (Source Traceability)**: Every extracted entity/relationship carries source_chunk_id; every citation includes file + line. Identical requirement for both Option 1 (Neo4j edges) and Option 2 (LanceDB metadata).
 
 ## Project Structure
 
