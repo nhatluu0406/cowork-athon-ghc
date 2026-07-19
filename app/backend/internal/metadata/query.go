@@ -554,6 +554,12 @@ func NewChunkStore(db *DB) *ChunkStore {
 	return &ChunkStore{db}
 }
 
+// NewChunkStoreFromConn creates a ChunkStore from a raw *sql.DB connection
+// This is useful when you only have the connection and not the DB wrapper
+func NewChunkStoreFromConn(conn *sql.DB) *ChunkStore {
+	return &ChunkStore{&DB{conn: conn}}
+}
+
 func NewConnectionStore(db *DB) *ConnectionStore {
 	return &ConnectionStore{db}
 }

@@ -38,6 +38,11 @@ func NewBrainClient(llmsvcAddr string) (*BrainClient, error) {
 	return &BrainClient{llmsvcClient: client}, nil
 }
 
+// LLMSvcClient returns the underlying llmsvc.Client
+func (bc *BrainClient) LLMSvcClient() *llmsvc.Client {
+	return bc.llmsvcClient
+}
+
 // NewBrainClientWithTLS creates a BrainClient with TLS support
 func NewBrainClientWithTLS(llmsvcAddr string, tlsCertFile string) (*BrainClient, error) {
 	client, err := llmsvc.NewClientWithTLS(llmsvcAddr, tlsCertFile)

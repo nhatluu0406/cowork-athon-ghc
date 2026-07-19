@@ -234,7 +234,7 @@ func main() {
 	// T047: Create NLP extractor for entity extraction via llm-svc
 	var extractor *nlp.Extractor
 	if brainClient != nil {
-		extractor = nlp.NewExtractorWithLLMSvc(brainClient, llmClient)
+		extractor = nlp.NewExtractorWithLLMSvc(brainClient.LLMSvcClient(), llmClient)
 		logger.Info("NLP extractor initialized with llm-svc")
 	} else if llmClient != nil {
 		extractor = nlp.NewExtractor(llmClient)
@@ -288,7 +288,7 @@ func main() {
 	}
 
 	// Create processor for import jobs
-	localChunkStore := metadata.NewChunkStore(repo.Conn())
+	localChunkStore := metadata.NewChunkStoreFromConn(repo.Conn())
 	localProcessor := localimport.NewProcessor(
 		localDeltaResolver,
 		localExtractor,
@@ -410,33 +410,11 @@ func main() {
 	logger.Info("server shutdown complete")
 }
 
-// similaritySearcherAdapter wraps embedding.Store to implement retrieval.SimilaritySearcher
-type similaritySearcherAdapter struct {
-	store *embedding.Store
-}
-
-func (a similaritySearcherAdapter) SearchSimilar(ctx context.Context, modelID int64, queryVec []float32, topK int) ([]retrieval.ScoredChunkResult, error) {
-	scoredChunks, err := a.store.SearchSimilar(ctx, modelID, queryVec, topK)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert embedding.ScoredChunk to retrieval.ScoredChunkResult
-	results := make([]retrieval.ScoredChunkResult, len(scoredChunks))
-	for i, sc := range scoredChunks {
-		results[i] = retrieval.ScoredChunkResult{
-			ChunkID: sc.ChunkID,
-			Score:   sc.Score,
-		}
-	}
-	return results, nil
-}
-
 // Helper function to extract the underlying SQLite DB from the SQLiteDriver
 // This is needed to pass to LanceDBStore since it expects a *sql.DB directly
 func getUnderlyingSQLiteDB(repo metadata.Repository) (*sql.DB, error) {
 	if sqliteDriver, ok := repo.(*metadata.SQLiteDriver); ok {
-		return sqliteDriver.GetDB()
+		return sqliteDriver.GetDB(), nil
 	}
 	return nil, fmt.Errorf("repository is not an SQLiteDriver")
 }
