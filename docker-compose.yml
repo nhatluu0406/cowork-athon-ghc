@@ -16,58 +16,14 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/app/data
-    depends_on:
-      - postgres
-      - neo4j
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  postgres:
-    image: postgres:15-alpine
-    container_name: m365kg-postgres
-    environment:
-      POSTGRES_DB: m365kg
-      POSTGRES_USER: m365kg_user
-      POSTGRES_PASSWORD: m365kg_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./app/backend/migrations/schema_postgres.sql:/docker-entrypoint-initdb.d/01-schema.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U m365kg_user -d m365kg"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  neo4j:
-    image: neo4j:5.13-community
-    container_name: m365kg-neo4j
-    environment:
-      NEO4J_AUTH: neo4j/neo4j_password
-      NEO4J_server_bolt_listen__address: 0.0.0.0:7687
-      NEO4J_server_http_listen__address: 0.0.0.0:7474
-    ports:
-      - "7687:7687"
-      - "7474:7474"
-      - "7473:7473"
-    volumes:
-      - neo4j_data:/var/lib/neo4j/data
-      - neo4j_logs:/var/lib/neo4j/logs
-      - ./app/backend/migrations/002_neo4j_schema.cypher:/import/schema.cypher
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7474"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
 volumes:
-  postgres_data:
-  neo4j_data:
-  neo4j_logs:
+  data:
 
 networks:
   default:
