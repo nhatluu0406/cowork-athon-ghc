@@ -8,6 +8,7 @@ require github.com/lib/pq v1.12.3
 
 require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/ledongthuc/pdf v0.0.0-20250511090121-5959a4027728
 	github.com/mattn/go-sqlite3 v1.14.47
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d
