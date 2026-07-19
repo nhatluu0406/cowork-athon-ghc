@@ -1,6 +1,30 @@
 version: '3.8'
 
 services:
+  m365kg:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: m365kg-app
+    environment:
+      PORT: 8080
+      DATABASE_URL: file:./m365kg.db?cache=shared
+      DB_TYPE: sqlite_lancedb
+      HOST: 0.0.0.0
+      JWT_SECRET: ${JWT_SECRET:-dev-key-change-in-production}
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+      - neo4j
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:15-alpine
     container_name: m365kg-postgres
