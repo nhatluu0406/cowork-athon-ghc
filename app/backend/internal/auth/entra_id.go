@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type EntraIDAuth struct {
@@ -217,4 +218,69 @@ func (ea *EntraIDAuth) GetUserInfo(ctx context.Context, accessToken string) (*En
 	}
 
 	return &userInfo, nil
+}
+
+// TokenManager manages token lifecycle: caching, refresh, and expiry.
+// Thread-safe token manager for use by M365 connectors.
+type TokenManager struct {
+	auth           *EntraIDAuth
+	accessToken    string
+	refreshToken   string
+	expiresAt      int64 // Unix timestamp
+	bufferSeconds  int64 // Refresh token if expiry is within this buffer
+}
+
+func NewTokenManager(auth *EntraIDAuth, bufferSeconds int64) *TokenManager {
+	if bufferSeconds == 0 {
+		bufferSeconds = 300 // 5 minutes default buffer
+	}
+	return &TokenManager{
+		auth:          auth,
+		bufferSeconds: bufferSeconds,
+	}
+}
+
+// SetTokens sets initial token state (used after login)
+func (tm *TokenManager) SetTokens(accessToken, refreshToken string, expiresIn int) {
+	tm.accessToken = accessToken
+	tm.refreshToken = refreshToken
+	tm.expiresAt = getCurrentTimeUnix() + int64(expiresIn)
+}
+
+// GetToken returns a valid access token, refreshing if necessary.
+// This is the primary method for M365 connectors to obtain a working token.
+func (tm *TokenManager) GetToken(ctx context.Context) (string, error) {
+	now := getCurrentTimeUnix()
+
+	// Token still valid and not approaching expiry
+	if tm.accessToken != "" && now < tm.expiresAt-tm.bufferSeconds {
+		return tm.accessToken, nil
+	}
+
+	// Token expired or approaching expiry, refresh
+	if tm.refreshToken != "" {
+		tokenResp, err := tm.auth.RefreshToken(ctx, tm.refreshToken)
+		if err != nil {
+			return "", fmt.Errorf("TokenManager.GetToken: refresh failed: %w", err)
+		}
+		tm.SetTokens(tokenResp.AccessToken, tokenResp.RefreshToken, tokenResp.ExpiresIn)
+		return tm.accessToken, nil
+	}
+
+	// No valid token and no refresh token available
+	return "", fmt.Errorf("TokenManager.GetToken: no valid token and no refresh token")
+}
+
+// ClientCredentialsToken acquires a service-principal token (no refresh, used for daemon sync).
+// Unlike GetToken, this doesn't cache or refresh—it's for one-time sync operations.
+func (tm *TokenManager) ClientCredentialsToken(ctx context.Context) (string, error) {
+	tokenResp, err := tm.auth.ClientCredentialsToken(ctx)
+	if err != nil {
+		return "", fmt.Errorf("TokenManager.ClientCredentialsToken: %w", err)
+	}
+	return tokenResp.AccessToken, nil
+}
+
+func getCurrentTimeUnix() int64 {
+	return time.Now().Unix()
 }
