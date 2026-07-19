@@ -1,56 +1,119 @@
+// Package nlp provides NLP operations for entity extraction and scoring.
+// Task T048: Implement confidence scoring (0.0-1.0) for extracted entities/relationships
 package nlp
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"log/slog"
+
+	"github.com/rad-system/m365-knowledge-graph/internal/metadata"
+	"github.com/rad-system/m365-knowledge-graph/pkg/types"
 )
 
+// ConfidenceScorer manages confidence tracking for extracted entities and relationships.
+// Uses the Repository interface to remain database-agnostic (supports both PostgreSQL and SQLite).
 type ConfidenceScorer struct {
-	db *sql.DB
+	repo   metadata.Repository
+	logger *slog.Logger
 }
 
-func NewConfidenceScorer(db *sql.DB) *ConfidenceScorer {
-	return &ConfidenceScorer{db: db}
+// NewConfidenceScorer creates a new confidence scorer using the metadata repository.
+func NewConfidenceScorer(repo metadata.Repository) *ConfidenceScorer {
+	return &ConfidenceScorer{
+		repo:   repo,
+		logger: slog.Default().With("component", "nlp.ConfidenceScorer"),
+	}
 }
 
-func (cs *ConfidenceScorer) Score(ctx context.Context, entityID, relationshipType, targetID string, confidence float64, sourceChunkID int) error {
+// Score records the confidence level for an extracted entity/relationship pair.
+// Task T048: Confidence must be in [0.0, 1.0] range
+// confidence: 0.0 = low confidence, 1.0 = high confidence
+// sourceChunkID: ID of the chunk this extraction came from (for traceability)
+func (cs *ConfidenceScorer) Score(ctx context.Context, entityID, relationshipType, targetID string, confidence float32) error {
 	if confidence < 0 || confidence > 1 {
-		return fmt.Errorf("confidence must be in [0, 1]")
+		return fmt.Errorf("confidence must be in [0.0, 1.0], got %f", confidence)
 	}
 
-	_, err := cs.db.ExecContext(ctx,
-		`INSERT INTO extraction_confidence (entity_id, relationship_type, target_entity_id, confidence, created_at)
-		 VALUES ($1, $2, $3, $4, now())`,
-		entityID, relationshipType, targetID, confidence)
+	if entityID == "" {
+		return fmt.Errorf("entity_id is required")
+	}
 
-	return err
+	cs.logger.Debug("recording confidence score",
+		"entity_id", entityID,
+		"relationship_type", relationshipType,
+		"target_id", targetID,
+		"confidence", confidence)
+
+	// Create ExtractionConfidence record
+	conf := &types.ExtractionConfidence{
+		EntityID:        entityID,
+		ConfidenceScore: confidence,
+	}
+
+	// Upsert into repository
+	if err := cs.repo.UpsertConfidence(ctx, conf); err != nil {
+		cs.logger.Error("failed to record confidence score",
+			"err", err,
+			"entity_id", entityID,
+			"confidence", confidence)
+		return fmt.Errorf("nlp.ConfidenceScorer.Score: %w", err)
+	}
+
+	return nil
 }
 
-func (cs *ConfidenceScorer) GetLowConfidenceEdges(ctx context.Context, threshold float64) ([]map[string]interface{}, error) {
-	rows, err := cs.db.QueryContext(ctx,
-		`SELECT entity_id, relationship_type, target_entity_id, confidence
-		 FROM extraction_confidence WHERE confidence < $1`,
-		threshold)
+// GetLowConfidenceEdges retrieves entities/relationships below the confidence threshold.
+// Task T048: Used for feedback-driven re-evaluation (Phase 6)
+// threshold: confidence score below which edges are considered "low confidence" (e.g., 0.5)
+func (cs *ConfidenceScorer) GetLowConfidenceEdges(ctx context.Context, threshold float32) ([]*types.ExtractionConfidence, error) {
+	if threshold < 0 || threshold > 1 {
+		return nil, fmt.Errorf("threshold must be in [0.0, 1.0], got %f", threshold)
+	}
+
+	cs.logger.Debug("fetching low confidence edges", "threshold", threshold)
+
+	edges, err := cs.repo.QueryLowConfidenceEdges(ctx, float64(threshold))
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var edges []map[string]interface{}
-	for rows.Next() {
-		var entityID, relType, targetID string
-		var conf float64
-		if err := rows.Scan(&entityID, &relType, &targetID, &conf); err != nil {
-			return nil, err
-		}
-		edges = append(edges, map[string]interface{}{
-			"entity_id":         entityID,
-			"relationship_type": relType,
-			"target_entity_id":  targetID,
-			"confidence":        conf,
-		})
+		cs.logger.Error("failed to query low confidence edges",
+			"err", err,
+			"threshold", threshold)
+		return nil, fmt.Errorf("nlp.ConfidenceScorer.GetLowConfidenceEdges: %w", err)
 	}
 
-	return edges, rows.Err()
+	cs.logger.Debug("found low confidence edges", "count", len(edges), "threshold", threshold)
+	return edges, nil
+}
+
+// ScoreRange provides guidance for confidence interpretation
+type ScoreRange struct {
+	High        float32 // >= High: high confidence (e.g., 0.8)
+	Medium      float32 // >= Medium && < High: medium confidence (e.g., 0.6)
+	Low         float32 // >= Low && < Medium: low confidence (e.g., 0.4)
+	VeryLow     float32 // < Low: very low confidence (e.g., 0.4)
+}
+
+// DefaultScoreRange returns sensible defaults for confidence interpretation
+func DefaultScoreRange() ScoreRange {
+	return ScoreRange{
+		High:    0.8,
+		Medium:  0.6,
+		Low:     0.4,
+		VeryLow: 0.0,
+	}
+}
+
+// ClassifyConfidence returns a human-readable classification of the confidence level
+func ClassifyConfidence(score float32) string {
+	sr := DefaultScoreRange()
+	switch {
+	case score >= sr.High:
+		return "HIGH"
+	case score >= sr.Medium:
+		return "MEDIUM"
+	case score >= sr.Low:
+		return "LOW"
+	default:
+		return "VERY_LOW"
+	}
 }
