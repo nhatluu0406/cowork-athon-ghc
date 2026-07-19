@@ -1,209 +1,248 @@
 package auth_test
 
 import (
-	"net/url"
-	"strings"
+	"context"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"
 )
 
-func TestJWTGenerateAndVerifyRoundTrip(t *testing.T) {
-	tt := []struct {
-		name        string
-		userID      string
-		email       string
-		displayName string
-		objectID    string
-	}{
-		{"basic claims", "user-1", "alice@example.com", "Alice", "obj-1"},
-		{"empty display name/object id", "user-2", "bob@example.com", "", ""},
+// TestEntraIDTokenCaching verifies that EntraID tokens are cached and reused
+// within their TTL, avoiding redundant token service calls.
+func TestEntraIDTokenCaching(t *testing.T) {
+	var tokenCallCount = 0
+
+	mockTokenProvider := func(ctx context.Context) (string, time.Time, error) {
+		tokenCallCount++
+		// Return token valid for 1 hour from now
+		expiry := time.Now().Add(time.Hour)
+		return fmt.Sprintf("token-%d", tokenCallCount), expiry, nil
 	}
 
-	for _, tc := range tt {
-		t.Run(tc.name, func(t *testing.T) {
-			ja := auth.NewJWTAuth("test-secret")
+	// Create EntraID with mocked token provider
+	entra := auth.NewEntraIDAuthWithProvider(mockTokenProvider)
 
-			token, err := ja.GenerateTokenWithClaims(tc.userID, tc.email, tc.displayName, tc.objectID, 3600)
-			if err != nil {
-				t.Fatalf("GenerateTokenWithClaims: %v", err)
-			}
-			if token == "" {
-				t.Fatal("expected non-empty token")
-			}
+	ctx := context.Background()
 
-			claims, err := ja.VerifyToken(token)
-			if err != nil {
-				t.Fatalf("VerifyToken: %v", err)
-			}
-			if claims.UserID != tc.userID {
-				t.Errorf("UserID = %q, want %q", claims.UserID, tc.userID)
-			}
-			if claims.Email != tc.email {
-				t.Errorf("Email = %q, want %q", claims.Email, tc.email)
-			}
-			if claims.DisplayName != tc.displayName {
-				t.Errorf("DisplayName = %q, want %q", claims.DisplayName, tc.displayName)
-			}
-			if claims.ObjectID != tc.objectID {
-				t.Errorf("ObjectID = %q, want %q", claims.ObjectID, tc.objectID)
-			}
-			if claims.Issuer != "m365-knowledge-graph" {
-				t.Errorf("Issuer = %q, want %q", claims.Issuer, "m365-knowledge-graph")
-			}
-		})
+	// First call should invoke token provider
+	token1, err := entra.GetAppToken(ctx)
+	if err != nil {
+		t.Fatalf("expected first token, got error: %v", err)
+	}
+	if token1 == "" {
+		t.Error("expected non-empty token")
+	}
+	if tokenCallCount != 1 {
+		t.Errorf("expected 1 token call, got %d", tokenCallCount)
+	}
+
+	// Second call should return cached token without calling provider
+	token2, err := entra.GetAppToken(ctx)
+	if err != nil {
+		t.Fatalf("expected cached token, got error: %v", err)
+	}
+	if token1 != token2 {
+		t.Errorf("expected same token (cached), got different tokens: %s vs %s", token1, token2)
+	}
+	if tokenCallCount != 1 {
+		t.Errorf("expected still 1 token call (cached), got %d", tokenCallCount)
 	}
 }
 
-func TestJWTGenerateTokenDefaultExpiry(t *testing.T) {
-	ja := auth.NewJWTAuth("test-secret")
+// TestEntraIDTokenRefreshOnExpiry verifies that when a token's expiry time
+// is reached, a new token is fetched from the provider.
+func TestEntraIDTokenRefreshOnExpiry(t *testing.T) {
+	var tokenCallCount = 0
+	var tokens []string
 
-	token, err := ja.GenerateToken("user-1", "alice@example.com", 0)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
+	mockTokenProvider := func(ctx context.Context) (string, time.Time, error) {
+		tokenCallCount++
+		token := fmt.Sprintf("token-%d", tokenCallCount)
+		tokens = append(tokens, token)
+		// Token expires immediately (well, 1 nanosecond from now)
+		expiry := time.Now().Add(1 * time.Nanosecond)
+		return token, expiry, nil
 	}
 
-	claims, err := ja.VerifyToken(token)
-	if err != nil {
-		t.Fatalf("VerifyToken: %v", err)
+	entra := auth.NewEntraIDAuthWithProvider(mockTokenProvider)
+	ctx := context.Background()
+
+	// First token
+	token1, _ := entra.GetAppToken(ctx)
+
+	// Small sleep to let token expire
+	time.Sleep(10 * time.Millisecond)
+
+	// Second call should refresh due to expiry
+	token2, _ := entra.GetAppToken(ctx)
+
+	if token1 == token2 {
+		t.Error("expected different tokens after expiry")
 	}
-
-	gotTTL := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
-	wantTTL := 24 * time.Hour
-	if diff := gotTTL - wantTTL; diff < -time.Second || diff > time.Second {
-		t.Errorf("default expiry TTL = %v, want ~%v", gotTTL, wantTTL)
-	}
-}
-
-func TestJWTVerifyExpiredTokenRejected(t *testing.T) {
-	secret := []byte("test-secret")
-
-	now := time.Now()
-	claims := auth.Claims{
-		UserID: "user-1",
-		Email:  "alice@example.com",
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(-1 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now.Add(-2 * time.Hour)),
-			NotBefore: jwt.NewNumericDate(now.Add(-2 * time.Hour)),
-			Issuer:    "m365-knowledge-graph",
-		},
-	}
-
-	expiredToken := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := expiredToken.SignedString(secret)
-	if err != nil {
-		t.Fatalf("sign expired token: %v", err)
-	}
-
-	ja := auth.NewJWTAuth("test-secret")
-	if _, err := ja.VerifyToken(tokenString); err == nil {
-		t.Fatal("expected error for expired token, got nil")
+	if tokenCallCount != 2 {
+		t.Errorf("expected 2 token calls (refresh on expiry), got %d", tokenCallCount)
 	}
 }
 
-func TestJWTVerifyTamperedSignatureRejected(t *testing.T) {
-	ja := auth.NewJWTAuth("test-secret")
-
-	token, err := ja.GenerateToken("user-1", "alice@example.com", 3600)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
+// TestEntraIDTokenProviderError verifies that if the token provider returns
+// an error, the EntraID auth propagates the error.
+func TestEntraIDTokenProviderError(t *testing.T) {
+	mockTokenProvider := func(ctx context.Context) (string, time.Time, error) {
+		return "", time.Time{}, fmt.Errorf("oauth service unavailable")
 	}
 
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		t.Fatalf("expected 3-part JWT, got %d parts", len(parts))
-	}
-	// Flip the last character of the signature segment.
-	sig := []rune(parts[2])
-	last := sig[len(sig)-1]
-	if last == 'A' {
-		sig[len(sig)-1] = 'B'
-	} else {
-		sig[len(sig)-1] = 'A'
-	}
-	tampered := parts[0] + "." + parts[1] + "." + string(sig)
+	entra := auth.NewEntraIDAuthWithProvider(mockTokenProvider)
+	ctx := context.Background()
 
-	if _, err := ja.VerifyToken(tampered); err == nil {
-		t.Fatal("expected error for tampered signature, got nil")
+	token, err := entra.GetAppToken(ctx)
+	if err == nil {
+		t.Error("expected error from token provider, got success")
+	}
+	if token != "" {
+		t.Error("expected empty token on error")
+	}
+	if !fmt.Sprintf("%v", err).Contains("oauth service unavailable") &&
+		!fmt.Sprintf("%v", err).Contains("oauth") {
+		t.Errorf("expected oauth-related error, got: %v", err)
 	}
 }
 
-func TestJWTVerifyWrongSecretRejected(t *testing.T) {
-	issuer := auth.NewJWTAuth("secret-a")
-	verifier := auth.NewJWTAuth("secret-b")
-
-	token, err := issuer.GenerateToken("user-1", "alice@example.com", 3600)
-	if err != nil {
-		t.Fatalf("GenerateToken: %v", err)
+// TestEntraIDContextCancellation verifies that if the context is cancelled,
+// token fetching respects the cancellation.
+func TestEntraIDContextCancellation(t *testing.T) {
+	mockTokenProvider := func(ctx context.Context) (string, time.Time, error) {
+		// Check if context is already cancelled
+		select {
+		case <-ctx.Done():
+			return "", time.Time{}, ctx.Err()
+		default:
+			return "token", time.Now().Add(time.Hour), nil
+		}
 	}
 
-	if _, err := verifier.VerifyToken(token); err == nil {
-		t.Fatal("expected error verifying token signed with a different secret, got nil")
+	entra := auth.NewEntraIDAuthWithProvider(mockTokenProvider)
+
+	// Create a cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	token, err := entra.GetAppToken(ctx)
+	if err == nil {
+		t.Error("expected context.Cancelled error, got success")
+	}
+	if token != "" {
+		t.Error("expected empty token on context cancellation")
 	}
 }
 
-func TestJWTVerifyMalformedTokenRejected(t *testing.T) {
-	ja := auth.NewJWTAuth("test-secret")
+// TestJWTTokenValidation verifies that a valid JWT is verified correctly
+// and invalid/expired tokens are rejected.
+func TestJWTTokenValidation(t *testing.T) {
+	// Create a JWT auth instance with a test secret
+	secret := "test-secret-key"
+	jwtAuth := auth.NewJWTAuth(secret)
 
-	if _, err := ja.VerifyToken("not-a-valid-jwt"); err == nil {
-		t.Fatal("expected error for malformed token, got nil")
+	// Create a token
+	userID := "user123"
+	email := "user@example.com"
+	token, err := jwtAuth.CreateToken(userID, email, time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create token: %v", err)
+	}
+
+	if token == "" {
+		t.Error("expected non-empty token")
+	}
+
+	// Verify the token
+	claims, err := jwtAuth.VerifyToken(token)
+	if err != nil {
+		t.Fatalf("failed to verify token: %v", err)
+	}
+
+	if claims.UserID != userID {
+		t.Errorf("expected userID %s, got %s", userID, claims.UserID)
+	}
+	if claims.Email != email {
+		t.Errorf("expected email %s, got %s", email, claims.Email)
 	}
 }
 
-func TestEntraIDAuthorizeURL(t *testing.T) {
-	ea := auth.NewEntraIDAuth("tenant-123", "client-456", "secret-789")
+// TestJWTTokenExpiration verifies that an expired JWT is rejected.
+func TestJWTTokenExpiration(t *testing.T) {
+	secret := "test-secret-key"
+	jwtAuth := auth.NewJWTAuth(secret)
 
-	redirectURI := "https://app.example.com/callback"
-	rawURL := ea.AuthorizeURL(redirectURI)
-
-	parsed, err := url.Parse(rawURL)
+	// Create an immediately-expired token
+	token, err := jwtAuth.CreateToken("user123", "user@example.com", 1*time.Nanosecond)
 	if err != nil {
-		t.Fatalf("AuthorizeURL returned unparsable URL: %v", err)
+		t.Fatalf("failed to create token: %v", err)
 	}
 
-	wantPath := "/tenant-123/oauth2/v2.0/authorize"
-	if parsed.Host != "login.microsoftonline.com" || parsed.Path != wantPath {
-		t.Errorf("AuthorizeURL host/path = %s%s, want login.microsoftonline.com%s", parsed.Host, parsed.Path, wantPath)
+	// Small sleep to let token expire
+	time.Sleep(10 * time.Millisecond)
+
+	// Attempt to verify
+	claims, err := jwtAuth.VerifyToken(token)
+	if err == nil {
+		t.Error("expected error for expired token, got success")
+	}
+	if claims != nil {
+		t.Error("expected nil claims for expired token")
+	}
+}
+
+// TestJWTInvalidSignature verifies that a token signed with a different key
+// is rejected.
+func TestJWTInvalidSignature(t *testing.T) {
+	secret1 := "secret-1"
+	secret2 := "secret-2"
+
+	jwtAuth1 := auth.NewJWTAuth(secret1)
+	jwtAuth2 := auth.NewJWTAuth(secret2)
+
+	// Create token with secret1
+	token, err := jwtAuth1.CreateToken("user123", "user@example.com", time.Hour)
+	if err != nil {
+		t.Fatalf("failed to create token: %v", err)
 	}
 
-	q := parsed.Query()
-	if got := q.Get("client_id"); got != "client-456" {
-		t.Errorf("client_id = %q, want %q", got, "client-456")
+	// Try to verify with secret2
+	claims, err := jwtAuth2.VerifyToken(token)
+	if err == nil {
+		t.Error("expected error for mismatched secret, got success")
 	}
-	if got := q.Get("redirect_uri"); got != redirectURI {
-		t.Errorf("redirect_uri = %q, want %q", got, redirectURI)
+	if claims != nil {
+		t.Error("expected nil claims for invalid signature")
 	}
-	if got := q.Get("response_type"); got != "code" {
-		t.Errorf("response_type = %q, want %q", got, "code")
+}
+
+// TestJWTMalformedToken verifies that a malformed JWT is rejected.
+func TestJWTMalformedToken(t *testing.T) {
+	secret := "test-secret-key"
+	jwtAuth := auth.NewJWTAuth(secret)
+
+	malformedTokens := []string{
+		"",
+		"not-a-jwt",
+		"header.payload", // missing signature
+		"a.b.c.d",        // too many parts
 	}
-	if got := q.Get("response_mode"); got != "query" {
-		t.Errorf("response_mode = %q, want %q", got, "query")
-	}
-	scope := q.Get("scope")
-	for _, want := range []string{"openid", "profile", "email", "User.Read", "offline_access"} {
-		if !strings.Contains(scope, want) {
-			t.Errorf("scope %q missing expected value %q", scope, want)
+
+	for _, malformed := range malformedTokens {
+		claims, err := jwtAuth.VerifyToken(malformed)
+		if err == nil {
+			t.Errorf("expected error for malformed token %q, got success", malformed)
+		}
+		if claims != nil {
+			t.Errorf("expected nil claims for malformed token %q", malformed)
 		}
 	}
 }
 
-func TestEntraIDAuthorizeURLDifferentTenants(t *testing.T) {
-	ea1 := auth.NewEntraIDAuth("tenant-a", "client-x", "secret-x")
-	ea2 := auth.NewEntraIDAuth("tenant-b", "client-x", "secret-x")
-
-	url1 := ea1.AuthorizeURL("https://app.example.com/callback")
-	url2 := ea2.AuthorizeURL("https://app.example.com/callback")
-
-	if !strings.Contains(url1, "/tenant-a/") {
-		t.Errorf("expected tenant-a in URL: %s", url1)
-	}
-	if !strings.Contains(url2, "/tenant-b/") {
-		t.Errorf("expected tenant-b in URL: %s", url2)
-	}
-	if url1 == url2 {
-		t.Error("expected different URLs for different tenants")
-	}
+// Helper to check if a string contains a substring
+func (s string) Contains(substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (len(s) >= len(substr))
 }

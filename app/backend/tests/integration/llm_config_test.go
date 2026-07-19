@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/api"
 	"github.com/rad-system/m365-knowledge-graph/internal/auth"

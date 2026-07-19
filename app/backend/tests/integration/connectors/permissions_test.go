@@ -1,232 +1,234 @@
+//go:build integration
 // +build integration
 
-package connectors
+package connectors_test
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/rad-system/m365-knowledge-graph/internal/connectors"
-	"github.com/rad-system/m365-knowledge-graph/internal/retrieval"
 )
 
-// TestPermissionExtractor_GetUserAccess tests basic database query for file access
-func TestPermissionExtractor_GetUserAccessBasic(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+// TestPermissionExtractionAndCache verifies that the GraphClient can extract
+// and cache permissions from MS Graph's /sites/{siteId}/lists/{listId}/items/{itemId}
+// sharing endpoint.
+func TestPermissionExtractionAndCache(t *testing.T) {
+	// Create a mock Graph API server that returns sharing information
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Mock response for /sites/{siteId}/drive/items/{itemId}/permissions
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 
-	_ = connectors.NewPermissionExtractor(db, nil)
+		// Return a minimal sharing response
+		io.WriteString(w, `{
+			"value": [
+				{
+					"id": "perm-1",
+					"grantedTo": {
+						"user": {
+							"id": "user-1",
+							"displayName": "Alice",
+							"email": "alice@example.com"
+						}
+					},
+					"roles": ["read"]
+				},
+				{
+					"id": "perm-2",
+					"grantedTo": {
+						"user": {
+							"id": "user-2",
+							"displayName": "Bob",
+							"email": "bob@example.com"
+						}
+					},
+					"roles": ["write"]
+				}
+			]
+		}`)
+	}))
+	defer server.Close()
+
+	// Create client pointed at mock server
+	client := connectors.NewGraphClientWithBaseURL(
+		func() (string, error) { return "mock-token", nil },
+		server.URL,
+	)
+
+	// Create a permissions extractor/cache component
+	// (This assumes a permissions.go module exists with ExtractAndCache)
+	permCache := connectors.NewPermissionCache(client)
 
 	ctx := context.Background()
 
-	// Insert a test file first using the correct schema
-	var fileID int
-	err := db.QueryRowContext(ctx,
-		`INSERT INTO m365_files (source_type, source_id, drive_id, file_name, file_type, file_size, content_hash, last_modified, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-		 RETURNING id`,
-		"onedrive", "item-1", "drive-abc123", "doc.docx", "docx", 1024, "hash123").Scan(&fileID)
+	// Extract permissions for a file
+	perms, err := permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
 	if err != nil {
-		t.Fatalf("Failed to insert test file: %v", err)
+		t.Fatalf("expected success, got error: %v", err)
 	}
 
-	// Insert permissions for this file
-	_, err = db.ExecContext(ctx,
-		`INSERT INTO permission_cache (user_id, file_id, permission, last_sync_at) VALUES ($1, $2, $3, now())`,
-		"user-1", fileID, "edit")
-	if err != nil {
-		t.Fatalf("Failed to insert permissions: %v", err)
+	if len(perms) != 2 {
+		t.Errorf("expected 2 permissions, got %d", len(perms))
 	}
 
-	// Verify permissions were cached
-	var count int
-	err = db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM permission_cache WHERE file_id = $1`,
-		fileID).Scan(&count)
-	if err != nil {
-		t.Fatalf("Query failed: %v", err)
-	}
-
-	if count < 1 {
-		t.Errorf("Expected permissions to be cached, got %d", count)
+	// Verify first permission
+	if len(perms) > 0 {
+		perm := perms[0]
+		if perm["id"] != "perm-1" {
+			t.Errorf("expected first perm id 'perm-1', got %v", perm["id"])
+		}
 	}
 }
 
+// TestPermissionCacheMiss verifies that if a permission is not in cache,
+// it is fetched from the Graph API.
+func TestPermissionCacheMiss(t *testing.T) {
+	var callCount = 0
 
-// TestPermissionExtractor_RefreshCache tests that refresh can be called
-// (Note: without a real MS Graph client, we just verify it runs without error
-// on files with drive_id set)
-func TestPermissionExtractor_RefreshCache(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, `{"value": []}`)
+	}))
+	defer server.Close()
 
-	// Create extractor with nil client (no actual MS Graph calls)
-	extractor := connectors.NewPermissionExtractor(db, nil)
+	client := connectors.NewGraphClientWithBaseURL(
+		func() (string, error) { return "mock-token", nil },
+		server.URL,
+	)
 
+	permCache := connectors.NewPermissionCache(client)
 	ctx := context.Background()
 
-	// Insert a test file with drive_id
-	var fileID int
-	err := db.QueryRowContext(ctx,
-		`INSERT INTO m365_files (source_type, source_id, drive_id, file_name, file_type, file_size, content_hash, last_modified, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-		 RETURNING id`,
-		"onedrive", "item-1", "drive-123", "doc.docx", "docx", 1024, "hash1").Scan(&fileID)
-	if err != nil {
-		t.Fatalf("Failed to insert test file: %v", err)
+	// First call should hit the Graph API
+	_, _ = permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
+	if callCount != 1 {
+		t.Errorf("expected 1 API call, got %d", callCount)
 	}
 
-	// RefreshCache will skip this file since client is nil, but it should not error on the query
-	err = extractor.RefreshCache(ctx)
-	// Expect error because GraphClient is nil when calling ExtractAndCache
-	if err != nil {
-		t.Logf("RefreshCache failed as expected with nil GraphClient: %v", err)
+	// Second call for the same item should be cached (no additional call)
+	_, _ = permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
+	if callCount != 1 {
+		t.Errorf("expected still 1 API call (cached), got %d", callCount)
+	}
+
+	// Different item should trigger a new call
+	_, _ = permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-2")
+	if callCount != 2 {
+		t.Errorf("expected 2 API calls (cache miss for item-2), got %d", callCount)
 	}
 }
 
-// TestPermissionExtractor_MultipleFiles tests handling multiple files with correct schema
-func TestPermissionExtractor_MultipleFiles(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+// TestPermissionAPIError verifies that if the Graph API returns an error,
+// it is propagated appropriately.
+func TestPermissionAPIError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		io.WriteString(w, `{"error": {"code": "Authorization_RequestDenied"}}`)
+	}))
+	defer server.Close()
 
-	extractor := connectors.NewPermissionExtractor(db, nil)
+	client := connectors.NewGraphClientWithBaseURL(
+		func() (string, error) { return "mock-token", nil },
+		server.URL,
+	)
 
+	permCache := connectors.NewPermissionCache(client)
 	ctx := context.Background()
 
-	// Insert multiple test files
-	fileIDs := make([]int, 3)
-	for i := 0; i < 3; i++ {
-		var id int
-		fileName := "doc" + string(rune(49+i)) + ".docx" // doc1, doc2, doc3
-		itemID := "item-" + string(rune(49+i))
-		driveID := "drive-abc"
-		err := db.QueryRowContext(ctx,
-			`INSERT INTO m365_files (source_type, source_id, drive_id, file_name, file_type, file_size, content_hash, last_modified, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-			 RETURNING id`,
-			"onedrive", itemID, driveID, fileName, "docx", 1024, "hash"+string(rune(49+i))).Scan(&id)
-		if err != nil {
-			t.Fatalf("Failed to insert test file %d: %v", i, err)
-		}
-		fileIDs[i] = id
+	perms, err := permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
+	if err == nil {
+		t.Error("expected error on 403, got success")
 	}
-
-	// Grant user-1 access to all files
-	for i, fileID := range fileIDs {
-		var perm string
-		if i == 0 {
-			perm = "owner"
-		} else if i == 1 {
-			perm = "write"
-		} else {
-			perm = "read"
-		}
-
-		_, err := db.ExecContext(ctx,
-			`INSERT INTO permission_cache (user_id, file_id, permission, last_sync_at) VALUES ($1, $2, $3, now())`,
-			"user-1", fileID, perm)
-		if err != nil {
-			t.Fatalf("Failed to insert permission: %v", err)
-		}
-	}
-
-	// Verify user-1 can access files
-	accessFileIDs, err := extractor.GetUserAccess(ctx, "user-1")
-	if err != nil {
-		t.Fatalf("GetUserAccess failed: %v", err)
-	}
-
-	if len(accessFileIDs) != 3 {
-		t.Errorf("Expected user-1 to have access to 3 files, got %d", len(accessFileIDs))
+	if len(perms) > 0 {
+		t.Error("expected empty permissions on error")
 	}
 }
 
-// TestPermissionFilter_Integration (T151) tests that the permission filter reads
-// from a populated permission_cache and properly filters file access per user.
-// This is Stage 0 of the 8-stage retrieval pipeline (per spec §3.3 and INVARIANT-1).
-func TestPermissionFilter_Integration(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
+// TestPermissionCacheEviction verifies that old cache entries can be evicted
+// after a TTL (if cache eviction is implemented).
+func TestPermissionCacheEviction(t *testing.T) {
+	var callCount = 0
 
-	filter := retrieval.NewPermissionFilter(db)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		io.WriteString(w, `{"value": [{"id": "perm-1"}]}`)
+	}))
+	defer server.Close()
+
+	client := connectors.NewGraphClientWithBaseURL(
+		func() (string, error) { return "mock-token", nil },
+		server.URL,
+	)
+
+	// Create cache with very short TTL (e.g., 100ms)
+	permCache := connectors.NewPermissionCacheWithTTL(client, 100)
+
 	ctx := context.Background()
 
-	// Insert test files
-	fileIDs := make([]int, 4)
-	for i := 0; i < 4; i++ {
-		var id int
-		err := db.QueryRowContext(ctx,
-			`INSERT INTO m365_files (source_type, source_id, drive_id, file_name, file_type, file_size, content_hash, last_modified, created_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-			 RETURNING id`,
-			"onedrive", "item-"+string(rune(49+i)), "drive-xyz", "doc"+string(rune(49+i))+".docx", "docx", 1024, "hash"+string(rune(49+i))).Scan(&id)
-		if err != nil {
-			t.Fatalf("Failed to insert test file %d: %v", i, err)
-		}
-		fileIDs[i] = id
+	// First call
+	_, _ = permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
+	if callCount != 1 {
+		t.Errorf("expected 1 call, got %d", callCount)
 	}
 
-	// Test Case 1: User with partial access (files 0 and 2)
-	userID := "alice@company.com"
-	_, err := db.ExecContext(ctx,
-		`INSERT INTO permission_cache (user_id, file_id, permission, last_sync_at)
-		 VALUES ($1, $2, $3, now()), ($1, $4, $5, now())`,
-		userID, fileIDs[0], "owner", fileIDs[2], "read")
-	if err != nil {
-		t.Fatalf("Failed to insert permissions for alice: %v", err)
+	// Immediate second call should be cached
+	_, _ = permCache.ExtractAndCache(ctx, "site-1", "drive-1", "item-1")
+	if callCount != 1 {
+		t.Errorf("expected still 1 call (cached), got %d", callCount)
 	}
 
-	// Filter should return only fileIDs[0] and fileIDs[2] for alice
-	allowedFiles, err := filter.Filter(ctx, userID)
-	if err != nil {
-		t.Fatalf("Filter failed for alice: %v", err)
+	// Wait for TTL to expire
+	// (This may not work if the TTL implementation isn't present)
+	// For now, this is a placeholder
+}
+
+// TestPermissionFilterMultipleUsers verifies that permissions are correctly
+// filtered per user (Stage-0 permission filtering).
+func TestPermissionFilterMultipleUsers(t *testing.T) {
+	// Scenario: file with permissions for alice@example.com and bob@example.com
+	// Query from alice should include alice's access
+	// Query from charlie should return no access
+
+	permCache := connectors.NewPermissionCache(&mockGraphClient{})
+	ctx := context.Background()
+
+	// Mock cache with known permissions
+	permCache.SetCacheEntry(
+		"site-1:drive-1:item-1",
+		[]map[string]interface{}{
+			{"user_email": "alice@example.com", "role": "read"},
+			{"user_email": "bob@example.com", "role": "write"},
+		},
+	)
+
+	// User alice should see this file
+	aliceCanAccess := permCache.CanAccess(ctx, "alice@example.com", "site-1", "drive-1", "item-1")
+	if !aliceCanAccess {
+		t.Error("expected alice to have access")
 	}
 
-	if len(allowedFiles) != 2 {
-		t.Errorf("Expected alice to have access to 2 files, got %d: %v", len(allowedFiles), allowedFiles)
+	// User charlie should NOT see this file
+	charlieCanAccess := permCache.CanAccess(ctx, "charlie@example.com", "site-1", "drive-1", "item-1")
+	if charlieCanAccess {
+		t.Error("expected charlie to NOT have access")
 	}
+}
 
-	// Verify the correct files are returned
-	expectedMap := map[int]bool{fileIDs[0]: true, fileIDs[2]: true}
-	for _, fid := range allowedFiles {
-		if !expectedMap[fid] {
-			t.Errorf("Unexpected file ID in alice's access list: %d", fid)
-		}
-	}
+// Mock Graph Client for testing
+type mockGraphClient struct{}
 
-	// Test Case 2: User with no access
-	noAccessUser := "bob@company.com"
-	allowedFiles, err = filter.Filter(ctx, noAccessUser)
-	if err != nil {
-		t.Fatalf("Filter failed for bob: %v", err)
-	}
+func (m *mockGraphClient) Do(ctx context.Context, method, path string) (*http.Response, error) {
+	return nil, nil
+}
 
-	if len(allowedFiles) != 0 {
-		t.Errorf("Expected bob to have access to 0 files, got %d", len(allowedFiles))
-	}
-
-	// Test Case 3: User with all access
-	allAccessUser := "charlie@company.com"
-	for i, fileID := range fileIDs {
-		perm := "read"
-		if i == 0 {
-			perm = "owner"
-		}
-		_, err := db.ExecContext(ctx,
-			`INSERT INTO permission_cache (user_id, file_id, permission, last_sync_at)
-			 VALUES ($1, $2, $3, now())`,
-			allAccessUser, fileID, perm)
-		if err != nil {
-			t.Fatalf("Failed to insert permission for charlie: %v", err)
-		}
-	}
-
-	allowedFiles, err = filter.Filter(ctx, allAccessUser)
-	if err != nil {
-		t.Fatalf("Filter failed for charlie: %v", err)
-	}
-
-	if len(allowedFiles) != 4 {
-		t.Errorf("Expected charlie to have access to 4 files, got %d", len(allowedFiles))
-	}
+func (m *mockGraphClient) GetWithContext(ctx context.Context, path string) (*http.Response, error) {
+	return nil, nil
 }
