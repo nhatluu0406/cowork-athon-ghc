@@ -369,7 +369,7 @@ func (p *Processor) extractAndCreateMentions(ctx context.Context, localFileID st
 
 	// Create MENTIONS relationships for each extracted entity
 	for _, entity := range extractionResult.Entities {
-		if err := p.neo4jClient.CreateMentionsRelationship(ctx, localFileID, entity.Type, entity.Name, entity.Confidence); err != nil {
+		if err := p.neo4jClient.CreateMentionsRelationship(ctx, localFileID, entity.Type, entity.Name, float64(entity.Confidence)); err != nil {
 			p.logger.Error("failed to create MENTIONS relationship", "error", err, "file_id", localFileID, "entity", entity.Name)
 			// Non-fatal: continue creating other relationships even if one fails
 		}
